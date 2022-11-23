@@ -60,6 +60,12 @@ impl<'a> Borrow<str> for SymbolRef<'a> {
     }
 }
 
+impl<'a, 'b> Borrow<str> for &'a SymbolRef<'b> {
+    fn borrow(&self) -> &str {
+        self.0
+    }
+}
+
 impl<'a> Serialize for SymbolRef<'a> {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where

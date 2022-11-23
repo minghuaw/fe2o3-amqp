@@ -1,5 +1,9 @@
 # Change Log
 
+## 0.5.6
+
+1. Added `Borrow<str>` impl for `&'a SymbolRef<'b>`
+
 ## 0.5.5
 
 1. Changed conversion from `Timestamp` to `time::OffsetDateTime` to infallible
