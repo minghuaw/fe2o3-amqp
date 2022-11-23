@@ -1,10 +1,13 @@
 use fe2o3_amqp_types::{
-    definitions::Handle,
+    definitions::{Fields, Handle},
     messaging::{message::DecodeIntoMessage, FromBody},
 };
 use serde_amqp::format_code::EncodingCodes;
 
-use crate::util::{is_consecutive, AsByteIterator, IntoReader};
+use crate::{
+    endpoint::LinkExt,
+    util::{is_consecutive, AsByteIterator, IntoReader},
+};
 
 use super::{delivery::DeliveryInfo, *};
 
@@ -669,6 +672,15 @@ where
             .as_ref()
             .delivery_count_mut(|_| initial_delivery_count);
 
+        if let Some(remote_properties) = remote_attach.properties {
+            self.properties_mut(|local_properties| {
+                local_properties
+                    .get_or_insert(OrderedMap::new())
+                    .as_inner_mut()
+                    .extend(remote_properties.into_inner());
+            });
+        }
+
         // Ok(Self::AttachExchange::Complete)
         Ok(self.handle_unsettled_in_attach(remote_attach.unsettled))
     }
@@ -753,6 +765,22 @@ where
             0 => None,
             _ => Some(self.max_message_size),
         }
+    }
+
+    fn properties<F, O>(&self, op: F) -> O
+    where
+        F: FnOnce(&Option<Fields>) -> O,
+    {
+        let guard = self.flow_state.lock.read();
+        op(&guard.properties)
+    }
+
+    fn properties_mut<F, O>(&self, op: F) -> O
+    where
+        F: FnOnce(&mut Option<Fields>) -> O,
+    {
+        let mut guard = self.flow_state.lock.write();
+        op(&mut guard.properties)
     }
 
     /// # Cancel safety

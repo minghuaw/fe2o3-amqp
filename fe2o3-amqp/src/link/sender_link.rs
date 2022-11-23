@@ -1,5 +1,7 @@
-use fe2o3_amqp_types::definitions::{Handle, SequenceNo};
+use fe2o3_amqp_types::definitions::{Fields, Handle, SequenceNo};
 use futures_util::Future;
+
+use crate::endpoint::LinkExt;
 
 use super::{resumption::resume_delivery, *};
 
@@ -582,6 +584,15 @@ where
         self.max_message_size =
             get_max_message_size(self.max_message_size, remote_attach.max_message_size);
 
+        if let Some(remote_properties) = remote_attach.properties {
+            self.properties_mut(|local_properties| {
+                local_properties
+                    .get_or_insert_with(Default::default)
+                    .as_inner_mut()
+                    .extend(remote_properties.into_inner());
+            })
+        }
+
         self.handle_unsettled_in_attach(remote_attach.unsettled)
     }
 
@@ -662,6 +673,22 @@ where
             0 => None,
             _ => Some(self.max_message_size),
         }
+    }
+
+    fn properties<F, O>(&self, op: F) -> O
+    where
+        F: FnOnce(&Option<Fields>) -> O,
+    {
+        let guard = self.flow_state.state().lock.read();
+        op(&guard.properties)
+    }
+
+    fn properties_mut<F, O>(&self, op: F) -> O
+    where
+        F: FnOnce(&mut Option<Fields>) -> O,
+    {
+        let mut guard = self.flow_state.state().lock.write();
+        op(&mut guard.properties)
     }
 
     async fn exchange_attach(
