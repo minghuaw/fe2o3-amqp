@@ -1,5 +1,9 @@
 # Change Log
 
+## 0.7.14
+
+1. Added `.name()` method to `Receiver` and `Sender`
+
 ## 0.7.13
 
 1. Added `Delivery::into_parts()`

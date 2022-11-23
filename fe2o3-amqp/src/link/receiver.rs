@@ -121,6 +121,11 @@ impl Receiver {
         builder::Builder::<role::ReceiverMarker, Target, _, _, _>::new()
     }
 
+    /// Get the name of the link
+    pub fn name(&self) -> &str {
+        self.inner.link.name()
+    }
+
     /// Returns the `max_message_size` of the link. A value of zero indicates that the link has no
     /// maximum message size, and thus a zero value is turned into a `None`
     pub fn max_message_size(&self) -> Option<u64> {
