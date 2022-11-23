@@ -10,7 +10,7 @@ use tokio::{
 };
 
 use fe2o3_amqp_types::{
-    definitions::{self, DeliveryTag, MessageFormat, SenderSettleMode},
+    definitions::{self, DeliveryTag, MessageFormat, SenderSettleMode, Fields},
     messaging::{
         message::__private::Serializable, Address, DeliveryState, Outcome, SerializableBody,
         Source, Target, MESSAGE_FORMAT,
@@ -128,6 +128,22 @@ impl Sender {
     /// Get a reference to the link's target field
     pub fn target(&self) -> &Option<Target> {
         &self.inner.link.target
+    }
+
+    /// Get a reference to the link's properties field in the op
+    pub fn properties<F, O>(&self, op: F) -> O
+    where
+        F: FnOnce(&Option<Fields>) -> O,
+    {
+        self.inner.link.properties(op)
+    }
+
+    /// Get a mutable reference to the link's properties field in the op
+    pub fn properties_mut<F, O>(&mut self, op: F) -> O
+    where
+        F: FnOnce(&mut Option<Fields>) -> O,
+    {
+        self.inner.link.properties_mut(op)
     }
 
     /// Attach the sender link to a session with default configuration
