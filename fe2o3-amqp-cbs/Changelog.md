@@ -1,5 +1,9 @@
 # Change Log
 
+## 0.0.11
+
+- Derive `Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash` for `CbsToken`
+
 ## 0.0.10
 
 - Updated `fe2o3-amqp-management` to "0.0.5"
