@@ -43,6 +43,9 @@ impl MgmtClient {
         Ok(())
     }
 
+    /// Send a request and wait for the outcome.
+    /// 
+    /// This currently takes ownership of the request because it needs to set the request id if the field is not set.
     pub async fn send_request(&mut self, request: impl Request) -> Result<Outcome, SendError> {
         let mut message = request.into_message().map_body(IntoBody::into_body);
 

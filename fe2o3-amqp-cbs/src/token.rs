@@ -2,6 +2,7 @@ use std::borrow::Cow;
 
 use fe2o3_amqp::types::primitives::Timestamp;
 
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct CbsToken<'a> {
     pub(crate) token_value: Cow<'a, str>,
     pub(crate) token_type: Cow<'a, str>,
