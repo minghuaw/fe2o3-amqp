@@ -8,7 +8,7 @@ use fe2o3_amqp_types::{
 use crate::{constants::CREATE, error::Error, request::Request, response::Response};
 
 /// The Create operation is used to create a new Manageable Entity.
-/// 
+///
 /// This trait is only a placeholder for now.
 pub trait Create {
     /// Handles a create operation.

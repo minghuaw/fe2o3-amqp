@@ -20,8 +20,8 @@ pub trait Response: Sized {
     type Error: From<StatusError> + From<InvalidType> + From<StatusCodeNotFound>;
 
     /// Decodes the response from the message.
-    /// 
-    /// This is the only function that the user needs to implement in most cases. The full 
+    ///
+    /// This is the only function that the user needs to implement in most cases. The full
     /// response decoding takes place in the [`from_message`] function, please see [`from_message`]
     /// for more details.
     fn decode_message(message: Message<Self::Body>) -> Result<Self, Self::Error>;
@@ -67,7 +67,7 @@ pub trait Response: Sized {
     }
 
     /// Decodes the response from the message.
-    /// 
+    ///
     /// The blanket implementation simply calls [`verify_status_code`] and [`decode_message`],
     /// which should work for most cases. The user should override this function if more than one
     /// successful status code is expected.

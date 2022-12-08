@@ -63,7 +63,7 @@ pub trait Request: Sized {
     }
 
     /// Encode the body of the message.
-    /// 
+    ///
     /// This is the only function that the user needs to implement if the request message
     /// doesn't encode other message sections.
     fn encode_body(self) -> Self::Body;
