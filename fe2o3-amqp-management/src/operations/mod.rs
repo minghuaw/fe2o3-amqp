@@ -1,3 +1,5 @@
+//! Defines and implements the operations used in the AMQP Management protocol.
+
 pub use self::{
     entity::{
         CreateRequest, CreateResponse, DeleteRequest, DeleteResponse, ReadRequest, ReadResponse,

@@ -1,3 +1,5 @@
+//! Defines the Request trait for AMQP 1.0 management requests.
+
 use fe2o3_amqp_types::messaging::{IntoBody, Message};
 
 use crate::response::Response;
@@ -11,13 +13,18 @@ use fe2o3_amqp_types::{
 
 use crate::constants;
 
+/// A trait for AMQP 1.0 management requests.
 pub trait Request: Sized {
     /// Management operation
     const OPERATION: &'static str;
 
+    /// The response type for this request.
     type Response: Response;
+
+    /// The body type for this request.
     type Body: IntoBody;
 
+    /// Set the locales for this request.
     fn locales(&mut self) -> Option<String> {
         None
     }
@@ -30,32 +37,43 @@ pub trait Request: Sized {
         None
     }
 
+    /// Encode the Header section of the message.
     fn encode_header(&mut self) -> Option<Header> {
         None
     }
 
+    /// Encode the DeliveryAnnotations section of the message.
     fn encode_delivery_annotations(&mut self) -> Option<DeliveryAnnotations> {
         None
     }
 
+    /// Encode the MessageAnnotations section of the message.
     fn encode_message_annotations(&mut self) -> Option<MessageAnnotations> {
         None
     }
 
+    /// Encode the Properties section of the message.
     fn encode_properties(&mut self) -> Option<Properties> {
         None
     }
 
+    /// Encode the ApplicationProperties section of the message.
     fn encode_application_properties(&mut self) -> Option<ApplicationProperties> {
         None
     }
 
+    /// Encode the body of the message.
+    /// 
+    /// This is the only function that the user needs to implement if the request message
+    /// doesn't encode other message sections.
     fn encode_body(self) -> Self::Body;
 
+    /// Encode the Footer section of the message.
     fn encode_footer(&mut self) -> Option<Footer> {
         None
     }
 
+    /// Encode this request into a message.
     fn into_message(mut self) -> Message<Self::Body> {
         let header = self.encode_header();
         let delivery_annotations = self.encode_delivery_annotations();

@@ -4,6 +4,7 @@ use fe2o3_amqp_types::messaging::ApplicationProperties;
 
 use crate::constants::ENTITY_TYPE;
 
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub(crate) struct GetRequest<'a> {
     pub entity_type: Option<Cow<'a, str>>,
 

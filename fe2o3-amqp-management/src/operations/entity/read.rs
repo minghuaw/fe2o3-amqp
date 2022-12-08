@@ -12,7 +12,9 @@ use crate::{
     response::Response,
 };
 
+/// A trait for handling Read request on a Manageable Entity.
 pub trait Read {
+    /// Handles a Read request.
     fn read(&mut self, arg: ReadRequest) -> Result<ReadResponse, Error>;
 }
 
@@ -22,19 +24,25 @@ pub trait Read {
 ///
 /// Body: No information is carried in the message body therefore any message body is valid and MUST
 /// be ignored
-#[derive(Debug)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum ReadRequest<'a> {
     /// The name of the Manageable Entity to be managed. This is case-sensitive.
     Name {
+        /// The name of the Manageable Entity to be managed. This is case-sensitive.
         value: Cow<'a, str>,
+        /// The type of the Manageable Entity to be managed. This is case-sensitive.
         r#type: Cow<'a, str>,
+        /// The locales to be used for any error messages. This is case-sensitive.
         locales: Option<Cow<'a, str>>,
     },
 
     /// The identity of the Manageable Entity to be managed. This is case-sensitive.
     Identity {
+        /// The identity of the Manageable Entity to be managed. This is case-sensitive.
         value: Cow<'a, str>,
+        /// The type of the Manageable Entity to be managed. This is case-sensitive.
         r#type: Cow<'a, str>,
+        /// The locales to be used for any error messages. This is case-sensitive.
         locales: Option<Cow<'a, str>>,
     },
 }
@@ -104,8 +112,10 @@ impl<'a> Request for ReadRequest<'a> {
     fn encode_body(self) -> Self::Body {}
 }
 
-#[derive(Debug)]
+/// The response to a Read request.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct ReadResponse {
+    /// The attributes of the Manageable Entity.
     pub entity_attributes: OrderedMap<String, Value>,
 }
 
