@@ -1,5 +1,13 @@
 # Change Log
 
+## 0.1.1
+
+- Added `CbsClientBuilder`
+
+## 0.1.0
+
+- Added documentation to all public items
+
 ## 0.0.11
 
 - Derive `Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash` for `CbsToken`
