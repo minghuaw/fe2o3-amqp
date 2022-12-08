@@ -1,6 +1,6 @@
 [package]
 name = "fe2o3-amqp-management"
-version = "0.0.5"
+version = "0.1.0"
 edition = "2021"
 description = "An experimental impl of AMQP 1.0 management extension"
 license = "MIT/Apache-2.0"
