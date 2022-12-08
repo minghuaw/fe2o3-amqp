@@ -1,3 +1,5 @@
+#![deny(missing_docs, missing_debug_implementations)]
+
 //! Experimental implementation of AMQP 1.0 CBS extension protocol
 
 use std::future::Future;
@@ -9,9 +11,12 @@ pub mod constants;
 pub mod put_token;
 pub mod token;
 
+/// A trait for providing CBS tokens
 pub trait CbsTokenProvider {
+    /// The associated error type
     type Error;
 
+    /// Get a CBS token
     fn get_token(
         &mut self,
         container_id: impl AsRef<str>,
@@ -20,13 +25,17 @@ pub trait CbsTokenProvider {
     ) -> Result<CbsToken, Self::Error>;
 }
 
-/// TODO: This will be updated when GAT is stablized
+/// An async version of `CbsTokenProvider`
 pub trait AsyncCbsTokenProvider {
+    /// The associated error type
     type Error;
+
+    /// The associated future type
     type Fut<'a>: Future<Output = Result<CbsToken<'a>, Self::Error>>
     where
         Self: 'a;
 
+    /// Get a CBS token
     fn get_token_async(
         &mut self,
         container_id: impl AsRef<str>,

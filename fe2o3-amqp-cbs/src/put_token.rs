@@ -1,3 +1,5 @@
+//! Defines PutTokenRequest and PutTokenResponse
+
 use fe2o3_amqp::types::{
     messaging::{ApplicationProperties, Message},
     primitives::{SimpleValue, Timestamp, Value},
@@ -15,15 +17,26 @@ use crate::constants::{EXPIRATION, PUT_TOKEN};
 ///
 /// Conversion from [`PutTokenRequest`] to [`Message`] will panic if `OffsetDateTime` represented in
 /// unix time but with a precision of milliseconds exceeds [`i64::MIN`] or [`i64::MAX`].
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct PutTokenRequest<'a> {
+    /// The name of the entity to which the token applies.
     pub name: Cow<'a, str>,
+
+    /// The token to be applied to the entity.
     pub token: Cow<'a, str>,
+
+    /// The time at which the token expires.
     pub expiration: Option<Timestamp>,
+
+    /// The type of the entity to which the token applies.
     pub manageable_entity_type: Cow<'a, str>,
+
+    /// The locales to be used for the
     pub locales: Option<Cow<'a, str>>,
 }
 
 impl<'a> PutTokenRequest<'a> {
+    /// Create a new PutTokenRequest
     pub fn new(
         name: impl Into<Cow<'a, str>>,
         token: impl Into<Cow<'a, str>>,
@@ -74,6 +87,8 @@ impl<'a> Request for PutTokenRequest<'a> {
     }
 }
 
+/// The response to a PutToken request.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct PutTokenResponse {}
 
 impl PutTokenResponse {}
