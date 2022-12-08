@@ -6,7 +6,9 @@ use crate::{constants::GET_MGMT_NODES, error::Error, request::Request, response:
 
 use super::get::GetRequest;
 
+/// A trait for handling GetMgmtNodes request on a Manageable Node.
 pub trait GetMgmtNodes {
+    /// Handles a GetMgmtNodes request.
     fn get_mgmt_nodes(&self, req: GetMgmtNodesRequest) -> Result<GetMgmtNodesResponse, Error>;
 }
 
@@ -17,11 +19,13 @@ pub trait GetMgmtNodes {
 /// Body:
 ///
 /// No information is carried in the message body therefore any message body is valid and MUST be ignored.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct GetMgmtNodesRequest<'a> {
     inner: GetRequest<'a>,
 }
 
 impl<'a> GetMgmtNodesRequest<'a> {
+    /// Creates a new GetMgmtNodes request.
     pub fn new(r#type: impl Into<Cow<'a, str>>, locales: Option<impl Into<Cow<'a, str>>>) -> Self {
         Self {
             inner: GetRequest::new(None, r#type, locales),
@@ -53,12 +57,16 @@ impl<'a> Request for GetMgmtNodesRequest<'a> {
     fn encode_body(self) -> Self::Body {}
 }
 
+type GetMgmtNodesResponseBody = Vec<String>;
+
 /// If the request was successful then the statusCode MUST be 200 (OK) and the body of the message
 /// MUST consist of an amqp-value section containing a list of addresses of other Management Nodes
 /// known by this Management Node (each element of the list thus being a string). If no other
 /// Management Nodes are known then the amqp-value section MUST contain a list of zero elements.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct GetMgmtNodesResponse {
-    pub addresses: Vec<String>,
+    /// The body of the response.
+    pub body: GetMgmtNodesResponseBody,
 }
 
 impl GetMgmtNodesResponse {}
@@ -66,15 +74,15 @@ impl GetMgmtNodesResponse {}
 impl Response for GetMgmtNodesResponse {
     const STATUS_CODE: u16 = 200;
 
-    type Body = Option<Vec<String>>;
+    type Body = Option<GetMgmtNodesResponseBody>;
 
     type Error = Error;
 
     fn decode_message(message: Message<Self::Body>) -> Result<Self, Self::Error> {
         match message.body {
-            Some(addresses) => Ok(Self { addresses }),
+            Some(body) => Ok(Self { body }),
             None => Ok(Self {
-                addresses: Vec::with_capacity(0),
+                body: Vec::with_capacity(0),
             }),
         }
     }

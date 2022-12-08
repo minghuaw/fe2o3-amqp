@@ -1,3 +1,5 @@
+//! Defines status code
+
 use std::num::NonZeroU16;
 
 use fe2o3_amqp_types::primitives::SimpleValue;

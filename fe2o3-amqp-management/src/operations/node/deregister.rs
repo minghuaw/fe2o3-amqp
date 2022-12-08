@@ -7,7 +7,9 @@ use fe2o3_amqp_types::{
 
 use crate::{constants::DEREGISTER, error::Error, request::Request, response::Response};
 
+/// A trait for handling Deregister request on a Manageable Node.
 pub trait Deregister {
+    /// Handles a Deregister request.
     fn deregister(&mut self, req: DeregisterRequest) -> Result<DeregisterResponse, Error>;
 }
 
@@ -18,7 +20,9 @@ pub trait Deregister {
 /// # Body
 ///
 /// The body of the message MUST be empty.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct DeregisterRequest<'a> {
+    /// Address
     pub address: Cow<'a, str>,
 
     /// Entity type
@@ -29,6 +33,7 @@ pub struct DeregisterRequest<'a> {
 }
 
 impl<'a> DeregisterRequest<'a> {
+    /// Creates a new Deregister request.
     pub fn new(
         address: impl Into<Cow<'a, str>>,
         r#type: impl Into<Cow<'a, str>>,
@@ -73,6 +78,7 @@ impl Request for DeregisterRequest<'_> {
 /// If the request was successful then the statusCode MUST be 200 (OK). Upon a successful
 /// deregistration, the address of the unregistered Management Node will not be present in the list
 /// of known Management Nodes returned by subsequent GET-MGMT-NODES operations.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct DeregisterResponse {}
 
 impl DeregisterResponse {}

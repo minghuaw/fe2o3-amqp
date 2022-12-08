@@ -7,10 +7,16 @@ use fe2o3_amqp_types::{
 
 use crate::{constants::CREATE, error::Error, request::Request, response::Response};
 
+/// The Create operation is used to create a new Manageable Entity.
+///
+/// This trait is only a placeholder for now.
 pub trait Create {
+    /// Handles a create operation.
     fn create(&mut self, req: CreateRequest) -> Result<CreateResponse, Error>;
 }
 
+/// A request to create a new manageable entity.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct CreateRequest<'a> {
     /// Additional application-properties
     ///
@@ -62,6 +68,7 @@ pub struct CreateRequest<'a> {
 }
 
 impl<'a> CreateRequest<'a> {
+    /// Creates a new CreateRequest.
     pub fn new(
         name: impl Into<Cow<'a, str>>,
         r#type: impl Into<Cow<'a, str>>,
@@ -108,7 +115,9 @@ impl<'a> Request for CreateRequest<'a> {
 /// (e.g. the string “2” into the integer value 2) A map containing attributes that are not
 /// applicable for the entity being created, or invalid values for a given attribute, MUST result in
 /// a failure response with a statusCode of 400 (Bad Request).
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct CreateResponse {
+    /// The body of Create response.
     pub entity_attributes: OrderedMap<String, Value>,
 }
 

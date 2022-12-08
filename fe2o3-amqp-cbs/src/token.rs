@@ -1,7 +1,10 @@
+//! Defines CbsToken struct
+
 use std::borrow::Cow;
 
 use fe2o3_amqp::types::primitives::Timestamp;
 
+/// A CBS token
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct CbsToken<'a> {
     pub(crate) token_value: Cow<'a, str>,
@@ -10,6 +13,7 @@ pub struct CbsToken<'a> {
 }
 
 impl<'a> CbsToken<'a> {
+    /// Create a new CBS token
     pub fn new(
         token_value: impl Into<Cow<'a, str>>,
         token_type: impl Into<Cow<'a, str>>,
@@ -22,14 +26,17 @@ impl<'a> CbsToken<'a> {
         }
     }
 
+    /// Get the token value
     pub fn token_value(&self) -> &str {
         &self.token_value
     }
 
+    /// Get the token type
     pub fn token_type(&self) -> &str {
         &self.token_type
     }
 
+    /// Get the expiration time
     pub fn expires_at_utc(&self) -> &Option<Timestamp> {
         &self.expires_at_utc
     }

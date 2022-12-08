@@ -12,23 +12,15 @@ use crate::{
     response::Response,
 };
 
+/// A trait for handling Delete request on a Manageable Entity.
 pub trait Delete {
+    /// Handles a Delete request.
     fn delete(&mut self, arg: DeleteRequest) -> Result<DeleteResponse, Error>;
 }
 
-pub struct EmptyMap(OrderedMap<String, Value>);
+// pub struct EmptyMap(OrderedMap<String, Value>);
 
-impl EmptyMap {
-    pub fn new() -> Self {
-        Self(OrderedMap::with_capacity(0))
-    }
-}
-
-impl Default for EmptyMap {
-    fn default() -> Self {
-        Self::new()
-    }
-}
+type EmptyMap = OrderedMap<String, Value>;
 
 /// Delete a Manageable Entity.
 ///
@@ -36,18 +28,25 @@ impl Default for EmptyMap {
 ///
 /// No information is carried in the message body therefore any message body is valid and MUST be
 /// ignored.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum DeleteRequest<'a> {
     /// The name of the Manageable Entity to be managed. This is case-sensitive.
     Name {
+        /// The name of the Manageable Entity to be managed. This is case-sensitive.
         value: Cow<'a, str>,
+        /// The type of the Manageable Entity to be managed. This is case-sensitive.
         r#type: Cow<'a, str>,
+        /// The locales to be used for any error messages. This is case-sensitive.
         locales: Option<Cow<'a, str>>,
     },
 
     /// The identity of the Manageable Entity to be managed. This is case-sensitive.
     Identity {
+        /// The identity of the Manageable Entity to be managed. This is case-sensitive.
         value: Cow<'a, str>,
+        /// The type of the Manageable Entity to be managed. This is case-sensitive.
         r#type: Cow<'a, str>,
+        /// The locales to be used for any error messages. This is case-sensitive.
         locales: Option<Cow<'a, str>>,
     },
 }
@@ -116,13 +115,13 @@ impl<'a> Request for DeleteRequest<'a> {
     fn encode_body(self) -> Self::Body {}
 }
 
-/// The body of the message MUST consist of an amqp-value section containing a map with zero
-/// entries. If the request was successful then the statusCode MUST be 204 (No Content).
+/// The response to a Delete request.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct DeleteResponse {
+    /// The body of the message MUST consist of an amqp-value section containing a map with zero
+    /// entries. If the request was successful then the statusCode MUST be 204 (No Content).
     pub empty_map: EmptyMap,
 }
-
-impl DeleteResponse {}
 
 impl Response for DeleteResponse {
     const STATUS_CODE: u16 = 204;
@@ -134,7 +133,7 @@ impl Response for DeleteResponse {
     fn decode_message(message: Message<Self::Body>) -> Result<Self, Self::Error> {
         match message.body.map(|m| m.len()) {
             None | Some(0) => Ok(Self {
-                empty_map: EmptyMap::new(),
+                empty_map: EmptyMap::with_capacity(0),
             }),
             _ => Err(Error::DecodeError(
                 InvalidType {

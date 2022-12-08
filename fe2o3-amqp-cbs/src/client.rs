@@ -1,3 +1,5 @@
+//! Implements the CBS client
+
 use std::borrow::Cow;
 
 use fe2o3_amqp::{link::DetachError, session::SessionHandle};
@@ -15,11 +17,13 @@ use crate::{
 /// CBS client
 ///
 /// The connection should be opened with an ANONYMOUS SASL profile.
+#[derive(Debug)]
 pub struct CbsClient {
     mgmt_client: MgmtClient,
 }
 
 impl CbsClient {
+    /// Attach a new CBS client to the session
     pub async fn attach(session: &mut SessionHandle<()>) -> Result<Self, AttachError> {
         let mgmt_client = MgmtClient::builder()
             .management_node_address(CBS_NODE_ADDR)
@@ -30,10 +34,12 @@ impl CbsClient {
         Ok(Self { mgmt_client })
     }
 
+    /// Close the CBS client
     pub async fn close(self) -> Result<(), DetachError> {
         self.mgmt_client.close().await
     }
 
+    /// Put a CBS token
     pub async fn put_token<'a>(
         &mut self,
         name: impl Into<Cow<'a, str>>,

@@ -12,7 +12,9 @@ use crate::{
     response::Response,
 };
 
+/// A trait for handling Update request on a Manageable Entity.
 pub trait Update {
+    /// Handles a Update request.
     fn update(&mut self, arg: UpdateRequest) -> Result<UpdateResponse, Error>;
 }
 
@@ -34,22 +36,34 @@ pub trait Update {
 ///
 /// Where the type of the attribute value provided is not as required, type conversion as per the
 /// rules in 3.3.1.1 MUST be provided.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum UpdateRequest<'a> {
+    /// The name of the Manageable Entity to be managed. This is case-sensitive.
     Name {
+        /// The name of the Manageable Entity to be managed. This is case-sensitive.
         value: Cow<'a, str>,
+        /// Entity type
         r#type: Cow<'a, str>,
+        /// The locales to be used for any error messages. This is case-sensitive.
         locales: Option<Cow<'a, str>>,
+        /// The body MUST consist of an amqp-value section containing a map.
         body: OrderedMap<String, Value>,
     },
+    /// The identity of the Manageable Entity to be managed. This is case-sensitive.
     Identity {
+        /// The identity of the Manageable Entity to be managed. This is case-sensitive.
         value: Cow<'a, str>,
+        /// Entity type
         r#type: Cow<'a, str>,
+        /// The locales to be used for any error messages. This is case-sensitive.
         locales: Option<Cow<'a, str>>,
+        /// The body MUST consist of an amqp-value section containing a map.
         body: OrderedMap<String, Value>,
     },
 }
 
 impl<'a> UpdateRequest<'a> {
+    /// Creates a new UpdateRequest with the entity name.
     pub fn name(
         name: impl Into<Cow<'a, str>>,
         r#type: impl Into<Cow<'a, str>>,
@@ -64,6 +78,7 @@ impl<'a> UpdateRequest<'a> {
         }
     }
 
+    /// Creates a new UpdateRequest with the entity identity.
     pub fn identity(
         identity: impl Into<Cow<'a, str>>,
         r#type: impl Into<Cow<'a, str>>,
@@ -129,7 +144,9 @@ impl<'a> Request for UpdateRequest<'a> {
 /// applicable for the entity being created, or an invalid value for a given attribute (excepting
 /// type conversion as above), MUST result in a failure response with a statusCode of 400 (Bad
 /// Request).
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct UpdateResponse {
+    /// The entity attributes.
     pub entity_attributes: OrderedMap<String, Value>,
 }
 

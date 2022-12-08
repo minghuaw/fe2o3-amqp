@@ -6,7 +6,9 @@ use crate::{constants::GET_ANNOTATIONS, error::Error, request::Request, response
 
 use super::get::GetRequest;
 
+/// A trait for handling GetAnnotations request on a Manageable Node.
 pub trait GetAnnotations {
+    /// Handles a GetAnnotations request.
     fn get_annotations(&self, req: GetAnnotationsRequest) -> Result<GetAnnotationsResponse, Error>;
 }
 
@@ -15,11 +17,13 @@ pub trait GetAnnotations {
 /// Body:
 ///
 /// No information is carried in the message body therefore any message body is valid and MUST be ignored.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct GetAnnotationsRequest<'a> {
     inner: GetRequest<'a>,
 }
 
 impl<'a> GetAnnotationsRequest<'a> {
+    /// Creates a new GetAnnotations request.
     pub fn new(
         entity_type: impl Into<Option<Cow<'a, str>>>,
         r#type: impl Into<Cow<'a, str>>,
@@ -55,22 +59,27 @@ impl<'a> Request for GetAnnotationsRequest<'a> {
     fn encode_body(self) -> Self::Body {}
 }
 
+type GetAnnotationsResponseBody = OrderedMap<String, Vec<String>>;
+
+/// Response to a GetAnnotations request.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct GetAnnotationsResponse {
-    pub annotations: OrderedMap<String, Vec<String>>,
+    /// The response body.
+    pub body: GetAnnotationsResponseBody,
 }
 
 impl Response for GetAnnotationsResponse {
     const STATUS_CODE: u16 = 200;
 
-    type Body = Option<OrderedMap<String, Vec<String>>>;
+    type Body = Option<GetAnnotationsResponseBody>;
 
     type Error = Error;
 
     fn decode_message(message: Message<Self::Body>) -> Result<Self, Self::Error> {
         match message.body {
-            Some(annotations) => Ok(Self { annotations }),
+            Some(body) => Ok(Self { body }),
             None => Ok(Self {
-                annotations: OrderedMap::with_capacity(0),
+                body: OrderedMap::with_capacity(0),
             }),
         }
     }

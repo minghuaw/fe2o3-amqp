@@ -6,7 +6,9 @@ use crate::{constants::GET_ATTRIBUTES, error::Error, request::Request, response:
 
 use super::get::GetRequest;
 
+/// A trait for handling GetAttributes request on a Manageable Node.
 pub trait GetAttributes {
+    /// Handles a GetAttributes request.
     fn get_attributes(&self, req: GetAttributesRequest) -> Result<GetAttributesResponse, Error>;
 }
 
@@ -15,11 +17,13 @@ pub trait GetAttributes {
 /// Body:
 ///
 /// No information is carried in the message body therefore any message body is valid and MUST be ignored.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct GetAttributesRequest<'a> {
     inner: GetRequest<'a>,
 }
 
 impl<'a> GetAttributesRequest<'a> {
+    /// Creates a new GetAttributes request.
     pub fn new(
         entity_type: impl Into<Option<Cow<'a, str>>>,
         r#type: impl Into<Cow<'a, str>>,
@@ -55,6 +59,8 @@ impl<'a> Request for GetAttributesRequest<'a> {
     fn encode_body(self) -> Self::Body {}
 }
 
+type GetAttributesResponseBody = OrderedMap<String, Vec<String>>;
+
 /// If the request was successful then the statusCode MUST be 200 (OK) and the body of the message
 /// MUST contain a map. The keys in the map MUST be the set of Manageable Entity Types for which
 /// attribute names are being provided. For any given key, the value MUST be a list of strings
@@ -64,8 +70,10 @@ impl<'a> Request for GetAttributesRequest<'a> {
 /// Types that extend it. For any given Manageable Entity Type, the set of attribute names returned
 /// MUST include every attribute name defined by Manageable Entity Types that it extends, either
 /// directly or indirectly.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct GetAttributesResponse {
-    pub attributes: OrderedMap<String, Vec<String>>,
+    /// The response body.
+    pub body: GetAttributesResponseBody,
 }
 
 impl GetAttributesResponse {}
@@ -79,9 +87,9 @@ impl Response for GetAttributesResponse {
 
     fn decode_message(message: Message<Self::Body>) -> Result<Self, Self::Error> {
         match message.body {
-            Some(attributes) => Ok(Self { attributes }),
+            Some(body) => Ok(Self { body }),
             None => Ok(Self {
-                attributes: OrderedMap::with_capacity(0),
+                body: OrderedMap::with_capacity(0),
             }),
         }
     }

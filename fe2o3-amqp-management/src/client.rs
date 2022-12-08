@@ -1,3 +1,5 @@
+//! Implements a client for the AMQP 1.0 management working draft.
+
 use fe2o3_amqp::{
     link::{DetachError, SendError},
     session::SessionHandle,
@@ -15,6 +17,8 @@ use crate::{
     DEFAULT_CLIENT_NODE_ADDRESS, MANAGEMENT_NODE_ADDRESS,
 };
 
+/// A client for the AMQP 1.0 management working draft. It contains a sender and receiver link.
+#[derive(Debug)]
 pub struct MgmtClient {
     req_id: u64,
     client_node_addr: String,
@@ -23,10 +27,12 @@ pub struct MgmtClient {
 }
 
 impl MgmtClient {
+    /// Creates a builder for a management client.
     pub fn builder() -> MgmtClientBuilder {
         MgmtClientBuilder::default()
     }
 
+    /// Attach a management client to a session.
     pub async fn attach<R>(
         session: &mut SessionHandle<R>,
         client_node_addr: impl Into<String>,
@@ -37,6 +43,7 @@ impl MgmtClient {
             .await
     }
 
+    /// Close/detach the management client.
     pub async fn close(self) -> Result<(), DetachError> {
         self.sender.close().await?;
         self.receiver.close().await?;
@@ -44,7 +51,7 @@ impl MgmtClient {
     }
 
     /// Send a request and wait for the outcome.
-    /// 
+    ///
     /// This currently takes ownership of the request because it needs to set the request id if the field is not set.
     pub async fn send_request(&mut self, request: impl Request) -> Result<Outcome, SendError> {
         let mut message = request.into_message().map_body(IntoBody::into_body);
@@ -62,6 +69,8 @@ impl MgmtClient {
 
         self.sender.send(message).await
     }
+
+    /// Receive a response.
     pub async fn recv_response<Res>(&mut self) -> Result<Res, Error>
     where
         Res: Response,
@@ -74,6 +83,7 @@ impl MgmtClient {
         Res::from_message(delivery.into_message()).map_err(Into::into)
     }
 
+    /// Send a request and receive a response.
     pub async fn call<Req, Res>(&mut self, request: Req) -> Result<Res, Error>
     where
         Req: Request<Response = Res>,
@@ -87,6 +97,8 @@ impl MgmtClient {
     }
 }
 
+/// A builder for a management client.
+#[derive(Debug)]
 pub struct MgmtClientBuilder {
     mgmt_node_addr: String,
     client_node_addr: String,
@@ -106,26 +118,31 @@ impl Default for MgmtClientBuilder {
 }
 
 impl MgmtClientBuilder {
+    /// Set the sender link properties.
     pub fn sender_properties(mut self, properties: Fields) -> Self {
         self.sender_properties = Some(properties);
         self
     }
 
+    /// Set the receiver link properties.
     pub fn receiver_properties(mut self, properties: Fields) -> Self {
         self.receiver_properties = Some(properties);
         self
     }
 
+    /// Set the management node address.
     pub fn management_node_address(mut self, mgmt_node_addr: impl Into<String>) -> Self {
         self.mgmt_node_addr = mgmt_node_addr.into();
         self
     }
 
+    /// Set the client node address.
     pub fn client_node_addr(mut self, client_node_addr: impl Into<String>) -> Self {
         self.client_node_addr = client_node_addr.into();
         self
     }
 
+    /// Attach a management client to a session.
     pub async fn attach<R>(
         self,
         session: &mut SessionHandle<R>,

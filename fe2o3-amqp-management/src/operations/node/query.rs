@@ -1,23 +1,3 @@
-//! Retrieve selected attributes of Manageable Entities that can be read at this Management Node.
-//!
-//! Since the query operation could potentially return a large number of results, this operation
-//! supports pagination through which a request can specify a subset of the results to be returned.
-//!
-//! A result set of size N can be considered to containing elements numbered from 0 to N-1. The
-//! elements of the result set returned in a particular request are controlled by specifying offset
-//! and count values. By setting an offset of M then only the elements numbered from M onwards will
-//! be returned. If M is greater than the number of elements in the result set then no elements will
-//! be returned. By additionally setting a count of C, only the elements numbered from M to
-//! Min(M+C-1, N-1) will be returned. Pagination is achieved via two application-properties, offset
-//! and count.
-//!
-//! If pagination is used then it cannot be guaranteed that the result set remains consistent
-//! between requests for successive pages. That is, the set of entities matching the query may have
-//! changed between requests. However, stable order MUST be provided, that is, for any two queries
-//! for the same parameters (except those related to pagination) then the results MUST be provided
-//! in the same order. Thus, if there are no changes to the set of entities that match the query
-//! then consistency MUST be maintained between requests for successive pages.
-
 use std::borrow::Cow;
 
 use fe2o3_amqp_types::{
@@ -27,10 +7,32 @@ use fe2o3_amqp_types::{
 
 use crate::{constants::QUERY, error::Error, request::Request, response::Response};
 
+/// A trait for handling Query request on a Manageable Node.
 pub trait Query {
+    /// Handles a Query request.
     fn query(&self, req: QueryRequest) -> Result<QueryResponse, Error>;
 }
 
+/// Retrieve selected attributes of Manageable Entities that can be read at this Management Node.
+///
+/// Since the query operation could potentially return a large number of results, this operation
+/// supports pagination through which a request can specify a subset of the results to be returned.
+///
+/// A result set of size N can be considered to containing elements numbered from 0 to N-1. The
+/// elements of the result set returned in a particular request are controlled by specifying offset
+/// and count values. By setting an offset of M then only the elements numbered from M onwards will
+/// be returned. If M is greater than the number of elements in the result set then no elements will
+/// be returned. By additionally setting a count of C, only the elements numbered from M to
+/// Min(M+C-1, N-1) will be returned. Pagination is achieved via two application-properties, offset
+/// and count.
+///
+/// If pagination is used then it cannot be guaranteed that the result set remains consistent
+/// between requests for successive pages. That is, the set of entities matching the query may have
+/// changed between requests. However, stable order MUST be provided, that is, for any two queries
+/// for the same parameters (except those related to pagination) then the results MUST be provided
+/// in the same order. Thus, if there are no changes to the set of entities that match the query
+/// then consistency MUST be maintained between requests for successive pages.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct QueryRequest<'a> {
     /// If set, restricts the set of Manageable Entities requested to those that extend (directly or
     /// indirectly) the given Manageable Entity Type.
@@ -60,6 +62,7 @@ pub struct QueryRequest<'a> {
 }
 
 impl<'a> QueryRequest<'a> {
+    /// Create a new Query request
     pub fn new(
         entity_type: impl Into<Option<Cow<'a, str>>>,
         offset: impl Into<Option<u32>>,
@@ -120,6 +123,8 @@ impl<'a> Request for QueryRequest<'a> {
     }
 }
 
+/// Response to a Query request.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct QueryResponse {
     /// Specifies the number of entries from the result set being returned. Note that the value of count
     /// MUST be the same as number of elements in the list value associated with the results key in the

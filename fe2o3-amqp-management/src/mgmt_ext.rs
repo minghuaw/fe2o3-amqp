@@ -1,3 +1,5 @@
+//! Extension trait for AMQP messages to provide management specific functionality
+
 use fe2o3_amqp_types::{
     messaging::{Message, MessageId},
     primitives::SimpleValue,
@@ -5,17 +7,24 @@ use fe2o3_amqp_types::{
 
 use crate::{constants, error::InvalidType, status::StatusCode};
 
+/// Extension trait for AMQP messages to provide management specific functionality
 pub trait AmqpMessageManagementExt {
+    /// Get the status code from the message
     fn status_code(&self) -> Option<Result<StatusCode, InvalidType>>;
 
+    /// Remove the status code from the message
     fn remove_status_code(&mut self) -> Option<Result<StatusCode, SimpleValue>>;
 
+    /// Get the correlation id from the message
     fn correlation_id(&self) -> Option<&MessageId>;
 
+    /// Remove the correlation id from the message
     fn remove_correlation_id(&mut self) -> Option<MessageId>;
 
+    /// Get the status description from the message
     fn status_description(&self) -> Option<Result<&str, InvalidType>>;
 
+    /// Remove the status description from the message
     fn remove_status_description(&mut self) -> Option<Result<String, SimpleValue>>;
 }
 

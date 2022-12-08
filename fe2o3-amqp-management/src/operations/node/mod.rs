@@ -30,6 +30,7 @@ pub use get_types::*;
 pub use query::*;
 pub use register::*;
 
+/// Management Node Operations
 pub trait ManagementNodeOperations:
     Query
     + GetTypes
