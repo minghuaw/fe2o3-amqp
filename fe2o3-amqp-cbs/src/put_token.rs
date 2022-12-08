@@ -4,11 +4,7 @@ use fe2o3_amqp::types::{
     messaging::{ApplicationProperties, Message},
     primitives::{SimpleValue, Timestamp, Value},
 };
-use fe2o3_amqp_management::{
-    constants::{NAME},
-    request::Request,
-    response::Response,
-};
+use fe2o3_amqp_management::{constants::NAME, request::Request, response::Response};
 use std::borrow::Cow;
 
 use crate::constants::{EXPIRATION, PUT_TOKEN};
