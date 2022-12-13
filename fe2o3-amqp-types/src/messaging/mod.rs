@@ -1,7 +1,6 @@
 //! Types defined in AMQP 1.0 specification Part 3: Messaging
 
 use serde::{Deserialize, Serialize};
-use serde_amqp::described::Described;
 use serde_amqp::extensions::TransparentVec;
 use serde_amqp::primitives::{Array, OrderedMap};
 use serde_amqp::{primitives::Symbol, value::Value};
@@ -58,7 +57,8 @@ pub type Batch<T> = TransparentVec<T>;
 /// A registry of commonly defined filter types and their capabilities is
 /// maintained \[AMQPFILTERS\].
 ///
-pub type FilterSet = OrderedMap<Symbol, Option<Described<Value>>>;
+// pub type FilterSet = OrderedMap<Symbol, Option<Described<Value>>>;
+pub type FilterSet = OrderedMap<Symbol, Value>;
 
 use crate::definitions::Fields;
 

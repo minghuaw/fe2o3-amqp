@@ -235,10 +235,11 @@ impl SourceBuilder {
         key: impl Into<Symbol>,
         value: impl Into<Option<Described<Value>>>,
     ) -> Self {
+        let value = value.into();
         self.source
             .filter
             .get_or_insert(OrderedMap::new())
-            .insert(key.into(), value.into());
+            .insert(key.into(), value.map(Into::into).unwrap_or(Value::Null));
         self
     }
 
