@@ -42,11 +42,11 @@ pub use lifetime_policy::*;
 pub type Batch<T> = TransparentVec<T>;
 
 /// 3.5.8 Filter Set
-/// 
+///
 /// ```xml
 /// <type name="filter-set" class="restricted" source="map"/>
 /// ```
-/// 
+///
 /// A set of named filters. Every key in the map MUST be of type symbol,
 /// every value MUST be either null or of a described type which provides
 /// the archetype filter. A filter acts as a function on a message which
@@ -143,7 +143,6 @@ impl From<SupportedDistModes> for Fields {
         let mut map = Fields::new();
         let values = modes
             .0
-             .0
             .into_iter()
             .map(Symbol::from)
             .map(Value::Symbol)
@@ -157,7 +156,6 @@ impl From<SupportedDistModes> for Value {
     fn from(modes: SupportedDistModes) -> Self {
         let values: Array<Value> = modes
             .0
-             .0
             .into_iter()
             .map(Symbol::from)
             .map(Value::Symbol)
