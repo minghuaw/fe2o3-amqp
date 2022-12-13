@@ -1,5 +1,16 @@
 # Change Log
 
+## 0.7.0
+
+1. Changed type alias `FilterSet` to
+
+   ```rust
+   pub type FilterSet = OrderedMap<Symbol, Value>;
+   ```
+
+   to support legacy formatted filter set. The user would need to ensure that the correct format is
+   used when constructing the filter set.
+
 ## 0.6.2
 
 1. Added impl of `BodySection` and `SerializableBody` for the following pointer types

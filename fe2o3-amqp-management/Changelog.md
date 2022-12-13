@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.2.0
+
+1. Updated `fe2o3-amqp-types` to version "0.7.0" and `fe2o3-amqp` to version "0.8.0", which
+    introduced breaking change to the type alias `FilterSet` to support legacy formatted filter set.
+
+## 0.1.0
+
+1. Added documentation
+
 ## 0.0.5
 
 1. Checking both `"status-code"` and `"statusCode"` because multiple cases have been found in different implementations

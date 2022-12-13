@@ -1,5 +1,11 @@
 # Change Log
 
+## 0.8.0
+
+1. Updated `fe2o3-amqp-types` to 0.7.0, which introduced breaking change to the type alias
+   `FilterSet` to support legacy formatted filter set. The user would need to ensure that the
+   correct format is used when constructing the filter set.
+
 ## 0.7.15
 
 1. Added `.properties()` and `.properties_mut()` methods to `Receiver` and `Sender`

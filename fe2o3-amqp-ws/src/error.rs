@@ -47,7 +47,7 @@ pub enum Error {
 
     /// A `tungsteninte::Error::Http` error
     #[error("HTTP error: {}", .0.status())]
-    Http(Response<Option<String>>),
+    Http(Response<Option<Vec<u8>>>),
 
     /// A `tungsteninte::Error::HttpFormat` error
     #[error("HTTP format error: {0}")]
