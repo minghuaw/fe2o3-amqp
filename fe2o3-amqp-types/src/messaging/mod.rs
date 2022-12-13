@@ -42,8 +42,11 @@ pub use lifetime_policy::*;
 pub type Batch<T> = TransparentVec<T>;
 
 /// 3.5.8 Filter Set
+/// 
+/// ```xml
 /// <type name="filter-set" class="restricted" source="map"/>
-///
+/// ```
+/// 
 /// A set of named filters. Every key in the map MUST be of type symbol,
 /// every value MUST be either null or of a described type which provides
 /// the archetype filter. A filter acts as a function on a message which
@@ -57,8 +60,14 @@ pub type Batch<T> = TransparentVec<T>;
 /// A registry of commonly defined filter types and their capabilities is
 /// maintained \[AMQPFILTERS\].
 ///
-// pub type FilterSet = OrderedMap<Symbol, Option<Described<Value>>>;
+/// Although the value of each entry must be either null or a described type,
+/// many implementations in other programming languages still supports the legacy
+/// format of a filter-set where the value could be any AMQP type. This legacy
+/// format is deprecated and SHOULD NOT be used in new implementations. However,
+/// for compatibility with existing implementations, the following type alias
+/// is provided since "0.7.0" to allow the legacy format to be used.
 pub type FilterSet = OrderedMap<Symbol, Value>;
+// pub type FilterSet = OrderedMap<Symbol, Option<Described<Value>>>;
 
 use crate::definitions::Fields;
 
