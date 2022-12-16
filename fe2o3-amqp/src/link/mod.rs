@@ -490,11 +490,14 @@ where
                 #[cfg(feature = "log")]
                 log::debug!("Sending detach: {:?}", detach);
 
-                writer
+                // An error here means the session is already closed, so we can't send a detach
+                let result = writer
                     .send(LinkFrame::Detach(detach))
                     .await // cancel safe
-                    .map_err(|_| DetachError::IllegalSessionState)?;
+                    .map_err(|_| DetachError::IllegalSessionState);
 
+                // The state should be updated even if the send failed which means the session is
+                // already closed
                 match (&self.local_state, closed) {
                     (LinkState::Attached, false) => self.local_state = LinkState::DetachSent,
                     (LinkState::DetachReceived, false) => self.local_state = LinkState::Detached,
@@ -505,11 +508,10 @@ where
                     _ => return Err(DetachError::IllegalState),
                 };
                 self.output_handle.take();
+                result
             }
-            None => return Err(DetachError::IllegalState),
+            None => Err(DetachError::IllegalState),
         }
-
-        Ok(())
     }
 }
 
