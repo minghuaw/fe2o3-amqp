@@ -152,6 +152,7 @@ impl SenderAttachExchange {
 ///
 /// This is useful for exposing the outcome of resuming a local receiver
 #[derive(Debug)]
+#[must_use]
 pub enum ReceiverAttachExchange {
     /// The attach exchange is completed without any unsettled deliveries
     Complete,
