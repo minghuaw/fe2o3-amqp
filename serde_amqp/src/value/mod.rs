@@ -351,9 +351,16 @@ impl_from_for_value! {
     Symbol, Symbol
 }
 
-impl From<Described<Value>> for Value {
-    fn from(value: Described<Value>) -> Self {
-        Self::Described(Box::new(value))
+impl<T> From<Described<T>> for Value 
+where
+    T: Into<Value>
+{
+    fn from(value: Described<T>) -> Self {
+        let described: Described<Value> = Described {
+            descriptor: value.descriptor,
+            value: value.value.into(),
+        };
+        Self::Described(Box::new(described))
     }
 }
 
