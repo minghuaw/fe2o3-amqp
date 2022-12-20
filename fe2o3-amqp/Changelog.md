@@ -7,6 +7,7 @@
    correct format is used when constructing the filter set.
 2. `Sender::detach()`/`Receiver::detach()` return a `DetachedSender`/`DetachedReceiver` even if it
    encounters an error
+3. Impl `std::error::Error` for `SenderResumeError` and `ReceiverResumeError`
 
 ## 0.7.15
 
