@@ -721,3 +721,27 @@ impl From<LinkRelayError> for definitions::Error {
         }
     }
 }
+
+/// Error with `Sender::detach_then_resume_on_session`
+#[derive(Debug, thiserror::Error)]
+pub enum DetachThenResumeSenderError {
+    /// Error with detaching the sender
+    #[error(transparent)]
+    Detach(#[from] DetachError),
+
+    /// Error with resuming the sender
+    #[error(transparent)]
+    Reattach(#[from] SenderResumeErrorKind),
+}
+
+/// Error with `Receiver::detach_then_resume_on_session`
+#[derive(Debug, thiserror::Error)]
+pub enum DetachThenResumeReceiverError {
+    /// Error with detaching the receiver
+    #[error(transparent)]
+    Detach(#[from] DetachError),
+
+    /// Error with resuming the receiver
+    #[error(transparent)]
+    Reattach(#[from] ReceiverResumeErrorKind),
+}

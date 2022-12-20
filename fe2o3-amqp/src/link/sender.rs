@@ -10,7 +10,7 @@ use tokio::{
 };
 
 use fe2o3_amqp_types::{
-    definitions::{self, DeliveryTag, MessageFormat, SenderSettleMode, Fields},
+    definitions::{self, DeliveryTag, Fields, MessageFormat, SenderSettleMode},
     messaging::{
         message::__private::Serializable, Address, DeliveryState, Outcome, SerializableBody,
         Source, Target, MESSAGE_FORMAT,
@@ -34,8 +34,9 @@ use super::{
     shared_inner::{
         recv_remote_detach, LinkEndpointInner, LinkEndpointInnerDetach, LinkEndpointInnerReattach,
     },
-    ArcSenderUnsettledMap, LinkFrame, LinkRelay, LinkStateError, SendError, SenderAttachError,
-    SenderAttachExchange, SenderFlowState, SenderLink, SenderResumeError, SenderResumeErrorKind,
+    ArcSenderUnsettledMap, DetachThenResumeSenderError, LinkFrame, LinkRelay, LinkStateError,
+    SendError, SenderAttachError, SenderAttachExchange, SenderFlowState, SenderLink,
+    SenderResumeError, SenderResumeErrorKind,
 };
 
 #[cfg(docsrs)]
@@ -219,6 +220,20 @@ impl Sender {
         duration: Duration,
     ) -> Result<Result<DetachedSender, DetachError>, Elapsed> {
         timeout(duration, self.detach()).await
+    }
+
+    /// Detach and re-attach the link to a new session
+    pub async fn detach_then_resume_on_session<R>(
+        &mut self,
+        new_session: &SessionHandle<R>,
+    ) -> Result<(), DetachThenResumeSenderError> {
+        // Detach the link
+        self.inner.detach_with_error(None).await?;
+
+        // Re-attach the link
+        *self.inner.session_control_mut() = new_session.control.clone();
+        self.inner.resume_incoming_attach(None).await?;
+        Ok(())
     }
 
     /// Close the link.
@@ -703,6 +718,39 @@ impl SenderInner<SenderLink<Target>> {
         .map_err(Into::into)
     }
 
+    async fn handle_resuming_delivery(
+        &mut self,
+        delivery_tag: DeliveryTag,
+        resuming: ResumingDelivery,
+        resend_buf: &mut Vec<Payload>,
+    ) -> Result<(), SendError> {
+        #[cfg(feature = "tracing")]
+        tracing::debug!("Resuming delivery: delivery_tag: {:?}", delivery_tag);
+        #[cfg(feature = "log")]
+        log::debug!("Resuming delivery: delivery_tag: {:?}", delivery_tag);
+        let settlement = match resuming {
+            ResumingDelivery::Abort => self.abort(delivery_tag).await?,
+            ResumingDelivery::Resend(payload) => {
+                resend_buf.push(payload);
+                return Ok(());
+            }
+            ResumingDelivery::Resume { state, payload } => {
+                self.resume(delivery_tag, payload, state).await?
+            }
+            ResumingDelivery::RestateOutcome { local_state } => {
+                self.restate_outcome(delivery_tag, local_state).await?
+            }
+        };
+
+        let fut = DeliveryFut::<SendResult>::from(settlement);
+        let _outcome = fut.await?;
+        #[cfg(feature = "tracing")]
+        tracing::debug!("Resuming delivery outcome {:?}", _outcome);
+        #[cfg(feature = "log")]
+        log::debug!("Resuming delivery outcome {:?}", _outcome);
+        Ok(())
+    }
+
     async fn resume(
         &mut self,
         delivery_tag: DeliveryTag,
@@ -779,6 +827,62 @@ impl SenderInner<SenderLink<Target>> {
         .await
         .map_err(Into::into)
     }
+
+    async fn resume_incoming_attach(
+        &mut self,
+        mut initial_remote_attach: Option<Attach>,
+    ) -> Result<(), SenderResumeErrorKind> {
+        self.reallocate_output_handle().await?;
+        let mut resend_buf = Vec::new();
+
+        loop {
+            let attach_exchange = match initial_remote_attach.take() {
+                Some(remote_attach) => {
+                    self.link
+                        .send_attach(&self.outgoing, &self.session, false)
+                        .await?;
+                    self.link.on_incoming_attach(remote_attach)?
+                }
+                None => self.exchange_attach(false).await?,
+            };
+
+            match attach_exchange {
+                SenderAttachExchange::Complete => break,
+                SenderAttachExchange::IncompleteUnsettled(resuming_deliveries) => {
+                    for (delivery_tag, resuming) in resuming_deliveries {
+                        self.handle_resuming_delivery(delivery_tag, resuming, &mut resend_buf)
+                            .await?;
+                    }
+                }
+                SenderAttachExchange::Resume(resuming_deliveries) => {
+                    for (delivery_tag, resuming) in resuming_deliveries {
+                        self.handle_resuming_delivery(delivery_tag, resuming, &mut resend_buf)
+                            .await?;
+                    }
+
+                    // Resend buffered payloads
+                    for payload in resend_buf.drain(..) {
+                        let settlement = self
+                            .send_payload::<SendError>(payload, MESSAGE_FORMAT, None, None, false)
+                            .await?;
+                        let fut = DeliveryFut::<SendResult>::from(settlement);
+
+                        let _outcome = fut.await?;
+                        #[cfg(feature = "tracing")]
+                        tracing::debug!("Resuming delivery outcome {:?}", _outcome);
+                        #[cfg(feature = "log")]
+                        log::debug!("Resuming delivery outcome {:?}", _outcome);
+                    }
+
+                    // Upon completion of this reduction of state, the two parties MUST suspend and
+                    // re-attempt to resume the link.
+                    self.detach_with_error(None).await?;
+                }
+            }
+        }
+
+        Ok(())
+    }
 }
 
 /// A detached sender
@@ -794,7 +898,6 @@ impl SenderInner<SenderLink<Target>> {
 #[derive(Debug)]
 pub struct DetachedSender {
     inner: SenderInner<SenderLink<Target>>,
-    resend_buf: Vec<Payload>,
 }
 
 macro_rules! try_as_sender {
@@ -813,108 +916,13 @@ macro_rules! try_as_sender {
 
 impl DetachedSender {
     fn new(inner: SenderInner<SenderLink<Target>>) -> Self {
-        Self {
-            inner,
-            resend_buf: Vec::new(),
-        }
-    }
-
-    async fn handle_resuming_delivery(
-        &mut self,
-        delivery_tag: DeliveryTag,
-        resuming: ResumingDelivery,
-    ) -> Result<(), SendError> {
-        #[cfg(feature = "tracing")]
-        tracing::debug!("Resuming delivery: delivery_tag: {:?}", delivery_tag);
-        #[cfg(feature = "log")]
-        log::debug!("Resuming delivery: delivery_tag: {:?}", delivery_tag);
-        let settlement = match resuming {
-            ResumingDelivery::Abort => self.inner.abort(delivery_tag).await?,
-            ResumingDelivery::Resend(payload) => {
-                self.resend_buf.push(payload);
-                return Ok(());
-            }
-            ResumingDelivery::Resume { state, payload } => {
-                self.inner.resume(delivery_tag, payload, state).await?
-            }
-            ResumingDelivery::RestateOutcome { local_state } => {
-                self.inner
-                    .restate_outcome(delivery_tag, local_state)
-                    .await?
-            }
-        };
-
-        let fut = DeliveryFut::<SendResult>::from(settlement);
-        let _outcome = fut.await?;
-        #[cfg(feature = "tracing")]
-        tracing::debug!("Resuming delivery outcome {:?}", _outcome);
-        #[cfg(feature = "log")]
-        log::debug!("Resuming delivery outcome {:?}", _outcome);
-        Ok(())
-    }
-
-    async fn resume_inner(
-        &mut self,
-        mut initial_remote_attach: Option<Attach>,
-    ) -> Result<(), SenderResumeErrorKind> {
-        self.inner.reallocate_output_handle().await?;
-
-        loop {
-            // let attach_exchange = self.inner.exchange_attach(false).await?;
-            let attach_exchange = match initial_remote_attach.take() {
-                Some(remote_attach) => {
-                    self.inner
-                        .link
-                        .send_attach(&self.inner.outgoing, &self.inner.session, false)
-                        .await?;
-                    self.inner.link.on_incoming_attach(remote_attach)?
-                }
-                None => self.inner.exchange_attach(false).await?,
-            };
-
-            match attach_exchange {
-                SenderAttachExchange::Complete => break,
-                SenderAttachExchange::IncompleteUnsettled(resuming_deliveries) => {
-                    for (delivery_tag, resuming) in resuming_deliveries {
-                        self.handle_resuming_delivery(delivery_tag, resuming)
-                            .await?;
-                    }
-                }
-                SenderAttachExchange::Resume(resuming_deliveries) => {
-                    for (delivery_tag, resuming) in resuming_deliveries {
-                        self.handle_resuming_delivery(delivery_tag, resuming)
-                            .await?;
-                    }
-
-                    // Resend buffered payloads
-                    for payload in self.resend_buf.drain(..) {
-                        let settlement = self
-                            .inner
-                            .send_payload::<SendError>(payload, MESSAGE_FORMAT, None, None, false)
-                            .await?;
-                        let fut = DeliveryFut::<SendResult>::from(settlement);
-
-                        let _outcome = fut.await?;
-                        #[cfg(feature = "tracing")]
-                        tracing::debug!("Resuming delivery outcome {:?}", _outcome);
-                        #[cfg(feature = "log")]
-                        log::debug!("Resuming delivery outcome {:?}", _outcome);
-                    }
-
-                    // Upon completion of this reduction of state, the two parties MUST suspend and
-                    // re-attempt to resume the link.
-                    self.inner.detach_with_error(None).await?;
-                }
-            }
-        }
-
-        Ok(())
+        Self { inner }
     }
 
     /// Resume the sender link on the original session
     #[cfg_attr(feature = "tracing", tracing::instrument(skip(self)))]
     pub async fn resume(mut self) -> Result<Sender, SenderResumeError> {
-        try_as_sender!(self, self.resume_inner(None).await);
+        try_as_sender!(self, self.inner.resume_incoming_attach(None).await);
         Ok(Sender { inner: self.inner })
     }
 
@@ -923,7 +931,10 @@ impl DetachedSender {
         mut self,
         remote_attach: Attach,
     ) -> Result<Sender, SenderResumeError> {
-        try_as_sender!(self, self.resume_inner(Some(remote_attach)).await);
+        try_as_sender!(
+            self,
+            self.inner.resume_incoming_attach(Some(remote_attach)).await
+        );
         Ok(Sender { inner: self.inner })
     }
 
@@ -933,7 +944,7 @@ impl DetachedSender {
         mut self,
         duration: Duration,
     ) -> Result<Sender, SenderResumeError> {
-        let fut = self.resume_inner(None);
+        let fut = self.inner.resume_incoming_attach(None);
 
         match tokio::time::timeout(duration, fut).await {
             Ok(Ok(_)) => Ok(Sender { inner: self.inner }),
@@ -957,7 +968,7 @@ impl DetachedSender {
         remote_attach: Attach,
         duration: Duration,
     ) -> Result<Sender, SenderResumeError> {
-        let fut = self.resume_inner(Some(remote_attach));
+        let fut = self.inner.resume_incoming_attach(Some(remote_attach));
 
         match tokio::time::timeout(duration, fut).await {
             Ok(Ok(_)) => Ok(Sender { inner: self.inner }),
