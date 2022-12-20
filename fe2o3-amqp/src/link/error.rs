@@ -747,7 +747,7 @@ pub enum DetachThenResumeSenderError {
 
     /// Error with resuming the sender
     #[error(transparent)]
-    Reattach(#[from] SenderResumeErrorKind),
+    Resume(#[from] SenderResumeErrorKind),
 }
 
 /// Error with `Receiver::detach_then_resume_on_session`
@@ -759,5 +759,5 @@ pub enum DetachThenResumeReceiverError {
 
     /// Error with resuming the receiver
     #[error(transparent)]
-    Reattach(#[from] ReceiverResumeErrorKind),
+    Resume(#[from] ReceiverResumeErrorKind),
 }
