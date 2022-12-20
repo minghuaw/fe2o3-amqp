@@ -35,7 +35,7 @@ use super::{
     shared_inner::{LinkEndpointInner, LinkEndpointInnerDetach, LinkEndpointInnerReattach},
     ArcReceiverUnsettledMap, DispositionError, IllegalLinkStateError, LinkFrame, LinkRelay,
     LinkStateError, ReceiverAttachError, ReceiverAttachExchange, ReceiverFlowState, ReceiverLink,
-    ReceiverResumeError, ReceiverResumeErrorKind, ReceiverTransferError, RecvError, DEFAULT_CREDIT,
+    ReceiverResumeError, ReceiverResumeErrorKind, ReceiverTransferError, RecvError, DEFAULT_CREDIT, DetachThenResumeReceiverError,
 };
 
 #[cfg(feature = "transaction")]
@@ -330,6 +330,21 @@ impl Receiver {
         duration: Duration,
     ) -> Result<Result<DetachedReceiver, DetachError>, Elapsed> {
         timeout(duration, self.detach()).await
+    }
+
+    /// Detach the link and then resume on a new session.
+    pub async fn detach_then_resume_on_session<R>(
+        &mut self,
+        new_session: &SessionHandle<R>
+    ) -> Result<ReceiverAttachExchange, DetachThenResumeReceiverError> {
+        // detach the link
+        self.inner.detach_with_error(None).await?;
+
+        // re-attach the link
+        *self.inner.session_control_mut() = new_session.control.clone();
+        // let exchange = self.inner.resume_inner(None).await?;
+
+        todo!()
     }
 
     /// Close the link.
@@ -981,6 +996,34 @@ where
     }
 }
 
+impl ReceiverInner<ReceiverLink<Target>> {
+    pub(crate) async fn resume_incoming_attach(
+        &mut self,
+        mut initial_remote_attach: Option<Attach>
+    ) -> Result<ReceiverAttachExchange, ReceiverResumeErrorKind> {
+        self.reallocate_output_handle().await?;
+
+        let exchange = match initial_remote_attach.take() {
+            Some(remote_attach) => {
+                self.link
+                    .send_attach(&self.outgoing, &self.session, false)
+                    .await?;
+                self.link.on_incoming_attach(remote_attach)?
+            }
+            None => self.exchange_attach(false).await?,
+        };
+        #[cfg(feature = "tracing")]
+        tracing::debug!(?exchange);
+        #[cfg(feature = "log")]
+        log::debug!("exchange = {:?}", exchange);
+
+        let credit = self.link.flow_state.link_credit();
+        self.set_credit(credit).await?;
+
+        Ok(exchange)
+    }
+}
+
 /// A detached receiver
 ///
 /// # Example
@@ -1098,40 +1141,13 @@ impl From<ResumingReceiver> for Receiver {
 }
 
 impl DetachedReceiver {
-    async fn resume_inner(
-        &mut self,
-        mut remote_attach: Option<Attach>,
-    ) -> Result<ReceiverAttachExchange, ReceiverResumeErrorKind> {
-        self.inner.reallocate_output_handle().await?;
-
-        let exchange = match remote_attach.take() {
-            Some(remote_attach) => {
-                self.inner
-                    .link
-                    .send_attach(&self.inner.outgoing, &self.inner.session, false)
-                    .await?;
-                self.inner.link.on_incoming_attach(remote_attach)?
-            }
-            None => self.inner.exchange_attach(false).await?,
-        };
-        #[cfg(feature = "tracing")]
-        tracing::debug!(?exchange);
-        #[cfg(feature = "log")]
-        log::debug!("exchange = {:?}", exchange);
-
-        let credit = self.inner.link.flow_state.link_credit();
-        self.inner.set_credit(credit).await?;
-
-        Ok(exchange)
-    }
-
     /// Resume the receiver link
     ///
     /// Please note that the link may need to be detached and then resume multiple
     /// times if there are unsettled deliveries.
     #[cfg_attr(feature = "tracing", tracing::instrument(skip(self)))]
     pub async fn resume(mut self) -> Result<ResumingReceiver, ReceiverResumeError> {
-        let exchange = try_as_recver!(self, self.resume_inner(None).await);
+        let exchange = try_as_recver!(self, self.inner.resume_incoming_attach(None).await);
         let receiver = Receiver { inner: self.inner };
         let resuming_receiver = match exchange {
             ReceiverAttachExchange::Complete => ResumingReceiver::Complete(receiver),
@@ -1154,7 +1170,7 @@ impl DetachedReceiver {
         mut self,
         duration: Duration,
     ) -> Result<ResumingReceiver, ReceiverResumeError> {
-        let fut = self.resume_inner(None);
+        let fut = self.inner.resume_incoming_attach(None);
 
         match tokio::time::timeout(duration, fut).await {
             Ok(Ok(exchange)) => {
@@ -1215,7 +1231,7 @@ impl DetachedReceiver {
         mut self,
         remote_attach: Attach,
     ) -> Result<ResumingReceiver, ReceiverResumeError> {
-        let exchange = try_as_recver!(self, self.resume_inner(Some(remote_attach)).await);
+        let exchange = try_as_recver!(self, self.inner.resume_incoming_attach(Some(remote_attach)).await);
         let receiver = Receiver { inner: self.inner };
         let resuming_receiver = match exchange {
             ReceiverAttachExchange::Complete => ResumingReceiver::Complete(receiver),
@@ -1236,7 +1252,7 @@ impl DetachedReceiver {
         remote_attach: Attach,
         duration: Duration,
     ) -> Result<ResumingReceiver, ReceiverResumeError> {
-        let fut = self.resume_inner(Some(remote_attach));
+        let fut = self.inner.resume_incoming_attach(Some(remote_attach));
 
         match tokio::time::timeout(duration, fut).await {
             Ok(Ok(exchange)) => {
