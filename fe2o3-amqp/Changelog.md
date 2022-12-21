@@ -9,6 +9,10 @@
    encounters an error
 3. Impl `std::error::Error` for `SenderResumeError` and `ReceiverResumeError`
 
+## 0.7.16
+
+1. Added `detach_then_resume_on_session` method for `Sender` and `Receiver`
+
 ## 0.7.15
 
 1. Added `.properties()` and `.properties_mut()` methods to `Receiver` and `Sender`
