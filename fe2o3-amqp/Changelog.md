@@ -8,7 +8,6 @@
 2. `Sender::detach()`/`Receiver::detach()` return a `DetachedSender`/`DetachedReceiver` even if it
    encounters an error
 3. Impl `std::error::Error` for `SenderResumeError` and `ReceiverResumeError`
-4. Added `detach_then_resume_on_session` method for `Sender` and `Receiver`
 
 ## 0.7.15
 
