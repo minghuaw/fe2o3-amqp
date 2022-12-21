@@ -295,7 +295,7 @@ impl endpoint::Session for Session {
     fn allocate_link(
         &mut self,
         link_name: String,
-        link_relay: Option<LinkRelay<()>>,
+        link_relay: Option<LinkRelay<()>>, // TODO: why is this `Option`?
     ) -> Result<OutputHandle, Self::AllocError> {
         match &self.local_state {
             SessionState::Mapped => {}
