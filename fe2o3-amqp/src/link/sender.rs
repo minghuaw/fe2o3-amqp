@@ -223,17 +223,30 @@ impl Sender {
     }
 
     /// Detach and re-attach the link to a new session
+    /// 
+    /// This will still attempt to re-attach even if detaching fails.
+    /// `DetachThenResumeSenderError::Resume` will be returned if the detach succeeds but re-attach
+    /// fails. `DetachThenResumeSenderError::Detach` will be returned if both the detach and
+    /// re-attach fails.
     pub async fn detach_then_resume_on_session<R>(
         &mut self,
         new_session: &SessionHandle<R>,
     ) -> Result<(), DetachThenResumeSenderError> {
         // Detach the link
-        self.inner.detach_with_error(None).await?;
+        let detach_result = self
+            .inner
+            .detach_with_error(None)
+            .await
+            .map_err(DetachThenResumeSenderError::from);
 
         // Re-attach the link
         *self.inner.session_control_mut() = new_session.control.clone();
-        self.inner.resume_incoming_attach(None).await?;
-        Ok(())
+        let attach_result = self
+            .inner
+            .resume_incoming_attach(None)
+            .await
+            .map_err(DetachThenResumeSenderError::from);
+        detach_result.or(attach_result)
     }
 
     /// Close the link.
