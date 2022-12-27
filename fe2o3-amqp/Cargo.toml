@@ -1,6 +1,6 @@
 [package]
 name = "fe2o3-amqp"
-version = "0.7.16"
+version = "0.7.17"
 edition = "2021"
 description = "An implementation of AMQP1.0 protocol based on serde and tokio"
 license = "MIT/Apache-2.0"
