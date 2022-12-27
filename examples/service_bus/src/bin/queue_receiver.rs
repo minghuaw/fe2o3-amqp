@@ -35,12 +35,14 @@ async fn main() {
         .unwrap();
 
     // All of the Microsoft AMQP clients represent the event body as an uninterpreted bag of bytes.
-    let delivery = receiver.recv::<Body<Value>>().await.unwrap();
-    receiver.accept(&delivery).await.unwrap();
-    println!("{:?}", delivery);
-    let msg =
-        std::str::from_utf8(&delivery.body().try_as_data().unwrap().next().unwrap()[..]).unwrap();
-    println!("Received: {:?}", msg);
+    for _ in 0..1 {
+        let delivery = receiver.recv::<Body<Value>>().await.unwrap();
+        receiver.accept(&delivery).await.unwrap();
+        println!("{:?}", delivery);
+        let msg =
+            std::str::from_utf8(&delivery.body().try_as_data().unwrap().next().unwrap()[..]).unwrap();
+        println!("Received: {:?}", msg);
+    }
 
     receiver.close().await.unwrap();
     session.end().await.unwrap();
