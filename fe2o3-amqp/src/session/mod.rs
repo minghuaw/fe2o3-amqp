@@ -1,6 +1,6 @@
 //! Implements AMQP1.0 Session
 
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
 
 use async_trait::async_trait;
 use fe2o3_amqp_types::{
@@ -48,7 +48,7 @@ pub use error::{BeginError, Error};
 mod builder;
 pub use builder::*;
 
-use self::frame::{SessionFrame, SessionFrameBody};
+use self::frame::{SessionFrame, SessionFrameBody, SessionOutgoingItem};
 
 /// Default incoming_window and outgoing_window
 pub const DEFAULT_WINDOW: UInt = 2048;
@@ -223,6 +223,8 @@ pub struct Session {
     // initialize with 0 first and change after receiving the remote Begin
     pub(crate) next_incoming_id: TransferNumber,
     pub(crate) remote_incoming_window: SequenceNo,
+    // Outgoing transfers that are blocked by the remote-incoming-window
+    pub(crate) remote_incoming_window_exhausted_buffer: VecDeque<(InputHandle, Transfer, Payload)>,
 
     // The remote-outgoing-window reflects the maximum number of incoming transfers that MAY
     // arrive without exceeding the remote endpoint’s outgoing-window. This value MUST be
@@ -274,6 +276,152 @@ impl Session {
     /// ```
     pub async fn begin(conn: &mut ConnectionHandle<()>) -> Result<SessionHandle<()>, BeginError> {
         Session::builder().begin(conn).await
+    }
+
+    fn on_outgoing_transfer_inner(
+        &mut self,
+        input_handle: InputHandle,
+        mut transfer: Transfer,
+        payload: Payload,
+    ) -> Result<SessionFrame, SessionInnerError> {
+        // Upon sending a transfer, the sending endpoint will increment its next-outgoing-id, decre-
+        // ment its remote-incoming-window, and MAY (depending on policy) decrement its outgoing-
+        // window.
+
+        // TODO: What policy would result in a decrement in outgoing-window?
+
+        // If not set on the first (or only) transfer for a (multi-transfer)
+        // delivery, then the settled flag MUST be interpreted as being false.
+        //
+        // If the negotiated value for snd-settle-mode at attachment is settled,
+        // then this field MUST be true on at least one transfer frame for a
+        // delivery
+        //
+        // If the negotiated value for snd-settle-mode at attachment is unsettled,
+        // then this field MUST be false (or unset) on every transfer frame for a
+        // delivery
+        let settled = transfer.settled.unwrap_or(false);
+
+        // Only the first transfer is required to have delivery_tag and delivery_id
+        if let Some(delivery_tag) = &transfer.delivery_tag {
+            // The next-outgoing-id is the transfer-id to assign to the next transfer frame.
+            let delivery_id = self.next_outgoing_id;
+            transfer.delivery_id = Some(delivery_id);
+
+            // Disposition doesn't carry delivery tag
+            if !settled {
+                self.delivery_tag_by_id.insert(
+                    (Role::Receiver, delivery_id),
+                    (input_handle, delivery_tag.clone()),
+                );
+            }
+        }
+
+        self.next_outgoing_id = self.next_outgoing_id.wrapping_add(1);
+
+        // The remote-incoming-window reflects the maximum number of outgoing transfers that can
+        // be sent without exceeding the remote endpoint’s incoming-window. This value MUST be
+        // decremented after every transfer frame is sent, and recomputed when informed of the
+        // remote session endpoint state.
+        self.remote_incoming_window = self.remote_incoming_window.saturating_sub(1);
+
+        let body = SessionFrameBody::Transfer {
+            performative: transfer,
+            payload,
+        };
+        let frame = SessionFrame::new(self.outgoing_channel, body);
+        Ok(frame)
+    }
+
+    async fn on_incoming_flow_inner(
+        &mut self,
+        flow: Flow,
+    ) -> Result<Option<LinkFlow>, SessionInnerError> {
+        // Handle session flow control
+        //
+        // When the endpoint receives a flow frame from its peer, it MUST update the next-incoming-id
+        // directly from the next-outgoing-id of the frame, and it MUST update the remote-outgoing-
+        // window directly from the outgoing-window of the frame.
+        self.next_incoming_id = flow.next_outgoing_id;
+        self.remote_outgoing_window = flow.outgoing_window;
+
+        match &flow.next_incoming_id {
+            Some(flow_next_incoming_id) => {
+                // The remote-incoming-window is computed as follows:
+                // next-incoming-id_flow + incoming-window_flow - next-outgoing-id_endpoint
+                self.remote_incoming_window =
+                    flow_next_incoming_id + flow.incoming_window - self.next_outgoing_id;
+            }
+            None => {
+                // If the next-incoming-id field of the flow frame is not set, then remote-incoming-window is computed as follows:
+                // initial-outgoing-id_endpoint + incoming-window_flow - next-outgoing-id_endpoint
+                self.remote_incoming_window = *(self.initial_outgoing_id.value())
+                    + flow.incoming_window
+                    - self.next_outgoing_id;
+            }
+        }
+
+        // Handle link flow control
+        if let Ok(link_flow) = LinkFlow::try_from(flow) {
+            let input_handle = InputHandle::from(link_flow.handle.clone());
+            match self.link_by_input_handle.get_mut(&input_handle) {
+                Some(link_relay) => {
+                    return link_relay
+                        .on_incoming_flow(link_flow)
+                        .await
+                        .map_err(Into::into);
+                }
+                None => return Err(SessionInnerError::UnattachedHandle), // End session with unattached handle?
+            }
+        }
+
+        Ok(None)
+    }
+
+    fn prepare_session_frames_from_buffered_transfers(
+        &mut self,
+        mut output_frame_buffer: Vec<SessionFrame>,
+    ) -> Result<Vec<SessionFrame>, SessionInnerError> {
+        // Drain the buffered transfers as much as possible
+        while self.remote_incoming_window > 0 {
+            if let Some((input_handle, transfer, payload)) =
+                self.remote_incoming_window_exhausted_buffer.pop_front()
+            {
+                let frame = self.on_outgoing_transfer_inner(input_handle, transfer, payload)?;
+                output_frame_buffer.push(frame);
+            } else {
+                break;
+            }
+        }
+        Ok(output_frame_buffer)
+    }
+
+    /// Drain the buffered transfers frames and current transfer frame as much as possible
+    fn prepare_session_frames_from_buffered_and_current_transfers(
+        &mut self,
+        output_frame_buffer: Vec<SessionFrame>,
+        cur_input_handle: InputHandle,
+        cur_transfer: Transfer,
+        cur_payload: Payload,
+    ) -> Result<Vec<SessionFrame>, SessionInnerError> {
+        // Drain the buffered transfers first
+        let mut frames =
+            self.prepare_session_frames_from_buffered_transfers(output_frame_buffer)?;
+
+        // Then process the current transfer if there is still space in the
+        // remote-incoming-window
+        if self.remote_incoming_window > 0 {
+            let frame =
+                self.on_outgoing_transfer_inner(cur_input_handle, cur_transfer, cur_payload)?;
+            frames.push(frame);
+        } else {
+            self.remote_incoming_window_exhausted_buffer.push_back((
+                cur_input_handle,
+                cur_transfer,
+                cur_payload,
+            ));
+        }
+        Ok(frames)
     }
 }
 
@@ -402,46 +550,31 @@ impl endpoint::Session for Session {
         }
     }
 
-    async fn on_incoming_flow(&mut self, flow: Flow) -> Result<Option<LinkFlow>, Self::Error> {
-        // Handle session flow control
-        //
-        // When the endpoint receives a flow frame from its peer, it MUST update the next-incoming-id
-        // directly from the next-outgoing-id of the frame, and it MUST update the remote-outgoing-
-        // window directly from the outgoing-window of the frame.
-        self.next_incoming_id = flow.next_outgoing_id;
-        self.remote_outgoing_window = flow.outgoing_window;
+    async fn on_incoming_flow(
+        &mut self,
+        flow: Flow,
+    ) -> Result<Option<SessionOutgoingItem>, Self::Error> {
+        let outgoing_link_flow = self.on_incoming_flow_inner(flow).await?;
+        let outgoing_session_flow = outgoing_link_flow
+            .map(|flow| self.on_outgoing_flow(flow))
+            .transpose()?;
 
-        match &flow.next_incoming_id {
-            Some(flow_next_incoming_id) => {
-                // The remote-incoming-window is computed as follows:
-                // next-incoming-id_flow + incoming-window_flow - next-outgoing-id_endpoint
-                self.remote_incoming_window =
-                    flow_next_incoming_id + flow.incoming_window - self.next_outgoing_id;
+        // Process buffered outgoing transfer frames if the updated remote-incoming-window is
+        // greater than 0
+        if self.remote_incoming_window > 0
+            && !self.remote_incoming_window_exhausted_buffer.is_empty()
+        {
+            let mut output_frame_buffer =
+                Vec::with_capacity(self.remote_incoming_window_exhausted_buffer.len() + 1);
+            if let Some(outgoing_session_flow) = outgoing_session_flow {
+                output_frame_buffer.push(outgoing_session_flow);
             }
-            None => {
-                // If the next-incoming-id field of the flow frame is not set, then remote-incoming-window is computed as follows:
-                // initial-outgoing-id_endpoint + incoming-window_flow - next-outgoing-id_endpoint
-                self.remote_incoming_window = *(self.initial_outgoing_id.value())
-                    + flow.incoming_window
-                    - self.next_outgoing_id;
-            }
+            let frames =
+                self.prepare_session_frames_from_buffered_transfers(output_frame_buffer)?;
+            Ok(Some(SessionOutgoingItem::MultipleFrames(frames)))
+        } else {
+            Ok(outgoing_session_flow.map(SessionOutgoingItem::SingleFrame))
         }
-
-        // Handle link flow control
-        if let Ok(link_flow) = LinkFlow::try_from(flow) {
-            let input_handle = InputHandle::from(link_flow.handle.clone());
-            match self.link_by_input_handle.get_mut(&input_handle) {
-                Some(link_relay) => {
-                    return link_relay
-                        .on_incoming_flow(link_flow)
-                        .await
-                        .map_err(Into::into);
-                }
-                None => return Err(SessionInnerError::UnattachedHandle), // End session with unattached handle?
-            }
-        }
-
-        Ok(None)
     }
 
     async fn on_incoming_transfer(
@@ -695,56 +828,34 @@ impl endpoint::Session for Session {
     fn on_outgoing_transfer(
         &mut self,
         input_handle: InputHandle,
-        mut transfer: Transfer,
+        transfer: Transfer,
         payload: Payload,
-    ) -> Result<SessionFrame, Self::Error> {
-        // Upon sending a transfer, the sending endpoint will increment its next-outgoing-id, decre-
-        // ment its remote-incoming-window, and MAY (depending on policy) decrement its outgoing-
-        // window.
-
-        // TODO: What policy would result in a decrement in outgoing-window?
-
-        // If not set on the first (or only) transfer for a (multi-transfer)
-        // delivery, then the settled flag MUST be interpreted as being false.
-        //
-        // If the negotiated value for snd-settle-mode at attachment is settled,
-        // then this field MUST be true on at least one transfer frame for a
-        // delivery
-        //
-        // If the negotiated value for snd-settle-mode at attachment is unsettled,
-        // then this field MUST be false (or unset) on every transfer frame for a
-        // delivery
-        let settled = transfer.settled.unwrap_or(false);
-
-        // Only the first transfer is required to have delivery_tag and delivery_id
-        if let Some(delivery_tag) = &transfer.delivery_tag {
-            // The next-outgoing-id is the transfer-id to assign to the next transfer frame.
-            let delivery_id = self.next_outgoing_id;
-            transfer.delivery_id = Some(delivery_id);
-
-            // Disposition doesn't carry delivery tag
-            if !settled {
-                self.delivery_tag_by_id.insert(
-                    (Role::Receiver, delivery_id),
-                    (input_handle, delivery_tag.clone()),
-                );
-            }
+    ) -> Result<Option<SessionOutgoingItem>, Self::Error> {
+        // Check if remote-incoming-window is exhausted
+        if self.remote_incoming_window == 0 {
+            // exhausted
+            self.remote_incoming_window_exhausted_buffer.push_back((
+                input_handle,
+                transfer,
+                payload,
+            ));
+            Ok(None)
+        } else if self.remote_incoming_window_exhausted_buffer.is_empty() {
+            // no buffered transfer
+            let frame = self.on_outgoing_transfer_inner(input_handle, transfer, payload)?;
+            Ok(Some(SessionOutgoingItem::SingleFrame(frame)))
+        } else {
+            let output_frame_buffer =
+                Vec::with_capacity(self.remote_incoming_window_exhausted_buffer.len() + 1);
+            self.prepare_session_frames_from_buffered_and_current_transfers(
+                output_frame_buffer,
+                input_handle,
+                transfer,
+                payload,
+            )
+            .map(SessionOutgoingItem::MultipleFrames)
+            .map(Some)
         }
-
-        self.next_outgoing_id = self.next_outgoing_id.wrapping_add(1);
-
-        // The remote-incoming-window reflects the maximum number of outgoing transfers that can
-        // be sent without exceeding the remote endpoint’s incoming-window. This value MUST be
-        // decremented after every transfer frame is sent, and recomputed when informed of the
-        // remote session endpoint state.
-        self.remote_incoming_window -= 1;
-
-        let body = SessionFrameBody::Transfer {
-            performative: transfer,
-            payload,
-        };
-        let frame = SessionFrame::new(self.outgoing_channel, body);
-        Ok(frame)
     }
 
     fn on_outgoing_disposition(
@@ -783,10 +894,7 @@ impl endpoint::Session for Session {
 }
 
 fn num_messages_settled_by_disposition(first: u32, last: Option<u32>) -> u32 {
-    last
-        .and_then(|last| last.checked_sub(first))
-        .unwrap_or(0)
-        + 1
+    last.and_then(|last| last.checked_sub(first)).unwrap_or(0) + 1
 }
 
 #[cfg(feature = "transaction")]
@@ -856,5 +964,4 @@ mod tests {
         let count = num_messages_settled_by_disposition(first, last);
         assert_eq!(count, 1);
     }
-
 }

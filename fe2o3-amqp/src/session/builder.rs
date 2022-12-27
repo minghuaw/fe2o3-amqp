@@ -1,6 +1,6 @@
 //! Session builder
 
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
 
 use fe2o3_amqp_types::definitions::{Fields, Handle, TransferNumber};
 use serde_amqp::primitives::Symbol;
@@ -95,7 +95,6 @@ impl Builder {
         local_state: SessionState,
     ) -> Session {
         Session {
-            // control,
             outgoing_channel,
             local_state,
             initial_outgoing_id: Constant::new(self.next_outgoing_id),
@@ -106,6 +105,7 @@ impl Builder {
             incoming_channel: None,
             next_incoming_id: 0,
             remote_incoming_window: 0,
+            remote_incoming_window_exhausted_buffer: VecDeque::new(),
             remote_outgoing_window: 0,
             offered_capabilities: self.offered_capabilities,
             desired_capabilities: self.desired_capabilities,
@@ -140,6 +140,7 @@ impl Builder {
             incoming_channel: None,
             next_incoming_id: 0,
             remote_incoming_window: 0,
+            remote_incoming_window_exhausted_buffer: VecDeque::new(),
             remote_outgoing_window: 0,
             offered_capabilities: self.offered_capabilities,
             desired_capabilities: self.desired_capabilities,

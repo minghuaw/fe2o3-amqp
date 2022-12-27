@@ -7,7 +7,7 @@ use std::{
 
 use async_trait::async_trait;
 use fe2o3_amqp_types::{
-    definitions::{self, DeliveryTag, SequenceNo, Fields},
+    definitions::{self, DeliveryTag, Fields, SequenceNo},
     messaging::{
         Accepted, Address, DeliveryState, FromBody, Modified, Rejected, Released, Source, Target,
     },
@@ -33,9 +33,10 @@ use super::{
     receiver_link::count_number_of_sections_and_offset,
     role,
     shared_inner::{LinkEndpointInner, LinkEndpointInnerDetach, LinkEndpointInnerReattach},
-    ArcReceiverUnsettledMap, DispositionError, IllegalLinkStateError, LinkFrame, LinkRelay,
-    LinkStateError, ReceiverAttachError, ReceiverAttachExchange, ReceiverFlowState, ReceiverLink,
-    ReceiverResumeError, ReceiverResumeErrorKind, ReceiverTransferError, RecvError, DEFAULT_CREDIT, DetachThenResumeReceiverError,
+    ArcReceiverUnsettledMap, DetachThenResumeReceiverError, DispositionError,
+    IllegalLinkStateError, LinkFrame, LinkRelay, LinkStateError, ReceiverAttachError,
+    ReceiverAttachExchange, ReceiverFlowState, ReceiverLink, ReceiverResumeError,
+    ReceiverResumeErrorKind, ReceiverTransferError, RecvError, DEFAULT_CREDIT,
 };
 
 #[cfg(feature = "transaction")]
@@ -333,23 +334,29 @@ impl Receiver {
     }
 
     /// Detach the link and then resume on a new session.
-    /// 
+    ///
     /// This will still attemt to re-attach even if the detach fails.
     /// `DetachThenResumeReceiverError::Resume` will be returned if detach succeeds but re-attach
     /// fails. `DetachThenResumeReceiverError::Detach` will be returned if both detach and re-attach
     /// fails.
     pub async fn detach_then_resume_on_session<R>(
         &mut self,
-        new_session: &SessionHandle<R>
+        new_session: &SessionHandle<R>,
     ) -> Result<ReceiverAttachExchange, DetachThenResumeReceiverError> {
         // detach the link
-        let detach_result = self.inner.detach_with_error(None).await
+        let detach_result = self
+            .inner
+            .detach_with_error(None)
+            .await
             .map_err(DetachThenResumeReceiverError::from);
 
         // re-attach the link
         self.inner.session = new_session.control.clone();
         self.inner.outgoing = new_session.outgoing.clone();
-        let exchange_result = self.inner.resume_incoming_attach(None).await
+        let exchange_result = self
+            .inner
+            .resume_incoming_attach(None)
+            .await
             .map_err(DetachThenResumeReceiverError::from);
 
         match (detach_result, exchange_result) {
@@ -1011,7 +1018,7 @@ where
 impl ReceiverInner<ReceiverLink<Target>> {
     pub(crate) async fn resume_incoming_attach(
         &mut self,
-        mut initial_remote_attach: Option<Attach>
+        mut initial_remote_attach: Option<Attach>,
     ) -> Result<ReceiverAttachExchange, ReceiverResumeErrorKind> {
         self.reallocate_output_handle().await?;
 
@@ -1245,7 +1252,10 @@ impl DetachedReceiver {
         mut self,
         remote_attach: Attach,
     ) -> Result<ResumingReceiver, ReceiverResumeError> {
-        let exchange = try_as_recver!(self, self.inner.resume_incoming_attach(Some(remote_attach)).await);
+        let exchange = try_as_recver!(
+            self,
+            self.inner.resume_incoming_attach(Some(remote_attach)).await
+        );
         let receiver = Receiver { inner: self.inner };
         let resuming_receiver = match exchange {
             ReceiverAttachExchange::Complete => ResumingReceiver::Complete(receiver),
