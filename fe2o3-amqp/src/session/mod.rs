@@ -223,6 +223,13 @@ pub struct Session {
     // initialize with 0 first and change after receiving the remote Begin
     pub(crate) next_incoming_id: TransferNumber,
     pub(crate) remote_incoming_window: SequenceNo,
+
+    // The remote-outgoing-window reflects the maximum number of incoming transfers that MAY
+    // arrive without exceeding the remote endpoint’s outgoing-window. This value MUST be
+    // decremented after every incoming transfer frame is received, and recomputed when in-
+    // formed of the remote session endpoint state. When this window shrinks, it is an
+    // indication of outstanding transfers. Settling outstanding transfers can cause the window
+    // to grow.
     pub(crate) remote_outgoing_window: SequenceNo,
 
     // capabilities
@@ -445,9 +452,8 @@ impl endpoint::Session for Session {
         // Upon receiving a transfer, the receiving endpoint will increment the next-incoming-id to
         // match the implicit transfer-id of the incoming transfer plus one, as well as decrementing the
         // remote-outgoing-window, and MAY (depending on policy) decrement its incoming-window.
-
         self.next_incoming_id = self.next_incoming_id.wrapping_add(1);
-        self.remote_outgoing_window -= 1;
+        self.remote_outgoing_window = self.remote_outgoing_window.checked_sub(1).unwrap_or(0);
 
         let input_handle = InputHandle::from(transfer.handle.clone());
         match self.link_by_input_handle.get_mut(&input_handle) {
@@ -745,6 +751,25 @@ impl endpoint::Session for Session {
     ) -> Result<SessionFrame, Self::Error> {
         // Currently the sender cannot actively dispose any message
         // because the sender doesn't have access to the delivery_id
+
+        // The remote-outgoing-window reflects the maximum number of incoming transfers that MAY
+        // arrive without exceeding the remote endpoint’s outgoing-window. This value MUST be
+        // decremented after every incoming transfer frame is received, and recomputed when in-
+        // formed of the remote session endpoint state. When this window shrinks, it is an
+        // indication of outstanding transfers. Settling outstanding transfers can cause the window
+        // to grow.
+        if disposition
+            .state
+            .as_ref()
+            .map(|s| s.is_terminal())
+            .unwrap_or(false)
+        {
+            let count = disposition
+                .last
+                .map(|last| last - disposition.first + 1)
+                .unwrap_or(1);
+            self.remote_outgoing_window = self.remote_outgoing_window.saturating_add(count);
+        }
 
         let body = SessionFrameBody::Disposition(disposition);
         let frame = SessionFrame::new(self.outgoing_channel, body);
