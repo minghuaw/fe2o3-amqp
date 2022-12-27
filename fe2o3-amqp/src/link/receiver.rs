@@ -338,18 +338,29 @@ impl Receiver {
     }
 
     /// Detach the link and then resume on a new session.
+    /// 
+    /// This will still attemt to re-attach even if the detach fails.
+    /// `DetachThenResumeReceiverError::Resume` will be returned if detach succeeds but re-attach
+    /// fails. `DetachThenResumeReceiverError::Detach` will be returned if both detach and re-attach
+    /// fails.
     pub async fn detach_then_resume_on_session<R>(
         &mut self,
         new_session: &SessionHandle<R>
     ) -> Result<ReceiverAttachExchange, DetachThenResumeReceiverError> {
         // detach the link
-        self.inner.detach_with_error(None).await?;
+        let detach_result = self.inner.detach_with_error(None).await
+            .map_err(DetachThenResumeReceiverError::from);
 
         // re-attach the link
         *self.inner.session_control_mut() = new_session.control.clone();
-        // let exchange = self.inner.resume_inner(None).await?;
+        let exchange_result = self.inner.resume_incoming_attach(None).await
+            .map_err(DetachThenResumeReceiverError::from);
 
-        todo!()
+        match (detach_result, exchange_result) {
+            (_, Ok(exchange)) => Ok(exchange),
+            (Ok(_), Err(err)) => Err(err),
+            (Err(err), Err(_)) => Err(err),
+        }
     }
 
     /// Close the link.
