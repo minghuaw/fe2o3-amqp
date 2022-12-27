@@ -4,11 +4,11 @@
 
 1. Ported 0.7.17
 
-~~## 0.8.1 (yanked)~~
+## ~~0.8.1 (yanked)~~
 
 1. Updated `base64` to "0.20"
 
-~~## 0.8.0 (yanked)~~
+## ~~0.8.0 (yanked)~~
 
 1. Updated `fe2o3-amqp-types` to 0.7.0, which introduced breaking change to the type alias
    `FilterSet` to support legacy formatted filter set. The user would need to ensure that the
@@ -23,7 +23,7 @@
 
 1. Fixed not implemented bug in `Receiver::detach_then_resume_on_session()`
 
-~~## 0.7.16 (yanked)~~
+## ~~0.7.16 (yanked)~~
 
 1. Added `detach_then_resume_on_session` method for `Sender` and `Receiver`
 
