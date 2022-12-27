@@ -198,18 +198,22 @@ impl Sender {
     ///
     /// If the remote peer sends a detach frame with closed field set to true,
     /// the Sender will re-attach and send a closing detach
-    pub async fn detach(mut self) -> Result<DetachedSender, DetachError> {
-        self.inner.detach_with_error(None).await?;
-        Ok(DetachedSender::new(self.inner))
+    pub async fn detach(mut self) -> Result<DetachedSender, (DetachedSender, DetachError)> {
+        match self.inner.detach_with_error(None).await {
+            Ok(_) => Ok(DetachedSender::new(self.inner)),
+            Err(err) => Err((DetachedSender::new(self.inner), err)),
+        }
     }
 
     /// Detach the link with an error
     pub async fn detach_with_error(
         mut self,
         error: impl Into<definitions::Error>,
-    ) -> Result<DetachedSender, DetachError> {
-        self.inner.detach_with_error(Some(error.into())).await?;
-        Ok(DetachedSender::new(self.inner))
+    ) -> Result<DetachedSender, (DetachedSender, DetachError)> {
+        match self.inner.detach_with_error(Some(error.into())).await {
+            Ok(_) => Ok(DetachedSender::new(self.inner)),
+            Err(err) => Err((DetachedSender::new(self.inner), err)),
+        }
     }
 
     /// Detach the link with a timeout
@@ -218,7 +222,7 @@ impl Sender {
     pub async fn detach_with_timeout(
         self,
         duration: Duration,
-    ) -> Result<Result<DetachedSender, DetachError>, Elapsed> {
+    ) -> Result<Result<DetachedSender, (DetachedSender, DetachError)>, Elapsed> {
         timeout(duration, self.detach()).await
     }
 

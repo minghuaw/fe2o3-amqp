@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.6.0
+
+1. Updated `fe2o3-amqp-types` to version "0.7.0" which introduced breaking changes to the type alias
+   `FilterSet` to support legacy formatted filter set.
+
 ## 0.5.0
 
 1. Updated deps to breaking alpha releases

@@ -663,6 +663,14 @@ pub struct SenderResumeError {
     pub kind: SenderResumeErrorKind,
 }
 
+impl std::fmt::Display for SenderResumeError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "SenderResumeError: {}", self.kind)
+    }
+}
+
+impl std::error::Error for SenderResumeError {}
+
 /// Error kind of receiver resumption
 #[derive(Debug, thiserror::Error)]
 pub enum ReceiverResumeErrorKind {
@@ -692,6 +700,14 @@ pub struct ReceiverResumeError {
     /// The error with resumption
     pub kind: ReceiverResumeErrorKind,
 }
+
+impl std::fmt::Display for ReceiverResumeError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "ReceiverResumeError: {}", self.kind)
+    }
+}
+
+impl std::error::Error for ReceiverResumeError {}
 
 /// Error with link relay
 #[derive(Debug, thiserror::Error)]

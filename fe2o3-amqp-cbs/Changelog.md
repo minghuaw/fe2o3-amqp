@@ -1,5 +1,10 @@
 # Change Log
 
+## 0.2.0
+
+- Updated `fe2o3-amqp` to "0.8.0" and `fe2o3-amqp-management` to "0.2.0" which introduced breaking
+  changes to the type alias `FilterSet` to support legacy formatted filter set.
+
 ## 0.1.1
 
 - Added `CbsClientBuilder`

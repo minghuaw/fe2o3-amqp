@@ -224,6 +224,13 @@ impl SourceBuilder {
     }
 
     /// Set the "filter" field
+    /// 
+    /// Although the value of each entry must be either null or a described type,
+    /// many implementations in other programming languages still supports the legacy
+    /// format of a filter-set where the value could be any AMQP type. This legacy
+    /// format is deprecated and SHOULD NOT be used in new implementations. However,
+    /// for compatibility with existing implementations, the following type alias
+    /// is provided since "0.7.0" to allow the legacy format to be used.
     pub fn filter(mut self, filter_set: FilterSet) -> Self {
         self.source.filter = Some(filter_set);
         self
@@ -235,10 +242,27 @@ impl SourceBuilder {
         key: impl Into<Symbol>,
         value: impl Into<Option<Described<Value>>>,
     ) -> Self {
+        let value = value.into();
         self.source
             .filter
             .get_or_insert(OrderedMap::new())
-            .insert(key.into(), value.into());
+            .insert(key.into(), value.map(Into::into).unwrap_or(Value::Null));
+        self
+    }
+
+    /// Many other implementations use the legacy format for filters, in which the value is any
+    /// AMQP type, not just a described value. This method allows you to add an entry to the filter
+    /// using the legacy format.
+    pub fn add_to_filter_using_legacy_format(
+        mut self,
+        key: impl Into<Symbol>,
+        value: impl Into<Value>,
+    ) -> Self {
+        let value = value.into();
+        self.source
+            .filter
+            .get_or_insert(OrderedMap::new())
+            .insert(key.into(), value);
         self
     }
 
