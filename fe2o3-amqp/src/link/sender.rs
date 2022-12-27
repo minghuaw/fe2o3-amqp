@@ -251,9 +251,9 @@ impl Sender {
             .await;
 
             match (detach_result, attach_result) {
-            (Ok(()), Ok(())) => Ok(()),
+            (_, Ok(())) => Ok(()),
             (Ok(()), Err(e)) => Err(DetachThenResumeSenderError::Resume(e)),
-            (Err(e), _) => Err(DetachThenResumeSenderError::Detach(e)),
+            (Err(e), Err(_)) => Err(DetachThenResumeSenderError::Detach(e)),
         }
     }
 
