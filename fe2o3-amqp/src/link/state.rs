@@ -163,7 +163,7 @@ impl LinkFlowState<role::SenderMarker> {
         // last known value indicated by the receiver.
         state.drain = flow.drain;
         if flow.drain {
-            state.delivery_count += state.link_credit;
+            state.delivery_count = state.delivery_count.wrapping_add(state.link_credit);
             state.link_credit = 0;
 
             return Some(state.as_link_flow(output_handle, false));
@@ -268,8 +268,8 @@ impl LinkFlowState<role::ReceiverMarker> {
         if state.link_credit < count {
             Err(ReceiverTransferError::TransferLimitExceeded)
         } else {
-            state.delivery_count += count;
-            state.link_credit -= count;
+            state.delivery_count = state.delivery_count.wrapping_add(count);
+            state.link_credit = state.link_credit.saturating_sub(count);
             Ok(())
         }
     }
@@ -324,8 +324,8 @@ impl TryConsume for SenderFlowState {
             Err(Self::Error::InsufficientCredit)
         } else {
             let tag = state.delivery_count.to_be_bytes();
-            state.delivery_count += item;
-            state.link_credit -= item;
+            state.delivery_count = state.delivery_count.wrapping_add(item);
+            state.link_credit = state.link_credit.saturating_sub(item);
             Ok(tag)
         }
     }
@@ -341,8 +341,8 @@ fn consume_link_credit(
         Err(InsufficientCredit {})
     } else {
         let tag = state.delivery_count.to_be_bytes();
-        state.delivery_count += count;
-        state.link_credit -= count;
+        state.delivery_count = state.delivery_count.wrapping_add(count);
+        state.link_credit = state.link_credit.saturating_sub(count);
         Ok(tag)
     }
 }

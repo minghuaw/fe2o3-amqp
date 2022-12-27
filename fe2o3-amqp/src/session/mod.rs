@@ -350,14 +350,14 @@ impl Session {
                 // The remote-incoming-window is computed as follows:
                 // next-incoming-id_flow + incoming-window_flow - next-outgoing-id_endpoint
                 self.remote_incoming_window =
-                    flow_next_incoming_id + flow.incoming_window - self.next_outgoing_id;
+                    flow_next_incoming_id.saturating_add(flow.incoming_window).saturating_sub(self.next_outgoing_id);
             }
             None => {
                 // If the next-incoming-id field of the flow frame is not set, then remote-incoming-window is computed as follows:
                 // initial-outgoing-id_endpoint + incoming-window_flow - next-outgoing-id_endpoint
-                self.remote_incoming_window = *(self.initial_outgoing_id.value())
-                    + flow.incoming_window
-                    - self.next_outgoing_id;
+                self.remote_incoming_window = self.initial_outgoing_id.value()
+                    .saturating_add(flow.incoming_window)
+                    .saturating_sub(self.next_outgoing_id);
             }
         }
 
@@ -565,7 +565,7 @@ impl endpoint::Session for Session {
             && !self.remote_incoming_window_exhausted_buffer.is_empty()
         {
             let mut output_frame_buffer =
-                Vec::with_capacity(self.remote_incoming_window_exhausted_buffer.len() + 1);
+                Vec::with_capacity(self.remote_incoming_window_exhausted_buffer.len().saturating_add(1));
             if let Some(outgoing_session_flow) = outgoing_session_flow {
                 output_frame_buffer.push(outgoing_session_flow);
             }
@@ -846,7 +846,7 @@ impl endpoint::Session for Session {
             Ok(Some(SessionOutgoingItem::SingleFrame(frame)))
         } else {
             let output_frame_buffer =
-                Vec::with_capacity(self.remote_incoming_window_exhausted_buffer.len() + 1);
+                Vec::with_capacity(self.remote_incoming_window_exhausted_buffer.len().saturating_add(1));
             self.prepare_session_frames_from_buffered_and_current_transfers(
                 output_frame_buffer,
                 input_handle,

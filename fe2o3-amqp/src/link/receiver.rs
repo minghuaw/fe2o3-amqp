@@ -955,7 +955,6 @@ where
             .dispose(&self.outgoing, delivery_info, settled, state, false)
             .await?; // cancel safe
 
-        // self.processed += 1;
         let prev = self.processed.fetch_add(1, Ordering::Release);
         self.update_credit_if_auto(prev + 1).await?; // cancel safe
         Ok(())
@@ -974,7 +973,6 @@ where
             .dispose_all(&self.outgoing, delivery_infos, settled, state, false)
             .await?; // cancel safe
 
-        // self.processed += total as u32;
         let prev = self.processed.fetch_add(total, Ordering::Release);
         self.update_credit_if_auto(prev + total).await?; // cancel safe
         Ok(())
