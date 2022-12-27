@@ -1,6 +1,10 @@
 # Change Log
 
-## 0.7.16
+## 0.7.17
+
+1. Fixed not implemented bug in `Receiver::detach_then_resume_on_session()`
+
+~~## 0.7.16 (yanked)~~
 
 1. Added `detach_then_resume_on_session` method for `Sender` and `Receiver`
 
