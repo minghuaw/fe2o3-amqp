@@ -586,7 +586,7 @@ impl endpoint::Session for Session {
         // match the implicit transfer-id of the incoming transfer plus one, as well as decrementing the
         // remote-outgoing-window, and MAY (depending on policy) decrement its incoming-window.
         self.next_incoming_id = self.next_incoming_id.wrapping_add(1);
-        self.remote_outgoing_window = self.remote_outgoing_window.checked_sub(1).unwrap_or(0);
+        self.remote_outgoing_window = self.remote_outgoing_window.saturating_sub(1);
 
         // TODO: allow user to define whether the incoming window should be decremented
 
