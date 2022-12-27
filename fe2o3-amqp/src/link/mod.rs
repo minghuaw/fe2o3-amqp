@@ -478,6 +478,17 @@ where
         closed: bool,
         error: Option<definitions::Error>,
     ) -> Result<(), Self::DetachError> {
+        // Change the state whether sending the detach frame succeeds or not
+        match (&self.local_state, closed) {
+            (LinkState::Attached, false) => self.local_state = LinkState::DetachSent,
+            (LinkState::DetachReceived, false) => self.local_state = LinkState::Detached,
+            (LinkState::CloseReceived, false) => return Err(DetachError::ClosedByRemote),
+            (LinkState::Attached, true) => self.local_state = LinkState::CloseSent,
+            (LinkState::DetachReceived, true) => return Err(DetachError::DetachedByRemote),
+            (LinkState::CloseReceived, true) => self.local_state = LinkState::Closed,
+            _ => return Err(DetachError::IllegalState),
+        };
+
         match self.output_handle.clone() {
             Some(handle) => {
                 let detach = Detach {
@@ -497,17 +508,6 @@ where
                     .await // cancel safe
                     .map_err(|_| DetachError::IllegalSessionState);
 
-                // The state should be updated even if the send failed which means the session is
-                // already closed
-                match (&self.local_state, closed) {
-                    (LinkState::Attached, false) => self.local_state = LinkState::DetachSent,
-                    (LinkState::DetachReceived, false) => self.local_state = LinkState::Detached,
-                    (LinkState::CloseReceived, false) => return Err(DetachError::ClosedByRemote),
-                    (LinkState::Attached, true) => self.local_state = LinkState::CloseSent,
-                    (LinkState::DetachReceived, true) => return Err(DetachError::DetachedByRemote),
-                    (LinkState::CloseReceived, true) => self.local_state = LinkState::Closed,
-                    _ => return Err(DetachError::IllegalState),
-                };
                 self.output_handle.take();
                 result
             }

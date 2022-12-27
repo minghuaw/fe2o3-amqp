@@ -240,8 +240,7 @@ impl Sender {
         let detach_result = self
             .inner
             .detach_with_error(None)
-            .await
-            .map_err(DetachThenResumeSenderError::from);
+            .await;
 
         // Re-attach the link
         self.inner.session = new_session.control.clone();
@@ -249,9 +248,13 @@ impl Sender {
         let attach_result = self
             .inner
             .resume_incoming_attach(None)
-            .await
-            .map_err(DetachThenResumeSenderError::from);
-        detach_result.or(attach_result)
+            .await;
+
+            match (detach_result, attach_result) {
+            (Ok(()), Ok(())) => Ok(()),
+            (Ok(()), Err(e)) => Err(DetachThenResumeSenderError::Resume(e)),
+            (Err(e), _) => Err(DetachThenResumeSenderError::Detach(e)),
+        }
     }
 
     /// Close the link.
