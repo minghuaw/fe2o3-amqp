@@ -1,10 +1,14 @@
 # Change Log
 
-## 0.8.1
+## 0.8.2
+
+1. Fixed a bug in `Receiver::detach_then_resume_on_session`
+
+~~## 0.8.1 (yanked)~~
 
 1. Updated `base64` to "0.20"
 
-## 0.8.0
+~~## 0.8.0 (yanked)~~
 
 1. Updated `fe2o3-amqp-types` to 0.7.0, which introduced breaking change to the type alias
    `FilterSet` to support legacy formatted filter set. The user would need to ensure that the
