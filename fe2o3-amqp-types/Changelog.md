@@ -9,7 +9,9 @@
    ```
 
    to support legacy formatted filter set. The user would need to ensure that the correct format is
-   used when constructing the filter set.
+   used when constructing the filter set (more details can be found at
+   [Azure/azure-amqp#231](https://github.com/Azure/azure-amqp/issues/231),
+   [Azure/azure-amqp#232](https://github.com/Azure/azure-amqp/issues/232)).
 
 ## 0.6.2
 

@@ -4,7 +4,9 @@
 
 1. Updated `fe2o3-amqp-types` to 0.7.0, which introduced breaking change to the type alias
    `FilterSet` to support legacy formatted filter set. The user would need to ensure that the
-   correct format is used when constructing the filter set.
+   correct format is used when constructing the filter set (more details can be found at
+   [Azure/azure-amqp#231](https://github.com/Azure/azure-amqp/issues/231),
+   [Azure/azure-amqp#232](https://github.com/Azure/azure-amqp/issues/232)).
 2. `Sender::detach()`/`Receiver::detach()` return a `DetachedSender`/`DetachedReceiver` even if it
    encounters an error
 3. Impl `std::error::Error` for `SenderResumeError` and `ReceiverResumeError`
