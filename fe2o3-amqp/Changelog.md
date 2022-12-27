@@ -1,5 +1,9 @@
 # Change Log
 
+## 0.8.1
+
+1. Updated `base64` to "0.20"
+
 ## 0.8.0
 
 1. Updated `fe2o3-amqp-types` to 0.7.0, which introduced breaking change to the type alias
