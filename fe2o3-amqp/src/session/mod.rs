@@ -766,10 +766,7 @@ impl endpoint::Session for Session {
             .map(|s| s.is_terminal())
             .unwrap_or(false)
         {
-            let count = disposition
-                .last
-                .map(|last| last - disposition.first + 1)
-                .unwrap_or(1);
+            let count = num_messages_settled_by_disposition(disposition.first, disposition.last);
             self.remote_outgoing_window = self.remote_outgoing_window.saturating_add(count);
         }
 
@@ -783,6 +780,13 @@ impl endpoint::Session for Session {
         let body = SessionFrameBody::Detach(detach);
         SessionFrame::new(self.outgoing_channel, body)
     }
+}
+
+fn num_messages_settled_by_disposition(first: u32, last: Option<u32>) -> u32 {
+    last
+        .and_then(|last| last.checked_sub(first))
+        .unwrap_or(0)
+        + 1
 }
 
 #[cfg(feature = "transaction")]
@@ -828,4 +832,29 @@ fn consecutive_chunk_indices(delivery_ids: &[DeliveryNumber]) -> Vec<usize> {
             }
         })
         .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::num_messages_settled_by_disposition;
+
+    #[test]
+    fn number_of_message_settled_by_disposition() {
+        let first = 1;
+        let last = Some(3);
+        let count = num_messages_settled_by_disposition(first, last);
+        assert_eq!(count, 3);
+
+        let first = 1;
+        let last = None;
+        let count = num_messages_settled_by_disposition(first, last);
+        assert_eq!(count, 1);
+
+        // This should be impossible as the Link will sort the delivery_ids first
+        let first = 3;
+        let last = Some(1);
+        let count = num_messages_settled_by_disposition(first, last);
+        assert_eq!(count, 1);
+    }
+
 }
