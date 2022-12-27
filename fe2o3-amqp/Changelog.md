@@ -2,7 +2,7 @@
 
 ## 0.8.2
 
-1. Fixed a bug in `Receiver::detach_then_resume_on_session`
+1. Ported 0.7.17
 
 ~~## 0.8.1 (yanked)~~
 
@@ -19,7 +19,11 @@
    encounters an error
 3. Impl `std::error::Error` for `SenderResumeError` and `ReceiverResumeError`
 
-## 0.7.16
+## 0.7.17
+
+1. Fixed not implemented bug in `Receiver::detach_then_resume_on_session()`
+
+~~## 0.7.16 (yanked)~~
 
 1. Added `detach_then_resume_on_session` method for `Sender` and `Receiver`
 
