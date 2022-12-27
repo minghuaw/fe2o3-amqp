@@ -347,7 +347,8 @@ impl Receiver {
             .map_err(DetachThenResumeReceiverError::from);
 
         // re-attach the link
-        *self.inner.session_control_mut() = new_session.control.clone();
+        self.inner.session = new_session.control.clone();
+        self.inner.outgoing = new_session.outgoing.clone();
         let exchange_result = self.inner.resume_incoming_attach(None).await
             .map_err(DetachThenResumeReceiverError::from);
 
@@ -1217,7 +1218,8 @@ impl DetachedReceiver {
         mut self,
         session: &SessionHandle<R>,
     ) -> Result<ResumingReceiver, ReceiverResumeError> {
-        *self.inner.session_control_mut() = session.control.clone();
+        self.inner.session = session.control.clone();
+        self.inner.outgoing = session.outgoing.clone();
         self.resume().await
     }
 
@@ -1230,7 +1232,8 @@ impl DetachedReceiver {
         session: &SessionHandle<R>,
         duration: Duration,
     ) -> Result<ResumingReceiver, ReceiverResumeError> {
-        *self.inner.session_control_mut() = session.control.clone();
+        self.inner.session = session.control.clone();
+        self.inner.outgoing = session.outgoing.clone();
         self.resume_with_timeout(duration).await
     }
 
@@ -1300,7 +1303,8 @@ impl DetachedReceiver {
         remote_attach: Attach,
         session: &SessionHandle<R>,
     ) -> Result<ResumingReceiver, ReceiverResumeError> {
-        *self.inner.session_control_mut() = session.control.clone();
+        self.inner.session = session.control.clone();
+        self.inner.outgoing = session.outgoing.clone();
         self.resume_incoming_attach(remote_attach).await
     }
 
@@ -1314,7 +1318,8 @@ impl DetachedReceiver {
         session: &SessionHandle<R>,
         duration: Duration,
     ) -> Result<ResumingReceiver, ReceiverResumeError> {
-        *self.inner.session_control_mut() = session.control.clone();
+        self.inner.session = session.control.clone();
+        self.inner.outgoing = session.outgoing.clone();
         self.resume_incoming_attach_with_timeout(remote_attach, duration)
             .await
     }
