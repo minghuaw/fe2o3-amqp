@@ -1,5 +1,9 @@
 # fe2o3-amqp-ws
 
+## 0.2.0
+
+1. Updated `tungstenite` and `tokio-tungstenite` to "0.18"
+
 ## 0.1.2
 
 1. Relaxed dependency versions
