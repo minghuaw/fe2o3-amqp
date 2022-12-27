@@ -455,6 +455,8 @@ impl endpoint::Session for Session {
         self.next_incoming_id = self.next_incoming_id.wrapping_add(1);
         self.remote_outgoing_window = self.remote_outgoing_window.checked_sub(1).unwrap_or(0);
 
+        // TODO: allow user to define whether the incoming window should be decremented
+
         let input_handle = InputHandle::from(transfer.handle.clone());
         match self.link_by_input_handle.get_mut(&input_handle) {
             Some(link_relay) => {
