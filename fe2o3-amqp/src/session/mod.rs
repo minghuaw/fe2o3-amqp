@@ -446,7 +446,7 @@ impl endpoint::Session for Session {
         // match the implicit transfer-id of the incoming transfer plus one, as well as decrementing the
         // remote-outgoing-window, and MAY (depending on policy) decrement its incoming-window.
 
-        self.next_incoming_id += 1;
+        self.next_incoming_id = self.next_incoming_id.wrapping_add(1);
         self.remote_outgoing_window -= 1;
 
         let input_handle = InputHandle::from(transfer.handle.clone());
@@ -723,7 +723,7 @@ impl endpoint::Session for Session {
             }
         }
 
-        self.next_outgoing_id += 1;
+        self.next_outgoing_id = self.next_outgoing_id.wrapping_add(1);
 
         // The remote-incoming-window reflects the maximum number of outgoing transfers that can
         // be sent without exceeding the remote endpoint’s incoming-window. This value MUST be
