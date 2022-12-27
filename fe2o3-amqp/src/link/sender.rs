@@ -244,7 +244,8 @@ impl Sender {
             .map_err(DetachThenResumeSenderError::from);
 
         // Re-attach the link
-        *self.inner.session_control_mut() = new_session.control.clone();
+        self.inner.session = new_session.control.clone();
+        self.inner.outgoing = new_session.outgoing.clone();
         let attach_result = self
             .inner
             .resume_incoming_attach(None)
@@ -1018,7 +1019,8 @@ impl DetachedSender {
         remote_attach: Attach,
         session: &SessionHandle<R>,
     ) -> Result<Sender, SenderResumeError> {
-        *self.inner.session_control_mut() = session.control.clone();
+        self.inner.session = session.control.clone();
+        self.inner.outgoing = session.outgoing.clone();
         self.resume_incoming_attach(remote_attach).await
     }
 

@@ -1,8 +1,22 @@
 # Change Log
 
+## 0.8.3
+
+1. Ported 0.7.18
+
+## 0.7.18
+
+1. Merged PR [#169](https://github.com/minghuaw/fe2o3-amqp/pull/169) which fixed panics due to
+   overflowing next-outgoing-id by using wrapping add
+2. Fixed a bug where sender and receiver's outgoing channel is not updated when attaching to new session
+
 ## 0.8.2
 
 1. Ported 0.7.17
+
+## 0.7.17
+
+1. Fixed not implemented bug in `Receiver::detach_then_resume_on_session()`
 
 ## ~~0.8.1 (yanked)~~
 
@@ -18,10 +32,6 @@
 2. `Sender::detach()`/`Receiver::detach()` return a `DetachedSender`/`DetachedReceiver` even if it
    encounters an error
 3. Impl `std::error::Error` for `SenderResumeError` and `ReceiverResumeError`
-
-## 0.7.17
-
-1. Fixed not implemented bug in `Receiver::detach_then_resume_on_session()`
 
 ## ~~0.7.16 (yanked)~~
 
