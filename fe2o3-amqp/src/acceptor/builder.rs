@@ -124,10 +124,10 @@ impl<M, Tls, Sasl> Builder<ConnectionAcceptor<Tls, Sasl>, M> {
     /// The maximum number of session that can be established on this connection.
     ///
     /// This will modify the `channel-max` field. The `channel-max` plus one is the maximum
-    /// number of sessions taht can be simultaenously active on the connection
+    /// number of sessions that can be simultaenously active on the connection
     pub fn session_max(mut self, session_max: impl Into<ChannelMax>) -> Self {
         let mut channel_max = session_max.into();
-        channel_max.0 -= 1;
+        channel_max.0 = channel_max.0.saturating_sub(1);
         self.inner.local_open.channel_max = channel_max;
         self
     }

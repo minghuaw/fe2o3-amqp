@@ -14,9 +14,36 @@ use crate::{
 
 use super::{
     error::{AllocLinkError, BeginError, Error, SessionInnerError},
-    frame::SessionIncomingItem,
+    frame::{SessionIncomingItem, SessionOutgoingItem},
     SessionFrame, SessionFrameBody, SessionState,
 };
+
+async fn send_outgoing_item(
+    outgoing: &mpsc::Sender<SessionFrame>,
+    outgoing_item: SessionOutgoingItem,
+) -> Result<(), SessionInnerError> {
+    match outgoing_item {
+        SessionOutgoingItem::SingleFrame(frame) => {
+            outgoing
+                .send(frame)
+                .await
+                // The receiving half must have dropped, and thus the `Connection`
+                // event loop has stopped. It should be treated as an io error
+                .map_err(|_| SessionInnerError::IllegalConnectionState)?;
+        }
+        SessionOutgoingItem::MultipleFrames(frames) => {
+            for frame in frames {
+                outgoing
+                    .send(frame)
+                    .await
+                    // The receiving half must have dropped, and thus the `Connection`
+                    // event loop has stopped. It should be treated as an io error
+                    .map_err(|_| SessionInnerError::IllegalConnectionState)?;
+            }
+        }
+    }
+    Ok(())
+}
 
 pub(crate) struct SessionEngine<S: Session> {
     pub conn_control: mpsc::Sender<ConnectionControl>,
@@ -101,14 +128,8 @@ where
                 self.session.on_incoming_attach(attach).await?;
             }
             SessionFrameBody::Flow(flow) => {
-                if let Some(link_flow) = self.session.on_incoming_flow(flow).await? {
-                    let flow = self.session.on_outgoing_flow(link_flow)?;
-                    self.outgoing
-                        .send(flow)
-                        .await
-                        // The receiving half must have dropped, and thus the `Connection`
-                        // event loop has stopped. It should be treated as an io error
-                        .map_err(|_| SessionInnerError::IllegalConnectionState)?;
+                if let Some(outgoing_item) = self.session.on_incoming_flow(flow).await? {
+                    send_outgoing_item(&self.outgoing, outgoing_item).await?;
                 }
             }
             SessionFrameBody::Transfer {
@@ -265,9 +286,17 @@ where
             _ => return Err(SessionInnerError::IllegalState), // End session with illegal state
         }
 
-        let session_frame = match frame {
-            LinkFrame::Attach(attach) => self.session.on_outgoing_attach(attach)?,
-            LinkFrame::Flow(flow) => self.session.on_outgoing_flow(flow)?,
+        let outgoing_item = match frame {
+            LinkFrame::Attach(attach) => self
+                .session
+                .on_outgoing_attach(attach)
+                .map(SessionOutgoingItem::SingleFrame)
+                .map(Some)?,
+            LinkFrame::Flow(flow) => self
+                .session
+                .on_outgoing_flow(flow)
+                .map(SessionOutgoingItem::SingleFrame)
+                .map(Some)?,
             LinkFrame::Transfer {
                 input_handle,
                 performative,
@@ -275,10 +304,14 @@ where
             } => self
                 .session
                 .on_outgoing_transfer(input_handle, performative, payload)?,
-            LinkFrame::Disposition(disposition) => {
-                self.session.on_outgoing_disposition(disposition)?
-            }
-            LinkFrame::Detach(detach) => self.session.on_outgoing_detach(detach),
+            LinkFrame::Disposition(disposition) => self
+                .session
+                .on_outgoing_disposition(disposition)
+                .map(SessionOutgoingItem::SingleFrame)
+                .map(Some)?,
+            LinkFrame::Detach(detach) => Some(SessionOutgoingItem::SingleFrame(
+                self.session.on_outgoing_detach(detach),
+            )),
 
             #[cfg(feature = "transaction")]
             LinkFrame::Acquisition(_) => {
@@ -287,12 +320,9 @@ where
             }
         };
 
-        self.outgoing
-            .send(session_frame)
-            .await
-            // The receiving half must have dropped, and thus the `Connection`
-            // event loop has stopped. It should be treated as an io error
-            .map_err(|_| SessionInnerError::IllegalConnectionState)?;
+        if let Some(outgoing_item) = outgoing_item {
+            send_outgoing_item(&self.outgoing, outgoing_item).await?;
+        }
 
         match self.session.local_state() {
             SessionState::Unmapped => Ok(Running::Stop),

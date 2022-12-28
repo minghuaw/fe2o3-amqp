@@ -428,7 +428,7 @@ impl<'a, Mode, Tls> Builder<'a, Mode, Tls> {
     /// number of sessions taht can be simultaenously active on the connection
     pub fn session_max(mut self, session_max: impl Into<ChannelMax>) -> Self {
         let mut channel_max = session_max.into();
-        channel_max.0 -= 1;
+        channel_max.0 = channel_max.0.saturating_sub(1);
         self.channel_max = channel_max;
         self
     }

@@ -268,7 +268,7 @@ where
 
         let max_message_size = match self.max_message_size {
             0 => None,
-            val => Some(val as u64),
+            val => Some(val),
         };
         let initial_delivery_count = Some(self.flow_state.as_ref().initial_delivery_count());
         let properties = self.flow_state.as_ref().properties();

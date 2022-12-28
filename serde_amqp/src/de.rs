@@ -912,7 +912,7 @@ where
                 let count = u32::from_be_bytes(count_bytes) as usize;
 
                 // Account for offset
-                let len = len as usize - OFFSET_ARRAY32;
+                let len = len - OFFSET_ARRAY32;
                 // let buf = self.reader.read_bytes(len)?;
 
                 visitor.visit_seq(ArrayAccess::new(self, len, count))
@@ -1736,7 +1736,7 @@ impl<'a, 'de, R: Read<'de>> de::SeqAccess<'de> for DescribedAccess<'a, R> {
                 // list headers
                 if self.counter == 0 {
                     if let StructEncoding::DescribedList = self.de.struct_encoding {
-                        self.field_count += self.consume_list_header()? as u32;
+                        self.field_count += self.consume_list_header()?;
                     }
                 }
                 result

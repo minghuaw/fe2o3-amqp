@@ -3,7 +3,8 @@
 use async_trait::async_trait;
 use fe2o3_amqp_types::{
     definitions::{
-        DeliveryNumber, DeliveryTag, Error, MessageFormat, ReceiverSettleMode, Role, SequenceNo, Fields,
+        DeliveryNumber, DeliveryTag, Error, Fields, MessageFormat, ReceiverSettleMode, Role,
+        SequenceNo,
     },
     messaging::{DeliveryState, FromBody},
     performatives::{Attach, Detach, Transfer},

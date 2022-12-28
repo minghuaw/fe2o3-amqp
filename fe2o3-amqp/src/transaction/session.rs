@@ -14,7 +14,10 @@ use crate::{
     control::SessionControl,
     endpoint::{self, IncomingChannel, InputHandle, LinkFlow, OutgoingChannel, OutputHandle},
     link::{target_archetype::VariantOfTargetArchetype, LinkRelay},
-    session::{self, frame::SessionFrame},
+    session::{
+        self,
+        frame::{SessionFrame, SessionOutgoingItem},
+    },
     Payload,
 };
 
@@ -267,7 +270,10 @@ where
     }
 
     #[cfg_attr(feature = "tracing", tracing::instrument(skip_all, flow = ?flow))]
-    async fn on_incoming_flow(&mut self, flow: Flow) -> Result<Option<LinkFlow>, Self::Error> {
+    async fn on_incoming_flow(
+        &mut self,
+        flow: Flow,
+    ) -> Result<Option<SessionOutgoingItem>, Self::Error> {
         // TODO: implement transactional acquisition
         // match flow
         //     .properties
@@ -366,7 +372,7 @@ where
         input_handle: InputHandle,
         transfer: Transfer,
         payload: Payload,
-    ) -> Result<SessionFrame, Self::Error> {
+    ) -> Result<Option<SessionOutgoingItem>, Self::Error> {
         self.session
             .on_outgoing_transfer(input_handle, transfer, payload)
     }
