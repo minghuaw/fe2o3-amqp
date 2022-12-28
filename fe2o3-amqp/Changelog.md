@@ -1,5 +1,10 @@
 # Change Log
 
+## 0.7.20
+
+1. Instead of panic when `ConnectionHandle::close()`/`SessionHandle::end()` is called multiple times,
+   it will now return an `Error::IllegalState`.
+
 ## 0.7.19
 
 1. Fixed #170 and #172 by reviewing potential addition/subtraction with overflow/underflow and
