@@ -208,6 +208,7 @@ impl<Tls, Sasl> ConnectionAcceptor<Tls, Sasl> {
         let handle = engine.spawn();
 
         let connection_handle = ConnectionHandle {
+            is_closed: false,
             control: control_tx,
             handle,
             outgoing: outgoing_tx,

@@ -650,6 +650,7 @@ impl<'a, Tls> Builder<'a, mode::ConnectorWithId, Tls> {
         let handle = engine.spawn();
 
         let connection_handle = ConnectionHandle {
+            is_closed: false,
             control: control_tx,
             handle,
             outgoing: outgoing_tx, // session_control: session_control_tx
