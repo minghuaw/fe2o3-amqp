@@ -188,7 +188,9 @@ impl From<LinkRelayError> for Error {
     fn from(error: LinkRelayError) -> Self {
         match error {
             LinkRelayError::UnattachedHandle => Self::UnattachedHandle,
-            LinkRelayError::TransferFrameToSender => unreachable!("A sender should not receive a transfer frame"),
+            LinkRelayError::TransferFrameToSender => {
+                unreachable!("A sender should not receive a transfer frame")
+            }
         }
     }
 }

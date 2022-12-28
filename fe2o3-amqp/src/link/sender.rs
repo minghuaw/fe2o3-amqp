@@ -227,7 +227,7 @@ impl Sender {
     }
 
     /// Detach and re-attach the link to a new session
-    /// 
+    ///
     /// This will still attempt to re-attach even if detaching fails.
     /// `DetachThenResumeSenderError::Resume` will be returned if the detach succeeds but re-attach
     /// fails. `DetachThenResumeSenderError::Detach` will be returned if both the detach and

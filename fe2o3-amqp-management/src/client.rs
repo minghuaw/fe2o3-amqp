@@ -60,7 +60,7 @@ impl MgmtClient {
         let properties = message.properties.get_or_insert(Properties::default());
         properties.message_id.get_or_insert({
             let message_id = MessageId::from(self.req_id);
-            self.req_id += 1;
+            self.req_id = self.req_id.wrapping_add(1);
             message_id
         });
         properties
