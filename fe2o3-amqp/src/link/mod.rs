@@ -342,8 +342,6 @@ where
             None => return Err(SendAttachErrorKind::IllegalState),
         };
 
-        println!("Output handle: {:?}", handle);
-
         let unsettled_map_len = {
             let guard = self.unsettled.read();
             guard.as_ref().map(|m| m.len())
