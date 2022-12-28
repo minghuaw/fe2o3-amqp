@@ -1,5 +1,9 @@
 # Change Log
 
+## 0.5.8
+
+1. Fixed clippy warnings
+
 ## 0.5.7
 
 1. Changed `From<Described<Value>> for Value` to `From<Described<T>> for Value where T: Into<Value>`

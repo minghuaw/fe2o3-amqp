@@ -1,5 +1,14 @@
 # Change Log
 
+## 0.8.4
+
+1. Ported 0.7.19
+
+## 0.7.19
+
+1. Fixed #170 and #172 by reviewing potential addition/subtraction with overflow/underflow and
+   replaced with wrapping/saturating add/sub
+
 ## 0.8.3
 
 1. Ported 0.7.18

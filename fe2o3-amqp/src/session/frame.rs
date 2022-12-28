@@ -4,6 +4,11 @@ use crate::Payload;
 
 pub(crate) type SessionIncomingItem = SessionFrame;
 
+pub(crate) enum SessionOutgoingItem {
+    SingleFrame(SessionFrame),
+    MultipleFrames(Vec<SessionFrame>),
+}
+
 /// A subset of AMQP frames that should be handled or intercepted by
 /// a Session endpoint.
 #[derive(Debug)]

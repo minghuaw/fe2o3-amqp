@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.2.1
+
+1. Ported 0.1.1
+
+## 0.1.1
+
+1. Fixed potential add/sub with overflow by using wrapping/checked/saturating add/sub
+
 ## 0.2.0
 
 1. Updated `fe2o3-amqp-types` to version "0.7.0" and `fe2o3-amqp` to version "0.8.0", which

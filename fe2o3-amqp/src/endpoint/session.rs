@@ -8,7 +8,11 @@ use fe2o3_amqp_types::{
 
 use tokio::sync::mpsc;
 
-use crate::{link::LinkRelay, session::frame::SessionFrame, Payload};
+use crate::{
+    link::LinkRelay,
+    session::frame::{SessionFrame, SessionOutgoingItem},
+    Payload,
+};
 
 use super::{IncomingChannel, InputHandle, LinkFlow, OutgoingChannel, OutputHandle};
 
@@ -51,7 +55,10 @@ pub(crate) trait Session {
     async fn on_incoming_attach(&mut self, attach: Attach) -> Result<(), Self::Error>;
 
     /// An `Ok(Some(link_flow))` means an immediate echo of the link flow is requested
-    async fn on_incoming_flow(&mut self, flow: Flow) -> Result<Option<LinkFlow>, Self::Error>;
+    async fn on_incoming_flow(
+        &mut self,
+        flow: Flow,
+    ) -> Result<Option<SessionOutgoingItem>, Self::Error>;
 
     async fn on_incoming_transfer(
         &mut self,
@@ -92,7 +99,7 @@ pub(crate) trait Session {
         input_handle: InputHandle,
         transfer: Transfer,
         payload: Payload,
-    ) -> Result<SessionFrame, Self::Error>;
+    ) -> Result<Option<SessionOutgoingItem>, Self::Error>;
 
     fn on_outgoing_disposition(
         &mut self,
