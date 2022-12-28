@@ -242,9 +242,6 @@ impl Sender {
             .detach_with_error(None)
             .await;
 
-        println!("Detach result: {:?}", detach_result);
-        println!("Link state: {:?}", self.inner.link.local_state);
-
         // Re-attach the link
         self.inner.session = new_session.control.clone();
         self.inner.outgoing = new_session.outgoing.clone();
@@ -253,10 +250,7 @@ impl Sender {
             .resume_incoming_attach(None)
             .await;
 
-        println!("Attach result: {:?}", attach_result);
-        println!("Link state: {:?}", self.inner.link.local_state);
-
-        match (detach_result, attach_result) {
+            match (detach_result, attach_result) {
             (_, Ok(())) => Ok(()),
             (Ok(()), Err(e)) => Err(DetachThenResumeSenderError::Resume(e)),
             (Err(e), Err(_)) => Err(DetachThenResumeSenderError::Detach(e)),
