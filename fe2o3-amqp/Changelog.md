@@ -1,5 +1,10 @@
 # Change Log
 
+## 0.7.19
+
+1. Fixed #170 and #172 by reviewing potential addition/subtraction with overflow/underflow and
+   replaced with wrapping/saturating add/sub
+
 ## 0.7.18
 
 1. Merged PR [#169](https://github.com/minghuaw/fe2o3-amqp/pull/169) which fixed panics due to

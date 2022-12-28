@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.1.1
+
+1. Fixed potential add/sub with overflow by using wrapping/checked/saturating add/sub
+
+## 0.1.0
+
+1. Added documentation
+
 ## 0.0.5
 
 1. Checking both `"status-code"` and `"statusCode"` because multiple cases have been found in different implementations
