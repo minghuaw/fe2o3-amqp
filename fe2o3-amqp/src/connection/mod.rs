@@ -52,6 +52,8 @@ type SessionRelay = Arc<Sender<SessionIncomingItem>>;
 /// Dropping the handle will also stop the [`Connection`] event loop.
 #[allow(dead_code)]
 pub struct ConnectionHandle<R> {
+    /// Only change this value in `on_close` method
+    pub(crate) is_closed: bool,
     pub(crate) control: Sender<ConnectionControl>,
     pub(crate) handle: JoinHandle<Result<(), Error>>,
 
@@ -75,16 +77,18 @@ impl<R> Drop for ConnectionHandle<R> {
 impl<R> ConnectionHandle<R> {
     /// Checks if the underlying event loop has stopped
     pub fn is_closed(&self) -> bool {
-        self.control.is_closed()
+        match self.is_closed {
+            true => true,
+            false => self.control.is_closed(),
+        }
     }
 
     /// Close the connection
     ///
-    /// # Panics
-    ///
-    /// Panics if this is called after executing any of [`close`](#method.close),
-    /// [`close_with_error`](#method.close_with_error) or [`on_close`](#method.on_close).
-    /// This will cause the JoinHandle to be polled after completion, which causes a panic.
+    /// An `Error::IllegalState` will be returned if this is called after executing any of
+    /// [`close`](#method.close), [`close_with_error`](#method.close_with_error) or
+    /// [`on_close`](#method.on_close). This will cause the JoinHandle to be polled after
+    /// completion, which causes a panic.
     pub async fn close(&mut self) -> Result<(), Error> {
         // If sending is unsuccessful, the `ConnectionEngine` event loop is
         // already dropped, this should be reflected by `JoinError` then.
@@ -94,11 +98,10 @@ impl<R> ConnectionHandle<R> {
 
     /// Close the connection with an error
     ///
-    /// # Panics
-    ///
-    /// Panics if this is called after executing any of [`close`](#method.close),
-    /// [`close_with_error`](#method.close_with_error) or [`on_close`](#method.on_close).
-    /// This will cause the JoinHandle to be polled after completion, which causes a panic.
+    /// An `Error::IllegalState` will be returned if this is called after executing any of
+    /// [`close`](#method.close), [`close_with_error`](#method.close_with_error) or
+    /// [`on_close`](#method.on_close). This will cause the JoinHandle to be polled after
+    /// completion, which causes a panic.
     pub async fn close_with_error(
         &mut self,
         error: impl Into<definitions::Error>,
@@ -114,12 +117,15 @@ impl<R> ConnectionHandle<R> {
 
     /// Returns when the underlying event loop has stopped
     ///
-    /// # Panics
-    ///
-    /// Panics if this is called after executing any of [`close`](#method.close),
-    /// [`close_with_error`](#method.close_with_error) or [`on_close`](#method.on_close).
-    /// This will cause the JoinHandle to be polled after completion, which causes a panic.
+    /// An `Error::IllegalState` will be returned if this is called after executing any of
+    /// [`close`](#method.close), [`close_with_error`](#method.close_with_error) or
+    /// [`on_close`](#method.on_close). This will cause the JoinHandle to be polled after
+    /// completion, which causes a panic.
     pub async fn on_close(&mut self) -> Result<(), Error> {
+        if self.is_closed {
+            return Err(Error::IllegalState);
+        }
+        self.is_closed = true;
         match (&mut self.handle).await {
             Ok(res) => res,
             Err(e) => Err(Error::JoinError(e)),
