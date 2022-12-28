@@ -44,4 +44,5 @@ async fn main() {
 
     session.end().await.unwrap();
     connection.close().await.unwrap();
+    connection.close().await.unwrap();
 }

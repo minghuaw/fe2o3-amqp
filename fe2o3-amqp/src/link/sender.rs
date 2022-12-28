@@ -237,20 +237,14 @@ impl Sender {
         new_session: &SessionHandle<R>,
     ) -> Result<(), DetachThenResumeSenderError> {
         // Detach the link
-        let detach_result = self
-            .inner
-            .detach_with_error(None)
-            .await;
+        let detach_result = self.inner.detach_with_error(None).await;
 
         // Re-attach the link
         self.inner.session = new_session.control.clone();
         self.inner.outgoing = new_session.outgoing.clone();
-        let attach_result = self
-            .inner
-            .resume_incoming_attach(None)
-            .await;
+        let attach_result = self.inner.resume_incoming_attach(None).await;
 
-            match (detach_result, attach_result) {
+        match (detach_result, attach_result) {
             (_, Ok(())) => Ok(()),
             (Ok(()), Err(e)) => Err(DetachThenResumeSenderError::Resume(e)),
             (Err(e), Err(_)) => Err(DetachThenResumeSenderError::Detach(e)),

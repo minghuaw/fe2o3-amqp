@@ -360,6 +360,7 @@ impl Builder {
             .await?;
 
         let handle = SessionHandle {
+            is_ended: false,
             control: session_control_tx,
             engine_handle,
             outgoing: outgoing_tx,

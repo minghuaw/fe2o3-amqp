@@ -58,6 +58,8 @@ pub const DEFAULT_WINDOW: UInt = 2048;
 /// Dropping the handle will also stop the [`Session`] event loop
 #[allow(dead_code)]
 pub struct SessionHandle<R> {
+    /// This value should only be changed in the `on_end` method
+    pub(crate) is_ended: bool,
     pub(crate) control: mpsc::Sender<SessionControl>,
     pub(crate) engine_handle: JoinHandle<Result<(), Error>>,
 
@@ -81,16 +83,17 @@ impl<R> Drop for SessionHandle<R> {
 impl<R> SessionHandle<R> {
     /// Checks if the underlying event loop has stopped
     pub fn is_ended(&self) -> bool {
-        self.control.is_closed()
+        match self.is_ended {
+            true => true,
+            false => self.control.is_closed(),
+        }
     }
 
     /// End the session
     ///
-    /// # Panics
-    ///
-    /// Panics if called after any of [`end`](#method.end), [`end_with_error`](#method.end_with_error),
-    /// [`on_end`](#on_end) has beend executed.
-    /// This will cause the JoinHandle to be polled after completion, which causes a panic.
+    /// An `Error::IllegalState` will be returned if called after any of [`end`](#method.end),
+    /// [`end_with_error`](#method.end_with_error), [`on_end`](#on_end) has beend executed. This
+    /// will cause the JoinHandle to be polled after completion, which causes a panic.
     pub async fn end(&mut self) -> Result<(), Error> {
         // If sending is unsuccessful, the `SessionEngine` event loop is
         // already dropped, this should be reflected by `JoinError` then.
@@ -105,10 +108,8 @@ impl<R> SessionHandle<R> {
 
     /// End the session with an error
     ///
-    /// # Panics
-    ///
-    /// Panics if called after any of [`end`](#method.end), [`end_with_error`](#method.end_with_error),
-    /// [`on_end`](#on_end) has beend executed.    
+    /// An `Error::IllegalState` will be returned if called after any of [`end`](#method.end),
+    /// [`end_with_error`](#method.end_with_error), [`on_end`](#on_end) has beend executed.    
     /// This will cause the JoinHandle to be polled after completion, which causes a panic.
     pub async fn end_with_error(
         &mut self,
@@ -125,17 +126,17 @@ impl<R> SessionHandle<R> {
 
     /// Returns when the underlying event loop has stopped
     ///
-    /// # Panics
-    ///
-    /// Panics if called after any of [`end`](#method.end), [`end_with_error`](#method.end_with_error),
-    /// [`on_end`](#on_end) has beend executed.
-    /// This will cause the JoinHandle to be polled after completion, which causes a panic.
+    /// An `Error::IllegalState` will be returned if called after any of [`end`](#method.end),
+    /// [`end_with_error`](#method.end_with_error), [`on_end`](#on_end) has beend executed. This
+    /// will cause the JoinHandle to be polled after completion, which causes a panic.
     pub async fn on_end(&mut self) -> Result<(), Error> {
+        if self.is_ended {
+            return Err(Error::IllegalState);
+        }
+
+        self.is_ended = true;
         match (&mut self.engine_handle).await {
-            Ok(res) => {
-                res?;
-                Ok(())
-            }
+            Ok(res) => res,
             Err(join_error) => Err(Error::JoinError(join_error)),
         }
     }
@@ -349,13 +350,16 @@ impl Session {
             Some(flow_next_incoming_id) => {
                 // The remote-incoming-window is computed as follows:
                 // next-incoming-id_flow + incoming-window_flow - next-outgoing-id_endpoint
-                self.remote_incoming_window =
-                    flow_next_incoming_id.saturating_add(flow.incoming_window).saturating_sub(self.next_outgoing_id);
+                self.remote_incoming_window = flow_next_incoming_id
+                    .saturating_add(flow.incoming_window)
+                    .saturating_sub(self.next_outgoing_id);
             }
             None => {
                 // If the next-incoming-id field of the flow frame is not set, then remote-incoming-window is computed as follows:
                 // initial-outgoing-id_endpoint + incoming-window_flow - next-outgoing-id_endpoint
-                self.remote_incoming_window = self.initial_outgoing_id.value()
+                self.remote_incoming_window = self
+                    .initial_outgoing_id
+                    .value()
                     .saturating_add(flow.incoming_window)
                     .saturating_sub(self.next_outgoing_id);
             }
@@ -564,8 +568,11 @@ impl endpoint::Session for Session {
         if self.remote_incoming_window > 0
             && !self.remote_incoming_window_exhausted_buffer.is_empty()
         {
-            let mut output_frame_buffer =
-                Vec::with_capacity(self.remote_incoming_window_exhausted_buffer.len().saturating_add(1));
+            let mut output_frame_buffer = Vec::with_capacity(
+                self.remote_incoming_window_exhausted_buffer
+                    .len()
+                    .saturating_add(1),
+            );
             if let Some(outgoing_session_flow) = outgoing_session_flow {
                 output_frame_buffer.push(outgoing_session_flow);
             }
@@ -845,8 +852,11 @@ impl endpoint::Session for Session {
             let frame = self.on_outgoing_transfer_inner(input_handle, transfer, payload)?;
             Ok(Some(SessionOutgoingItem::SingleFrame(frame)))
         } else {
-            let output_frame_buffer =
-                Vec::with_capacity(self.remote_incoming_window_exhausted_buffer.len().saturating_add(1));
+            let output_frame_buffer = Vec::with_capacity(
+                self.remote_incoming_window_exhausted_buffer
+                    .len()
+                    .saturating_add(1),
+            );
             self.prepare_session_frames_from_buffered_and_current_transfers(
                 output_frame_buffer,
                 input_handle,
