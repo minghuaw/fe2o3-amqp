@@ -839,9 +839,11 @@ impl SenderInner<SenderLink<Target>> {
         let detached_fut = self.incoming.recv();
         let tag = self.link.get_delivery_tag_or_detached(&self.outgoing, detached_fut).await?;
         let new_delivery_tag = DeliveryTag::from(tag);
-        let transfer = self.link.generate_transfer_performative(new_delivery_tag.clone(), message_format, None, None, false)?;
+        let transfer = self.link.generate_non_resuming_transfer_performative(new_delivery_tag.clone(), message_format, None, None, false)?;
 
         let settled = self.link.send_transfer_without_modifying_unsettled_map(&self.outgoing, transfer, payload).await?;
+
+        println!("old delivery tag: {:?}, new delivery tag: {:?}, settled: {:?}", prev_delivery_tag, new_delivery_tag, settled);
 
         match settled {
             true => {
