@@ -1,5 +1,10 @@
 # Change Log
 
+## 0.7.21
+
+1. `DeliveryFut` returned by `Sender::send_batchable` and `Sender::send_batchable_ref` now will be
+   able to receive the outcome after sender is re-attached.
+
 ## 0.8.5
 
 1. Ported 0.7.20
