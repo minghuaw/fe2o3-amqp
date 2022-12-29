@@ -5,7 +5,7 @@ use std::time::Duration;
 use async_trait::async_trait;
 use bytes::{Bytes, BytesMut};
 use tokio::{
-    sync::mpsc,
+    sync::{mpsc, oneshot},
     time::{error::Elapsed, timeout},
 };
 
@@ -15,7 +15,8 @@ use fe2o3_amqp_types::{
         message::__private::Serializable, Address, DeliveryState, Outcome, SerializableBody,
         Source, Target,
     },
-    performatives::{Attach, Detach, Transfer}, primitives::OrderedMap,
+    performatives::{Attach, Detach, Transfer},
+    primitives::OrderedMap,
 };
 
 use crate::{
@@ -27,7 +28,7 @@ use crate::{
 
 use super::{
     builder::{self, WithSource, WithoutName, WithoutTarget},
-    delivery::{DeliveryFut, Sendable},
+    delivery::{DeliveryFut, Sendable, UnsettledMessage},
     error::DetachError,
     resumption::ResumingDelivery,
     role,
@@ -698,40 +699,49 @@ where
 
 impl SenderInner<SenderLink<Target>> {
     /// Resumes a delivery with the given state and payload.
-    /// 
+    ///
     /// The resume operation should not replace the unsettled map entry.
     async fn handle_resuming_delivery(
         &mut self,
         delivery_tag: DeliveryTag,
         resuming: ResumingDelivery,
-        resend_buf: &mut Vec<(DeliveryTag, MessageFormat, Payload)>,
+        resend_buf: &mut Vec<UnsettledMessage>,
     ) -> Result<(), SendError> {
         #[cfg(feature = "tracing")]
         tracing::debug!("Resuming delivery: delivery_tag: {:?}", delivery_tag);
         #[cfg(feature = "log")]
         log::debug!("Resuming delivery: delivery_tag: {:?}", delivery_tag);
-        let settled = match resuming {
-            ResumingDelivery::Abort(message_format) => self.abort(delivery_tag, message_format).await?,
-            ResumingDelivery::Resend{message_format, payload} => {
-                resend_buf.push((delivery_tag, message_format, payload));
-                return Ok(());
+        match resuming {
+            ResumingDelivery::Abort {
+                message_format,
+                sender,
+            } => self.abort(delivery_tag, message_format, sender).await?,
+            ResumingDelivery::Resend(unsettled_message) => {
+                resend_buf.push(unsettled_message)
             }
-            ResumingDelivery::Resume { message_format, state, payload } => {
-                self.resume(delivery_tag, message_format, payload, state).await?
+            ResumingDelivery::Resume(unsettled_message) => {
+                self.resume(delivery_tag, unsettled_message).await?
             }
-            ResumingDelivery::RestateOutcome { message_format, local_state } => {
-                self.restate_outcome(delivery_tag, message_format, local_state).await?
+            ResumingDelivery::RestateOutcome {
+                message_format,
+                local_state,
+                payload,
+                sender,
+            } => {
+                self.restate_outcome(delivery_tag, message_format, local_state, payload, sender)
+                    .await?
             }
-        };
+        }
 
-        #[cfg(feature = "tracing")]
-        tracing::debug!("Resuming delivery is settled {:?}", settled);
-        #[cfg(feature = "log")]
-        log::debug!("Resuming delivery is settled {:?}", settled);
         Ok(())
     }
 
-    async fn abort(&mut self, delivery_tag: DeliveryTag, message_format: MessageFormat) -> Result<bool, SendError> {
+    async fn abort(
+        &mut self,
+        delivery_tag: DeliveryTag,
+        message_format: MessageFormat,
+        sender: Option<oneshot::Sender<Option<DeliveryState>>>,
+    ) -> Result<(), SendError> {
         let handle = self
             .link
             .output_handle
@@ -741,7 +751,7 @@ impl SenderInner<SenderLink<Target>> {
         let transfer = Transfer {
             handle,
             delivery_id: None,
-            delivery_tag: Some(delivery_tag),
+            delivery_tag: Some(delivery_tag.clone()),
             message_format: Some(message_format),
             settled: None,
             more: false,
@@ -753,19 +763,40 @@ impl SenderInner<SenderLink<Target>> {
         };
         let payload = Bytes::new();
 
-        self.link
-            .send_transfer_without_modifying_unsettled_map(&self.outgoing, transfer, payload)
-            .await
-            .map_err(Into::into)
+        let settled = self
+            .link
+            .send_transfer_without_modifying_unsettled_map(
+                &self.outgoing,
+                transfer,
+                payload.clone(),
+            )
+            .await?;
+
+        match settled {
+            true => {
+                if let Some(sender) = sender {
+                    let _ = sender.send(None);
+                }
+            }
+            false => {
+                if let Some(sender) = sender {
+                    let unsettled = UnsettledMessage::new(payload, None, message_format, sender);
+                    let mut guard = self.link.unsettled.write();
+                    guard
+                        .get_or_insert(OrderedMap::new())
+                        .insert(delivery_tag, unsettled);
+                }
+            }
+        }
+
+        Ok(())
     }
 
     async fn resume(
         &mut self,
         delivery_tag: DeliveryTag,
-        message_format: MessageFormat,
-        payload: Payload,
-        state: Option<DeliveryState>,
-    ) -> Result<bool, SendError> {
+        unsettled_message: UnsettledMessage,
+    ) -> Result<(), SendError> {
         let handle = self
             .link
             .output_handle
@@ -780,21 +811,38 @@ impl SenderInner<SenderLink<Target>> {
         let transfer = Transfer {
             handle,
             delivery_id: None,
-            delivery_tag: Some(delivery_tag),
-            message_format: Some(message_format),
+            delivery_tag: Some(delivery_tag.clone()),
+            message_format: Some(unsettled_message.message_format),
             settled: Some(settled),
             more: false, // This will be determined in `send_payload_with_transfer`
             rcv_settle_mode: None,
-            state,
+            state: unsettled_message.state.clone(),
             resume: true,
             aborted: false,
             batchable: false,
         };
 
-        self.link
-            .send_transfer_without_modifying_unsettled_map(&self.outgoing, transfer, payload)
-            .await
-            .map_err(Into::into)
+        let settled = self
+            .link
+            .send_transfer_without_modifying_unsettled_map(
+                &self.outgoing,
+                transfer,
+                unsettled_message.payload.clone(),
+            )
+            .await?;
+
+        match settled {
+            true => {
+                let _ = unsettled_message.settle();
+            },
+            false => {
+                let mut guard = self.link.unsettled.write();
+                guard
+                    .get_or_insert(OrderedMap::new())
+                    .insert(delivery_tag, unsettled_message);
+            },
+        }
+        Ok(())
     }
 
     async fn restate_outcome(
@@ -802,7 +850,9 @@ impl SenderInner<SenderLink<Target>> {
         delivery_tag: DeliveryTag,
         message_format: MessageFormat,
         state: DeliveryState,
-    ) -> Result<bool, SendError> {
+        payload: Payload,
+        sender: oneshot::Sender<Option<DeliveryState>>,
+    ) -> Result<(), SendError> {
         let handle = self
             .link
             .output_handle
@@ -812,7 +862,7 @@ impl SenderInner<SenderLink<Target>> {
         let transfer = Transfer {
             handle,
             delivery_id: None,
-            delivery_tag: Some(delivery_tag),
+            delivery_tag: Some(delivery_tag.clone()),
             message_format: Some(message_format),
             settled: Some(false),
             more: false,
@@ -822,47 +872,59 @@ impl SenderInner<SenderLink<Target>> {
             aborted: false,
             batchable: false,
         };
-        let payload = Bytes::new();
 
-        self.link
-            .send_transfer_without_modifying_unsettled_map(&self.outgoing, transfer, payload)
-            .await
-            .map_err(Into::into)
+        let settled = self.link
+            .send_transfer_without_modifying_unsettled_map(&self.outgoing, transfer, payload.clone())
+            .await?;
+        
+        match settled {
+            true => {
+                let _ = sender.send(None);
+            }
+            false => {
+                let unsettled = UnsettledMessage::new(payload, None, message_format, sender);
+                let mut guard = self.link.unsettled.write();
+                guard
+                    .get_or_insert(OrderedMap::new())
+                    .insert(delivery_tag, unsettled);
+            }
+        }
+
+        Ok(())
     }
 
     async fn resend(
         &mut self,
-        prev_delivery_tag: DeliveryTag,
-        message_format: MessageFormat,
-        payload: Payload,
+        unsettled_message: UnsettledMessage,
     ) -> Result<(), SendError> {
         let detached_fut = self.incoming.recv();
-        let tag = self.link.get_delivery_tag_or_detached(&self.outgoing, detached_fut).await?;
+        let tag = self
+            .link
+            .get_delivery_tag_or_detached(&self.outgoing, detached_fut)
+            .await?;
         let new_delivery_tag = DeliveryTag::from(tag);
-        let transfer = self.link.generate_non_resuming_transfer_performative(new_delivery_tag.clone(), message_format, None, None, false)?;
+        let transfer = self.link.generate_non_resuming_transfer_performative(
+            new_delivery_tag.clone(),
+            unsettled_message.message_format,
+            None,
+            None,
+            false,
+        )?;
 
-        let settled = self.link.send_transfer_without_modifying_unsettled_map(&self.outgoing, transfer, payload).await?;
-
-        println!("old delivery tag: {:?}, new delivery tag: {:?}, settled: {:?}", prev_delivery_tag, new_delivery_tag, settled);
+        let settled = self
+            .link
+            .send_transfer_without_modifying_unsettled_map(&self.outgoing, transfer, unsettled_message.payload.clone())
+            .await?;
 
         match settled {
             true => {
-                let mut guard = self.link.unsettled.write();
-                let unsettled_message = guard.get_or_insert(OrderedMap::new())
-                    .remove(&prev_delivery_tag);
-                if let Some(unsettled_message) = unsettled_message {
-                    let _ = unsettled_message.settle();
-                }
-            },
+                let _ = unsettled_message.settle();
+            }
             false => {
                 let mut guard = self.link.unsettled.write();
-                let unsettled_message = guard.get_or_insert(OrderedMap::new())
-                    .remove(&prev_delivery_tag);
-                if let Some(unsettled_message) = unsettled_message {
-                    let unsettled_message = unsettled_message;
-                    guard.get_or_insert(OrderedMap::new())
-                        .insert(new_delivery_tag, unsettled_message);
-                }
+                guard
+                    .get_or_insert(OrderedMap::new())
+                    .insert(new_delivery_tag, unsettled_message);
             }
         }
 
@@ -902,8 +964,8 @@ impl SenderInner<SenderLink<Target>> {
                     }
 
                     // Resend buffered payloads
-                    for (delivery_tag, message_format, payload) in resend_buf.drain(..) {
-                        self.resend(delivery_tag, message_format, payload).await?;
+                    for unsettled_message in resend_buf.drain(..) {
+                        self.resend(unsettled_message).await?;
                     }
 
                     // Upon completion of this reduction of state, the two parties MUST suspend and

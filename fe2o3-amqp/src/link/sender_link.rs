@@ -1,11 +1,14 @@
-use fe2o3_amqp_types::{definitions::{Fields, Handle, SequenceNo}, messaging::MESSAGE_FORMAT};
+use fe2o3_amqp_types::{
+    definitions::{Fields, Handle, SequenceNo},
+    messaging::MESSAGE_FORMAT,
+};
 use futures_util::Future;
 
 use crate::endpoint::LinkExt;
 
 use super::{resumption::resume_delivery, *};
 
-impl<T> SenderLink<T> 
+impl<T> SenderLink<T>
 where
     T: Into<TargetArchetype>
         + TryFrom<TargetArchetype>
@@ -71,7 +74,7 @@ where
         &mut self,
         writer: &mpsc::Sender<LinkFrame>,
         detached: Fut,
-    ) -> Result<[u8; 4], LinkStateError> 
+    ) -> Result<[u8; 4], LinkStateError>
     where
         Fut: Future<Output = Option<LinkFrame>> + Send,
     {
@@ -239,14 +242,16 @@ where
             .delivery_tag
             .clone()
             .ok_or(LinkStateError::IllegalState)?;
-        let settled = self.send_transfer_without_modifying_unsettled_map(writer, transfer, payload).await?;
+        let settled = self
+            .send_transfer_without_modifying_unsettled_map(writer, transfer, payload)
+            .await?;
         match settled {
             true => Ok(Settlement::Settled(delivery_tag)),
             // If not set on the first (or only) transfer for a (multi-transfer)
             // delivery, then the settled flag MUST be interpreted as being false.
             false => {
                 let (tx, rx) = oneshot::channel();
-                let unsettled = UnsettledMessage::new(payload_copy, message_format, tx);
+                let unsettled = UnsettledMessage::new(payload_copy, None, message_format, tx);
                 {
                     let mut guard = self.unsettled.write();
                     guard
@@ -282,7 +287,7 @@ where
                     let _ = msg.settle();
                 }
             } else if let Some(msg) = lock.as_mut().and_then(|m| m.get_mut(&delivery_tag)) {
-                *msg.state_mut() = Some(state.clone());
+                msg.state = Some(state.clone());
             }
         }
 
@@ -316,7 +321,7 @@ where
                         let _ = msg.settle();
                     }
                 } else if let Some(msg) = guard.as_mut().and_then(|m| m.get_mut(&delivery_tag)) {
-                    *msg.state_mut() = Some(state.clone());
+                    msg.state = Some(state.clone());
                 }
             }
 
@@ -503,7 +508,10 @@ impl<T> SenderLink<T> {
                 remote_map
                     .into_keys()
                     // Local is None, assume the message format is 0
-                    .map(|delivery_tag| (delivery_tag, ResumingDelivery::Abort(MESSAGE_FORMAT)))
+                    .map(|delivery_tag| (delivery_tag, ResumingDelivery::Abort{
+                        message_format: MESSAGE_FORMAT,
+                        sender: None
+                    }))
                     .collect()
             }
             (Some(local_map), None) => {
@@ -533,7 +541,10 @@ impl<T> SenderLink<T> {
                 let remote = remote_map
                     .into_keys()
                     // These are unsettled messages not found in the local map, assume the message format is 0
-                    .map(|tag| (tag, ResumingDelivery::Abort(MESSAGE_FORMAT)));
+                    .map(|tag| (tag, ResumingDelivery::Abort{
+                        message_format: MESSAGE_FORMAT,
+                        sender: None
+                    }));
                 local.into_iter().chain(remote).collect()
             }
         };
