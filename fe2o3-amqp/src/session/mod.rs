@@ -619,8 +619,6 @@ impl endpoint::Session for Session {
         &mut self,
         disposition: Disposition,
     ) -> Result<Option<Vec<Disposition>>, Self::Error> {
-        // and disposition only has delivery id?
-
         let first = disposition.first;
         let last = disposition.last.unwrap_or(first);
 
