@@ -317,18 +317,14 @@ impl UnsettledMessage {
     }
 
     pub fn settle(self) -> Result<(), Option<DeliveryState>> {
-        let outcome = self.sender.send(self.state);
-        println!("outcome: {:?}", outcome);
-        outcome
+        self.sender.send(self.state)
     }
 
     pub fn settle_with_state(
         self,
         state: Option<DeliveryState>,
     ) -> Result<(), Option<DeliveryState>> {
-        let outcome = self.sender.send(state);
-        println!("outcome: {:?}", outcome);
-        outcome
+        self.sender.send(state)
     }
 }
 

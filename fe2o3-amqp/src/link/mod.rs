@@ -677,7 +677,6 @@ impl LinkRelay<OutputHandle> {
                 receiver_settle_mode,
                 ..
             } => {
-                println!(">>> LinkRelay::Sender::on_incoming_disposition: delivery_tag={:?}", delivery_tag);
                 let echo = if settled {
                     // Upon receiving the updated delivery state from the receiver, the sender will, if it has not already spontaneously
                     // attained a terminal state (e.g., through the expiry of the TTL at the sender), update its view of the state and
@@ -689,10 +688,7 @@ impl LinkRelay<OutputHandle> {
                         let mut guard = unsettled.write();
                         guard
                             .as_mut()
-                            .and_then(|m| {
-                                println!("--> unsettled map: {:?}", m);
-                                m.remove(&delivery_tag)
-                            })
+                            .and_then(|m| m.remove(&delivery_tag))
                             .map(|msg| msg.settle_with_state(state));
                     }
                     false
@@ -851,8 +847,6 @@ mod tests {
         receiver::ReceiverInner, sender::SenderInner, state::LinkFlowStateInner, ReceiverLink,
     };
 
-    use super::SenderLink;
-
     #[tokio::test]
     async fn test_producer_notify() {
         use std::sync::Arc;
@@ -880,23 +874,6 @@ mod tests {
         });
 
         notified.await;
-        println!("wait passed");
-
         handle.await.unwrap();
-    }
-
-    #[test]
-    fn test_size_of_sender_and_receiver_links() {
-        let size = std::mem::size_of::<SenderLink<Target>>();
-        println!("SenderLink: {:?}", size);
-
-        let size = std::mem::size_of::<ReceiverLink<Target>>();
-        println!("ReceiverLink: {:?}", size);
-
-        let size = std::mem::size_of::<SenderInner<SenderLink<Target>>>();
-        println!("SenderInner: {:?}", size);
-
-        let size = std::mem::size_of::<ReceiverInner<ReceiverLink<Target>>>();
-        println!("ReceiverInner: {:?}", size);
     }
 }

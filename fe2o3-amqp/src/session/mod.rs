@@ -318,8 +318,6 @@ impl Session {
             }
         }
 
-        println!("Sending transfer: {:?}", transfer);
-
         self.next_outgoing_id = self.next_outgoing_id.wrapping_add(1);
 
         // The remote-incoming-window reflects the maximum number of outgoing transfers that can
@@ -621,10 +619,6 @@ impl endpoint::Session for Session {
         &mut self,
         disposition: Disposition,
     ) -> Result<Option<Vec<Disposition>>, Self::Error> {
-        // and disposition only has delivery id?
-
-        println!("Session::on_incoming_disposition: {:?}", disposition);
-
         let first = disposition.first;
         let last = disposition.last.unwrap_or(first);
 
@@ -635,9 +629,7 @@ impl endpoint::Session for Session {
             for delivery_id in first..=last {
                 let key = (disposition.role.clone(), delivery_id);
                 if let Some((handle, delivery_tag)) = self.delivery_tag_by_id.remove(&key) {
-                    println!("Session::on_incoming_disposition: handle: {}", handle.0);
                     if let Some(link_handle) = self.link_by_input_handle.get_mut(&handle) {
-                        println!(">>> Found link handle");
                         let _echo = link_handle.on_incoming_disposition(
                             disposition.role.clone(),
                             disposition.settled,
