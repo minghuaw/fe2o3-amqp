@@ -224,7 +224,7 @@ impl SourceBuilder {
     }
 
     /// Set the "filter" field
-    /// 
+    ///
     /// Although the value of each entry must be either null or a described type,
     /// many implementations in other programming languages still supports the legacy
     /// format of a filter-set where the value could be any AMQP type. This legacy

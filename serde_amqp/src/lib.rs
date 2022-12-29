@@ -221,13 +221,13 @@
 //! ```
 //!
 //! ## Extensions
-//! 
+//!
 //! A raw u64 can be used as the descriptor code in the macro attribute. This is useful for defining types
 //! that are not strictly compliant.
-//! 
+//!
 //! ```
 //! use serde_amqp::macros::{SerializeComposite, DeserializeComposite};
-//! 
+//!
 //! #[derive(Debug, Clone, SerializeComposite, DeserializeComposite)]
 //! #[amqp_contract(
 //!     name = "amqp:application-properties:map",
@@ -255,8 +255,8 @@ pub mod format_code;
 pub mod primitives;
 pub mod read;
 pub mod ser;
-pub mod value;
 pub mod size_ser;
+pub mod value;
 
 #[cfg_attr(docsrs, doc(cfg(feature = "extensions")))]
 #[cfg(feature = "extensions")]
@@ -279,8 +279,8 @@ pub use serde;
 pub use de::{from_reader, from_slice};
 pub use error::Error;
 pub use ser::to_vec;
-pub use value::{de::from_value, ser::to_value, Value};
 pub use size_ser::serialized_size;
+pub use value::{de::from_value, ser::to_value, Value};
 
 #[cfg(feature = "derive")]
 pub mod macros;

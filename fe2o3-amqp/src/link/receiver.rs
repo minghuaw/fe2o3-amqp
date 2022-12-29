@@ -325,7 +325,6 @@ impl Receiver {
             Ok(_) => Ok(DetachedReceiver { inner: self.inner }),
             Err(err) => Err((DetachedReceiver { inner: self.inner }, err)),
         }
-        
     }
 
     /// Detach the link with a timeout

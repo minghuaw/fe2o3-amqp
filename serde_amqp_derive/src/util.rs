@@ -11,11 +11,7 @@ pub(crate) fn parse_described_struct_attr(input: &syn::DeriveInput) -> Described
     let attr = DescribedAttr::from_derive_input(input).unwrap();
 
     let name = attr.name.unwrap_or_else(|| input.ident.to_string());
-    let code = attr
-        .code
-        .map(parse_descriptor_code)
-        .transpose()
-        .unwrap();
+    let code = attr.code.map(parse_descriptor_code).transpose().unwrap();
     let encoding = attr.encoding.unwrap_or(EncodingType::List);
     let rename_field = attr.rename_all;
     DescribedStructAttr {
@@ -42,23 +38,27 @@ fn parse_descriptor_code(s: String) -> Result<u64, ParseDescriptorCodeError> {
 
     match second_half {
         Some(descriptor_id_str) => {
-                let domain_id_str = first_half.ok_or(ParseDescriptorCodeError::IncorrectDescriptorFormat)?.replace('_', "");
-                let domain_id = parse_code_based_on_prefix(&domain_id_str)
-                    .map_err(ParseDescriptorCodeError::DomainIdParseError)?;
-            
-                let descriptor_id_str = descriptor_id_str.replace('_', "");
-                let descriptor_id = parse_code_based_on_prefix(&descriptor_id_str)
-                    .map_err(ParseDescriptorCodeError::DescriptorIdParseError)?;
-                // numeric descriptors
-                // (domain-id << 32) | descriptor-id
-                Ok((domain_id << 32) | descriptor_id)
-        },
+            let domain_id_str = first_half
+                .ok_or(ParseDescriptorCodeError::IncorrectDescriptorFormat)?
+                .replace('_', "");
+            let domain_id = parse_code_based_on_prefix(&domain_id_str)
+                .map_err(ParseDescriptorCodeError::DomainIdParseError)?;
+
+            let descriptor_id_str = descriptor_id_str.replace('_', "");
+            let descriptor_id = parse_code_based_on_prefix(&descriptor_id_str)
+                .map_err(ParseDescriptorCodeError::DescriptorIdParseError)?;
+            // numeric descriptors
+            // (domain-id << 32) | descriptor-id
+            Ok((domain_id << 32) | descriptor_id)
+        }
         None => {
-            let descriptor_id_str = first_half.ok_or(ParseDescriptorCodeError::IncorrectDescriptorFormat)?.replace('_', "");
+            let descriptor_id_str = first_half
+                .ok_or(ParseDescriptorCodeError::IncorrectDescriptorFormat)?
+                .replace('_', "");
             let descriptor_id = parse_code_based_on_prefix(&descriptor_id_str)
                 .map_err(ParseDescriptorCodeError::DescriptorIdParseError)?;
             Ok(descriptor_id)
-        },
+        }
     }
 }
 

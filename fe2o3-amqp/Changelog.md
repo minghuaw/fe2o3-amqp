@@ -1,5 +1,9 @@
 # Change Log
 
+## 0.8.7
+
+1. Fixed clippy warnings
+
 ## 0.8.6
 
 1. Ported 0.7.21

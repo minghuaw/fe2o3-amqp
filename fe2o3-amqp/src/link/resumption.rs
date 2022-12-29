@@ -1,4 +1,7 @@
-use fe2o3_amqp_types::{messaging::{DeliveryState, Received}, definitions::MessageFormat};
+use fe2o3_amqp_types::{
+    definitions::MessageFormat,
+    messaging::{DeliveryState, Received},
+};
 use tokio::sync::oneshot;
 
 use crate::Payload;
@@ -40,7 +43,7 @@ pub(crate) fn resume_delivery(
         | (Some(DeliveryState::Declared(_)), _)
         | (Some(DeliveryState::TransactionalState(_)), _) => {
             // Illegal delivery states?
-            Some(ResumingDelivery::Abort{
+            Some(ResumingDelivery::Abort {
                 message_format: local.message_format,
                 sender: Some(local.sender),
             })
@@ -66,7 +69,7 @@ pub(crate) fn resume_delivery(
                 *section_number as usize,
                 *section_offset as usize,
             )
-            .unwrap_or_else(|| local.payload);
+            .unwrap_or(local.payload);
             local.payload = remaining;
             Some(ResumingDelivery::Resume(local))
         }
@@ -88,9 +91,7 @@ pub(crate) fn resume_delivery(
         }
 
         // delivery-tag 5 example
-        (Some(DeliveryState::Received(_)), None) => {
-            Some(ResumingDelivery::Resend(local))
-        }
+        (Some(DeliveryState::Received(_)), None) => Some(ResumingDelivery::Resend(local)),
 
         // delivery-tag 6, 7 and 9 examples
         (
@@ -104,7 +105,7 @@ pub(crate) fn resume_delivery(
                     remote_recved.section_number as usize,
                     remote_recved.section_offset as usize,
                 )
-                .unwrap_or_else(|| local.payload);
+                .unwrap_or(local.payload);
                 local.payload = remaining;
                 Some(ResumingDelivery::Resume(local))
             } else {
@@ -112,7 +113,7 @@ pub(crate) fn resume_delivery(
                 //
                 // delivery-tag 9 has a null in the remote value,
                 // which is equivalent to (0, 0)
-                Some(ResumingDelivery::Abort{
+                Some(ResumingDelivery::Abort {
                     message_format: local.message_format,
                     sender: Some(local.sender),
                 })
@@ -165,7 +166,7 @@ pub(crate) fn resume_delivery(
         | (Some(DeliveryState::Modified(_)), Some(DeliveryState::Received(_)))
         | (Some(DeliveryState::Rejected(_)), Some(DeliveryState::Received(_)))
         | (Some(DeliveryState::Released(_)), Some(DeliveryState::Received(_))) => {
-            Some(ResumingDelivery::Abort{
+            Some(ResumingDelivery::Abort {
                 message_format: local.message_format,
                 sender: Some(local.sender),
             })
