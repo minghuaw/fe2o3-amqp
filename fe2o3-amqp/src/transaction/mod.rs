@@ -541,7 +541,7 @@ impl<'t> Drop for Transaction<'t> {
                     // The transfer is sent unsettled and will be
                     // inserted into
                     let (tx, rx) = oneshot::channel();
-                    let unsettled = UnsettledMessage::new(payload_copy, MESSAGE_FORMAT, tx);
+                    let unsettled = UnsettledMessage::new(payload_copy, None, MESSAGE_FORMAT, tx);
                     {
                         let mut guard = match inner.link.unsettled.try_write() {
                             Some(guard) => guard,

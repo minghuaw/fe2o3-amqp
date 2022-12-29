@@ -714,7 +714,7 @@ impl LinkRelay<OutputHandle> {
                         } else if let Some(msg) =
                             guard.as_mut().and_then(|m| m.get_mut(&delivery_tag))
                         {
-                            *msg.state_mut() = state;
+                            msg.state = state;
                         }
                     }
 

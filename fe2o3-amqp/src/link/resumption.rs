@@ -1,28 +1,27 @@
 use fe2o3_amqp_types::{messaging::{DeliveryState, Received}, definitions::MessageFormat};
+use tokio::sync::oneshot;
 
 use crate::Payload;
 
 use super::{delivery::UnsettledMessage, receiver_link::is_section_header};
 
 pub(crate) enum ResumingDelivery {
-    Abort(MessageFormat),
-    Resend{
-        message_format: u32,
-        payload: Payload
-    },
-    Resume {
+    Abort {
         message_format: MessageFormat,
-        state: Option<DeliveryState>,
-        payload: Payload,
+        sender: Option<oneshot::Sender<Option<DeliveryState>>>,
     },
+    Resend(UnsettledMessage),
+    Resume(UnsettledMessage),
     RestateOutcome {
-        message_format: MessageFormat,
+        payload: Payload,
         local_state: DeliveryState,
+        message_format: MessageFormat,
+        sender: oneshot::Sender<Option<DeliveryState>>,
     },
 }
 
 pub(crate) fn resume_delivery(
-    local: UnsettledMessage,
+    mut local: UnsettledMessage,
     remote: Option<Option<DeliveryState>>,
 ) -> Option<ResumingDelivery> {
     // The outer None indicates absence of entry
@@ -34,21 +33,21 @@ pub(crate) fn resume_delivery(
             section_offset: 0,
         }))
     });
-    match (&local.state(), &remote_state) {
+    match (&local.state, &remote_state) {
         #[cfg(feature = "transaction")]
         (_, Some(DeliveryState::Declared(_)))
         | (_, Some(DeliveryState::TransactionalState(_)))
         | (Some(DeliveryState::Declared(_)), _)
         | (Some(DeliveryState::TransactionalState(_)), _) => {
             // Illegal delivery states?
-            Some(ResumingDelivery::Abort(local.message_format()))
+            Some(ResumingDelivery::Abort{
+                message_format: local.message_format,
+                sender: Some(local.sender),
+            })
         }
 
         // delivery-tag 1 example
-        (None, None) => Some(ResumingDelivery::Resend{
-            message_format: local.message_format(),
-            payload: local.payload().clone()
-        }),
+        (None, None) => Some(ResumingDelivery::Resend(local)),
 
         // delivery-tag 2 and 4 example
         //
@@ -63,16 +62,13 @@ pub(crate) fn resume_delivery(
             })),
         ) => {
             let remaining = split_off_at_section_and_offset(
-                local.payload(),
+                &local.payload,
                 *section_number as usize,
                 *section_offset as usize,
             )
-            .unwrap_or_else(|| local.payload().clone());
-            Some(ResumingDelivery::Resume {
-                message_format: local.message_format(),
-                state: remote_state,
-                payload: remaining,
-            })
+            .unwrap_or_else(|| local.payload);
+            local.payload = remaining;
+            Some(ResumingDelivery::Resume(local))
         }
 
         // delivery-tag 3 example
@@ -93,10 +89,7 @@ pub(crate) fn resume_delivery(
 
         // delivery-tag 5 example
         (Some(DeliveryState::Received(_)), None) => {
-            Some(ResumingDelivery::Resend{
-                message_format: local.message_format(),
-                payload: local.payload().clone()
-            })
+            Some(ResumingDelivery::Resend(local))
         }
 
         // delivery-tag 6, 7 and 9 examples
@@ -107,22 +100,22 @@ pub(crate) fn resume_delivery(
             if local_recved <= remote_recved {
                 // delivery-tag 6 case
                 let remaining = split_off_at_section_and_offset(
-                    local.payload(),
+                    &local.payload,
                     remote_recved.section_number as usize,
                     remote_recved.section_offset as usize,
                 )
-                .unwrap_or_else(|| local.payload().clone());
-                Some(ResumingDelivery::Resume {
-                    message_format: local.message_format(),
-                    state: remote_state,
-                    payload: remaining,
-                })
+                .unwrap_or_else(|| local.payload);
+                local.payload = remaining;
+                Some(ResumingDelivery::Resume(local))
             } else {
                 // delivery-tag 7 and 9 case
                 //
                 // delivery-tag 9 has a null in the remote value,
                 // which is equivalent to (0, 0)
-                Some(ResumingDelivery::Abort(local.message_format()))
+                Some(ResumingDelivery::Abort{
+                    message_format: local.message_format,
+                    sender: Some(local.sender),
+                })
             }
         }
 
@@ -172,7 +165,10 @@ pub(crate) fn resume_delivery(
         | (Some(DeliveryState::Modified(_)), Some(DeliveryState::Received(_)))
         | (Some(DeliveryState::Rejected(_)), Some(DeliveryState::Received(_)))
         | (Some(DeliveryState::Released(_)), Some(DeliveryState::Received(_))) => {
-            Some(ResumingDelivery::Abort(local.message_format()))
+            Some(ResumingDelivery::Abort{
+                message_format: local.message_format,
+                sender: Some(local.sender),
+            })
         }
 
         // delivery-tag 12 case
@@ -195,8 +191,10 @@ pub(crate) fn resume_delivery(
         // is the sender’s view that is definitive. The sender thus MUST restate this as the
         // terminal outcome, and the receiver SHOULD then echo this and settle.
         (Some(local_state), Some(_)) => Some(ResumingDelivery::RestateOutcome {
-            message_format: local.message_format(),
+            message_format: local.message_format,
             local_state: local_state.clone(),
+            payload: local.payload,
+            sender: local.sender,
         }),
     }
 }
