@@ -39,7 +39,7 @@ use fe2o3_amqp_types::{
     definitions::{self, AmqpError, DeliveryTag, Fields, SequenceNo},
     messaging::{
         message::__private::Serializable, Accepted, DeliveryState, Message, Modified, Outcome,
-        Rejected, Released, SerializableBody,
+        Rejected, Released, SerializableBody, MESSAGE_FORMAT,
     },
     performatives::Transfer,
     primitives::{OrderedMap, Symbol},
@@ -504,7 +504,7 @@ impl<'t> Drop for Transaction<'t> {
                         handle,
                         delivery_id: None,
                         delivery_tag: Some(delivery_tag.clone()),
-                        message_format: Some(0),
+                        message_format: Some(MESSAGE_FORMAT),
                         settled: Some(false),
                         more: false, // This message should be small enough
                         rcv_settle_mode: None,
@@ -541,7 +541,7 @@ impl<'t> Drop for Transaction<'t> {
                     // The transfer is sent unsettled and will be
                     // inserted into
                     let (tx, rx) = oneshot::channel();
-                    let unsettled = UnsettledMessage::new(payload_copy, tx);
+                    let unsettled = UnsettledMessage::new(payload_copy, MESSAGE_FORMAT, tx);
                     {
                         let mut guard = match inner.link.unsettled.try_write() {
                             Some(guard) => guard,

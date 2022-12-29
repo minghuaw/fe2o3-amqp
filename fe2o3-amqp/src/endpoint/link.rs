@@ -148,6 +148,7 @@ pub(crate) trait SenderLink: Link + LinkExt {
     async fn send_payload_with_transfer(
         &mut self,
         writer: &mpsc::Sender<LinkFrame>,
+        message_format: MessageFormat,
         transfer: Transfer,
         payload: Payload,
     ) -> Result<Settlement, Self::TransferError>;

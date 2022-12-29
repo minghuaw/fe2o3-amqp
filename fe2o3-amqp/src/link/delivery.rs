@@ -297,16 +297,22 @@ impl<T> From<Builder<Message<T>>> for Sendable<T> {
 pub(crate) struct UnsettledMessage {
     payload: Payload,
     state: Option<DeliveryState>,
+    message_format: u32,
     sender: oneshot::Sender<Option<DeliveryState>>,
 }
 
 impl UnsettledMessage {
-    pub fn new(payload: Payload, sender: oneshot::Sender<Option<DeliveryState>>) -> Self {
+    pub fn new(payload: Payload, message_format: u32, sender: oneshot::Sender<Option<DeliveryState>>) -> Self {
         Self {
             payload,
             state: None,
+            message_format,
             sender,
         }
+    }
+
+    pub fn message_format(&self) -> u32 {
+        self.message_format
     }
 
     pub fn state(&self) -> &Option<DeliveryState> {
