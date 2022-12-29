@@ -1,4 +1,4 @@
-use fe2o3_amqp_types::definitions::{Fields, Handle, SequenceNo};
+use fe2o3_amqp_types::{definitions::{Fields, Handle, SequenceNo}, messaging::MESSAGE_FORMAT};
 use futures_util::Future;
 
 use crate::endpoint::LinkExt;
@@ -66,6 +66,96 @@ where
 
         Ok(settled)
     }
+
+    pub(crate) async fn get_delivery_tag_or_detached<Fut>(
+        &mut self,
+        writer: &mpsc::Sender<LinkFrame>,
+        detached: Fut,
+    ) -> Result<[u8; 4], LinkStateError> 
+    where
+        Fut: Future<Output = Option<LinkFrame>> + Send,
+    {
+        use crate::util::Consume;
+
+        tokio::select! {
+            tag = self.flow_state.consume(1) => {
+                // link-credit is defined as
+                // "The current maximum number of messages that can be handled
+                // at the receiver endpoint of the link"
+
+                // Draining should already set the link credit to 0, causing
+                // sender to wait for new link credit
+                Ok(tag)
+            },
+            frame = detached => { // cancel safe
+                match frame {
+                    // If remote has detached the link
+                    Some(LinkFrame::Detach(detach)) => {
+                        // FIXME: if the sender is not trying to send anything, this is
+                        // probably not responsive enough
+                        let closed = detach.closed;
+                        self.send_detach(writer, closed, None).await?;
+                        let result = self.on_incoming_detach(detach);
+
+                        match (result, closed) {
+                            (Ok(_), true) => Err(LinkStateError::RemoteClosed),
+                            (Ok(_), false) => Err(LinkStateError::RemoteDetached),
+                            (Err(err), _) => Err(LinkStateError::from(err)),
+                        }
+                    },
+                    _ => {
+                        // Other frames should not forwarded to the sender by the session
+                        Err(LinkStateError::ExpectImmediateDetach)
+                    }
+                }
+            }
+        }
+    }
+
+    pub(crate) fn generate_transfer_performative(
+        &self,
+        delivery_tag: DeliveryTag,
+        message_format: MessageFormat,
+        settled: Option<bool>,
+        state: Option<DeliveryState>,
+        batchable: bool,
+    ) -> Result<Transfer, LinkStateError> {
+        let handle = self
+            .output_handle
+            .clone()
+            .ok_or(LinkStateError::IllegalState)?
+            .into();
+
+        let settled = match self.snd_settle_mode {
+            SenderSettleMode::Settled => true,
+            SenderSettleMode::Unsettled => false,
+            // If not set on the first (or only) transfer for a (multi-transfer)
+            // delivery, then the settled flag MUST be interpreted as being false.
+            SenderSettleMode::Mixed => settled.unwrap_or(false),
+        };
+
+        // If true, the resume flag indicates that the transfer is being used to reassociate an
+        // unsettled delivery from a dissociated link endpoint
+        let resume = false;
+
+        let transfer = Transfer {
+            handle,
+            delivery_id: None, // This will be set by the session
+            delivery_tag: Some(delivery_tag.clone()),
+            message_format: Some(message_format),
+            settled: Some(settled),
+            more: false, // This will be changed later
+
+            // If not set, this value is defaulted to the value negotiated
+            // on link attach.
+            rcv_settle_mode: None,
+            state,
+            resume,
+            aborted: false,
+            batchable,
+        };
+        Ok(transfer)
+    }
 }
 
 #[async_trait]
@@ -116,82 +206,19 @@ where
     where
         Fut: Future<Output = Option<LinkFrame>> + Send,
     {
-        use crate::endpoint::LinkDetach;
-        use crate::util::Consume;
-
-        let tag = tokio::select! {
-            tag = self.flow_state.consume(1) => {
-                // link-credit is defined as
-                // "The current maximum number of messages that can be handled
-                // at the receiver endpoint of the link"
-
-                // Draining should already set the link credit to 0, causing
-                // sender to wait for new link credit
-                tag
-            },
-            frame = detached => { // cancel safe
-                match frame {
-                    // If remote has detached the link
-                    Some(LinkFrame::Detach(detach)) => {
-                        // FIXME: if the sender is not trying to send anything, this is
-                        // probably not responsive enough
-                        let closed = detach.closed;
-                        self.send_detach(writer, closed, None).await?;
-                        let result = self.on_incoming_detach(detach);
-
-                        match (result, closed) {
-                            (Ok(_), true) => return Err(Self::TransferError::RemoteClosed),
-                            (Ok(_), false) => return Err(Self::TransferError::RemoteDetached),
-                            (Err(err), _) => return Err(Self::TransferError::from(err)),
-                        }
-                    },
-                    _ => {
-                        // Other frames should not forwarded to the sender by the session
-                        return Err(Self::TransferError::ExpectImmediateDetach)
-                    }
-                }
-            }
-        };
-
-        let handle = self
-            .output_handle
-            .clone()
-            .ok_or(Self::TransferError::IllegalState)?
-            .into();
-
+        let tag = self.get_delivery_tag_or_detached(writer, detached).await?;
         // Delivery count is incremented when consuming credit
         let delivery_tag = DeliveryTag::from(tag);
 
-        let settled = match self.snd_settle_mode {
-            SenderSettleMode::Settled => true,
-            SenderSettleMode::Unsettled => false,
-            // If not set on the first (or only) transfer for a (multi-transfer)
-            // delivery, then the settled flag MUST be interpreted as being false.
-            SenderSettleMode::Mixed => settled.unwrap_or(false),
-        };
-
-        // If true, the resume flag indicates that the transfer is being used to reassociate an
-        // unsettled delivery from a dissociated link endpoint
-        let resume = false;
-
-        let transfer = Transfer {
-            handle,
-            delivery_id: None, // This will be set by the session
-            delivery_tag: Some(delivery_tag.clone()),
-            message_format: Some(message_format),
-            settled: Some(settled),
-            more: false, // This will be changed later
-
-            // If not set, this value is defaulted to the value negotiated
-            // on link attach.
-            rcv_settle_mode: None,
+        let transfer = self.generate_transfer_performative(
+            delivery_tag,
+            message_format,
+            settled,
             state,
-            resume,
-            aborted: false,
             batchable,
-        };
+        )?;
 
-        self.send_payload_with_transfer(writer, transfer, payload)
+        self.send_payload_with_transfer(writer, message_format, transfer, payload)
             .await
     }
 
@@ -201,6 +228,7 @@ where
     async fn send_payload_with_transfer(
         &mut self,
         writer: &mpsc::Sender<LinkFrame>,
+        message_format: MessageFormat,
         transfer: Transfer,
         payload: Payload,
     ) -> Result<Settlement, Self::TransferError> {
@@ -218,7 +246,7 @@ where
             // delivery, then the settled flag MUST be interpreted as being false.
             false => {
                 let (tx, rx) = oneshot::channel();
-                let unsettled = UnsettledMessage::new(payload_copy, tx);
+                let unsettled = UnsettledMessage::new(payload_copy, message_format, tx);
                 {
                     let mut guard = self.unsettled.write();
                     guard
@@ -474,7 +502,8 @@ impl<T> SenderLink<T> {
 
                 remote_map
                     .into_keys()
-                    .map(|delivery_tag| (delivery_tag, ResumingDelivery::Abort))
+                    // Local is None, assume the message format is 0
+                    .map(|delivery_tag| (delivery_tag, ResumingDelivery::Abort(MESSAGE_FORMAT)))
                     .collect()
             }
             (Some(local_map), None) => {
@@ -503,7 +532,8 @@ impl<T> SenderLink<T> {
                     .collect();
                 let remote = remote_map
                     .into_keys()
-                    .map(|tag| (tag, ResumingDelivery::Abort));
+                    // These are unsettled messages not found in the local map, assume the message format is 0
+                    .map(|tag| (tag, ResumingDelivery::Abort(MESSAGE_FORMAT)));
                 local.into_iter().chain(remote).collect()
             }
         };

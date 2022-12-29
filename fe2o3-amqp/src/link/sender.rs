@@ -13,9 +13,9 @@ use fe2o3_amqp_types::{
     definitions::{self, DeliveryTag, Fields, MessageFormat, SenderSettleMode},
     messaging::{
         message::__private::Serializable, Address, DeliveryState, Outcome, SerializableBody,
-        Source, Target, MESSAGE_FORMAT,
+        Source, Target,
     },
-    performatives::{Attach, Detach, Transfer},
+    performatives::{Attach, Detach, Transfer}, primitives::OrderedMap,
 };
 
 use crate::{
@@ -27,7 +27,7 @@ use crate::{
 
 use super::{
     builder::{self, WithSource, WithoutName, WithoutTarget},
-    delivery::{DeliveryFut, SendResult, Sendable},
+    delivery::{DeliveryFut, Sendable},
     error::DetachError,
     resumption::ResumingDelivery,
     role,
@@ -697,7 +697,41 @@ where
 }
 
 impl SenderInner<SenderLink<Target>> {
-    async fn abort(&mut self, delivery_tag: DeliveryTag) -> Result<bool, SendError> {
+    /// Resumes a delivery with the given state and payload.
+    /// 
+    /// The resume operation should not replace the unsettled map entry.
+    async fn handle_resuming_delivery(
+        &mut self,
+        delivery_tag: DeliveryTag,
+        resuming: ResumingDelivery,
+        resend_buf: &mut Vec<(DeliveryTag, MessageFormat, Payload)>,
+    ) -> Result<(), SendError> {
+        #[cfg(feature = "tracing")]
+        tracing::debug!("Resuming delivery: delivery_tag: {:?}", delivery_tag);
+        #[cfg(feature = "log")]
+        log::debug!("Resuming delivery: delivery_tag: {:?}", delivery_tag);
+        let settled = match resuming {
+            ResumingDelivery::Abort(message_format) => self.abort(delivery_tag, message_format).await?,
+            ResumingDelivery::Resend{message_format, payload} => {
+                resend_buf.push((delivery_tag, message_format, payload));
+                return Ok(());
+            }
+            ResumingDelivery::Resume { message_format, state, payload } => {
+                self.resume(delivery_tag, message_format, payload, state).await?
+            }
+            ResumingDelivery::RestateOutcome { message_format, local_state } => {
+                self.restate_outcome(delivery_tag, message_format, local_state).await?
+            }
+        };
+
+        #[cfg(feature = "tracing")]
+        tracing::debug!("Resuming delivery is settled {:?}", settled);
+        #[cfg(feature = "log")]
+        log::debug!("Resuming delivery is settled {:?}", settled);
+        Ok(())
+    }
+
+    async fn abort(&mut self, delivery_tag: DeliveryTag, message_format: MessageFormat) -> Result<bool, SendError> {
         let handle = self
             .link
             .output_handle
@@ -708,7 +742,7 @@ impl SenderInner<SenderLink<Target>> {
             handle,
             delivery_id: None,
             delivery_tag: Some(delivery_tag),
-            message_format: Some(MESSAGE_FORMAT),
+            message_format: Some(message_format),
             settled: None,
             more: false,
             rcv_settle_mode: None,
@@ -725,43 +759,10 @@ impl SenderInner<SenderLink<Target>> {
             .map_err(Into::into)
     }
 
-    /// Resumes a delivery with the given state and payload.
-    /// 
-    /// The resume operation should not replace the unsettled map entry.
-    async fn handle_resuming_delivery(
-        &mut self,
-        delivery_tag: DeliveryTag,
-        resuming: ResumingDelivery,
-        resend_buf: &mut Vec<Payload>,
-    ) -> Result<(), SendError> {
-        #[cfg(feature = "tracing")]
-        tracing::debug!("Resuming delivery: delivery_tag: {:?}", delivery_tag);
-        #[cfg(feature = "log")]
-        log::debug!("Resuming delivery: delivery_tag: {:?}", delivery_tag);
-        let settled = match resuming {
-            ResumingDelivery::Abort => self.abort(delivery_tag).await?,
-            ResumingDelivery::Resend(payload) => {
-                resend_buf.push(payload);
-                return Ok(());
-            }
-            ResumingDelivery::Resume { state, payload } => {
-                self.resume(delivery_tag, payload, state).await?
-            }
-            ResumingDelivery::RestateOutcome { local_state } => {
-                self.restate_outcome(delivery_tag, local_state).await?
-            }
-        };
-
-        #[cfg(feature = "tracing")]
-        tracing::debug!("Resuming delivery is settled {:?}", settled);
-        #[cfg(feature = "log")]
-        log::debug!("Resuming delivery is settled {:?}", settled);
-        Ok(())
-    }
-
     async fn resume(
         &mut self,
         delivery_tag: DeliveryTag,
+        message_format: MessageFormat,
         payload: Payload,
         state: Option<DeliveryState>,
     ) -> Result<bool, SendError> {
@@ -780,7 +781,7 @@ impl SenderInner<SenderLink<Target>> {
             handle,
             delivery_id: None,
             delivery_tag: Some(delivery_tag),
-            message_format: Some(MESSAGE_FORMAT),
+            message_format: Some(message_format),
             settled: Some(settled),
             more: false, // This will be determined in `send_payload_with_transfer`
             rcv_settle_mode: None,
@@ -799,6 +800,7 @@ impl SenderInner<SenderLink<Target>> {
     async fn restate_outcome(
         &mut self,
         delivery_tag: DeliveryTag,
+        message_format: MessageFormat,
         state: DeliveryState,
     ) -> Result<bool, SendError> {
         let handle = self
@@ -811,7 +813,7 @@ impl SenderInner<SenderLink<Target>> {
             handle,
             delivery_id: None,
             delivery_tag: Some(delivery_tag),
-            message_format: Some(MESSAGE_FORMAT),
+            message_format: Some(message_format),
             settled: Some(false),
             more: false,
             rcv_settle_mode: None,
@@ -826,6 +828,43 @@ impl SenderInner<SenderLink<Target>> {
             .send_transfer_without_modifying_unsettled_map(&self.outgoing, transfer, payload)
             .await
             .map_err(Into::into)
+    }
+
+    async fn resend(
+        &mut self,
+        prev_delivery_tag: DeliveryTag,
+        message_format: MessageFormat,
+        payload: Payload,
+    ) -> Result<(), SendError> {
+        let detached_fut = self.incoming.recv();
+        let tag = self.link.get_delivery_tag_or_detached(&self.outgoing, detached_fut).await?;
+        let new_delivery_tag = DeliveryTag::from(tag);
+        let transfer = self.link.generate_transfer_performative(new_delivery_tag.clone(), message_format, None, None, false)?;
+
+        let settled = self.link.send_transfer_without_modifying_unsettled_map(&self.outgoing, transfer, payload).await?;
+
+        match settled {
+            true => {
+                let mut guard = self.link.unsettled.write();
+                let unsettled_message = guard.get_or_insert(OrderedMap::new())
+                    .remove(&prev_delivery_tag);
+                if let Some(unsettled_message) = unsettled_message {
+                    let _ = unsettled_message.settle();
+                }
+            },
+            false => {
+                let mut guard = self.link.unsettled.write();
+                let unsettled_message = guard.get_or_insert(OrderedMap::new())
+                    .remove(&prev_delivery_tag);
+                if let Some(unsettled_message) = unsettled_message {
+                    let unsettled_message = unsettled_message;
+                    guard.get_or_insert(OrderedMap::new())
+                        .insert(new_delivery_tag, unsettled_message);
+                }
+            }
+        }
+
+        Ok(())
     }
 
     async fn resume_incoming_attach(
@@ -861,17 +900,8 @@ impl SenderInner<SenderLink<Target>> {
                     }
 
                     // Resend buffered payloads
-                    for payload in resend_buf.drain(..) {
-                        let settlement = self
-                            .send_payload::<SendError>(payload, MESSAGE_FORMAT, None, None, false)
-                            .await?;
-                        let fut = DeliveryFut::<SendResult>::from(settlement);
-
-                        let _outcome = fut.await?;
-                        #[cfg(feature = "tracing")]
-                        tracing::debug!("Resuming delivery outcome {:?}", _outcome);
-                        #[cfg(feature = "log")]
-                        log::debug!("Resuming delivery outcome {:?}", _outcome);
+                    for (delivery_tag, message_format, payload) in resend_buf.drain(..) {
+                        self.resend(delivery_tag, message_format, payload).await?;
                     }
 
                     // Upon completion of this reduction of state, the two parties MUST suspend and
