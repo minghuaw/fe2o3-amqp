@@ -846,8 +846,6 @@ mod tests {
         receiver::ReceiverInner, sender::SenderInner, state::LinkFlowStateInner, ReceiverLink,
     };
 
-    use super::SenderLink;
-
     #[tokio::test]
     async fn test_producer_notify() {
         use std::sync::Arc;
@@ -875,23 +873,6 @@ mod tests {
         });
 
         notified.await;
-        println!("wait passed");
-
         handle.await.unwrap();
-    }
-
-    #[test]
-    fn test_size_of_sender_and_receiver_links() {
-        let size = std::mem::size_of::<SenderLink<Target>>();
-        println!("SenderLink: {:?}", size);
-
-        let size = std::mem::size_of::<ReceiverLink<Target>>();
-        println!("ReceiverLink: {:?}", size);
-
-        let size = std::mem::size_of::<SenderInner<SenderLink<Target>>>();
-        println!("SenderInner: {:?}", size);
-
-        let size = std::mem::size_of::<ReceiverInner<ReceiverLink<Target>>>();
-        println!("ReceiverInner: {:?}", size);
     }
 }
