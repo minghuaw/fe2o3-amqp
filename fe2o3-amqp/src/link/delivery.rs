@@ -295,30 +295,25 @@ impl<T> From<Builder<Message<T>>> for Sendable<T> {
 /// An unsettled message stored in the Sender's unsettled map
 #[derive(Debug)]
 pub(crate) struct UnsettledMessage {
-    payload: Payload,
-    state: Option<DeliveryState>,
-    sender: oneshot::Sender<Option<DeliveryState>>,
+    pub(crate) payload: Payload,
+    pub(crate) state: Option<DeliveryState>,
+    pub(crate) message_format: u32,
+    pub(crate) sender: oneshot::Sender<Option<DeliveryState>>,
 }
 
 impl UnsettledMessage {
-    pub fn new(payload: Payload, sender: oneshot::Sender<Option<DeliveryState>>) -> Self {
+    pub fn new(
+        payload: Payload,
+        state: Option<DeliveryState>,
+        message_format: u32,
+        sender: oneshot::Sender<Option<DeliveryState>>,
+    ) -> Self {
         Self {
             payload,
-            state: None,
+            state,
+            message_format,
             sender,
         }
-    }
-
-    pub fn state(&self) -> &Option<DeliveryState> {
-        &self.state
-    }
-
-    pub fn state_mut(&mut self) -> &mut Option<DeliveryState> {
-        &mut self.state
-    }
-
-    pub fn payload(&self) -> &Payload {
-        &self.payload
     }
 
     pub fn settle(self) -> Result<(), Option<DeliveryState>> {
