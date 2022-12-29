@@ -50,7 +50,7 @@ serde_amqp = { version = "0.5.2", path = "../serde_amqp" }
 fe2o3-amqp-types = { version = "0.7.0", path = "../fe2o3-amqp-types" }
 
 bytes = "1"
-tokio = { version = "^1.16.1", features = ["io-util", "net", "rt", "macros"] }
+tokio = { version = "^1.16.1", features = ["sync", "io-util", "net", "rt", "macros"] }
 tokio-util = { version = "0.7", features = ["codec"] } # tokio-rs/tokio#4816
 thiserror = "1"
 serde = "1"
