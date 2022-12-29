@@ -697,7 +697,7 @@ where
 }
 
 impl SenderInner<SenderLink<Target>> {
-    async fn abort(&mut self, delivery_tag: DeliveryTag) -> Result<Settlement, SendError> {
+    async fn abort(&mut self, delivery_tag: DeliveryTag) -> Result<bool, SendError> {
         let handle = self
             .link
             .output_handle
@@ -719,16 +719,15 @@ impl SenderInner<SenderLink<Target>> {
         };
         let payload = Bytes::new();
 
-        endpoint::SenderLink::send_payload_with_transfer(
-            &mut self.link,
-            &self.outgoing,
-            transfer,
-            payload,
-        )
-        .await
-        .map_err(Into::into)
+        self.link
+            .send_transfer_without_modifying_unsettled_map(&self.outgoing, transfer, payload)
+            .await
+            .map_err(Into::into)
     }
 
+    /// Resumes a delivery with the given state and payload.
+    /// 
+    /// The resume operation should not replace the unsettled map entry.
     async fn handle_resuming_delivery(
         &mut self,
         delivery_tag: DeliveryTag,
@@ -739,7 +738,7 @@ impl SenderInner<SenderLink<Target>> {
         tracing::debug!("Resuming delivery: delivery_tag: {:?}", delivery_tag);
         #[cfg(feature = "log")]
         log::debug!("Resuming delivery: delivery_tag: {:?}", delivery_tag);
-        let settlement = match resuming {
+        let settled = match resuming {
             ResumingDelivery::Abort => self.abort(delivery_tag).await?,
             ResumingDelivery::Resend(payload) => {
                 resend_buf.push(payload);
@@ -753,12 +752,10 @@ impl SenderInner<SenderLink<Target>> {
             }
         };
 
-        let fut = DeliveryFut::<SendResult>::from(settlement);
-        let _outcome = fut.await?;
         #[cfg(feature = "tracing")]
-        tracing::debug!("Resuming delivery outcome {:?}", _outcome);
+        tracing::debug!("Resuming delivery is settled {:?}", settled);
         #[cfg(feature = "log")]
-        log::debug!("Resuming delivery outcome {:?}", _outcome);
+        log::debug!("Resuming delivery is settled {:?}", settled);
         Ok(())
     }
 
@@ -767,7 +764,7 @@ impl SenderInner<SenderLink<Target>> {
         delivery_tag: DeliveryTag,
         payload: Payload,
         state: Option<DeliveryState>,
-    ) -> Result<Settlement, SendError> {
+    ) -> Result<bool, SendError> {
         let handle = self
             .link
             .output_handle
@@ -793,21 +790,17 @@ impl SenderInner<SenderLink<Target>> {
             batchable: false,
         };
 
-        endpoint::SenderLink::send_payload_with_transfer(
-            &mut self.link,
-            &self.outgoing,
-            transfer,
-            payload,
-        )
-        .await
-        .map_err(Into::into)
+        self.link
+            .send_transfer_without_modifying_unsettled_map(&self.outgoing, transfer, payload)
+            .await
+            .map_err(Into::into)
     }
 
     async fn restate_outcome(
         &mut self,
         delivery_tag: DeliveryTag,
         state: DeliveryState,
-    ) -> Result<Settlement, SendError> {
+    ) -> Result<bool, SendError> {
         let handle = self
             .link
             .output_handle
@@ -829,14 +822,10 @@ impl SenderInner<SenderLink<Target>> {
         };
         let payload = Bytes::new();
 
-        endpoint::SenderLink::send_payload_with_transfer(
-            &mut self.link,
-            &self.outgoing,
-            transfer,
-            payload,
-        )
-        .await
-        .map_err(Into::into)
+        self.link
+            .send_transfer_without_modifying_unsettled_map(&self.outgoing, transfer, payload)
+            .await
+            .map_err(Into::into)
     }
 
     async fn resume_incoming_attach(

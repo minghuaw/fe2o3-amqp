@@ -5,6 +5,69 @@ use crate::endpoint::LinkExt;
 
 use super::{resumption::resume_delivery, *};
 
+impl<T> SenderLink<T> 
+where
+    T: Into<TargetArchetype>
+        + TryFrom<TargetArchetype>
+        + VerifyTargetArchetype
+        + Clone
+        + Send
+        + Sync,
+{
+    /// # Cancel safety
+    ///
+    /// This is cancel safe because all internal `.await` are cancel safe
+    pub(crate) async fn send_transfer_without_modifying_unsettled_map(
+        &mut self,
+        writer: &mpsc::Sender<LinkFrame>,
+        mut transfer: Transfer,
+        mut payload: Payload,
+    ) -> Result<bool, LinkStateError> {
+        let settled = transfer.settled.unwrap_or(match self.snd_settle_mode {
+            SenderSettleMode::Settled => true,
+            SenderSettleMode::Unsettled => false,
+            SenderSettleMode::Mixed => false,
+        });
+        let input_handle = self
+            .input_handle
+            .clone()
+            .ok_or(LinkStateError::IllegalState)?;
+
+        // Check message size
+        // If this field is zero or unset, there is no maximum size imposed by the link endpoint.
+        let more = (self.max_message_size != 0) && (payload.len() as u64 > self.max_message_size);
+        if !more {
+            transfer.more = false;
+            send_transfer(writer, input_handle, transfer, payload.clone()).await?;
+        // cancel safe
+        } else {
+            // Send the first frame
+            let partial = payload.split_to(self.max_message_size as usize);
+            transfer.more = true;
+            send_transfer(writer, input_handle.clone(), transfer.clone(), partial).await?; // cancel safe
+
+            // Send the transfers in the middle
+            while payload.len() > self.max_message_size as usize {
+                let partial = payload.split_to(self.max_message_size as usize);
+                transfer.delivery_tag = None;
+                transfer.message_format = None;
+                transfer.settled = None;
+                send_transfer(writer, input_handle.clone(), transfer.clone(), partial).await?;
+                // cancel safe
+            }
+
+            // Send the last transfer
+            // For messages that are too large to fit within the maximum frame size, additional
+            // data MAY be trans- ferred in additional transfer frames by setting the more flag on
+            // all but the last transfer frame
+            transfer.more = false;
+            send_transfer(writer, input_handle, transfer, payload).await?; // cancel safe
+        }
+
+        Ok(settled)
+    }
+}
+
 #[async_trait]
 impl<T> endpoint::SenderLink for SenderLink<T>
 where
@@ -138,58 +201,17 @@ where
     async fn send_payload_with_transfer(
         &mut self,
         writer: &mpsc::Sender<LinkFrame>,
-        mut transfer: Transfer,
-        mut payload: Payload,
+        transfer: Transfer,
+        payload: Payload,
     ) -> Result<Settlement, Self::TransferError> {
-        let settled = transfer.settled.unwrap_or(match self.snd_settle_mode {
-            SenderSettleMode::Settled => true,
-            SenderSettleMode::Unsettled => false,
-            SenderSettleMode::Mixed => false,
-        });
-        let delivery_tag = transfer
-            .delivery_tag
-            .clone()
-            .ok_or(Self::TransferError::IllegalState)?;
-        let input_handle = self
-            .input_handle
-            .clone()
-            .ok_or(Self::TransferError::IllegalState)?;
-
         // Keep a copy for unsettled message
         // Clone should be very cheap on Bytes
         let payload_copy = payload.clone();
-
-        // Check message size
-        // If this field is zero or unset, there is no maximum size imposed by the link endpoint.
-        let more = (self.max_message_size != 0) && (payload.len() as u64 > self.max_message_size);
-        if !more {
-            transfer.more = false;
-            send_transfer(writer, input_handle, transfer, payload.clone()).await?;
-        // cancel safe
-        } else {
-            // Send the first frame
-            let partial = payload.split_to(self.max_message_size as usize);
-            transfer.more = true;
-            send_transfer(writer, input_handle.clone(), transfer.clone(), partial).await?; // cancel safe
-
-            // Send the transfers in the middle
-            while payload.len() > self.max_message_size as usize {
-                let partial = payload.split_to(self.max_message_size as usize);
-                transfer.delivery_tag = None;
-                transfer.message_format = None;
-                transfer.settled = None;
-                send_transfer(writer, input_handle.clone(), transfer.clone(), partial).await?;
-                // cancel safe
-            }
-
-            // Send the last transfer
-            // For messages that are too large to fit within the maximum frame size, additional
-            // data MAY be trans- ferred in additional transfer frames by setting the more flag on
-            // all but the last transfer frame
-            transfer.more = false;
-            send_transfer(writer, input_handle, transfer, payload).await?; // cancel safe
-        }
-
+        let delivery_tag = transfer
+            .delivery_tag
+            .clone()
+            .ok_or(LinkStateError::IllegalState)?;
+        let settled = self.send_transfer_without_modifying_unsettled_map(writer, transfer, payload).await?;
         match settled {
             true => Ok(Settlement::Settled(delivery_tag)),
             // If not set on the first (or only) transfer for a (multi-transfer)
