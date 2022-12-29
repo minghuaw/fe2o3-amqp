@@ -318,6 +318,8 @@ impl Session {
             }
         }
 
+        println!("Sending transfer: {:?}", transfer);
+
         self.next_outgoing_id = self.next_outgoing_id.wrapping_add(1);
 
         // The remote-incoming-window reflects the maximum number of outgoing transfers that can
