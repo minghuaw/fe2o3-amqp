@@ -621,6 +621,8 @@ impl endpoint::Session for Session {
     ) -> Result<Option<Vec<Disposition>>, Self::Error> {
         // and disposition only has delivery id?
 
+        println!("Session::on_incoming_disposition: {:?}", disposition);
+
         let first = disposition.first;
         let last = disposition.last.unwrap_or(first);
 

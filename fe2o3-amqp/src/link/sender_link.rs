@@ -112,7 +112,7 @@ where
         }
     }
 
-    pub(crate) fn generate_transfer_performative(
+    pub(crate) fn generate_non_resuming_transfer_performative(
         &self,
         delivery_tag: DeliveryTag,
         message_format: MessageFormat,
@@ -210,7 +210,7 @@ where
         // Delivery count is incremented when consuming credit
         let delivery_tag = DeliveryTag::from(tag);
 
-        let transfer = self.generate_transfer_performative(
+        let transfer = self.generate_non_resuming_transfer_performative(
             delivery_tag,
             message_format,
             settled,
