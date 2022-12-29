@@ -351,9 +351,9 @@ impl_from_for_value! {
     Symbol, Symbol
 }
 
-impl<T> From<Described<T>> for Value 
+impl<T> From<Described<T>> for Value
 where
-    T: Into<Value>
+    T: Into<Value>,
 {
     fn from(value: Described<T>) -> Self {
         let described: Described<Value> = Described {

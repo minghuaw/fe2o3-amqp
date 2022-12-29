@@ -840,10 +840,10 @@ pub(crate) fn get_max_message_size(local: u64, remote: Option<u64>) -> u64 {
 
 #[cfg(test)]
 mod tests {
-    use fe2o3_amqp_types::messaging::Target;
+    
 
     use crate::link::{
-        receiver::ReceiverInner, sender::SenderInner, state::LinkFlowStateInner, ReceiverLink,
+        state::LinkFlowStateInner,
     };
 
     #[tokio::test]

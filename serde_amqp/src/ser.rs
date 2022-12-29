@@ -1828,8 +1828,14 @@ mod test {
         let val: Array<u8> = (0..254).collect();
         let mut expected = vec![
             EncodingCodes::Array32 as u8,
-            0, 0, 1, 3,
-            0, 0, 0, 254,
+            0,
+            0,
+            1,
+            3,
+            0,
+            0,
+            0,
+            254,
             EncodingCodes::UByte as u8,
         ];
         expected.append(&mut (0..254).collect());
