@@ -84,11 +84,11 @@ pub use error::Error;
 mod macros;
 
 cfg_not_wasm32! {
-    mod native;
+    pub mod tokio;
 }
 
 cfg_wasm32! {
-    mod wasm;
+    pub mod wasm;
 }
 
 /// This a wrapper around `tungstenite::Message`
