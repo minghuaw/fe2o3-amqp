@@ -84,7 +84,7 @@ pub use error::Error;
 mod macros;
 
 cfg_not_wasm32! {
-    pub mod tokio;
+    pub mod native;
 }
 
 cfg_wasm32! {
