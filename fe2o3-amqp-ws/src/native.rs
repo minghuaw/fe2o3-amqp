@@ -24,8 +24,6 @@ use super::{Error, WebSocketStream};
 
 const SEC_WEBSOCKET_PROTOCOL: &str = "Sec-WebSocket-Protocol";
 
-// type TokioWebSocketStream<S> = tokio_tungstenite::WebSocketStream<MaybeTlsStream<S>>;
-
 pin_project! {
     /// This a simple wrapper around [`tokio_tungstenite::WebSocketStream`]
     #[derive(Debug)]
@@ -137,6 +135,11 @@ impl<S> WebSocketStream<TokioWebSocketStream<S>>
 where
     S: AsyncRead + AsyncWrite + Unpin,
 {
+    /// Returns the [`Response`] of the WebSocket handshake
+    pub fn response(&self) -> &Response {
+        &self.inner.response
+    }
+
     /// Calls [`tokio_tungstenite::client_async`] internally with `"Sec-WebSocket-Protocol"` HTTP
     /// header of the `req` set to `"amqp"`
     pub async fn connect_with_stream(
