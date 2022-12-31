@@ -2,7 +2,6 @@
 members = [
     "serde_amqp_derive",
     "serde_amqp", 
-    "fe2o3-amqp",
     "fe2o3-amqp-ext",
     "fe2o3-amqp-types", 
     "fe2o3-amqp-management",
@@ -10,6 +9,7 @@ members = [
 ]
 
 exclude = [
+    "fe2o3-amqp",
     "fe2o3-amqp-ws", # TODO: move back to members after wasm32 experiment
     "examples/alternative_tls_connection",
     "examples/batchable_send",

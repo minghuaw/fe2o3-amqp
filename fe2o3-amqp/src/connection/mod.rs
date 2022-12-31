@@ -1,6 +1,6 @@
 //! Implements AMQP1.0 Connection
 
-use std::{cmp::min, collections::HashMap, convert::TryInto, sync::Arc};
+use std::{cmp::min, collections::HashMap, sync::Arc};
 
 use async_trait::async_trait;
 
@@ -15,7 +15,11 @@ use tokio::{
     sync::{mpsc::Sender, oneshot},
     task::JoinHandle,
 };
-use url::Url;
+
+cfg_not_wasm32! {
+    use std::convert::TryInto;
+    use url::Url;
+}
 
 use crate::{
     control::ConnectionControl,
@@ -368,88 +372,90 @@ impl Connection {
         builder::Builder::new()
     }
 
-    /// Negotiate and open a [`Connection`] with the default configuration
-    ///
-    /// # Default configuration
-    ///
-    /// | Field | Default Value |
-    /// |-------|---------------|
-    /// |`max_frame_size`| [`DEFAULT_MAX_FRAME_SIZE`] |
-    /// |`channel_max`| [`DEFAULT_CHANNEL_MAX`] |
-    /// |`idle_time_out`| `None` |
-    /// |`outgoing_locales`| `None` |
-    /// |`incoming_locales`| `None` |
-    /// |`offered_capabilities`| `None` |
-    /// |`desired_capabilities`| `None` |
-    /// |`Properties`| `None` |
-    ///
-    /// The negotiation depends on the url supplied.
-    ///
-    /// # Raw AMQP
-    ///
-    /// ```rust, ignore
-    /// let connection = Connection::open("connection-1", "amqp://localhost:5672").await.unwrap();
-    /// ```
-    ///
-    /// # TLS
-    ///
-    /// TLS support is enabled by selecting one and only one of the following feature flags
-    ///
-    /// 1. `"rustls"`: enables TLS support with `tokio-rustls`
-    /// 2. `"native-tls"`: enables TLS support with `tokio-native-tls`
-    ///
-    /// ```rust, ignore
-    /// let connection = Connection::open("connection-1", "amqps://localhost:5671").await.unwrap();
-    /// ```
-    /// ## TLS with feature `"rustls"` enabled
-    ///
-    /// TLS connection can be established with a default connector or a custom `tokio_rustls::TlsConnector`.
-    /// The following connector is used unless a custom connector is supplied to the builder.
-    ///
-    /// ```rust,ignore
-    /// let mut root_cert_store = RootCertStore::empty();
-    /// root_cert_store.add_server_trust_anchors(webpki_roots::TLS_SERVER_ROOTS.0.iter().map(
-    ///     |ta| {
-    ///         OwnedTrustAnchor::from_subject_spki_name_constraints(
-    ///             ta.subject,
-    ///             ta.spki,
-    ///             ta.name_constraints,
-    ///         )
-    ///     },
-    /// ));
-    /// let config = ClientConfig::builder()
-    ///     .with_safe_defaults()
-    ///     .with_root_certificates(root_cert_store)
-    ///     .with_no_client_auth();
-    /// let connector = TlsConnector::from(Arc::new(config));
-    /// ```
-    ///
-    /// ### TLS with feature `"native-tls"` enabled
-    ///
-    /// TLS connection can be established with a default connector or a custom `tokio_native_tls::TlsConnector`.
-    /// The following connector is used unless a custom connector is supplied to the builder.
-    ///
-    /// ```rust,ignore
-    /// let connector = native_tls::TlsConnector::new().unwrap();
-    /// let connector = tokio_native_tls::TlsConnector::from(connector);
-    /// ```
-    ///
-    /// # SASL
-    ///
-    /// Start SASL negotiation with SASL PLAIN profile extracted from the url
-    ///
-    /// ```rust, ignore
-    /// let connection = Connection::open("connection-1", "amqp://guest:guest@localhost:5672").await.unwrap();
-    /// ```
-    ///
-    pub async fn open(
-        container_id: impl Into<String>,
-        url: impl TryInto<Url, Error = impl Into<OpenError>>,
-    ) -> Result<ConnectionHandle<()>, OpenError> {
-        Connection::builder()
-            .container_id(container_id)
-            .open(url)
-            .await
+    cfg_not_wasm32! {
+        /// Negotiate and open a [`Connection`] with the default configuration
+        ///
+        /// # Default configuration
+        ///
+        /// | Field | Default Value |
+        /// |-------|---------------|
+        /// |`max_frame_size`| [`DEFAULT_MAX_FRAME_SIZE`] |
+        /// |`channel_max`| [`DEFAULT_CHANNEL_MAX`] |
+        /// |`idle_time_out`| `None` |
+        /// |`outgoing_locales`| `None` |
+        /// |`incoming_locales`| `None` |
+        /// |`offered_capabilities`| `None` |
+        /// |`desired_capabilities`| `None` |
+        /// |`Properties`| `None` |
+        ///
+        /// The negotiation depends on the url supplied.
+        ///
+        /// # Raw AMQP
+        ///
+        /// ```rust, ignore
+        /// let connection = Connection::open("connection-1", "amqp://localhost:5672").await.unwrap();
+        /// ```
+        ///
+        /// # TLS
+        ///
+        /// TLS support is enabled by selecting one and only one of the following feature flags
+        ///
+        /// 1. `"rustls"`: enables TLS support with `tokio-rustls`
+        /// 2. `"native-tls"`: enables TLS support with `tokio-native-tls`
+        ///
+        /// ```rust, ignore
+        /// let connection = Connection::open("connection-1", "amqps://localhost:5671").await.unwrap();
+        /// ```
+        /// ## TLS with feature `"rustls"` enabled
+        ///
+        /// TLS connection can be established with a default connector or a custom `tokio_rustls::TlsConnector`.
+        /// The following connector is used unless a custom connector is supplied to the builder.
+        ///
+        /// ```rust,ignore
+        /// let mut root_cert_store = RootCertStore::empty();
+        /// root_cert_store.add_server_trust_anchors(webpki_roots::TLS_SERVER_ROOTS.0.iter().map(
+        ///     |ta| {
+        ///         OwnedTrustAnchor::from_subject_spki_name_constraints(
+        ///             ta.subject,
+        ///             ta.spki,
+        ///             ta.name_constraints,
+        ///         )
+        ///     },
+        /// ));
+        /// let config = ClientConfig::builder()
+        ///     .with_safe_defaults()
+        ///     .with_root_certificates(root_cert_store)
+        ///     .with_no_client_auth();
+        /// let connector = TlsConnector::from(Arc::new(config));
+        /// ```
+        ///
+        /// ### TLS with feature `"native-tls"` enabled
+        ///
+        /// TLS connection can be established with a default connector or a custom `tokio_native_tls::TlsConnector`.
+        /// The following connector is used unless a custom connector is supplied to the builder.
+        ///
+        /// ```rust,ignore
+        /// let connector = native_tls::TlsConnector::new().unwrap();
+        /// let connector = tokio_native_tls::TlsConnector::from(connector);
+        /// ```
+        ///
+        /// # SASL
+        ///
+        /// Start SASL negotiation with SASL PLAIN profile extracted from the url
+        ///
+        /// ```rust, ignore
+        /// let connection = Connection::open("connection-1", "amqp://guest:guest@localhost:5672").await.unwrap();
+        /// ```
+        ///
+        pub async fn open(
+            container_id: impl Into<String>,
+            url: impl TryInto<Url, Error = impl Into<OpenError>>,
+        ) -> Result<ConnectionHandle<()>, OpenError> {
+            Connection::builder()
+                .container_id(container_id)
+                .open(url)
+                .await
+        }
     }
 }
 

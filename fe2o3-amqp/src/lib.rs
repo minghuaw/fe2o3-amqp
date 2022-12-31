@@ -171,6 +171,9 @@
 //!
 //! 1.56.0 (ie. 2021 edition)
 
+#[macro_use]
+mod macros;
+
 pub(crate) mod control;
 pub(crate) mod endpoint;
 pub(crate) mod util;
