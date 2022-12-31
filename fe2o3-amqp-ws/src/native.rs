@@ -286,7 +286,7 @@ fn map_amqp_websocket_request(req: impl IntoClientRequest) -> Result<Request, tu
     // or greater, with version negotiation as defined by AMQP 1.0.
     request
         .headers_mut()
-        .insert(SEC_WEBSOCKET_PROTOCOL, HeaderValue::from_static("amqp"));
+        .insert(SEC_WEBSOCKET_PROTOCOL, HeaderValue::from_static(super::SEC_WEBSOCKET_PROTOCOL_AMQP));
 
     Ok(request)
 }

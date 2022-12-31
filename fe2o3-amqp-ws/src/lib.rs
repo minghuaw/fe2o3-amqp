@@ -91,6 +91,8 @@ cfg_wasm32! {
     pub mod wasm;
 }
 
+const SEC_WEBSOCKET_PROTOCOL_AMQP: &str = "amqp";
+
 /// This a wrapper around `tungstenite::Message`
 #[derive(Debug, Eq, PartialEq, Clone)]
 pub struct WsMessage(pub tungstenite::Message);
