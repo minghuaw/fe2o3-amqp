@@ -36,7 +36,8 @@ tokio = {version = "1", default-features = false, features = ["net"]}
 tokio-tungstenite = "0.18.0"
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
-tokio = {version = "1", default-features = false, features = ["sync", "macros"]}
+tokio = {version = "1", default-features = false}
+futures-channel = "0.3"
 getrandom = {version = "0.2", features = ["js"]}
 js-sys = "0.3"
 wasm-bindgen = "0.2"
