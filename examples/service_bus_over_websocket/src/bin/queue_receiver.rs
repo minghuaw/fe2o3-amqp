@@ -17,7 +17,7 @@ async fn main() {
     // wss://[sas-policy]:[sas-key]@[ns].servicebus.windows.net/$servicebus/websocket
     let ws_address = format!("wss://{sa_key_name}:{sa_key_value}@{hostname}/$servicebus/websocket");
 
-    let ws_stream = WebSocketStream::connect(ws_address).await.unwrap();
+    let (ws_stream, _) = WebSocketStream::connect(ws_address).await.unwrap();
 
     let mut connection = Connection::builder()
         .container_id("rust-connection-1")
