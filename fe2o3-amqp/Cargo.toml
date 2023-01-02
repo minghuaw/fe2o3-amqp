@@ -50,7 +50,6 @@ futures-util = { version = "0.3", features = ["sink"] }
 pin-project-lite = "0.2"
 url = "2"
 slab = "0.4"
-tokio-stream = { version = "0.1", features = ["time"] }
 async-trait = "0.1"
 serde_bytes = "0.11"
 parking_lot = { version = "0.12", features = ["send_guard"] }
@@ -73,13 +72,15 @@ librustls = { package = "rustls", version = "0.20", optional = true }
 webpki-roots = { version = "0.22", optional = true }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+tokio = { version = "^1.16.1", features = ["sync", "io-util", "net", "rt", "macros", "time"] }
 libnative-tls = { package = "native-tls", version = "0.2", optional = true }
 tokio-native-tls = { version = "0.3", optional = true }
-tokio = { version = "^1.16.1", features = ["sync", "io-util", "net", "rt", "macros"] }
+tokio-stream = { version = "0.1", features = ["time"] }
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 tokio = { version = "^1.16.1", features = ["sync", "io-util", "rt", "macros"]} # "net" feature doesn't support wasm32
 getrandom = {version = "0.2", features = ["js"]}
+wasm-timer = "0.2"
 
 [dev-dependencies]
 tokio-test = { version = "0.4" }

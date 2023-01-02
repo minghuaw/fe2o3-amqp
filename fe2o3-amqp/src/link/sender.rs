@@ -1,13 +1,15 @@
 //! Implementation of AMQP1.0 sender
 
-use std::time::Duration;
-
 use async_trait::async_trait;
 use bytes::{Bytes, BytesMut};
 use tokio::{
     sync::{mpsc, oneshot},
-    time::{error::Elapsed, timeout},
 };
+
+cfg_not_wasm32! {
+    use std::time::Duration;
+    use tokio::time::{error::Elapsed, timeout};
+}
 
 use fe2o3_amqp_types::{
     definitions::{self, DeliveryTag, Fields, MessageFormat, SenderSettleMode},
@@ -220,6 +222,7 @@ impl Sender {
     /// Detach the link with a timeout
     ///
     /// This simply wraps [`detach`](#method.detach) with a `timeout`
+    #[cfg(not(target_arch = "wasm32"))]
     pub async fn detach_with_timeout(
         self,
         duration: Duration,
@@ -398,6 +401,7 @@ impl Sender {
     /// Send a message and wait for acknowledgement (disposition) with a timeout.
     ///
     /// This simply wraps [`send`](#method.send) inside a [`tokio::time::timeout`]
+    #[cfg(not(target_arch = "wasm32"))]
     pub async fn send_with_timeout<T: SerializableBody>(
         &mut self,
         sendable: impl Into<Sendable<T>>,
@@ -1041,6 +1045,7 @@ impl DetachedSender {
     }
 
     /// Resume the sender link with a timeout
+    #[cfg(not(target_arch = "wasm32"))]
     #[cfg_attr(feature = "tracing", tracing::instrument(skip(self)))]
     pub async fn resume_with_timeout(
         mut self,
@@ -1065,6 +1070,7 @@ impl DetachedSender {
     }
 
     /// Resume the sender link on the original session with an Attach sent by the remote peer
+    #[cfg(not(target_arch = "wasm32"))]
     pub async fn resume_incoming_attach_with_timeout(
         mut self,
         remote_attach: Attach,
@@ -1109,6 +1115,7 @@ impl DetachedSender {
     }
 
     /// Resume the sender on a specific session with timeout
+    #[cfg(not(target_arch = "wasm32"))]
     pub async fn resume_on_session_with_timeout<R>(
         mut self,
         session: &SessionHandle<R>,
@@ -1119,6 +1126,7 @@ impl DetachedSender {
     }
 
     /// Resume the sender on a specific session with timeout
+    #[cfg(not(target_arch = "wasm32"))]
     pub async fn resume_incoming_attach_on_session_with_timeout<R>(
         mut self,
         remote_attach: Attach,

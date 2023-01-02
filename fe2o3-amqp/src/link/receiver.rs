@@ -2,7 +2,6 @@
 
 use std::{
     sync::atomic::{AtomicU32, Ordering},
-    time::Duration,
 };
 
 use async_trait::async_trait;
@@ -15,8 +14,12 @@ use fe2o3_amqp_types::{
 };
 use tokio::{
     sync::mpsc,
-    time::{error::Elapsed, timeout},
 };
+
+cfg_not_wasm32! {
+    use std::time::Duration;
+    use tokio::time::{error::Elapsed, timeout};
+}
 
 use crate::{
     control::SessionControl,
@@ -330,6 +333,7 @@ impl Receiver {
     /// Detach the link with a timeout
     ///
     /// This simply wraps [`detach`](#method.detach) with a `timeout`
+    #[cfg(not(target_arch = "wasm32"))]
     pub async fn detach_with_timeout(
         self,
         duration: Duration,
@@ -1186,6 +1190,7 @@ impl DetachedReceiver {
     ///
     /// Please note that the link may need to be detached and then resume multiple
     /// times if there are unsettled deliveries. For more details please see [`resume`](./#method.resume)
+    #[cfg(not(target_arch = "wasm32"))]
     #[cfg_attr(feature = "tracing", tracing::instrument(skip(self)))]
     pub async fn resume_with_timeout(
         mut self,
@@ -1236,6 +1241,7 @@ impl DetachedReceiver {
     ///
     /// Please note that the link may need to be detached and then resume multiple
     /// times if there are unsettled deliveries. For more details please see [`resume`](./#method.resume)
+    #[cfg(not(target_arch = "wasm32"))]
     pub async fn resume_on_session_with_timeout<R>(
         mut self,
         session: &SessionHandle<R>,
@@ -1273,6 +1279,7 @@ impl DetachedReceiver {
     ///
     /// Please note that the link may need to be detached and then resume multiple
     /// times if there are unsettled deliveries. For more details please see [`resume`](./#method.resume)
+    #[cfg(not(target_arch = "wasm32"))]
     pub async fn resume_incoming_attach_with_timeout(
         mut self,
         remote_attach: Attach,
@@ -1324,6 +1331,7 @@ impl DetachedReceiver {
     ///
     /// Please note that the link may need to be detached and then resume multiple
     /// times if there are unsettled deliveries. For more details please see [`resume`](./#method.resume)
+    #[cfg(not(target_arch = "wasm32"))]
     pub async fn resume_incoming_attach_on_session_with_timeout<R>(
         mut self,
         remote_attach: Attach,
