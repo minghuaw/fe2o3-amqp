@@ -207,3 +207,16 @@ pub use link::{
 pub use session::Session;
 
 type Payload = bytes::Bytes;
+
+
+cfg_not_wasm32! {
+    /// A marker trait to indicate that the type is `Send` bound in non-wasm32 targets
+    pub trait SendBound: Send {}
+    impl<T> SendBound for T where T: Send {}
+}
+
+cfg_wasm32! {
+    /// A marker trait that is implemented for all types in wasm32 targets
+    pub trait SendBound {}
+    impl<T> SendBound for T {}
+}

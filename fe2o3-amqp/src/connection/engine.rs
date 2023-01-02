@@ -9,7 +9,7 @@ use fe2o3_amqp_types::performatives::Close;
 use futures_util::{SinkExt, StreamExt};
 use tokio::io::{AsyncRead, AsyncWrite};
 use tokio::sync::mpsc::Receiver;
-use tokio::task::JoinHandle;
+use tokio::task::{JoinHandle};
 
 use crate::control::ConnectionControl;
 use crate::endpoint::{IncomingChannel, OutgoingChannel};
@@ -17,7 +17,7 @@ use crate::frames::amqp::{self, Frame, FrameBody};
 use crate::session::frame::{SessionFrame, SessionFrameBody};
 use crate::transport::Transport;
 use crate::util::Running;
-use crate::{endpoint, transport};
+use crate::{endpoint, transport, SendBound};
 
 use super::{heartbeat::HeartBeat, ConnectionState};
 use super::{AllocSessionError, ConnectionInnerError, ConnectionStateError, Error, OpenError};
@@ -33,7 +33,29 @@ pub(crate) struct ConnectionEngine<Io, C> {
 
 impl<Io, C> ConnectionEngine<Io, C>
 where
-    Io: AsyncRead + AsyncWrite + std::fmt::Debug + Send + Unpin + 'static,
+    Io: AsyncRead + AsyncWrite + std::fmt::Debug + SendBound + Unpin + 'static,
+    C: endpoint::Connection<State = ConnectionState> + std::fmt::Debug + Send + Sync + 'static,
+    C::AllocError: Into<AllocSessionError>,
+    C::CloseError: From<transport::Error>,
+    C::OpenError: From<transport::Error>,
+    ConnectionInnerError: From<C::Error> + From<C::OpenError> + From<C::CloseError>,
+    ConnectionStateError: From<C::OpenError> + From<C::CloseError>,
+    OpenError: From<C::OpenError>,
+{
+    #[cfg(not(target_arch = "wasm32"))]
+    pub fn spawn(self) -> JoinHandle<Result<(), Error>> {
+        tokio::spawn(self.event_loop())
+    }
+
+    #[cfg(target_arch = "wasm32")]
+    pub fn spawn_local(self, local_set: &tokio::task::LocalSet) -> JoinHandle<Result<(), Error>> {
+        local_set.spawn_local(self.event_loop())
+    }
+}
+
+impl<Io, C> ConnectionEngine<Io, C>
+where
+    Io: AsyncRead + AsyncWrite + std::fmt::Debug + SendBound + Unpin + 'static,
     C: endpoint::Connection<State = ConnectionState> + std::fmt::Debug + Send + Sync + 'static,
     C::AllocError: Into<AllocSessionError>,
     C::CloseError: From<transport::Error>,
@@ -200,10 +222,6 @@ where
                 }
             }
         }
-    }
-
-    pub fn spawn(self) -> JoinHandle<Result<(), Error>> {
-        tokio::spawn(self.event_loop())
     }
 
     #[cfg_attr(feature = "tracing", tracing::instrument(skip_all))]

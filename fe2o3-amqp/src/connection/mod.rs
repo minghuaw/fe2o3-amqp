@@ -26,7 +26,7 @@ use crate::{
     endpoint::{self, IncomingChannel, OutgoingChannel},
     frames::amqp::{Frame, FrameBody},
     session::frame::{SessionFrame, SessionFrameBody, SessionIncomingItem},
-    session::Session,
+    session::Session, SendBound,
 };
 
 mod builder;
@@ -480,7 +480,8 @@ impl Connection {
     }
 }
 
-#[async_trait]
+#[cfg_attr(not(target_arch="wasm32"), async_trait)]
+#[cfg_attr(target_arch="wasm32", async_trait(?Send))]
 impl endpoint::Connection for Connection {
     type AllocError = AllocSessionError;
     type OpenError = ConnectionStateError;
@@ -643,7 +644,7 @@ impl endpoint::Connection for Connection {
     #[cfg_attr(feature = "tracing", tracing::instrument(skip_all))]
     async fn send_open<W>(&mut self, writer: &mut W) -> Result<(), Self::OpenError>
     where
-        W: Sink<Frame> + Send + Unpin,
+        W: Sink<Frame> + SendBound + Unpin,
         Self::OpenError: From<W::Error>,
     {
         let body = FrameBody::Open(self.local_open.clone());
@@ -665,26 +666,6 @@ impl endpoint::Connection for Connection {
         Ok(())
     }
 
-    fn on_outgoing_begin(
-        &mut self,
-        outgoing_channel: OutgoingChannel,
-        begin: Begin,
-    ) -> Result<Frame, Self::Error> {
-        // TODO: check states?
-        let frame = Frame::new(outgoing_channel, FrameBody::Begin(begin));
-        Ok(frame)
-    }
-
-    #[cfg_attr(feature = "tracing", tracing::instrument(skip_all))]
-    fn on_outgoing_end(
-        &mut self,
-        channel: OutgoingChannel,
-        end: End,
-    ) -> Result<Frame, Self::Error> {
-        let frame = Frame::new(channel, FrameBody::End(end));
-        Ok(frame)
-    }
-
     // TODO: set a timeout for recving incoming Close
     async fn send_close<W>(
         &mut self,
@@ -692,7 +673,7 @@ impl endpoint::Connection for Connection {
         error: Option<definitions::Error>,
     ) -> Result<(), Self::CloseError>
     where
-        W: Sink<Frame> + Send + Unpin,
+        W: Sink<Frame> + SendBound + Unpin,
         Self::CloseError: From<W::Error>,
     {
         let error_is_some = error.is_some();
@@ -716,6 +697,26 @@ impl endpoint::Connection for Connection {
             _ => return Err(CloseError::IllegalState),
         }
         Ok(())
+    }
+
+    fn on_outgoing_begin(
+        &mut self,
+        outgoing_channel: OutgoingChannel,
+        begin: Begin,
+    ) -> Result<Frame, Self::Error> {
+        // TODO: check states?
+        let frame = Frame::new(outgoing_channel, FrameBody::Begin(begin));
+        Ok(frame)
+    }
+
+    #[cfg_attr(feature = "tracing", tracing::instrument(skip_all))]
+    fn on_outgoing_end(
+        &mut self,
+        channel: OutgoingChannel,
+        end: End,
+    ) -> Result<Frame, Self::Error> {
+        let frame = Frame::new(channel, FrameBody::End(end));
+        Ok(frame)
     }
 
     fn session_tx_by_incoming_channel(
