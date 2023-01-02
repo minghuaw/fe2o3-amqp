@@ -514,7 +514,7 @@ where
                         Poll::Ready(result) => match result {
                             Ok(_) => return Poll::Ready(Some(Err(Error::IdleTimeoutElapsed))),
                             Err(err) => return Poll::Ready(Some(Err(err.into()))),
-                        }
+                        },
                         Poll::Pending => return Poll::Pending,
                     }
                 }

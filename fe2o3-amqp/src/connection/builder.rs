@@ -934,7 +934,9 @@ impl<'a> Builder<'a, mode::ConnectorWithId, ()> {
                 #[cfg(all(feature = "rustls", not(feature = "native-tls")))]
                 {
                     let domain = self.domain.ok_or(OpenError::InvalidDomain)?;
-                    return self.connect_tls_with_rustls_default(stream, domain, spawn_engine).await;
+                    return self
+                        .connect_tls_with_rustls_default(stream, domain, spawn_engine)
+                        .await;
                 }
 
                 #[cfg(all(

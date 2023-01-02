@@ -1,6 +1,5 @@
 //! Tests connection with different brokers
 
-
 macro_rules! cfg_not_wasm32 {
     ($($item:item)*) => {
         $(
@@ -22,7 +21,7 @@ cfg_not_wasm32! {
         let mut connection = Connection::open("test-connection", &url[..]).await.unwrap();
         connection.close().await.unwrap();
     }
-    
+
     #[tokio::test]
     async fn activemq_artemis_sasl_plain_connection() {
         let (_node, port) = common::setup_activemq_artemis(Some("guest"), Some("guest")).await;
@@ -30,7 +29,7 @@ cfg_not_wasm32! {
         let mut connection = Connection::open("test-connection", &url[..]).await.unwrap();
         connection.close().await.unwrap();
     }
-    
+
     #[tokio::test]
     async fn rabbitmq_amqp10_connection() {
         let (_node, port) = common::setup_rabbitmq_amqp10(None, None).await;
@@ -38,7 +37,7 @@ cfg_not_wasm32! {
         let mut connection = Connection::open("test-connection", &url[..]).await.unwrap();
         connection.close().await.unwrap();
     }
-    
+
     #[tokio::test]
     async fn rabbitmq_amqp10_sasl_plain_connection() {
         let (_node, port) = common::setup_rabbitmq_amqp10(Some("guest"), Some("guest")).await;

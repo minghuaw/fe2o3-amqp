@@ -15,3 +15,24 @@ macro_rules! cfg_not_wasm32 {
         )*
     }
 }
+
+macro_rules! cfg_acceptor {
+    ($($item:item)*) => {
+        $(
+            #[cfg_attr(docsrs, doc(cfg(feature = "acceptor")))]
+            #[cfg(not(target_arch = "wasm32"))]
+            #[cfg(feature = "acceptor")]
+            $item
+        )*
+    }
+}
+
+macro_rules! cfg_transaction {
+    ($($item:item)*) => {
+        $(
+            #[cfg_attr(docsrs, doc(cfg(feature = "transaction")))]
+            #[cfg(feature = "transaction")]
+            $item
+        )*
+    }
+}

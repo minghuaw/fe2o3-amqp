@@ -137,11 +137,11 @@ impl<R> SessionHandle<R> {
             Ok(res) => {
                 self.is_ended = true;
                 res
-            },
+            }
             Err(join_error) => {
                 self.is_ended = true;
                 Err(Error::JoinError(join_error))
-            },
+            }
         }
     }
 }
@@ -280,7 +280,9 @@ impl Session {
     /// let session = Session::begin(&mut connection).await.unwrap();
     /// ```
     #[cfg(not(target_arch = "wasm32"))]
-    pub async fn begin(conn: &mut crate::connection::ConnectionHandle<()>) -> Result<SessionHandle<()>, BeginError> {
+    pub async fn begin(
+        conn: &mut crate::connection::ConnectionHandle<()>,
+    ) -> Result<SessionHandle<()>, BeginError> {
         Session::builder().begin(conn).await
     }
 

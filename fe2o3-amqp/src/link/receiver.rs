@@ -1,8 +1,6 @@
 //! Implementation of AMQP1.0 receiver
 
-use std::{
-    sync::atomic::{AtomicU32, Ordering},
-};
+use std::sync::atomic::{AtomicU32, Ordering};
 
 use async_trait::async_trait;
 use fe2o3_amqp_types::{
@@ -12,9 +10,7 @@ use fe2o3_amqp_types::{
     },
     performatives::{Attach, Detach, Transfer},
 };
-use tokio::{
-    sync::mpsc,
-};
+use tokio::sync::mpsc;
 
 cfg_not_wasm32! {
     use std::time::Duration;

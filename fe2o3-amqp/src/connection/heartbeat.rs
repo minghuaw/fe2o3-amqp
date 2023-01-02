@@ -1,10 +1,9 @@
 //! Implements an asynchronous heartbeat
 
-use std::{task::Poll, time::Duration, io, pin::Pin};
+use std::{io, pin::Pin, task::Poll, time::Duration};
 
-use futures_util::{Stream};
+use futures_util::Stream;
 use pin_project_lite::pin_project;
-
 
 cfg_not_wasm32! {
     use tokio_stream::wrappers::IntervalStream;

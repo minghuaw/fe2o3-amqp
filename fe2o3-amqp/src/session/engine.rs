@@ -9,7 +9,8 @@ use crate::{
     control::{ConnectionControl, SessionControl},
     endpoint::{self, IncomingChannel, Session},
     link::LinkFrame,
-    util::Running, SendBound,
+    util::Running,
+    SendBound,
 };
 
 use super::{
@@ -354,6 +355,7 @@ where
     async fn on_error(&mut self, kind: &SessionInnerError) -> Result<Running, SessionInnerError> {
         use definitions::Error;
 
+        #[cfg(not(target_arch = "wasm32"))]
         #[cfg(all(feature = "transaction", feature = "acceptor"))]
         use fe2o3_amqp_types::transaction::TransactionError;
 
@@ -391,6 +393,7 @@ where
                 self.end_session(None).await
             }
 
+            #[cfg(not(target_arch = "wasm32"))]
             #[cfg(all(feature = "transaction", feature = "acceptor"))]
             SessionInnerError::UnknownTxnId => {
                 let error = Error::new(TransactionError::UnknownId, None, None);

@@ -13,7 +13,7 @@ use crate::{frames::amqp::Frame, session::frame::SessionIncomingItem, SendBound}
 use super::{IncomingChannel, OutgoingChannel, Session};
 
 /// Trait for connection
-#[cfg_attr(not(target_arch="wasm32"), async_trait)]
+#[cfg_attr(not(target_arch = "wasm32"), async_trait)]
 #[cfg_attr(target_arch="wasm32", async_trait(?Send))]
 pub(crate) trait Connection {
     type AllocError: SendBound;

@@ -10,7 +10,7 @@ use futures_util::{SinkExt, StreamExt};
 use tokio::io::{AsyncRead, AsyncWrite};
 use tokio::sync::mpsc::Receiver;
 use tokio::sync::oneshot;
-use tokio::task::{JoinHandle};
+use tokio::task::JoinHandle;
 
 use crate::control::ConnectionControl;
 use crate::endpoint::{IncomingChannel, OutgoingChannel};
@@ -51,7 +51,10 @@ where
     }
 
     #[cfg(target_arch = "wasm32")]
-    pub fn spawn_local(self, local_set: &tokio::task::LocalSet) -> (JoinHandle<()>, oneshot::Receiver<Result<(), Error>>) {
+    pub fn spawn_local(
+        self,
+        local_set: &tokio::task::LocalSet,
+    ) -> (JoinHandle<()>, oneshot::Receiver<Result<(), Error>>) {
         let (tx, rx) = oneshot::channel();
         let handle = local_set.spawn_local(self.event_loop(tx));
         (handle, rx)

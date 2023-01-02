@@ -5,28 +5,18 @@ use std::collections::{HashMap, VecDeque};
 use fe2o3_amqp_types::definitions::{Fields, Handle, TransferNumber};
 use serde_amqp::primitives::Symbol;
 use slab::Slab;
-use tokio::{sync::mpsc, task::JoinHandle};
+use tokio::sync::mpsc;
 
 use crate::{
     connection::{AllocSessionError, ConnectionHandle},
     control::SessionControl,
     endpoint::OutgoingChannel,
-    link::LinkFrame,
     session::{engine::SessionEngine, SessionState},
     util::Constant,
     Session,
 };
 
-#[cfg(all(feature = "transaction", feature = "acceptor"))]
-use crate::transaction::{
-    coordinator::ControlLinkAcceptor, manager::TransactionManager, session::TxnSession,
-};
-
-use super::{
-    error::{BeginError, Error},
-    frame::SessionFrame,
-    SessionHandle, DEFAULT_WINDOW,
-};
+use super::{error::BeginError, SessionHandle, DEFAULT_WINDOW};
 
 pub(crate) const DEFAULT_SESSION_CONTROL_BUFFER_SIZE: usize = 128;
 pub(crate) const DEFAULT_SESSION_MUX_BUFFER_SIZE: usize = u16::MAX as usize;
@@ -60,6 +50,7 @@ pub struct Builder {
     pub buffer_size: usize,
 
     /// Acceptor for incoming transaction control links
+    #[cfg(not(target_arch = "wasm32"))]
     #[cfg(all(feature = "transaction", feature = "acceptor"))]
     pub(crate) control_link_acceptor: Option<ControlLinkAcceptor>,
 }
@@ -76,8 +67,59 @@ impl Default for Builder {
             properties: None,
             buffer_size: DEFAULT_SESSION_MUX_BUFFER_SIZE,
 
+            #[cfg(not(target_arch = "wasm32"))]
             #[cfg(all(feature = "transaction", feature = "acceptor"))]
             control_link_acceptor: None,
+        }
+    }
+}
+
+cfg_transaction! {
+    cfg_acceptor! {
+        use crate::transaction::{
+            coordinator::ControlLinkAcceptor, manager::TransactionManager, session::TxnSession,
+        };
+
+        impl Builder {
+            pub(crate) fn into_txn_session(
+                self,
+                control: mpsc::Sender<SessionControl>,
+                outgoing: mpsc::Sender<crate::link::LinkFrame>,
+                outgoing_channel: OutgoingChannel,
+                control_link_acceptor: ControlLinkAcceptor,
+                local_state: SessionState,
+            ) -> TxnSession<Session> {
+                let txn_manager = TransactionManager::new(outgoing, control_link_acceptor);
+                let session = Session {
+                    // control,
+                    outgoing_channel,
+                    local_state,
+                    initial_outgoing_id: Constant::new(self.next_outgoing_id),
+                    next_outgoing_id: self.next_outgoing_id,
+                    incoming_window: self.incoming_window,
+                    outgoing_window: self.outgoing_window,
+                    handle_max: self.handle_max,
+                    incoming_channel: None,
+                    next_incoming_id: 0,
+                    remote_incoming_window: 0,
+                    remote_incoming_window_exhausted_buffer: VecDeque::new(),
+                    remote_outgoing_window: 0,
+                    offered_capabilities: self.offered_capabilities,
+                    desired_capabilities: self.desired_capabilities,
+                    properties: self.properties,
+
+                    link_name_by_output_handle: Slab::new(),
+                    link_by_name: HashMap::new(),
+                    link_by_input_handle: HashMap::new(),
+                    delivery_tag_by_id: HashMap::new(),
+                };
+
+                TxnSession {
+                    control,
+                    session,
+                    txn_manager,
+                }
+            }
         }
     }
 }
@@ -115,127 +157,6 @@ impl Builder {
             link_by_name: HashMap::new(),
             link_by_input_handle: HashMap::new(),
             delivery_tag_by_id: HashMap::new(),
-        }
-    }
-
-    #[cfg(all(feature = "transaction", feature = "acceptor"))]
-    pub(crate) fn into_txn_session(
-        self,
-        control: mpsc::Sender<SessionControl>,
-        outgoing: mpsc::Sender<LinkFrame>,
-        outgoing_channel: OutgoingChannel,
-        control_link_acceptor: ControlLinkAcceptor,
-        local_state: SessionState,
-    ) -> TxnSession<Session> {
-        let txn_manager = TransactionManager::new(outgoing, control_link_acceptor);
-        let session = Session {
-            // control,
-            outgoing_channel,
-            local_state,
-            initial_outgoing_id: Constant::new(self.next_outgoing_id),
-            next_outgoing_id: self.next_outgoing_id,
-            incoming_window: self.incoming_window,
-            outgoing_window: self.outgoing_window,
-            handle_max: self.handle_max,
-            incoming_channel: None,
-            next_incoming_id: 0,
-            remote_incoming_window: 0,
-            remote_incoming_window_exhausted_buffer: VecDeque::new(),
-            remote_outgoing_window: 0,
-            offered_capabilities: self.offered_capabilities,
-            desired_capabilities: self.desired_capabilities,
-            properties: self.properties,
-
-            link_name_by_output_handle: Slab::new(),
-            link_by_name: HashMap::new(),
-            link_by_input_handle: HashMap::new(),
-            delivery_tag_by_id: HashMap::new(),
-        };
-
-        TxnSession {
-            control,
-            session,
-            txn_manager,
-        }
-    }
-
-    #[allow(clippy::too_many_arguments)]
-    #[cfg(not(all(feature = "transaction", feature = "acceptor")))]
-    async fn launch_client_session_engine<R, F>(
-        self,
-        _session_control_tx: &mpsc::Sender<SessionControl>,
-        _outgoing: &mpsc::Sender<LinkFrame>,
-        outgoing_channel: OutgoingChannel,
-        local_state: SessionState,
-        connection: &ConnectionHandle<R>,
-        session_control_rx: mpsc::Receiver<SessionControl>,
-        incoming: mpsc::Receiver<SessionFrame>,
-        outgoing_link_frames: mpsc::Receiver<LinkFrame>,
-        spawn_engine_fn: F
-    ) -> Result<JoinHandle<Result<(), Error>>, BeginError> 
-    where
-        F: FnOnce(SessionEngine<Session>) -> JoinHandle<Result<(), Error>>,
-    {
-        let session = self.into_session(outgoing_channel, local_state);
-        let engine = SessionEngine::begin_client_session(
-            connection.control.clone(),
-            session,
-            session_control_rx,
-            incoming,
-            connection.outgoing.clone(),
-            outgoing_link_frames,
-        )
-        .await?;
-        let handle = (spawn_engine_fn)(engine);
-        Ok(handle)
-    }
-
-    #[allow(clippy::too_many_arguments)]
-    #[cfg(all(feature = "transaction", feature = "acceptor"))]
-    async fn launch_client_session_engine<R>(
-        mut self,
-        session_control_tx: &mpsc::Sender<SessionControl>,
-        control_link_outgoing: &mpsc::Sender<LinkFrame>,
-        outgoing_channel: OutgoingChannel,
-        local_state: SessionState,
-        connection: &ConnectionHandle<R>,
-        session_control_rx: mpsc::Receiver<SessionControl>,
-        incoming: mpsc::Receiver<SessionFrame>,
-        outgoing_link_frames: mpsc::Receiver<LinkFrame>,
-    ) -> Result<JoinHandle<Result<(), Error>>, BeginError> {
-        match self.control_link_acceptor.take() {
-            Some(control_link_acceptor) => {
-                let session = self.into_txn_session(
-                    session_control_tx.clone(),
-                    control_link_outgoing.clone(),
-                    outgoing_channel,
-                    control_link_acceptor,
-                    local_state,
-                );
-                let engine = SessionEngine::begin_client_session(
-                    connection.control.clone(),
-                    session,
-                    session_control_rx,
-                    incoming,
-                    connection.outgoing.clone(),
-                    outgoing_link_frames,
-                )
-                .await?;
-                Ok(engine.spawn())
-            }
-            None => {
-                let session = self.into_session(outgoing_channel, local_state);
-                let engine = SessionEngine::begin_client_session(
-                    connection.control.clone(),
-                    session,
-                    session_control_rx,
-                    incoming,
-                    connection.outgoing.clone(),
-                    outgoing_link_frames,
-                )
-                .await?;
-                Ok(engine.spawn())
-            }
         }
     }
 
@@ -352,19 +273,59 @@ impl Builder {
             },
         };
 
-        let engine_handle = self
-            .launch_client_session_engine(
-                &session_control_tx,
-                &outgoing_tx,
-                outgoing_channel,
-                local_state,
-                connection,
+        #[cfg(not(all(feature = "transaction", feature = "acceptor")))]
+        let engine_handle = {
+            let session = self.into_session(outgoing_channel, local_state);
+            let engine = SessionEngine::begin_client_session(
+                connection.control.clone(),
+                session,
                 session_control_rx,
                 incoming_rx,
+                connection.outgoing.clone(),
                 outgoing_rx,
-                SessionEngine::spawn
             )
             .await?;
+            engine.spawn()
+        };
+
+        #[cfg(all(feature = "transaction", feature = "acceptor"))]
+        let engine_handle = {
+            let mut this = self;
+            match this.control_link_acceptor.take() {
+                Some(control_link_acceptor) => {
+                    let session = this.into_txn_session(
+                        session_control_tx.clone(),
+                        outgoing_tx.clone(),
+                        outgoing_channel,
+                        control_link_acceptor,
+                        local_state,
+                    );
+                    let engine = SessionEngine::begin_client_session(
+                        connection.control.clone(),
+                        session,
+                        session_control_rx,
+                        incoming_rx,
+                        connection.outgoing.clone(),
+                        outgoing_rx,
+                    )
+                    .await?;
+                    engine.spawn()
+                }
+                None => {
+                    let session = this.into_session(outgoing_channel, local_state);
+                    let engine = SessionEngine::begin_client_session(
+                        connection.control.clone(),
+                        session,
+                        session_control_rx,
+                        incoming_rx,
+                        connection.outgoing.clone(),
+                        outgoing_rx,
+                    )
+                    .await?;
+                    engine.spawn()
+                }
+            }
+        };
 
         let handle = SessionHandle {
             is_ended: false,
@@ -375,7 +336,6 @@ impl Builder {
         };
         Ok(handle)
     }
-
 
     /// Begins a new session
     ///
@@ -412,22 +372,19 @@ impl Builder {
             },
         };
 
-        let spawn_engine_fn = |engine| {
-            SessionEngine::spawn_local(engine, local_set)
-        };
-        let engine_handle = self
-            .launch_client_session_engine(
-                &session_control_tx,
-                &outgoing_tx,
-                outgoing_channel,
-                local_state,
-                connection,
+        let engine_handle = {
+            let session = self.into_session(outgoing_channel, local_state);
+            let engine = SessionEngine::begin_client_session(
+                connection.control.clone(),
+                session,
                 session_control_rx,
                 incoming_rx,
+                connection.outgoing.clone(),
                 outgoing_rx,
-                spawn_engine_fn
             )
             .await?;
+            engine.spawn_local(local_set)
+        };
 
         let handle = SessionHandle {
             is_ended: false,

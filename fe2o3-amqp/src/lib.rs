@@ -186,13 +186,13 @@ pub mod sasl_profile;
 pub mod session;
 pub mod transport;
 
-#[cfg_attr(docsrs, doc(cfg(feature = "acceptor")))]
-#[cfg(feature = "acceptor")]
-pub mod acceptor;
+cfg_acceptor! {
+    pub mod acceptor;
+}
 
-#[cfg_attr(docsrs, doc(cfg(feature = "transaction")))]
-#[cfg(feature = "transaction")]
-pub mod transaction;
+cfg_transaction! {
+    pub mod transaction;
+}
 
 pub mod types {
     //! Re-exporting `fe2o3-amqp-types`
@@ -207,7 +207,6 @@ pub use link::{
 pub use session::Session;
 
 type Payload = bytes::Bytes;
-
 
 cfg_not_wasm32! {
     /// A marker trait to indicate that the type is `Send` bound in non-wasm32 targets

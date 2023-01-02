@@ -93,6 +93,7 @@ pub(crate) enum SessionInnerError {
     RemoteEndedWithError(definitions::Error),
 
     /// Unknown transaction ID
+    #[cfg(not(target_arch = "wasm32"))]
     #[cfg(all(feature = "transaction", feature = "acceptor"))]
     #[error("Unknown transaction ID")]
     UnknownTxnId,
@@ -178,6 +179,7 @@ impl From<SessionInnerError> for Error {
             SessionInnerError::RemoteEnded => Self::RemoteEnded,
             SessionInnerError::RemoteEndedWithError(err) => Self::RemoteEndedWithError(err),
 
+            #[cfg(not(target_arch = "wasm32"))]
             #[cfg(all(feature = "transaction", feature = "acceptor"))]
             SessionInnerError::UnknownTxnId => Self::UnknownTxnId,
         }

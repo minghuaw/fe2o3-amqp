@@ -26,7 +26,8 @@ use crate::{
     endpoint::{self, IncomingChannel, OutgoingChannel},
     frames::amqp::{Frame, FrameBody},
     session::frame::{SessionFrame, SessionFrameBody, SessionIncomingItem},
-    session::Session, SendBound,
+    session::Session,
+    SendBound,
 };
 
 mod builder;
@@ -134,11 +135,11 @@ impl<R> ConnectionHandle<R> {
             Ok(res) => {
                 self.is_closed = true;
                 res
-            },
+            }
             Err(_) => {
                 self.is_closed = true;
                 Err(Error::IllegalState)
-            },
+            }
         }
     }
 
@@ -486,7 +487,7 @@ impl Connection {
     }
 }
 
-#[cfg_attr(not(target_arch="wasm32"), async_trait)]
+#[cfg_attr(not(target_arch = "wasm32"), async_trait)]
 #[cfg_attr(target_arch="wasm32", async_trait(?Send))]
 impl endpoint::Connection for Connection {
     type AllocError = AllocSessionError;

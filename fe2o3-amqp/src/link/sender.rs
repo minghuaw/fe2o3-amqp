@@ -2,9 +2,7 @@
 
 use async_trait::async_trait;
 use bytes::{Bytes, BytesMut};
-use tokio::{
-    sync::{mpsc, oneshot},
-};
+use tokio::sync::{mpsc, oneshot};
 
 cfg_not_wasm32! {
     use std::time::Duration;
