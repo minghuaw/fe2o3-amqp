@@ -21,7 +21,6 @@ use tokio::{
 };
 
 use crate::{
-    connection::ConnectionHandle,
     control::SessionControl,
     endpoint::{self, IncomingChannel, InputHandle, LinkFlow, OutgoingChannel, OutputHandle},
     link::{LinkFrame, LinkRelay},
@@ -134,10 +133,15 @@ impl<R> SessionHandle<R> {
             return Err(Error::IllegalState);
         }
 
-        self.is_ended = true;
         match (&mut self.engine_handle).await {
-            Ok(res) => res,
-            Err(join_error) => Err(Error::JoinError(join_error)),
+            Ok(res) => {
+                self.is_ended = true;
+                res
+            },
+            Err(join_error) => {
+                self.is_ended = true;
+                Err(Error::JoinError(join_error))
+            },
         }
     }
 }
@@ -275,7 +279,8 @@ impl Session {
     ///
     /// let session = Session::begin(&mut connection).await.unwrap();
     /// ```
-    pub async fn begin(conn: &mut ConnectionHandle<()>) -> Result<SessionHandle<()>, BeginError> {
+    #[cfg(not(target_arch = "wasm32"))]
+    pub async fn begin(conn: &mut crate::connection::ConnectionHandle<()>) -> Result<SessionHandle<()>, BeginError> {
         Session::builder().begin(conn).await
     }
 

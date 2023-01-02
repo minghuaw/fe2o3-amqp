@@ -59,7 +59,8 @@ pub struct ConnectionHandle<R> {
     /// Only change this value in `on_close` method
     pub(crate) is_closed: bool,
     pub(crate) control: Sender<ConnectionControl>,
-    pub(crate) handle: JoinHandle<Result<(), Error>>,
+    pub(crate) handle: JoinHandle<()>,
+    pub(crate) outcome: oneshot::Receiver<Result<(), Error>>,
 
     // outgoing channel for session
     pub(crate) outgoing: Sender<SessionFrame>,
@@ -129,10 +130,15 @@ impl<R> ConnectionHandle<R> {
         if self.is_closed {
             return Err(Error::IllegalState);
         }
-        self.is_closed = true;
-        match (&mut self.handle).await {
-            Ok(res) => res,
-            Err(e) => Err(Error::JoinError(e)),
+        match (&mut self.outcome).await {
+            Ok(res) => {
+                self.is_closed = true;
+                res
+            },
+            Err(_) => {
+                self.is_closed = true;
+                Err(Error::IllegalState)
+            },
         }
     }
 
