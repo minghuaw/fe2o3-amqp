@@ -161,7 +161,7 @@ impl Builder {
 
     #[allow(clippy::too_many_arguments)]
     #[cfg(not(all(feature = "transaction", feature = "acceptor")))]
-    async fn launch_client_session_engine<R>(
+    async fn launch_client_session_engine<R, F>(
         self,
         _session_control_tx: &mpsc::Sender<SessionControl>,
         _outgoing: &mpsc::Sender<LinkFrame>,
@@ -171,7 +171,11 @@ impl Builder {
         session_control_rx: mpsc::Receiver<SessionControl>,
         incoming: mpsc::Receiver<SessionFrame>,
         outgoing_link_frames: mpsc::Receiver<LinkFrame>,
-    ) -> Result<JoinHandle<Result<(), Error>>, BeginError> {
+        spawn_engine_fn: F
+    ) -> Result<JoinHandle<Result<(), Error>>, BeginError> 
+    where
+        F: FnOnce(SessionEngine<Session>) -> JoinHandle<Result<(), Error>>,
+    {
         let session = self.into_session(outgoing_channel, local_state);
         let engine = SessionEngine::begin_client_session(
             connection.control.clone(),
@@ -182,7 +186,8 @@ impl Builder {
             outgoing_link_frames,
         )
         .await?;
-        Ok(engine.spawn())
+        let handle = (spawn_engine_fn)(engine);
+        Ok(handle)
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -324,6 +329,7 @@ impl Builder {
     ///     .await.unwrap();
     /// ```
     ///
+    #[cfg(not(target_arch = "wasm32"))]
     pub async fn begin(
         self,
         connection: &mut ConnectionHandle<()>,
@@ -356,6 +362,70 @@ impl Builder {
                 session_control_rx,
                 incoming_rx,
                 outgoing_rx,
+                SessionEngine::spawn
+            )
+            .await?;
+
+        let handle = SessionHandle {
+            is_ended: false,
+            control: session_control_tx,
+            engine_handle,
+            outgoing: outgoing_tx,
+            link_listener: (),
+        };
+        Ok(handle)
+    }
+
+
+    /// Begins a new session
+    ///
+    /// # Example
+    ///
+    /// ```rust, ignore
+    /// let session = Session::builder()
+    ///     .handle_max(128u32)
+    ///     .begin(&mut connection)
+    ///     .await.unwrap();
+    /// ```
+    ///
+    #[cfg(target_arch = "wasm32")]
+    pub async fn begin_on_local_set(
+        self,
+        connection: &mut ConnectionHandle<()>,
+        local_set: &tokio::task::LocalSet,
+    ) -> Result<SessionHandle<()>, BeginError> {
+        let local_state = SessionState::Unmapped;
+        let (session_control_tx, session_control_rx) =
+            mpsc::channel::<SessionControl>(DEFAULT_SESSION_CONTROL_BUFFER_SIZE);
+        let (incoming_tx, incoming_rx) = mpsc::channel(self.buffer_size);
+        let (outgoing_tx, outgoing_rx) = mpsc::channel(self.buffer_size);
+
+        // create session in connection::Engine
+        let outgoing_channel = match connection.allocate_session(incoming_tx).await {
+            Ok(channel) => channel,
+            Err(alloc_error) => match alloc_error {
+                AllocSessionError::IllegalState => return Err(BeginError::IllegalConnectionState),
+                AllocSessionError::ChannelMaxReached => {
+                    // Locally initiating session exceeded channel max
+                    return Err(BeginError::LocalChannelMaxReached);
+                }
+            },
+        };
+
+        let spawn_engine_fn = |engine| {
+            SessionEngine::spawn_local(engine, local_set)
+        };
+        let engine_handle = self
+            .launch_client_session_engine(
+                &session_control_tx,
+                &outgoing_tx,
+                outgoing_channel,
+                local_state,
+                connection,
+                session_control_rx,
+                incoming_rx,
+                outgoing_rx,
+                spawn_engine_fn
             )
             .await?;
 

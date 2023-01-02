@@ -9,6 +9,7 @@ use fe2o3_amqp_types::performatives::Close;
 use futures_util::{SinkExt, StreamExt};
 use tokio::io::{AsyncRead, AsyncWrite};
 use tokio::sync::mpsc::Receiver;
+use tokio::sync::oneshot;
 use tokio::task::{JoinHandle};
 
 use crate::control::ConnectionControl;
@@ -43,13 +44,17 @@ where
     OpenError: From<C::OpenError>,
 {
     #[cfg(not(target_arch = "wasm32"))]
-    pub fn spawn(self) -> JoinHandle<Result<(), Error>> {
-        tokio::spawn(self.event_loop())
+    pub fn spawn(self) -> (JoinHandle<()>, oneshot::Receiver<Result<(), Error>>) {
+        let (tx, rx) = oneshot::channel();
+        let handle = tokio::spawn(self.event_loop(tx));
+        (handle, rx)
     }
 
     #[cfg(target_arch = "wasm32")]
-    pub fn spawn_local(self, local_set: &tokio::task::LocalSet) -> JoinHandle<Result<(), Error>> {
-        local_set.spawn_local(self.event_loop())
+    pub fn spawn_local(self, local_set: &tokio::task::LocalSet) -> (JoinHandle<()>, oneshot::Receiver<Result<(), Error>>) {
+        let (tx, rx) = oneshot::channel();
+        let handle = local_set.spawn_local(self.event_loop(tx));
+        (handle, rx)
     }
 }
 
@@ -462,7 +467,7 @@ where
     }
 
     #[cfg_attr(feature = "tracing", tracing::instrument(name = "Connection::event_loop", skip(self), fields(container_id = %self.connection.local_open().container_id)))]
-    async fn event_loop(mut self) -> Result<(), Error> {
+    async fn event_loop(mut self, tx: oneshot::Sender<Result<(), Error>>) {
         let mut outcome = Ok(());
         loop {
             let result = tokio::select! {
@@ -569,6 +574,7 @@ where
         #[cfg(feature = "log")]
         log::debug!("Stopped");
 
-        outcome.and(close).map_err(Into::into)
+        let result = outcome.and(close).map_err(Into::into);
+        let _ = tx.send(result);
     }
 }

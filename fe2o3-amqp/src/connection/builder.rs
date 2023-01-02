@@ -1267,12 +1267,13 @@ fn spawn_engine<Io>(
 where
     Io: AsyncRead + AsyncWrite + std::fmt::Debug + Send + Unpin + 'static,
 {
-    let handle = engine.spawn();
+    let (handle, outcome) = engine.spawn();
 
     let connection_handle = ConnectionHandle {
         is_closed: false,
         control: control_tx,
         handle,
+        outcome,
         outgoing: outgoing_tx, // session_control: session_control_tx
         session_listener: (),
     };
@@ -1290,12 +1291,13 @@ fn spawn_local_engine<Io>(
 where
     Io: AsyncRead + AsyncWrite + std::fmt::Debug + Unpin + 'static,
 {
-    let handle = engine.spawn_local(local_set);
+    let (handle, outcome) = engine.spawn_local(local_set);
 
     let connection_handle = ConnectionHandle {
         is_closed: false,
         control: control_tx,
         handle,
+        outcome,
         outgoing: outgoing_tx, // session_control: session_control_tx
         session_listener: (),
     };

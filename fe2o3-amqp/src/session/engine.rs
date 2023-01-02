@@ -9,7 +9,7 @@ use crate::{
     control::{ConnectionControl, SessionControl},
     endpoint::{self, IncomingChannel, Session},
     link::LinkFrame,
-    util::Running,
+    util::Running, SendBound,
 };
 
 use super::{
@@ -102,6 +102,7 @@ where
     }
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 impl<S> SessionEngine<S>
 where
     S: endpoint::SessionEndpoint<State = SessionState> + Send + Sync + 'static,
@@ -111,7 +112,26 @@ where
     pub fn spawn(self) -> JoinHandle<Result<(), Error>> {
         tokio::spawn(self.event_loop())
     }
+}
 
+#[cfg(target_arch = "wasm32")]
+impl<S> SessionEngine<S>
+where
+    S: endpoint::SessionEndpoint<State = SessionState> + SendBound + Sync + 'static,
+    AllocLinkError: From<S::AllocError>,
+    SessionInnerError: From<S::Error> + From<S::BeginError> + From<S::EndError>,
+{
+    pub fn spawn_local(self, local_set: &tokio::task::LocalSet) -> JoinHandle<Result<(), Error>> {
+        local_set.spawn_local(self.event_loop())
+    }
+}
+
+impl<S> SessionEngine<S>
+where
+    S: endpoint::SessionEndpoint<State = SessionState> + SendBound + Sync + 'static,
+    AllocLinkError: From<S::AllocError>,
+    SessionInnerError: From<S::Error> + From<S::BeginError> + From<S::EndError>,
+{
     #[inline]
     #[cfg_attr(feature = "tracing", tracing::instrument(skip_all))]
     async fn on_incoming(
