@@ -1,5 +1,17 @@
 # Change Log
 
+## 0.8.8
+
+1. Ported 0.7.22
+
+## 0.7.22
+
+1. Use `saturating_add/sub` when computing link credit `on_incoming_flow` for sender
+
+## 0.8.7
+
+1. Fixed clippy warnings
+
 ## 0.8.6
 
 1. Ported 0.7.21

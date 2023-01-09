@@ -1,6 +1,8 @@
 use std::{
     borrow::Cow,
-    collections::{BTreeMap, HashMap}, sync::Arc, rc::Rc,
+    collections::{BTreeMap, HashMap},
+    rc::Rc,
+    sync::Arc,
 };
 
 use serde::{de, ser, Deserialize, Serialize};
@@ -19,7 +21,7 @@ use super::AmqpValue;
 use super::{AmqpSequence, Batch, Body, Data};
 
 pub(crate) mod __private {
-    use std::{sync::Arc, rc::Rc};
+    use std::{rc::Rc, sync::Arc};
 
     /// Marker trait for message body.
     ///
@@ -71,22 +73,25 @@ impl<T> SerializableBody for &T where T: SerializableBody {}
 impl<T> SerializableBody for &mut T where T: SerializableBody {}
 
 impl<T> SerializableBody for Box<T>
-    where 
-        T: SerializableBody,
-        Box<T>: Serialize,
-{}
+where
+    T: SerializableBody,
+    Box<T>: Serialize,
+{
+}
 
 impl<T> SerializableBody for Rc<T>
-    where 
-        T: SerializableBody,
-        Rc<T>: Serialize,
-{}
+where
+    T: SerializableBody,
+    Rc<T>: Serialize,
+{
+}
 
-impl<T> SerializableBody for Arc<T> 
-    where 
-        T: SerializableBody,
-        Arc<T>: Serialize,
-{}
+impl<T> SerializableBody for Arc<T>
+where
+    T: SerializableBody,
+    Arc<T>: Serialize,
+{
+}
 
 /// This trait defines how to interprerte a message when there is an emtpy body.
 ///

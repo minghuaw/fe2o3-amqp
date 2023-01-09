@@ -720,9 +720,7 @@ impl SenderInner<SenderLink<Target>> {
                 message_format,
                 sender,
             } => self.abort(delivery_tag, message_format, sender).await?,
-            ResumingDelivery::Resend(unsettled_message) => {
-                resend_buf.push(unsettled_message)
-            }
+            ResumingDelivery::Resend(unsettled_message) => resend_buf.push(unsettled_message),
             ResumingDelivery::Resume(unsettled_message) => {
                 self.resume(delivery_tag, unsettled_message).await?
             }
@@ -838,13 +836,13 @@ impl SenderInner<SenderLink<Target>> {
         match settled {
             true => {
                 let _ = unsettled_message.settle();
-            },
+            }
             false => {
                 let mut guard = self.link.unsettled.write();
                 guard
                     .get_or_insert(OrderedMap::new())
                     .insert(delivery_tag, unsettled_message);
-            },
+            }
         }
         Ok(())
     }
@@ -877,10 +875,15 @@ impl SenderInner<SenderLink<Target>> {
             batchable: false,
         };
 
-        let settled = self.link
-            .send_transfer_without_modifying_unsettled_map(&self.outgoing, transfer, payload.clone())
+        let settled = self
+            .link
+            .send_transfer_without_modifying_unsettled_map(
+                &self.outgoing,
+                transfer,
+                payload.clone(),
+            )
             .await?;
-        
+
         match settled {
             true => {
                 let _ = sender.send(None);
@@ -897,10 +900,7 @@ impl SenderInner<SenderLink<Target>> {
         Ok(())
     }
 
-    async fn resend(
-        &mut self,
-        unsettled_message: UnsettledMessage,
-    ) -> Result<(), SendError> {
+    async fn resend(&mut self, unsettled_message: UnsettledMessage) -> Result<(), SendError> {
         let detached_fut = self.incoming.recv();
         let tag = self
             .link
@@ -917,7 +917,11 @@ impl SenderInner<SenderLink<Target>> {
 
         let settled = self
             .link
-            .send_transfer_without_modifying_unsettled_map(&self.outgoing, transfer, unsettled_message.payload.clone())
+            .send_transfer_without_modifying_unsettled_map(
+                &self.outgoing,
+                transfer,
+                unsettled_message.payload.clone(),
+            )
             .await?;
 
         match settled {

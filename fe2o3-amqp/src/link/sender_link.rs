@@ -144,7 +144,7 @@ where
         let transfer = Transfer {
             handle,
             delivery_id: None, // This will be set by the session
-            delivery_tag: Some(delivery_tag.clone()),
+            delivery_tag: Some(delivery_tag),
             message_format: Some(message_format),
             settled: Some(settled),
             more: false, // This will be changed later
@@ -508,10 +508,15 @@ impl<T> SenderLink<T> {
                 remote_map
                     .into_keys()
                     // Local is None, assume the message format is 0
-                    .map(|delivery_tag| (delivery_tag, ResumingDelivery::Abort{
-                        message_format: MESSAGE_FORMAT,
-                        sender: None
-                    }))
+                    .map(|delivery_tag| {
+                        (
+                            delivery_tag,
+                            ResumingDelivery::Abort {
+                                message_format: MESSAGE_FORMAT,
+                                sender: None,
+                            },
+                        )
+                    })
                     .collect()
             }
             (Some(local_map), None) => {
@@ -541,10 +546,15 @@ impl<T> SenderLink<T> {
                 let remote = remote_map
                     .into_keys()
                     // These are unsettled messages not found in the local map, assume the message format is 0
-                    .map(|tag| (tag, ResumingDelivery::Abort{
-                        message_format: MESSAGE_FORMAT,
-                        sender: None
-                    }));
+                    .map(|tag| {
+                        (
+                            tag,
+                            ResumingDelivery::Abort {
+                                message_format: MESSAGE_FORMAT,
+                                sender: None,
+                            },
+                        )
+                    });
                 local.into_iter().chain(remote).collect()
             }
         };
