@@ -35,7 +35,7 @@ async fn main() {
         .unwrap();
 
     // All of the Microsoft AMQP clients represent the event body as an uninterpreted bag of bytes.
-    for _ in 0..10 {
+    for _ in 0..1 {
         let delivery = receiver.recv::<Body<Value>>().await.unwrap();
         receiver.accept(&delivery).await.unwrap();
         println!("{:?}", delivery);

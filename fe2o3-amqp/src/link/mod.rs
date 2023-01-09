@@ -841,7 +841,9 @@ pub(crate) fn get_max_message_size(local: u64, remote: Option<u64>) -> u64 {
 
 #[cfg(test)]
 mod tests {
-    use crate::link::state::LinkFlowStateInner;
+    use crate::link::{
+        state::LinkFlowStateInner,
+    };
 
     #[tokio::test]
     async fn test_producer_notify() {

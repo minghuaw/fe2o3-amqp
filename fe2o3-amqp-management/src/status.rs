@@ -14,7 +14,7 @@ impl TryFrom<SimpleValue> for StatusCode {
     fn try_from(value: SimpleValue) -> Result<Self, Self::Error> {
         let code = match value {
             SimpleValue::UShort(val) => {
-                let val = val as u16;
+                let val = val;
                 NonZeroU16::new(val)
             }
             SimpleValue::UInt(val) => {
@@ -51,7 +51,7 @@ impl<'a> TryFrom<&'a SimpleValue> for StatusCode {
     fn try_from(value: &'a SimpleValue) -> Result<Self, Self::Error> {
         let code = match value {
             SimpleValue::UShort(val) => {
-                let val = *val as u16;
+                let val = *val;
                 NonZeroU16::new(val)
             }
             SimpleValue::UInt(val) => {
