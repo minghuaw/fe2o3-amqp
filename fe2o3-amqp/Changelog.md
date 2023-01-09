@@ -1,5 +1,9 @@
 # Change Log
 
+## 0.7.22
+
+1. Use `saturating_add/sub` when computing link credit `on_incoming_flow` for sender
+
 ## 0.7.21
 
 1. `DeliveryFut` returned by `Sender::send_batchable` and `Sender::send_batchable_ref` now will be

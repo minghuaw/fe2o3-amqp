@@ -145,7 +145,9 @@ impl LinkFlowState<role::SenderMarker> {
         );
 
         if let Some(link_credit_rcv) = flow.link_credit {
-            let link_credit = delivery_count_rcv + link_credit_rcv - state.delivery_count;
+            let link_credit = delivery_count_rcv
+                .saturating_add(link_credit_rcv)
+                .saturating_sub(state.delivery_count);
             state.link_credit = link_credit;
         }
 
