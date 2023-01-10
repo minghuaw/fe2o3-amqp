@@ -38,7 +38,9 @@ impl ScramClient {
     }
 
     pub fn compute_client_first_message(&mut self) -> Bytes {
-        let nonce = base64::encode(generate_nonce());
+        use base64::Engine;
+
+        let nonce = base64::engine::general_purpose::STANDARD.encode(generate_nonce());
         let (client_first_message, client_first_message_bare) = self
             .scram
             .client_first_message(self.username.as_bytes(), nonce.as_bytes());

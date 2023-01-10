@@ -1,5 +1,9 @@
 # Change Log
 
+## 0.7.23
+
+1. Updated `base64` to "0.21"
+
 ## 0.7.22
 
 1. Use `saturating_add/sub` when computing link credit `on_incoming_flow` for sender

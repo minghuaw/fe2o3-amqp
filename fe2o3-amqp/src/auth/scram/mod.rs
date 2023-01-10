@@ -173,6 +173,8 @@ impl ScramVersion {
         server_first: &str,
         client_first_message_bare: &[u8],
     ) -> Result<(Vec<u8>, Vec<u8>), ScramErrorKind> {
+        use base64::Engine;
+
         let parts: Vec<&str> = server_first.split(',').collect();
 
         if parts.len() < 3 {
@@ -191,7 +193,7 @@ impl ScramVersion {
         let base64_salt = parts[1]
             .strip_prefix(SALT_KEY)
             .ok_or(ScramErrorKind::SaltNotFound)?;
-        let salt = base64::decode(base64_salt)?;
+        let salt = base64::engine::general_purpose::STANDARD.decode(base64_salt)?;
 
         let iter_count_str = parts[2]
             .strip_prefix(ITERATION_COUNT_KEY)
@@ -221,7 +223,7 @@ impl ScramVersion {
 
         let client_proof_bytes =
             self.compute_client_proof::<ScramErrorKind>(&salted_password, &auth_message)?;
-        let client_proof = base64::encode(client_proof_bytes);
+        let client_proof = base64::engine::general_purpose::STANDARD.encode(client_proof_bytes);
 
         let client_final =
             client_final(&client_final_message_without_proof, client_proof.as_bytes());
@@ -237,6 +239,8 @@ impl ScramVersion {
         server_final: &[u8],
         server_signature: &[u8],
     ) -> Result<(), ScramErrorKind> {
+        use base64::Engine;
+
         let server_final = std::str::from_utf8(server_final)?;
         let parts: Vec<&str> = server_final.split(',').collect();
 
@@ -244,7 +248,7 @@ impl ScramVersion {
             .first()
             .and_then(|signature| signature.strip_prefix(VERIFIER_KEY))
             .ok_or(ScramErrorKind::ServerSignatureMismatch)?;
-        let signature_bytes = base64::decode(signature)?;
+        let signature_bytes = base64::engine::general_purpose::STANDARD.decode(signature)?;
 
         match signature_bytes == server_signature {
             true => Ok(()),
@@ -450,7 +454,9 @@ fn auth_message(
 }
 
 fn without_proof(client_server_nonce: &str) -> Vec<u8> {
-    let encoded_gs2_header = base64::encode(GS2_HEADER).into_bytes();
+    use base64::Engine;
+
+    let encoded_gs2_header = base64::engine::general_purpose::STANDARD.encode(GS2_HEADER).into_bytes();
     let total_len = CHANNEL_BINDING_KEY.len()
         + encoded_gs2_header.len()
         + 1
