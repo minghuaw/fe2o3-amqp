@@ -305,9 +305,11 @@ impl Receiver {
     /// This will send a `Detach` performative with the `closed` field set to false. If the remote
     /// peer responds with a Detach performative whose `closed` field is set to true, the link will
     /// re-attach and then close by exchanging closing Detach performatives.
-    pub async fn detach(mut self) -> Result<DetachedReceiver, DetachError> {
-        self.inner.detach_with_error(None).await?;
-        Ok(DetachedReceiver { inner: self.inner })
+    pub async fn detach(mut self) -> Result<DetachedReceiver, (DetachedReceiver, DetachError)> {
+        match self.inner.detach_with_error(None).await {
+            Ok(_) => Ok(DetachedReceiver { inner: self.inner }),
+            Err(err) => Err((DetachedReceiver { inner: self.inner }, err)),
+        }
     }
 
     /// Detach the link with an error.
@@ -318,9 +320,11 @@ impl Receiver {
     pub async fn detach_with_error(
         mut self,
         error: impl Into<definitions::Error>,
-    ) -> Result<DetachedReceiver, DetachError> {
-        self.inner.detach_with_error(Some(error.into())).await?;
-        Ok(DetachedReceiver { inner: self.inner })
+    ) -> Result<DetachedReceiver, (DetachedReceiver, DetachError)> {
+        match self.inner.detach_with_error(Some(error.into())).await {
+            Ok(_) => Ok(DetachedReceiver { inner: self.inner }),
+            Err(err) => Err((DetachedReceiver { inner: self.inner }, err)),
+        }
     }
 
     /// Detach the link with a timeout
@@ -329,7 +333,7 @@ impl Receiver {
     pub async fn detach_with_timeout(
         self,
         duration: Duration,
-    ) -> Result<Result<DetachedReceiver, DetachError>, Elapsed> {
+    ) -> Result<Result<DetachedReceiver, (DetachedReceiver, DetachError)>, Elapsed> {
         timeout(duration, self.detach()).await
     }
 

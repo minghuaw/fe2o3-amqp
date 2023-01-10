@@ -152,6 +152,7 @@ impl SenderAttachExchange {
 ///
 /// This is useful for exposing the outcome of resuming a local receiver
 #[derive(Debug)]
+#[must_use]
 pub enum ReceiverAttachExchange {
     /// The attach exchange is completed without any unsettled deliveries
     Complete,
@@ -501,17 +502,17 @@ where
                 #[cfg(feature = "log")]
                 log::debug!("Sending detach: {:?}", detach);
 
-                writer
+                // An error here means the session is already closed, so we can't send a detach
+                let result = writer
                     .send(LinkFrame::Detach(detach))
                     .await // cancel safe
-                    .map_err(|_| DetachError::IllegalSessionState)?;
+                    .map_err(|_| DetachError::IllegalSessionState);
 
                 self.output_handle.take();
+                result
             }
-            None => return Err(DetachError::IllegalState),
+            None => Err(DetachError::IllegalState),
         }
-
-        Ok(())
     }
 }
 
@@ -840,8 +841,6 @@ pub(crate) fn get_max_message_size(local: u64, remote: Option<u64>) -> u64 {
 
 #[cfg(test)]
 mod tests {
-    
-
     use crate::link::{
         state::LinkFlowStateInner,
     };

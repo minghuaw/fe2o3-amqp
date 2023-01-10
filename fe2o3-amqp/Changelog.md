@@ -4,24 +4,48 @@
 
 1. Updated `base64` to "0.21"
 
+## 0.8.8
+
+1. Ported 0.7.22
+
 ## 0.7.22
 
 1. Use `saturating_add/sub` when computing link credit `on_incoming_flow` for sender
+
+## 0.8.7
+
+1. Fixed clippy warnings
+
+## 0.8.6
+
+1. Ported 0.7.21
 
 ## 0.7.21
 
 1. `DeliveryFut` returned by `Sender::send_batchable` and `Sender::send_batchable_ref` now will be
    able to receive the outcome after sender is re-attached.
 
+## 0.8.5
+
+1. Ported 0.7.20
+
 ## 0.7.20
 
 1. Instead of panic when `ConnectionHandle::close()`/`SessionHandle::end()` is called multiple times,
    it will now return an `Error::IllegalState`.
 
+## 0.8.4
+
+1. Ported 0.7.19
+
 ## 0.7.19
 
 1. Fixed #170 and #172 by reviewing potential addition/subtraction with overflow/underflow and
    replaced with wrapping/saturating add/sub
+
+## 0.8.3
+
+1. Ported 0.7.18
 
 ## 0.7.18
 
@@ -29,11 +53,30 @@
    overflowing next-outgoing-id by using wrapping add
 2. Fixed a bug where sender and receiver's outgoing channel is not updated when attaching to new session
 
+## 0.8.2
+
+1. Ported 0.7.17
+
 ## 0.7.17
 
 1. Fixed not implemented bug in `Receiver::detach_then_resume_on_session()`
 
-~~## 0.7.16 (yanked)~~
+## ~~0.8.1 (yanked)~~
+
+1. Updated `base64` to "0.20"
+
+## ~~0.8.0 (yanked)~~
+
+1. Updated `fe2o3-amqp-types` to 0.7.0, which introduced breaking change to the type alias
+   `FilterSet` to support legacy formatted filter set. The user would need to ensure that the
+   correct format is used when constructing the filter set (more details can be found at
+   [Azure/azure-amqp#231](https://github.com/Azure/azure-amqp/issues/231),
+   [Azure/azure-amqp#232](https://github.com/Azure/azure-amqp/issues/232)).
+2. `Sender::detach()`/`Receiver::detach()` return a `DetachedSender`/`DetachedReceiver` even if it
+   encounters an error
+3. Impl `std::error::Error` for `SenderResumeError` and `ReceiverResumeError`
+
+## ~~0.7.16 (yanked)~~
 
 1. Added `detach_then_resume_on_session` method for `Sender` and `Receiver`
 
