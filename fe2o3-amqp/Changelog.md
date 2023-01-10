@@ -1,5 +1,9 @@
 # Change Log
 
+## 0.7.23
+
+1. Updated `base64` to "0.21"
+
 ## 0.8.8
 
 1. Ported 0.7.22
