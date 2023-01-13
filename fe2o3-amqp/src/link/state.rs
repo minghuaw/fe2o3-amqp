@@ -4,7 +4,7 @@ use std::{marker::PhantomData, sync::Arc};
 
 use async_trait::async_trait;
 use fe2o3_amqp_types::definitions::{Fields, SequenceNo};
-use parking_lot::RwLock;
+use std::sync::RwLock;
 
 use crate::{
     endpoint::{LinkFlow, OutputHandle},

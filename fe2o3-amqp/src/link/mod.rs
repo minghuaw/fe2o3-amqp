@@ -16,7 +16,7 @@ use fe2o3_amqp_types::{
 
 pub use error::*;
 
-use parking_lot::RwLock;
+use std::sync::RwLock;
 pub use receiver::Receiver;
 pub use sender::Sender;
 use serde::Serialize;
@@ -232,7 +232,8 @@ where
             return None;
         }
 
-        let guard = self.unsettled.read();
+        // The map is treated as if it does not exist if the lock is poisoned
+        let guard = self.unsettled.read().ok()?;
         let map = guard.as_ref()?;
         match (map.len(), partial_unsettled) {
             (0, _) => None,
@@ -342,7 +343,8 @@ where
         };
 
         let unsettled_map_len = {
-            let guard = self.unsettled.read();
+            let guard = self.unsettled.read()
+                .map_err(|_| SendAttachErrorKind::IllegalState)?;
             guard.as_ref().map(|m| m.len())
         };
 
@@ -683,8 +685,7 @@ impl LinkRelay<OutputHandle> {
 
                     // Since we are settling (ie. forgetting) this message, we don't care whether the
                     // receiving end is alive or not
-                    {
-                        let mut guard = unsettled.write();
+                    if let Ok(mut guard) = unsettled.write() {
                         guard
                             .as_mut()
                             .and_then(|m| m.remove(&delivery_tag))
@@ -696,8 +697,7 @@ impl LinkRelay<OutputHandle> {
                         Some(s) => s.is_terminal(),
                         None => false, // Probably should not assume the state is not specified
                     };
-                    {
-                        let mut guard = unsettled.write();
+                    if let Ok(mut guard) = unsettled.write() {
                         // Once the receiving application has finished processing the message,
                         // it indicates to the link endpoint a **terminal delivery state** that
                         // reflects the outcome of the application processing
@@ -735,12 +735,15 @@ impl LinkRelay<OutputHandle> {
             }
             LinkRelay::Receiver { unsettled, .. } => {
                 if settled {
-                    let mut guard = unsettled.write();
-                    // let _state = remove_from_unsettled(unsettled, &delivery_tag).await;
-                    let _state = guard.as_mut().and_then(|m| m.remove(&delivery_tag));
+                    let _state_result = unsettled.write().map(|guard| {
+                        guard.as_mut().and_then(|m| m.remove(&delivery_tag))
+                    });
                 } else {
-                    let mut guard = unsettled.write();
-                    if let Some(msg_state) = guard.as_mut().and_then(|m| m.get_mut(&delivery_tag)) {
+                    if let Ok(Some(msg_state)) = unsettled.write().map(|mut guard| {
+                        guard
+                            .as_mut()
+                            .and_then(|m| m.get_mut(&delivery_tag))
+                    }) {
                         *msg_state = state;
                     }
                 }

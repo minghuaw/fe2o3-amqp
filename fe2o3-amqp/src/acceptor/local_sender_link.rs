@@ -8,7 +8,7 @@ use fe2o3_amqp_types::{
     performatives::Attach,
     primitives::Symbol,
 };
-use parking_lot::RwLock;
+use std::sync::RwLock;
 use tokio::sync::{mpsc, Notify};
 
 use crate::{

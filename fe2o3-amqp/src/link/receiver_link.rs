@@ -70,7 +70,10 @@ where
         let delivery_tag = delivery_tag
             .as_ref()
             .ok_or(Self::TransferError::DeliveryTagIsNone)?;
-        let mut guard = self.unsettled.write();
+        let mut guard = self
+            .unsettled
+            .write()
+            .map_err(|_| Self::TransferError::IllegalState)?;
         let map = guard.get_or_insert(OrderedMap::new());
 
         if matches!(settled, Some(true)) {
@@ -115,13 +118,11 @@ where
             section_offset,
         });
 
-        {
-            let mut guard = self.unsettled.write();
-            // The same key may be writter multiple times
+        self.unsettled.write().map(|guard| {
             let _ = guard
                 .get_or_insert(OrderedMap::new())
                 .insert(delivery_tag, Some(state));
-        }
+        });
     }
 
     fn on_complete_transfer<'a, T, P>(
@@ -195,13 +196,11 @@ where
             // Mode Second doesn't automatically send back a disposition
             // (ie. thus doesn't call `link.dispose()`) and thus need to manually
             // set the delivery state
-            {
-                let mut lock = self.unsettled.write();
-                // There may be records of incomplete delivery
-                let _ = lock
+            self.unsettled.write().map(|guard| {
+                let _ = guard
                     .get_or_insert(OrderedMap::new())
                     .insert(delivery_tag.clone(), Some(state));
-            }
+            });
             (message, mode)
         };
 
@@ -256,15 +255,21 @@ where
         });
 
         let unsettled_state = if settled {
-            let mut lock = self.unsettled.write();
-            lock.as_mut()
-                .and_then(|map| map.remove(&delivery_info.delivery_tag))
+            match self.unsettled.write() {
+                Ok(mut lock) => lock
+                    .as_mut()
+                    .and_then(|map| map.remove(&delivery_info.delivery_tag)),
+                Err(_) => None,
+            }
         } else {
-            let mut lock = self.unsettled.write();
             // If the key is present in the map, the old value will be returned, which
             // we don't really need
-            lock.get_or_insert(OrderedMap::new())
-                .insert(delivery_info.delivery_tag.clone(), Some(state.clone()))
+            match self.unsettled.write() {
+                Ok(mut lock) => lock
+                    .get_or_insert(OrderedMap::new())
+                    .insert(delivery_info.delivery_tag.clone(), Some(state.clone())),
+                Err(_) => None,
+            }
         };
 
         // Only dispose if message is found in unsettled map
@@ -298,8 +303,8 @@ where
     ) -> Result<(), Self::DispositionError> {
         // sorting before filtering may be more cache/branch-prediction friendly?
         delivery_infos.sort_by(|left, right| left.delivery_id.cmp(&right.delivery_id));
-        {
-            let reader = self.unsettled.read();
+
+        if let Ok(reader) = self.unsettled.read() {
             delivery_infos.retain(|info| {
                 reader
                     .as_ref()
@@ -307,6 +312,7 @@ where
                     .unwrap_or(false)
             });
         }
+
         let chunk_inds = consecutive_chunk_indices(&delivery_infos);
 
         let mut prev_ind = 0;
@@ -462,12 +468,12 @@ impl<T> ReceiverLink<T> {
 
         // TODO: Individually checking whether a delivery is already dropped is probably too heavy?
         if settled {
-            let mut lock = self.unsettled.write();
+            let mut lock = self.unsettled.write().map_err(|_| DispositionError::IllegalState)?;
             for info in consecutive_infos {
                 lock.as_mut().and_then(|map| map.remove(&info.delivery_tag));
             }
         } else {
-            let mut lock = self.unsettled.write();
+            let mut lock = self.unsettled.write().map_err(|_| DispositionError::IllegalState)?;
             for info in consecutive_infos {
                 lock.get_or_insert(OrderedMap::new())
                     .insert(info.delivery_tag.clone(), Some(state.clone()));
@@ -495,10 +501,10 @@ impl<T> ReceiverLink<T> {
         link_credit: Option<u32>,
         drain: Option<bool>,
         echo: bool,
-    ) -> LinkFlow {
-        match (link_credit, drain) {
+    ) -> Result<LinkFlow, LinkStateError> {
+        let link_flow = match (link_credit, drain) {
             (Some(link_credit), Some(drain)) => {
-                let mut guard = self.flow_state.lock.write();
+                let mut guard = self.flow_state.lock.write().map_err(|_| LinkStateError::IllegalState)?;
                 guard.link_credit = link_credit;
                 guard.drain = drain;
                 LinkFlow {
@@ -517,7 +523,7 @@ impl<T> ReceiverLink<T> {
                 }
             }
             (Some(link_credit), None) => {
-                let mut guard = self.flow_state.lock.write();
+                let mut guard = self.flow_state.lock.write().map_err(|_| LinkStateError::IllegalState)?;
                 guard.link_credit = link_credit;
                 LinkFlow {
                     handle,
@@ -535,7 +541,7 @@ impl<T> ReceiverLink<T> {
                 }
             }
             (None, Some(drain)) => {
-                let mut guard = self.flow_state.lock.write();
+                let mut guard = self.flow_state.lock.write().map_err(|_| LinkStateError::IllegalState)?;
                 guard.drain = drain;
                 LinkFlow {
                     handle,
@@ -553,7 +559,7 @@ impl<T> ReceiverLink<T> {
                 }
             }
             (None, None) => {
-                let guard = self.flow_state.lock.read();
+                let guard = self.flow_state.lock.read().map_err(|_| LinkStateError::IllegalState)?;
                 LinkFlow {
                     handle,
                     // When the flow state is being sent from the receiver endpoint to the sender
@@ -569,7 +575,8 @@ impl<T> ReceiverLink<T> {
                     properties: guard.properties.clone(),
                 }
             }
-        }
+        };
+        Ok(link_flow)
     }
 }
 

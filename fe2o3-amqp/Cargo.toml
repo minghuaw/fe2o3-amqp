@@ -19,7 +19,7 @@ rustdoc-args = ["--cfg", "docsrs"]
 [features]
 # dev defaults
 default = [
-    # "acceptor",
+    "acceptor",
     # "rustls",
     # "native-tls",
     # "transaction",
@@ -39,7 +39,7 @@ acceptor = []
 scram = ["sha-1", "sha2", "rand", "base64", "stringprep", "hmac", "pbkdf2"]
 
 [dev-dependencies]
-tokio = { version = "1", features = ["rt", "rt-multi-thread", "macros", "parking_lot"] }
+tokio = { version = "1", features = ["rt", "rt-multi-thread", "macros"] }
 tokio-test = { version = "0.4" }
 testcontainers = "0.14"
 
@@ -61,7 +61,6 @@ slab = "0.4"
 tokio-stream = { version = "0.1", features = ["time"] }
 async-trait = "0.1"
 serde_bytes = "0.11"
-parking_lot = { version = "0.12", features = ["send_guard"] }
 
 # Optinoal deps that are feature themselves
 tracing = { version = "0.1", optional = true }
