@@ -173,6 +173,8 @@ impl ScramVersion {
         server_first: &str,
         client_first_message_bare: &[u8],
     ) -> Result<(Vec<u8>, Vec<u8>), ScramErrorKind> {
+        use base64::Engine;
+
         let parts: Vec<&str> = server_first.split(',').collect();
 
         if parts.len() < 3 {
@@ -191,7 +193,7 @@ impl ScramVersion {
         let base64_salt = parts[1]
             .strip_prefix(SALT_KEY)
             .ok_or(ScramErrorKind::SaltNotFound)?;
-        let salt = base64::decode(base64_salt)?;
+        let salt = base64::engine::general_purpose::STANDARD.decode(base64_salt)?;
 
         let iter_count_str = parts[2]
             .strip_prefix(ITERATION_COUNT_KEY)
@@ -221,7 +223,7 @@ impl ScramVersion {
 
         let client_proof_bytes =
             self.compute_client_proof::<ScramErrorKind>(&salted_password, &auth_message)?;
-        let client_proof = base64::encode(client_proof_bytes);
+        let client_proof = base64::engine::general_purpose::STANDARD.encode(client_proof_bytes);
 
         let client_final =
             client_final(&client_final_message_without_proof, client_proof.as_bytes());
@@ -237,6 +239,8 @@ impl ScramVersion {
         server_final: &[u8],
         server_signature: &[u8],
     ) -> Result<(), ScramErrorKind> {
+        use base64::Engine;
+
         let server_final = std::str::from_utf8(server_final)?;
         let parts: Vec<&str> = server_final.split(',').collect();
 
@@ -244,7 +248,7 @@ impl ScramVersion {
             .first()
             .and_then(|signature| signature.strip_prefix(VERIFIER_KEY))
             .ok_or(ScramErrorKind::ServerSignatureMismatch)?;
-        let signature_bytes = base64::decode(signature)?;
+        let signature_bytes = base64::engine::general_purpose::STANDARD.decode(signature)?;
 
         match signature_bytes == server_signature {
             true => Ok(()),
@@ -262,6 +266,8 @@ impl ScramVersion {
     where
         C: ScramCredentialProvider,
     {
+        use base64::Engine;
+
         let client_first = std::str::from_utf8(client_first)?;
 
         let client_first_message_bare = client_first
@@ -283,7 +289,7 @@ impl ScramVersion {
             Some(stored) => stored,
             None => return Ok(None),
         };
-        let base64_salt = base64::encode(stored_password.salt);
+        let base64_salt = base64::engine::general_purpose::STANDARD.encode(stored_password.salt);
         let iterations = stored_password.iterations.to_string();
 
         let client_server_nonce = format!("{}{}", client_nonce, base64_server_nonce);
@@ -336,6 +342,8 @@ impl ScramVersion {
         server_first_message: &[u8],
         stored_password: &StoredPassword,
     ) -> Result<Vec<u8>, ServerScramErrorKind> {
+        use base64::Engine;
+
         let client_final = std::str::from_utf8(client_final)?;
         let parts: Vec<&str> = client_final.split(',').collect();
 
@@ -343,7 +351,7 @@ impl ScramVersion {
             .first()
             .and_then(|s| s.strip_prefix(CHANNEL_BINDING_KEY))
             .ok_or(ServerScramErrorKind::CannotParseClientFinalMessage)?;
-        let channel_binding = base64::decode(channel_binding)?;
+        let channel_binding = base64::engine::general_purpose::STANDARD.decode(channel_binding)?;
         if channel_binding != GS2_HEADER.as_bytes() {
             return Err(ServerScramErrorKind::InvalidChannelBinding);
         }
@@ -377,7 +385,7 @@ impl ScramVersion {
         // ClientSignature := HMAC(StoredKey, AuthMessage)
         // Inverse of XOR is XOR
         let client_signature = self.hmac(stored_password.stored_key, &auth_message)?;
-        let client_proof = base64::decode(client_proof)?;
+        let client_proof = base64::engine::general_purpose::STANDARD.decode(client_proof)?;
         let client_key = xor(&client_proof, &client_signature)?;
         // StoredKey := H(ClientKey)
         let stored_key_from_client = self.h(&client_key);
@@ -386,7 +394,7 @@ impl ScramVersion {
         }
 
         let server_signature_bytes = self.hmac(stored_password.server_key, &auth_message)?;
-        let server_signature = base64::encode(server_signature_bytes);
+        let server_signature = base64::engine::general_purpose::STANDARD.encode(server_signature_bytes);
 
         // Form server final message
         let mut server_final = Vec::new();
@@ -450,7 +458,9 @@ fn auth_message(
 }
 
 fn without_proof(client_server_nonce: &str) -> Vec<u8> {
-    let encoded_gs2_header = base64::encode(GS2_HEADER).into_bytes();
+    use base64::Engine;
+
+    let encoded_gs2_header = base64::engine::general_purpose::STANDARD.encode(GS2_HEADER).into_bytes();
     let total_len = CHANNEL_BINDING_KEY.len()
         + encoded_gs2_header.len()
         + 1
@@ -717,9 +727,10 @@ mod tests {
     #[test]
     fn test_sasl_scram_sha1_server() {
         use scram_sha1::*;
+        use base64::Engine;
 
         let base64_salt = get_base64_salt_from_server_first_message(SERVER_FIRST_MESSAGE);
-        let salt = base64::decode(base64_salt).unwrap();
+        let salt = base64::engine::general_purpose::STANDARD.decode(base64_salt).unwrap();
         let base64_server_nonce =
             get_base64_server_nonce_from_server_first_message(SERVER_FIRST_MESSAGE, CLIENT_NONCE);
         let client_server_nonce = format!("{}{}", CLIENT_NONCE, base64_server_nonce);
@@ -763,9 +774,10 @@ mod tests {
     #[test]
     fn test_sasl_scram_sha256_server() {
         use scram_sha256::*;
+        use base64::Engine;
 
         let base64_salt = get_base64_salt_from_server_first_message(SERVER_FIRST_MESSAGE);
-        let salt = base64::decode(base64_salt).unwrap();
+        let salt = base64::engine::general_purpose::STANDARD.decode(base64_salt).unwrap();
         let base64_server_nonce =
             get_base64_server_nonce_from_server_first_message(SERVER_FIRST_MESSAGE, CLIENT_NONCE);
         let client_server_nonce = format!("{}{}", CLIENT_NONCE, base64_server_nonce);
@@ -809,9 +821,10 @@ mod tests {
     #[test]
     fn test_sasl_scram_sha512_server() {
         use scram_sha512::*;
+        use base64::Engine;
 
         let base64_salt = get_base64_salt_from_server_first_message(SERVER_FIRST_MESSAGE);
-        let salt = base64::decode(base64_salt).unwrap();
+        let salt = base64::engine::general_purpose::STANDARD.decode(base64_salt).unwrap();
         let base64_server_nonce =
             get_base64_server_nonce_from_server_first_message(SERVER_FIRST_MESSAGE, CLIENT_NONCE);
         let client_server_nonce = format!("{}{}", CLIENT_NONCE, base64_server_nonce);
