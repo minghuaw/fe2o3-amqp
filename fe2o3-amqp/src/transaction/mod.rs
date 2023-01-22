@@ -346,9 +346,38 @@ impl<'t> Transaction<'t> {
         })
     }
 
+    /// Post a ref of transactional work and wait for the acknowledgement.
+    pub async fn post_batchable_ref<T: SerializableBody>(
+        &self,
+        sender: &mut Sender,
+        sendable: &Sendable<T>,
+    ) -> Result<DeliveryFut<Result<Outcome, PostError>>, PostError>{
+        let state = TransactionalState {
+            txn_id: self.declared.txn_id.clone(),
+            outcome: None,
+        };
+        let state = DeliveryState::TransactionalState(state);
+        let settlement = sender
+            .inner
+            .send_ref_with_state::<T, PostError>(sendable, Some(state), false)
+            .await?;
+
+        Ok(DeliveryFut::from(settlement))
+    }
+
+    /// Post a ref of transactional work
+    pub async fn post_ref<T: SerializableBody>(
+        &self,
+        sender: &mut Sender,
+        sendable: &Sendable<T>,
+    ) -> Result<Outcome, PostError> {
+        let fut = self.post_batchable_ref(sender, sendable).await?;
+        fut.await
+    }
+
     /// Post a transactional work without waiting for the acknowledgement.
-    async fn post_batchable<T>(
-        &mut self,
+    pub async fn post_batchable<T>(
+        &self,
         sender: &mut Sender,
         sendable: impl Into<Sendable<T>>,
     ) -> Result<DeliveryFut<Result<Outcome, PostError>>, PostError>
@@ -377,7 +406,7 @@ impl<'t> Transaction<'t> {
 
     /// Post a transactional work
     pub async fn post<T>(
-        &mut self,
+        &self,
         sender: &mut Sender,
         sendable: impl Into<Sendable<T>>,
     ) -> Result<Outcome, PostError>
