@@ -1,5 +1,9 @@
 # Change Log
 
+## 0.7.24
+
+1. Relaxed `post` and `post_batachable` to require `&self` only.
+
 ## 0.7.23
 
 1. Updated `base64` to "0.21"
