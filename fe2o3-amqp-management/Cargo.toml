@@ -12,6 +12,13 @@ readme = "Readme.md"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
+[features]
+default = [
+    "transaction"
+]
+
+transaction = ["fe2o3-amqp/transaction"]
+
 [dependencies]
 fe2o3-amqp = { version = "0.7.11", path = "../fe2o3-amqp" }
 fe2o3-amqp-types =  { version = "0.6.2", path = "../fe2o3-amqp-types/" }

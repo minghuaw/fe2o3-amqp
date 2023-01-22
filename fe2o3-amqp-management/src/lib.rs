@@ -16,6 +16,8 @@ pub mod response;
 
 pub mod mgmt_ext;
 
+pub mod transaction;
+
 /// The default address of the management node.
 pub const MANAGEMENT_NODE_ADDRESS: &str = "$management";
 
