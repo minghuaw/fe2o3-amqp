@@ -22,8 +22,8 @@ use crate::{
 pub struct MgmtClient {
     req_id: u64,
     client_node_addr: String,
-    sender: Sender,
-    receiver: Receiver,
+    pub(crate) sender: Sender,
+    pub(crate) receiver: Receiver,
 }
 
 impl MgmtClient {

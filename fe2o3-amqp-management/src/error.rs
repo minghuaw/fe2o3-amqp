@@ -1,8 +1,8 @@
 //! Error types for the management client.
 
-use fe2o3_amqp::link::{
+use fe2o3_amqp::{link::{
     DispositionError, ReceiverAttachError, RecvError, SendError, SenderAttachError,
-};
+}, transaction::PostError};
 use fe2o3_amqp_types::messaging::Outcome;
 
 use crate::status::StatusCode;
@@ -118,4 +118,16 @@ impl From<StatusCodeNotFound> for Error {
     fn from(_: StatusCodeNotFound) -> Self {
         Self::StatusCodeNotFound
     }
+}
+
+/// Error with transaction operation with the management client.
+#[derive(Debug, thiserror::Error)]
+pub enum TxnMgmtLinkError {
+    /// Error with management link
+    #[error(transparent)]
+    MgmtClientError(#[from] Error),
+
+    /// Error with transactional posting
+    #[error(transparent)]
+    PostError(#[from] PostError),
 }
