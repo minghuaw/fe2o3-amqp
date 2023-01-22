@@ -1,5 +1,13 @@
 # Change Log
 
+## 0.8.10
+
+1. Ported 0.7.24
+
+## 0.7.24
+
+1. Relaxed `post` and `post_batachable` to require `&self` only.
+
 ## 0.8.9
 
 1. Ported 0.7.23
