@@ -42,8 +42,10 @@ where
         &mut self,
         client_first_message: &[u8],
     ) -> Result<Option<impl Into<Vec<u8>>>, ServerScramErrorKind> {
+        use base64::Engine;
+
         let nonce = generate_nonce();
-        let base64_server_nonce = base64::encode(nonce);
+        let base64_server_nonce = base64::engine::general_purpose::STANDARD.encode(nonce);
 
         let server_first = match self
             .credentials
