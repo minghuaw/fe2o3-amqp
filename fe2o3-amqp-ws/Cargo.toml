@@ -1,14 +1,14 @@
 [package]
-description = "WebSocket binding stream for AMQP1.0"
-documentation = "https://docs.rs/fe2o3-amqp-ws/"
-edition = "2021"
-homepage = "https://github.com/minghuaw/fe2o3-amqp"
-keywords = ["websocket", "tokio"]
-license = "MIT/Apache-2.0"
 name = "fe2o3-amqp-ws"
-readme = "Readme.md"
+version = "0.3.0"
+edition = "2021"
+description = "WebSocket binding stream for AMQP1.0"
+license = "MIT/Apache-2.0"
+documentation = "https://docs.rs/fe2o3-amqp-ws/"
+homepage = "https://github.com/minghuaw/fe2o3-amqp"
 repository = "https://github.com/minghuaw/fe2o3-amqp"
-version = "0.2.0"
+keywords = ["websocket", "tokio"]
+readme = "Readme.md"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
