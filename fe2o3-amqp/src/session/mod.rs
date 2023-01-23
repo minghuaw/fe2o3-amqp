@@ -88,39 +88,53 @@ impl<R> SessionHandle<R> {
         }
     }
 
-    /// End the session
-    ///
-    /// An `Error::IllegalState` will be returned if called after any of [`end`](#method.end),
-    /// [`end_with_error`](#method.end_with_error), [`on_end`](#on_end) has beend executed. This
-    /// will cause the JoinHandle to be polled after completion, which causes a panic.
-    pub async fn end(&mut self) -> Result<(), Error> {
-        // If sending is unsuccessful, the `SessionEngine` event loop is
-        // already dropped, this should be reflected by `JoinError` then.
-        let _ = self.control.send(SessionControl::End(None)).await;
-        self.on_end().await
-    }
-
-    /// Alias for [`end`](#method.end)
-    pub async fn close(&mut self) -> Result<(), Error> {
-        self.end().await
-    }
-
-    /// End the session with an error
-    ///
-    /// An `Error::IllegalState` will be returned if called after any of [`end`](#method.end),
-    /// [`end_with_error`](#method.end_with_error), [`on_end`](#on_end) has beend executed.    
-    /// This will cause the JoinHandle to be polled after completion, which causes a panic.
-    pub async fn end_with_error(
-        &mut self,
-        error: impl Into<definitions::Error>,
-    ) -> Result<(), Error> {
-        // If sending is unsuccessful, the `SessionEngine` event loop is
-        // already dropped, this should be reflected by `JoinError` then.
-        let _ = self
-            .control
-            .send(SessionControl::End(Some(error.into())))
-            .await;
-        self.on_end().await
+    cfg_not_wasm32! {
+        /// End the session
+        ///
+        /// An `Error::IllegalState` will be returned if called after any of [`end`](#method.end),
+        /// [`end_with_error`](#method.end_with_error), [`on_end`](#on_end) has beend executed. This
+        /// will cause the JoinHandle to be polled after completion, which causes a panic.
+        /// 
+        /// # wasm32 support
+        /// 
+        /// This method is not supported on wasm32 targets, please use `drop()` instead.
+        pub async fn end(&mut self) -> Result<(), Error> {
+            // If sending is unsuccessful, the `SessionEngine` event loop is
+            // already dropped, this should be reflected by `JoinError` then.
+            let _ = self.control.send(SessionControl::End(None)).await;
+            self.on_end().await
+        }
+    
+        /// Alias for [`end`](#method.end)
+        /// 
+        /// # wasm32 support
+        /// 
+        /// This method is not supported on wasm32 targets, please use `drop()` instead.
+        pub async fn close(&mut self) -> Result<(), Error> {
+            self.end().await
+        }
+    
+        /// End the session with an error
+        ///
+        /// An `Error::IllegalState` will be returned if called after any of [`end`](#method.end),
+        /// [`end_with_error`](#method.end_with_error), [`on_end`](#on_end) has beend executed.    
+        /// This will cause the JoinHandle to be polled after completion, which causes a panic.
+        /// 
+        /// # wasm32 support
+        /// 
+        /// This method is not supported on wasm32 targets, please use `drop()` instead.
+        pub async fn end_with_error(
+            &mut self,
+            error: impl Into<definitions::Error>,
+        ) -> Result<(), Error> {
+            // If sending is unsuccessful, the `SessionEngine` event loop is
+            // already dropped, this should be reflected by `JoinError` then.
+            let _ = self
+                .control
+                .send(SessionControl::End(Some(error.into())))
+                .await;
+            self.on_end().await
+        }
     }
 
     /// Returns when the underlying event loop has stopped

@@ -89,36 +89,46 @@ impl<R> ConnectionHandle<R> {
         }
     }
 
-    /// Close the connection
-    ///
-    /// An `Error::IllegalState` will be returned if this is called after executing any of
-    /// [`close`](#method.close), [`close_with_error`](#method.close_with_error) or
-    /// [`on_close`](#method.on_close). This will cause the JoinHandle to be polled after
-    /// completion, which causes a panic.
-    pub async fn close(&mut self) -> Result<(), Error> {
-        // If sending is unsuccessful, the `ConnectionEngine` event loop is
-        // already dropped, this should be reflected by `JoinError` then.
-        let _ = self.control.send(ConnectionControl::Close(None)).await;
-        self.on_close().await
-    }
-
-    /// Close the connection with an error
-    ///
-    /// An `Error::IllegalState` will be returned if this is called after executing any of
-    /// [`close`](#method.close), [`close_with_error`](#method.close_with_error) or
-    /// [`on_close`](#method.on_close). This will cause the JoinHandle to be polled after
-    /// completion, which causes a panic.
-    pub async fn close_with_error(
-        &mut self,
-        error: impl Into<definitions::Error>,
-    ) -> Result<(), Error> {
-        // If sending is unsuccessful, the `ConnectionEngine` event loop is
-        // already dropped, this should be reflected by `JoinError` then.
-        let _ = self
-            .control
-            .send(ConnectionControl::Close(Some(error.into())))
-            .await;
-        self.on_close().await
+    cfg_not_wasm32! {
+        /// Close the connection
+        ///
+        /// An `Error::IllegalState` will be returned if this is called after executing any of
+        /// [`close`](#method.close), [`close_with_error`](#method.close_with_error) or
+        /// [`on_close`](#method.on_close). This will cause the JoinHandle to be polled after
+        /// completion, which causes a panic.
+        /// 
+        /// # wasm32 support
+        /// 
+        /// This method is not supported in wasm32 targets, please use `drop()` instead.
+        pub async fn close(&mut self) -> Result<(), Error> {
+            // If sending is unsuccessful, the `ConnectionEngine` event loop is
+            // already dropped, this should be reflected by `JoinError` then.
+            let _ = self.control.send(ConnectionControl::Close(None)).await;
+            self.on_close().await
+        }
+    
+        /// Close the connection with an error
+        ///
+        /// An `Error::IllegalState` will be returned if this is called after executing any of
+        /// [`close`](#method.close), [`close_with_error`](#method.close_with_error) or
+        /// [`on_close`](#method.on_close). This will cause the JoinHandle to be polled after
+        /// completion, which causes a panic.
+        /// 
+        /// # wasm32 support
+        /// 
+        /// This method is not supported in wasm32 targets, please use `drop()` instead.
+        pub async fn close_with_error(
+            &mut self,
+            error: impl Into<definitions::Error>,
+        ) -> Result<(), Error> {
+            // If sending is unsuccessful, the `ConnectionEngine` event loop is
+            // already dropped, this should be reflected by `JoinError` then.
+            let _ = self
+                .control
+                .send(ConnectionControl::Close(Some(error.into())))
+                .await;
+            self.on_close().await
+        }
     }
 
     /// Returns when the underlying event loop has stopped
