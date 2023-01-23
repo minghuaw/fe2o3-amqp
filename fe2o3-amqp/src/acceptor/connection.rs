@@ -205,12 +205,13 @@ impl<Tls, Sasl> ConnectionAcceptor<Tls, Sasl> {
 
         let engine =
             ConnectionEngine::open(transport, listener_connection, control_rx, outgoing_rx).await?;
-        let handle = engine.spawn();
+        let (handle, outcome) = engine.spawn();
 
         let connection_handle = ConnectionHandle {
             is_closed: false,
             control: control_tx,
             handle,
+            outcome,
             outgoing: outgoing_tx,
             session_listener: begin_rx,
         };

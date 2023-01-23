@@ -1,14 +1,14 @@
 [package]
-name = "fe2o3-amqp-ws"
-version = "0.2.0"
-edition = "2021"
 description = "WebSocket binding stream for AMQP1.0"
-license = "MIT/Apache-2.0"
 documentation = "https://docs.rs/fe2o3-amqp-ws/"
+edition = "2021"
 homepage = "https://github.com/minghuaw/fe2o3-amqp"
-repository = "https://github.com/minghuaw/fe2o3-amqp"
 keywords = ["websocket", "tokio"]
+license = "MIT/Apache-2.0"
+name = "fe2o3-amqp-ws"
 readme = "Readme.md"
+repository = "https://github.com/minghuaw/fe2o3-amqp"
+version = "0.2.0"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
@@ -25,10 +25,28 @@ rustls-tls-native-roots = ["tokio-tungstenite/rustls-tls-native-roots"]
 rustls-tls-webpki-roots = ["tokio-tungstenite/rustls-tls-webpki-roots"]
 
 [dependencies]
-futures-util = "0.3"
-pin-project-lite = "0.2"
-tokio = "1"
-tokio-tungstenite = "0.18.0"
-tungstenite = "0.18.0"
+futures-util = { version = "0.3", features = ["sink"] }
 http = "0.2"
+pin-project-lite = "0.2"
 thiserror = "1"
+tungstenite = "0.18.0"
+
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+tokio = {version = "1", default-features = false, features = ["net"]}
+tokio-tungstenite = "0.18.0"
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+tokio = {version = "1", default-features = false, features = ["sync", "macros"]}
+getrandom = {version = "0.2", features = ["js"]}
+js-sys = "0.3"
+wasm-bindgen = "0.2"
+web-sys = {version = "0.3", features = [
+  "WebSocket",
+  "MessageEvent",
+  "CloseEvent",
+  "ErrorEvent",
+  "BinaryType",
+]}
+
+[target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
+tokio = { version = "1", features = ["net"] }

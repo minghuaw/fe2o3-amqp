@@ -1,5 +1,11 @@
 # Change Log
 
+## 0.8.11
+
+1. Experimental support for `wasm32-unknown-unknown` target (see `examples/wasm32-in-browser`).
+   `Close()`/`End()` are not supported yet and the user should simply drop the
+   `ConnectionHandle`/`SessionHandle` to close the connection/session.
+
 ## 0.8.10
 
 1. Ported 0.7.24

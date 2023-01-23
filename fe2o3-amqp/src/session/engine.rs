@@ -10,6 +10,7 @@ use crate::{
     endpoint::{self, IncomingChannel, Session},
     link::LinkFrame,
     util::Running,
+    SendBound,
 };
 
 use super::{
@@ -102,6 +103,7 @@ where
     }
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 impl<S> SessionEngine<S>
 where
     S: endpoint::SessionEndpoint<State = SessionState> + Send + Sync + 'static,
@@ -111,7 +113,26 @@ where
     pub fn spawn(self) -> JoinHandle<Result<(), Error>> {
         tokio::spawn(self.event_loop())
     }
+}
 
+#[cfg(target_arch = "wasm32")]
+impl<S> SessionEngine<S>
+where
+    S: endpoint::SessionEndpoint<State = SessionState> + SendBound + Sync + 'static,
+    AllocLinkError: From<S::AllocError>,
+    SessionInnerError: From<S::Error> + From<S::BeginError> + From<S::EndError>,
+{
+    pub fn spawn_local(self, local_set: &tokio::task::LocalSet) -> JoinHandle<Result<(), Error>> {
+        local_set.spawn_local(self.event_loop())
+    }
+}
+
+impl<S> SessionEngine<S>
+where
+    S: endpoint::SessionEndpoint<State = SessionState> + SendBound + Sync + 'static,
+    AllocLinkError: From<S::AllocError>,
+    SessionInnerError: From<S::Error> + From<S::BeginError> + From<S::EndError>,
+{
     #[inline]
     #[cfg_attr(feature = "tracing", tracing::instrument(skip_all))]
     async fn on_incoming(
@@ -334,6 +355,7 @@ where
     async fn on_error(&mut self, kind: &SessionInnerError) -> Result<Running, SessionInnerError> {
         use definitions::Error;
 
+        #[cfg(not(target_arch = "wasm32"))]
         #[cfg(all(feature = "transaction", feature = "acceptor"))]
         use fe2o3_amqp_types::transaction::TransactionError;
 
@@ -371,6 +393,7 @@ where
                 self.end_session(None).await
             }
 
+            #[cfg(not(target_arch = "wasm32"))]
             #[cfg(all(feature = "transaction", feature = "acceptor"))]
             SessionInnerError::UnknownTxnId => {
                 let error = Error::new(TransactionError::UnknownId, None, None);
