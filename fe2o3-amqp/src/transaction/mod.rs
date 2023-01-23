@@ -39,7 +39,7 @@ use fe2o3_amqp_types::{
     definitions::{self, AmqpError, DeliveryTag, Fields, SequenceNo},
     messaging::{
         message::__private::Serializable, Accepted, DeliveryState, Message, Modified, Outcome,
-        Rejected, Released, SerializableBody,
+        Rejected, Released, SerializableBody, MESSAGE_FORMAT,
     },
     performatives::Transfer,
     primitives::{OrderedMap, Symbol},
@@ -65,21 +65,12 @@ pub use owned::*;
 
 pub(crate) mod control_link_frame;
 
-#[cfg_attr(docsrs, doc(cfg(feature = "acceptor")))]
-#[cfg(feature = "acceptor")]
-pub mod coordinator;
-
-#[cfg_attr(docsrs, doc(cfg(feature = "acceptor")))]
-#[cfg(feature = "acceptor")]
-pub mod frame;
-
-#[cfg_attr(docsrs, doc(cfg(feature = "acceptor")))]
-#[cfg(feature = "acceptor")]
-pub mod manager;
-
-#[cfg_attr(docsrs, doc(cfg(feature = "acceptor")))]
-#[cfg(feature = "acceptor")]
-pub mod session;
+cfg_acceptor! {
+    pub mod coordinator;
+    pub mod frame;
+    pub mod manager;
+    pub mod session;
+}
 
 /// Trait for generics for TxnAcquisition
 #[async_trait]
@@ -346,9 +337,38 @@ impl<'t> Transaction<'t> {
         })
     }
 
+    /// Post a ref of transactional work and wait for the acknowledgement.
+    pub async fn post_batchable_ref<T: SerializableBody>(
+        &self,
+        sender: &mut Sender,
+        sendable: &Sendable<T>,
+    ) -> Result<DeliveryFut<Result<Outcome, PostError>>, PostError>{
+        let state = TransactionalState {
+            txn_id: self.declared.txn_id.clone(),
+            outcome: None,
+        };
+        let state = DeliveryState::TransactionalState(state);
+        let settlement = sender
+            .inner
+            .send_ref_with_state::<T, PostError>(sendable, Some(state), false)
+            .await?;
+
+        Ok(DeliveryFut::from(settlement))
+    }
+
+    /// Post a ref of transactional work
+    pub async fn post_ref<T: SerializableBody>(
+        &self,
+        sender: &mut Sender,
+        sendable: &Sendable<T>,
+    ) -> Result<Outcome, PostError> {
+        let fut = self.post_batchable_ref(sender, sendable).await?;
+        fut.await
+    }
+
     /// Post a transactional work without waiting for the acknowledgement.
-    async fn post_batchable<T>(
-        &mut self,
+    pub async fn post_batchable<T>(
+        &self,
         sender: &mut Sender,
         sendable: impl Into<Sendable<T>>,
     ) -> Result<DeliveryFut<Result<Outcome, PostError>>, PostError>
@@ -377,7 +397,7 @@ impl<'t> Transaction<'t> {
 
     /// Post a transactional work
     pub async fn post<T>(
-        &mut self,
+        &self,
         sender: &mut Sender,
         sendable: impl Into<Sendable<T>>,
     ) -> Result<Outcome, PostError>
@@ -504,7 +524,7 @@ impl<'t> Drop for Transaction<'t> {
                         handle,
                         delivery_id: None,
                         delivery_tag: Some(delivery_tag.clone()),
-                        message_format: Some(0),
+                        message_format: Some(MESSAGE_FORMAT),
                         settled: Some(false),
                         more: false, // This message should be small enough
                         rcv_settle_mode: None,
@@ -541,7 +561,7 @@ impl<'t> Drop for Transaction<'t> {
                     // The transfer is sent unsettled and will be
                     // inserted into
                     let (tx, rx) = oneshot::channel();
-                    let unsettled = UnsettledMessage::new(payload_copy, tx);
+                    let unsettled = UnsettledMessage::new(payload_copy, None, MESSAGE_FORMAT, tx);
                     {
                         let mut guard = match inner.link.unsettled.try_write() {
                             Some(guard) => guard,

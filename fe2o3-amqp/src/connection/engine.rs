@@ -9,6 +9,7 @@ use fe2o3_amqp_types::performatives::Close;
 use futures_util::{SinkExt, StreamExt};
 use tokio::io::{AsyncRead, AsyncWrite};
 use tokio::sync::mpsc::Receiver;
+use tokio::sync::oneshot;
 use tokio::task::JoinHandle;
 
 use crate::control::ConnectionControl;
@@ -17,7 +18,7 @@ use crate::frames::amqp::{self, Frame, FrameBody};
 use crate::session::frame::{SessionFrame, SessionFrameBody};
 use crate::transport::Transport;
 use crate::util::Running;
-use crate::{endpoint, transport};
+use crate::{endpoint, transport, SendBound};
 
 use super::{heartbeat::HeartBeat, ConnectionState};
 use super::{AllocSessionError, ConnectionInnerError, ConnectionStateError, Error, OpenError};
@@ -33,7 +34,36 @@ pub(crate) struct ConnectionEngine<Io, C> {
 
 impl<Io, C> ConnectionEngine<Io, C>
 where
-    Io: AsyncRead + AsyncWrite + std::fmt::Debug + Send + Unpin + 'static,
+    Io: AsyncRead + AsyncWrite + std::fmt::Debug + SendBound + Unpin + 'static,
+    C: endpoint::Connection<State = ConnectionState> + std::fmt::Debug + Send + Sync + 'static,
+    C::AllocError: Into<AllocSessionError>,
+    C::CloseError: From<transport::Error>,
+    C::OpenError: From<transport::Error>,
+    ConnectionInnerError: From<C::Error> + From<C::OpenError> + From<C::CloseError>,
+    ConnectionStateError: From<C::OpenError> + From<C::CloseError>,
+    OpenError: From<C::OpenError>,
+{
+    #[cfg(not(target_arch = "wasm32"))]
+    pub fn spawn(self) -> (JoinHandle<()>, oneshot::Receiver<Result<(), Error>>) {
+        let (tx, rx) = oneshot::channel();
+        let handle = tokio::spawn(self.event_loop(tx));
+        (handle, rx)
+    }
+
+    #[cfg(target_arch = "wasm32")]
+    pub fn spawn_local(
+        self,
+        local_set: &tokio::task::LocalSet,
+    ) -> (JoinHandle<()>, oneshot::Receiver<Result<(), Error>>) {
+        let (tx, rx) = oneshot::channel();
+        let handle = local_set.spawn_local(self.event_loop(tx));
+        (handle, rx)
+    }
+}
+
+impl<Io, C> ConnectionEngine<Io, C>
+where
+    Io: AsyncRead + AsyncWrite + std::fmt::Debug + SendBound + Unpin + 'static,
     C: endpoint::Connection<State = ConnectionState> + std::fmt::Debug + Send + Sync + 'static,
     C::AllocError: Into<AllocSessionError>,
     C::CloseError: From<transport::Error>,
@@ -200,10 +230,6 @@ where
                 }
             }
         }
-    }
-
-    pub fn spawn(self) -> JoinHandle<Result<(), Error>> {
-        tokio::spawn(self.event_loop())
     }
 
     #[cfg_attr(feature = "tracing", tracing::instrument(skip_all))]
@@ -444,7 +470,7 @@ where
     }
 
     #[cfg_attr(feature = "tracing", tracing::instrument(name = "Connection::event_loop", skip(self), fields(container_id = %self.connection.local_open().container_id)))]
-    async fn event_loop(mut self) -> Result<(), Error> {
+    async fn event_loop(mut self, tx: oneshot::Sender<Result<(), Error>>) {
         let mut outcome = Ok(());
         loop {
             let result = tokio::select! {
@@ -551,6 +577,7 @@ where
         #[cfg(feature = "log")]
         log::debug!("Stopped");
 
-        outcome.and(close).map_err(Into::into)
+        let result = outcome.and(close).map_err(Into::into);
+        let _ = tx.send(result);
     }
 }

@@ -1,6 +1,6 @@
 //! Builder for [`crate::Connection`]
 
-use std::{convert::TryInto, io, marker::PhantomData, time::Duration};
+use std::{io, marker::PhantomData, time::Duration};
 
 use fe2o3_amqp_types::{
     definitions::{Fields, IetfLanguageTag, Milliseconds, MIN_MAX_FRAME_SIZE},
@@ -11,18 +11,25 @@ use futures_util::{SinkExt, StreamExt};
 use serde_amqp::primitives::Symbol;
 use tokio::{
     io::{AsyncRead, AsyncWrite, ReadHalf, WriteHalf},
-    net::TcpStream,
     sync::mpsc::{self},
 };
 use tokio_util::codec::{FramedRead, FramedWrite};
-use url::Url;
+
+cfg_not_wasm32! {
+    use std::convert::TryInto;
+    use url::Url;
+    use tokio::net::TcpStream;
+}
 
 use crate::{
     connection::{Connection, ConnectionState},
+    control::ConnectionControl,
     frames::sasl,
     sasl_profile::{Negotiation, SaslProfile},
+    session::frame::SessionFrame,
     transport::Transport,
     transport::{error::NegotiationError, protocol_header::ProtocolHeaderCodec},
+    SendBound,
 };
 
 use super::{
@@ -35,6 +42,16 @@ use tracing::instrument;
 
 pub(crate) const DEFAULT_CONTROL_CHAN_BUF: usize = 128;
 pub(crate) const DEFAULT_OUTGOING_BUFFER_SIZE: usize = u16::MAX as usize;
+
+cfg_not_wasm32! {
+    fn default_port(scheme: &str) -> Option<u16> {
+        match scheme {
+            "amqp" => Some(fe2o3_amqp_types::definitions::PORT),
+            "amqps" => Some(fe2o3_amqp_types::definitions::SECURE_PORT),
+            _ => None,
+        }
+    }
+}
 
 pub(crate) mod mode {
     /// Type state for [`crate::connection::Builder`]
@@ -195,7 +212,7 @@ impl<'a, Mode: std::fmt::Debug> std::fmt::Debug for Builder<'a, Mode, tokio_rust
     }
 }
 
-#[cfg(feature = "native-tls")]
+#[cfg(all(feature = "native-tls", not(target_arch = "wasm32")))]
 impl<'a, Mode: std::fmt::Debug> std::fmt::Debug
     for Builder<'a, Mode, tokio_native_tls::TlsConnector>
 {
@@ -338,8 +355,22 @@ impl<'a, Mode, Tls> Builder<'a, Mode, Tls> {
 
     /// Alias for [`native_tls_connector`](#method.native_tls_connector) if only `"native-tls"` is
     /// enabled.
-    #[cfg_attr(docsrs, doc(cfg(all(feature = "native-tls", not(feature = "rustls")))))]
-    #[cfg(any(docsrs, all(feature = "native-tls", not(feature = "rustls"))))]
+    #[cfg_attr(
+        docsrs,
+        doc(cfg(all(
+            feature = "native-tls",
+            not(feature = "rustls"),
+            not(target_arch = "wasm32")
+        )))
+    )]
+    #[cfg(any(
+        docsrs,
+        all(
+            feature = "native-tls",
+            not(feature = "rustls"),
+            not(target_arch = "wasm32")
+        )
+    ))]
     pub fn tls_connector(
         self,
         tls_connector: tokio_native_tls::TlsConnector,
@@ -350,8 +381,11 @@ impl<'a, Mode, Tls> Builder<'a, Mode, Tls> {
     /// Set the TLS connector with `tokio-native-tls`
     ///
     /// If only one of `"rustls"` or `"native-tls"` is enabled, a convenience alias function `tls_connector()` is provided.
-    #[cfg_attr(docsrs, doc(cfg(feature = "native-tls")))]
-    #[cfg(feature = "native-tls")]
+    #[cfg_attr(
+        docsrs,
+        doc(cfg(all(feature = "native-tls"), not(target_arch = "wasm32")))
+    )]
+    #[cfg(all(feature = "native-tls", not(target_arch = "wasm32")))]
     pub fn native_tls_connector(
         self,
         tls_connector: tokio_native_tls::TlsConnector,
@@ -541,7 +575,7 @@ impl<'a, Tls> Builder<'a, mode::ConnectorWithId, Tls> {
         mut profile: SaslProfile,
     ) -> Result<(), NegotiationError>
     where
-        Io: AsyncRead + AsyncWrite + std::fmt::Debug + Send + Unpin + 'static,
+        Io: AsyncRead + AsyncWrite + std::fmt::Debug + Unpin + 'static,
     {
         // TODO: timeout?
         while let Some(frame) = transport.next().await {
@@ -587,12 +621,18 @@ impl<'a, Tls> Builder<'a, mode::ConnectorWithId, Tls> {
         )))
     }
 
-    async fn connect_with_stream<Io>(
+    async fn connect_with_stream<Io, F>(
         mut self,
         stream: Io,
+        spawn_engine_fn: F,
     ) -> Result<ConnectionHandle<()>, OpenError>
     where
-        Io: AsyncRead + AsyncWrite + std::fmt::Debug + Send + Unpin + 'static,
+        Io: AsyncRead + AsyncWrite + std::fmt::Debug + SendBound + Unpin + 'static,
+        F: FnOnce(
+            ConnectionEngine<Io, Connection>,
+            mpsc::Sender<ConnectionControl>,
+            mpsc::Sender<SessionFrame>,
+        ) -> Result<ConnectionHandle<()>, OpenError>,
     {
         match self.sasl_profile.take() {
             Some(profile) => {
@@ -610,20 +650,46 @@ impl<'a, Tls> Builder<'a, mode::ConnectorWithId, Tls> {
                 let framed_read = framed_read.map_decoder(|_| ProtocolHeaderCodec::new());
 
                 // Then perform AMQP negotiation
-                self.connect_amqp_with_framed(framed_write, framed_read)
+                self.connect_amqp_with_framed(framed_write, framed_read, spawn_engine_fn)
                     .await
             }
-            None => self.connect_amqp_with_stream(stream).await,
+            None => self.connect_amqp_with_stream(stream, spawn_engine_fn).await,
         }
     }
 
-    async fn connect_amqp_with_framed<Io>(
+    async fn connect_amqp_with_stream<Io, F>(
+        self,
+        stream: Io,
+        spawn_engine_fn: F,
+    ) -> Result<ConnectionHandle<()>, OpenError>
+    where
+        Io: AsyncRead + AsyncWrite + std::fmt::Debug + SendBound + Unpin + 'static,
+        F: FnOnce(
+            ConnectionEngine<Io, Connection>,
+            mpsc::Sender<ConnectionControl>,
+            mpsc::Sender<SessionFrame>,
+        ) -> Result<ConnectionHandle<()>, OpenError>,
+    {
+        let (reader, writer) = tokio::io::split(stream);
+        let framed_write = FramedWrite::new(writer, ProtocolHeaderCodec::new());
+        let framed_read = FramedRead::new(reader, ProtocolHeaderCodec::new());
+        self.connect_amqp_with_framed(framed_write, framed_read, spawn_engine_fn)
+            .await
+    }
+
+    async fn connect_amqp_with_framed<Io, F>(
         self,
         framed_write: FramedWrite<WriteHalf<Io>, ProtocolHeaderCodec>,
         framed_read: FramedRead<ReadHalf<Io>, ProtocolHeaderCodec>,
+        spawn_engine_fn: F,
     ) -> Result<ConnectionHandle<()>, OpenError>
     where
-        Io: AsyncRead + AsyncWrite + std::fmt::Debug + Send + Unpin + 'static,
+        Io: AsyncRead + AsyncWrite + std::fmt::Debug + SendBound + Unpin + 'static,
+        F: FnOnce(
+            ConnectionEngine<Io, Connection>,
+            mpsc::Sender<ConnectionControl>,
+            mpsc::Sender<SessionFrame>,
+        ) -> Result<ConnectionHandle<()>, OpenError>,
     {
         // Exchange AMQP headers
         let mut local_state = ConnectionState::Start;
@@ -647,34 +713,86 @@ impl<'a, Tls> Builder<'a, mode::ConnectorWithId, Tls> {
         let connection = Connection::new(local_state, local_open);
 
         let engine = ConnectionEngine::open(transport, connection, control_rx, outgoing_rx).await?;
-        let handle = engine.spawn();
-
-        let connection_handle = ConnectionHandle {
-            is_closed: false,
-            control: control_tx,
-            handle,
-            outgoing: outgoing_tx, // session_control: session_control_tx
-            session_listener: (),
-        };
-
-        Ok(connection_handle)
-    }
-
-    async fn connect_amqp_with_stream<Io>(
-        self,
-        stream: Io,
-    ) -> Result<ConnectionHandle<()>, OpenError>
-    where
-        Io: AsyncRead + AsyncWrite + std::fmt::Debug + Send + Unpin + 'static,
-    {
-        let (reader, writer) = tokio::io::split(stream);
-        let framed_write = FramedWrite::new(writer, ProtocolHeaderCodec::new());
-        let framed_read = FramedRead::new(reader, ProtocolHeaderCodec::new());
-        self.connect_amqp_with_framed(framed_write, framed_read)
-            .await
+        // Self::spawn_engine(engine, control_tx, outgoing_tx)
+        (spawn_engine_fn)(engine, control_tx, outgoing_tx)
     }
 }
 
+/* -------------------------------------------------------------------------- */
+/*                                 Without TLS                                */
+/* -------------------------------------------------------------------------- */
+
+impl<'a> Builder<'a, mode::ConnectorWithId, ()> {
+    #[cfg(all(feature = "rustls", not(feature = "native-tls")))]
+    async fn connect_tls_with_rustls_default<Io, F>(
+        self,
+        stream: Io,
+        domain: &str,
+        spawn_engine_fn: F,
+    ) -> Result<ConnectionHandle<()>, OpenError>
+    where
+        Io: AsyncRead + AsyncWrite + std::fmt::Debug + SendBound + Unpin + 'static,
+        F: FnOnce(
+            ConnectionEngine<tokio_rustls::client::TlsStream<Io>, Connection>,
+            mpsc::Sender<ConnectionControl>,
+            mpsc::Sender<SessionFrame>,
+        ) -> Result<ConnectionHandle<()>, OpenError>,
+    {
+        use librustls::{ClientConfig, OwnedTrustAnchor, RootCertStore};
+        use std::sync::Arc;
+        use tokio_rustls::TlsConnector;
+
+        let mut root_cert_store = RootCertStore::empty();
+        root_cert_store.add_server_trust_anchors(webpki_roots::TLS_SERVER_ROOTS.0.iter().map(
+            |ta| {
+                OwnedTrustAnchor::from_subject_spki_name_constraints(
+                    ta.subject,
+                    ta.spki,
+                    ta.name_constraints,
+                )
+            },
+        ));
+        let config = ClientConfig::builder()
+            .with_safe_defaults()
+            .with_root_certificates(root_cert_store)
+            .with_no_client_auth();
+        let connector = TlsConnector::from(Arc::new(config));
+        let tls_stream =
+            Transport::connect_tls_with_rustls(stream, domain, &connector, self.alt_tls_estab)
+                .await?;
+        self.connect_with_stream(tls_stream, spawn_engine_fn).await
+    }
+
+    #[cfg(all(
+        feature = "native-tls",
+        not(feature = "rustls"),
+        not(target_arch = "wasm32")
+    ))]
+    async fn connect_tls_with_native_tls_default<Io, F>(
+        self,
+        stream: Io,
+        domain: &str,
+        spawn_engine_fn: F,
+    ) -> Result<ConnectionHandle<()>, OpenError>
+    where
+        Io: AsyncRead + AsyncWrite + std::fmt::Debug + SendBound + Unpin + 'static,
+        F: FnOnce(
+            ConnectionEngine<tokio_native_tls::TlsStream<Io>, Connection>,
+            mpsc::Sender<ConnectionControl>,
+            mpsc::Sender<SessionFrame>,
+        ) -> Result<ConnectionHandle<()>, OpenError>,
+    {
+        let connector = libnative_tls::TlsConnector::new()
+            .map_err(|e| OpenError::Io(io::Error::new(io::ErrorKind::Other, format!("{:?}", e))))?;
+        let connector = tokio_native_tls::TlsConnector::from(connector);
+        let tls_stream =
+            Transport::connect_tls_with_native_tls(stream, domain, &connector, self.alt_tls_estab)
+                .await?;
+        self.connect_with_stream(tls_stream, spawn_engine_fn).await
+    }
+}
+
+#[cfg(not(target_arch = "wasm32"))]
 impl<'a> Builder<'a, mode::ConnectorWithId, ()> {
     /// Open a [`crate::Connection`] with an url
     ///
@@ -808,22 +926,28 @@ impl<'a> Builder<'a, mode::ConnectorWithId, ()> {
     #[allow(unreachable_code)]
     pub async fn open_with_stream<Io>(self, stream: Io) -> Result<ConnectionHandle<()>, OpenError>
     where
-        Io: AsyncRead + AsyncWrite + std::fmt::Debug + Send + Unpin + 'static,
+        Io: AsyncRead + AsyncWrite + std::fmt::Debug + SendBound + Unpin + 'static,
     {
         match self.scheme {
-            "amqp" => self.connect_with_stream(stream).await,
+            "amqp" => self.connect_with_stream(stream, spawn_engine).await,
             "amqps" => {
                 #[cfg(all(feature = "rustls", not(feature = "native-tls")))]
                 {
                     let domain = self.domain.ok_or(OpenError::InvalidDomain)?;
-                    return self.connect_tls_with_rustls_default(stream, domain).await;
+                    return self
+                        .connect_tls_with_rustls_default(stream, domain, spawn_engine)
+                        .await;
                 }
 
-                #[cfg(all(feature = "native-tls", not(feature = "rustls")))]
+                #[cfg(all(
+                    feature = "native-tls",
+                    not(feature = "rustls"),
+                    not(target_arch = "wasm32")
+                ))]
                 {
                     let domain = self.domain.ok_or_else(|| OpenError::InvalidDomain)?;
                     return self
-                        .connect_tls_with_native_tls_default(stream, domain)
+                        .connect_tls_with_native_tls_default(stream, domain, spawn_engine)
                         .await;
                 }
 
@@ -832,60 +956,63 @@ impl<'a> Builder<'a, mode::ConnectorWithId, ()> {
             _ => Err(OpenError::InvalidScheme),
         }
     }
+}
 
-    #[cfg(all(feature = "rustls", not(feature = "native-tls")))]
-    async fn connect_tls_with_rustls_default<Io>(
+#[cfg(target_arch = "wasm32")]
+impl<'a> Builder<'a, mode::ConnectorWithId, ()> {
+    /// Open a connection with the given stream onto a [`tokio::task::LocalSet`].
+    pub async fn open_with_stream_on_local_set<Io>(
         self,
         stream: Io,
-        domain: &str,
+        local_set: &tokio::task::LocalSet,
     ) -> Result<ConnectionHandle<()>, OpenError>
     where
-        Io: AsyncRead + AsyncWrite + std::fmt::Debug + Send + Unpin + 'static,
+        Io: AsyncRead + AsyncWrite + std::fmt::Debug + Unpin + 'static,
     {
-        use librustls::{ClientConfig, OwnedTrustAnchor, RootCertStore};
-        use std::sync::Arc;
-        use tokio_rustls::TlsConnector;
+        match self.scheme {
+            "amqp" => {
+                let spawn_engine_fn = |engine, control_tx, outgoing_tx| {
+                    spawn_local_engine(engine, control_tx, outgoing_tx, local_set)
+                };
+                self.connect_with_stream(stream, spawn_engine_fn).await
+            }
+            "amqps" => {
+                #[cfg(all(feature = "rustls", not(feature = "native-tls")))]
+                {
+                    let domain = self.domain.ok_or(OpenError::InvalidDomain)?;
+                    let spawn_engine_fn = |engine, control_tx, outgoing_tx| {
+                        spawn_local_engine(engine, control_tx, outgoing_tx, local_set)
+                    };
+                    return self
+                        .connect_tls_with_rustls_default(stream, domain, spawn_engine_fn)
+                        .await;
+                }
 
-        let mut root_cert_store = RootCertStore::empty();
-        root_cert_store.add_server_trust_anchors(webpki_roots::TLS_SERVER_ROOTS.0.iter().map(
-            |ta| {
-                OwnedTrustAnchor::from_subject_spki_name_constraints(
-                    ta.subject,
-                    ta.spki,
-                    ta.name_constraints,
-                )
-            },
-        ));
-        let config = ClientConfig::builder()
-            .with_safe_defaults()
-            .with_root_certificates(root_cert_store)
-            .with_no_client_auth();
-        let connector = TlsConnector::from(Arc::new(config));
-        let tls_stream =
-            Transport::connect_tls_with_rustls(stream, domain, &connector, self.alt_tls_estab)
-                .await?;
-        self.connect_with_stream(tls_stream).await
-    }
+                #[cfg(all(
+                    feature = "native-tls",
+                    not(feature = "rustls"),
+                    not(target_arch = "wasm32")
+                ))]
+                {
+                    let domain = self.domain.ok_or_else(|| OpenError::InvalidDomain)?;
+                    return self
+                        .connect_tls_with_native_tls_default(stream, domain, spawn_engine)
+                        .await;
+                }
 
-    #[cfg(all(feature = "native-tls", not(feature = "rustls")))]
-    async fn connect_tls_with_native_tls_default<Io>(
-        self,
-        stream: Io,
-        domain: &str,
-    ) -> Result<ConnectionHandle<()>, OpenError>
-    where
-        Io: AsyncRead + AsyncWrite + std::fmt::Debug + Send + Unpin + 'static,
-    {
-        let connector = libnative_tls::TlsConnector::new()
-            .map_err(|e| OpenError::Io(io::Error::new(io::ErrorKind::Other, format!("{:?}", e))))?;
-        let connector = tokio_native_tls::TlsConnector::from(connector);
-        let tls_stream =
-            Transport::connect_tls_with_native_tls(stream, domain, &connector, self.alt_tls_estab)
-                .await?;
-        self.connect_with_stream(tls_stream).await
+                #[allow(unused)]
+                Err(OpenError::TlsConnectorNotFound)
+            }
+            _ => Err(OpenError::InvalidScheme),
+        }
     }
 }
 
+/* -------------------------------------------------------------------------- */
+/*                               TLS with rustls                              */
+/* -------------------------------------------------------------------------- */
+
+#[cfg(not(target_arch = "wasm32"))]
 #[cfg(all(feature = "rustls"))]
 impl<'a> Builder<'a, mode::ConnectorWithId, tokio_rustls::TlsConnector> {
     /// Open a [`crate::Connection`] with an url
@@ -987,10 +1114,10 @@ impl<'a> Builder<'a, mode::ConnectorWithId, tokio_rustls::TlsConnector> {
     /// `tokio_rustls::TlsConnector`.
     pub async fn open_with_stream<Io>(self, stream: Io) -> Result<ConnectionHandle<()>, OpenError>
     where
-        Io: AsyncRead + AsyncWrite + std::fmt::Debug + Send + Unpin + 'static,
+        Io: AsyncRead + AsyncWrite + std::fmt::Debug + SendBound + Unpin + 'static,
     {
         match self.scheme {
-            "amqp" => self.connect_with_stream(stream).await,
+            "amqp" => self.connect_with_stream(stream, spawn_engine).await,
             "amqps" => {
                 let domain = self.domain.ok_or(OpenError::InvalidDomain)?;
                 let tls_stream = Transport::connect_tls_with_rustls(
@@ -1000,13 +1127,18 @@ impl<'a> Builder<'a, mode::ConnectorWithId, tokio_rustls::TlsConnector> {
                     self.alt_tls_estab,
                 )
                 .await?;
-                self.connect_with_stream(tls_stream).await
+                self.connect_with_stream(tls_stream, spawn_engine).await
             }
             _ => Err(OpenError::InvalidScheme),
         }
     }
 }
 
+/* -------------------------------------------------------------------------- */
+/*                             TLS with native-tls                            */
+/* -------------------------------------------------------------------------- */
+
+#[cfg(not(target_arch = "wasm32"))]
 #[cfg(all(feature = "native-tls"))]
 impl<'a> Builder<'a, mode::ConnectorWithId, tokio_native_tls::TlsConnector> {
     /// Open a [`crate::Connection`] with an url
@@ -1108,10 +1240,10 @@ impl<'a> Builder<'a, mode::ConnectorWithId, tokio_native_tls::TlsConnector> {
     /// `tokio_rustls::TlsConnector`.
     pub async fn open_with_stream<Io>(self, stream: Io) -> Result<ConnectionHandle<()>, OpenError>
     where
-        Io: AsyncRead + AsyncWrite + std::fmt::Debug + Send + Unpin + 'static,
+        Io: AsyncRead + AsyncWrite + std::fmt::Debug + SendBound + Unpin + 'static,
     {
         match self.scheme {
-            "amqp" => self.connect_with_stream(stream).await,
+            "amqp" => self.connect_with_stream(stream, spawn_engine).await,
             "amqps" => {
                 let domain = self.domain.ok_or(OpenError::InvalidDomain)?;
                 let tls_stream = Transport::connect_tls_with_native_tls(
@@ -1121,19 +1253,58 @@ impl<'a> Builder<'a, mode::ConnectorWithId, tokio_native_tls::TlsConnector> {
                     self.alt_tls_estab,
                 )
                 .await?;
-                self.connect_with_stream(tls_stream).await
+                self.connect_with_stream(tls_stream, spawn_engine).await
             }
             _ => Err(OpenError::InvalidScheme),
         }
     }
 }
 
-fn default_port(scheme: &str) -> Option<u16> {
-    match scheme {
-        "amqp" => Some(fe2o3_amqp_types::definitions::PORT),
-        "amqps" => Some(fe2o3_amqp_types::definitions::SECURE_PORT),
-        _ => None,
-    }
+#[cfg(not(target_arch = "wasm32"))]
+fn spawn_engine<Io>(
+    engine: ConnectionEngine<Io, Connection>,
+    control_tx: mpsc::Sender<ConnectionControl>,
+    outgoing_tx: mpsc::Sender<SessionFrame>,
+) -> Result<ConnectionHandle<()>, OpenError>
+where
+    Io: AsyncRead + AsyncWrite + std::fmt::Debug + Send + Unpin + 'static,
+{
+    let (handle, outcome) = engine.spawn();
+
+    let connection_handle = ConnectionHandle {
+        is_closed: false,
+        control: control_tx,
+        handle,
+        outcome,
+        outgoing: outgoing_tx, // session_control: session_control_tx
+        session_listener: (),
+    };
+
+    Ok(connection_handle)
+}
+
+#[cfg(target_arch = "wasm32")]
+fn spawn_local_engine<Io>(
+    engine: ConnectionEngine<Io, Connection>,
+    control_tx: mpsc::Sender<ConnectionControl>,
+    outgoing_tx: mpsc::Sender<SessionFrame>,
+    local_set: &tokio::task::LocalSet,
+) -> Result<ConnectionHandle<()>, OpenError>
+where
+    Io: AsyncRead + AsyncWrite + std::fmt::Debug + Unpin + 'static,
+{
+    let (handle, outcome) = engine.spawn_local(local_set);
+
+    let connection_handle = ConnectionHandle {
+        is_closed: false,
+        control: control_tx,
+        handle,
+        outcome,
+        outgoing: outgoing_tx, // session_control: session_control_tx
+        session_listener: (),
+    };
+
+    Ok(connection_handle)
 }
 
 #[cfg(test)]

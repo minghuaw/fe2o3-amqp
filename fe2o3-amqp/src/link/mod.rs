@@ -710,7 +710,7 @@ impl LinkRelay<OutputHandle> {
                         } else if let Some(msg) =
                             guard.as_mut().and_then(|m| m.get_mut(&delivery_tag))
                         {
-                            *msg.state_mut() = state;
+                            msg.state = state;
                         }
                     }
 
@@ -841,13 +841,9 @@ pub(crate) fn get_max_message_size(local: u64, remote: Option<u64>) -> u64 {
 
 #[cfg(test)]
 mod tests {
-    use fe2o3_amqp_types::messaging::Target;
-
     use crate::link::{
-        receiver::ReceiverInner, sender::SenderInner, state::LinkFlowStateInner, ReceiverLink,
+        state::LinkFlowStateInner,
     };
-
-    use super::SenderLink;
 
     #[tokio::test]
     async fn test_producer_notify() {
@@ -876,23 +872,6 @@ mod tests {
         });
 
         notified.await;
-        println!("wait passed");
-
         handle.await.unwrap();
-    }
-
-    #[test]
-    fn test_size_of_sender_and_receiver_links() {
-        let size = std::mem::size_of::<SenderLink<Target>>();
-        println!("SenderLink: {:?}", size);
-
-        let size = std::mem::size_of::<ReceiverLink<Target>>();
-        println!("ReceiverLink: {:?}", size);
-
-        let size = std::mem::size_of::<SenderInner<SenderLink<Target>>>();
-        println!("SenderInner: {:?}", size);
-
-        let size = std::mem::size_of::<ReceiverInner<ReceiverLink<Target>>>();
-        println!("ReceiverInner: {:?}", size);
     }
 }

@@ -11,17 +11,17 @@ use tokio::sync::mpsc;
 use crate::{
     link::LinkRelay,
     session::frame::{SessionFrame, SessionOutgoingItem},
-    Payload,
+    Payload, SendBound,
 };
 
 use super::{IncomingChannel, InputHandle, LinkFlow, OutgoingChannel, OutputHandle};
 
 #[async_trait]
 pub(crate) trait Session {
-    type AllocError: Send;
-    type BeginError: Send;
-    type EndError: Send;
-    type Error: Send;
+    type AllocError: SendBound;
+    type BeginError: SendBound;
+    type EndError: SendBound;
+    type Error: SendBound;
     type State;
 
     fn local_state(&self) -> &Self::State;

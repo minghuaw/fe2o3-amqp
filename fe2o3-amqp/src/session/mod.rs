@@ -21,7 +21,6 @@ use tokio::{
 };
 
 use crate::{
-    connection::ConnectionHandle,
     control::SessionControl,
     endpoint::{self, IncomingChannel, InputHandle, LinkFlow, OutgoingChannel, OutputHandle},
     link::{LinkFrame, LinkRelay},
@@ -89,39 +88,53 @@ impl<R> SessionHandle<R> {
         }
     }
 
-    /// End the session
-    ///
-    /// An `Error::IllegalState` will be returned if called after any of [`end`](#method.end),
-    /// [`end_with_error`](#method.end_with_error), [`on_end`](#on_end) has beend executed. This
-    /// will cause the JoinHandle to be polled after completion, which causes a panic.
-    pub async fn end(&mut self) -> Result<(), Error> {
-        // If sending is unsuccessful, the `SessionEngine` event loop is
-        // already dropped, this should be reflected by `JoinError` then.
-        let _ = self.control.send(SessionControl::End(None)).await;
-        self.on_end().await
-    }
-
-    /// Alias for [`end`](#method.end)
-    pub async fn close(&mut self) -> Result<(), Error> {
-        self.end().await
-    }
-
-    /// End the session with an error
-    ///
-    /// An `Error::IllegalState` will be returned if called after any of [`end`](#method.end),
-    /// [`end_with_error`](#method.end_with_error), [`on_end`](#on_end) has beend executed.    
-    /// This will cause the JoinHandle to be polled after completion, which causes a panic.
-    pub async fn end_with_error(
-        &mut self,
-        error: impl Into<definitions::Error>,
-    ) -> Result<(), Error> {
-        // If sending is unsuccessful, the `SessionEngine` event loop is
-        // already dropped, this should be reflected by `JoinError` then.
-        let _ = self
-            .control
-            .send(SessionControl::End(Some(error.into())))
-            .await;
-        self.on_end().await
+    cfg_not_wasm32! {
+        /// End the session
+        ///
+        /// An `Error::IllegalState` will be returned if called after any of [`end`](#method.end),
+        /// [`end_with_error`](#method.end_with_error), [`on_end`](#on_end) has beend executed. This
+        /// will cause the JoinHandle to be polled after completion, which causes a panic.
+        /// 
+        /// # wasm32 support
+        /// 
+        /// This method is not supported on wasm32 targets, please use `drop()` instead.
+        pub async fn end(&mut self) -> Result<(), Error> {
+            // If sending is unsuccessful, the `SessionEngine` event loop is
+            // already dropped, this should be reflected by `JoinError` then.
+            let _ = self.control.send(SessionControl::End(None)).await;
+            self.on_end().await
+        }
+    
+        /// Alias for [`end`](#method.end)
+        /// 
+        /// # wasm32 support
+        /// 
+        /// This method is not supported on wasm32 targets, please use `drop()` instead.
+        pub async fn close(&mut self) -> Result<(), Error> {
+            self.end().await
+        }
+    
+        /// End the session with an error
+        ///
+        /// An `Error::IllegalState` will be returned if called after any of [`end`](#method.end),
+        /// [`end_with_error`](#method.end_with_error), [`on_end`](#on_end) has beend executed.    
+        /// This will cause the JoinHandle to be polled after completion, which causes a panic.
+        /// 
+        /// # wasm32 support
+        /// 
+        /// This method is not supported on wasm32 targets, please use `drop()` instead.
+        pub async fn end_with_error(
+            &mut self,
+            error: impl Into<definitions::Error>,
+        ) -> Result<(), Error> {
+            // If sending is unsuccessful, the `SessionEngine` event loop is
+            // already dropped, this should be reflected by `JoinError` then.
+            let _ = self
+                .control
+                .send(SessionControl::End(Some(error.into())))
+                .await;
+            self.on_end().await
+        }
     }
 
     /// Returns when the underlying event loop has stopped
@@ -134,10 +147,15 @@ impl<R> SessionHandle<R> {
             return Err(Error::IllegalState);
         }
 
-        self.is_ended = true;
         match (&mut self.engine_handle).await {
-            Ok(res) => res,
-            Err(join_error) => Err(Error::JoinError(join_error)),
+            Ok(res) => {
+                self.is_ended = true;
+                res
+            }
+            Err(join_error) => {
+                self.is_ended = true;
+                Err(Error::JoinError(join_error))
+            }
         }
     }
 }
@@ -275,7 +293,10 @@ impl Session {
     ///
     /// let session = Session::begin(&mut connection).await.unwrap();
     /// ```
-    pub async fn begin(conn: &mut ConnectionHandle<()>) -> Result<SessionHandle<()>, BeginError> {
+    #[cfg(not(target_arch = "wasm32"))]
+    pub async fn begin(
+        conn: &mut crate::connection::ConnectionHandle<()>,
+    ) -> Result<SessionHandle<()>, BeginError> {
         Session::builder().begin(conn).await
     }
 
@@ -619,8 +640,6 @@ impl endpoint::Session for Session {
         &mut self,
         disposition: Disposition,
     ) -> Result<Option<Vec<Disposition>>, Self::Error> {
-        // and disposition only has delivery id?
-
         let first = disposition.first;
         let last = disposition.last.unwrap_or(first);
 

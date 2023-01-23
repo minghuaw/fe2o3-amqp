@@ -865,11 +865,14 @@ impl<'a> ser::SerializeStructVariant for VariantSerializer<'a> {
 
 #[cfg(test)]
 mod tests {
-    use std::collections::{HashMap, BTreeMap};
+    use std::collections::{BTreeMap, HashMap};
 
     use serde_bytes::ByteBuf;
 
-    use crate::{to_vec, primitives::{Dec32, Dec64, Dec128, Uuid, Timestamp, Symbol, Array}};
+    use crate::{
+        primitives::{Array, Dec128, Dec32, Dec64, Symbol, Timestamp, Uuid},
+        to_vec,
+    };
 
     use super::serialized_size;
 
@@ -1278,10 +1281,7 @@ mod tests {
         let buf = to_vec(&value).unwrap();
         assert_eq!(ssize, buf.len());
 
-        let value = Foo {
-            a: 1,
-            b: Some(2),
-        };
+        let value = Foo { a: 1, b: Some(2) };
         let ssize = serialized_size(&value).unwrap();
         let buf = to_vec(&value).unwrap();
         assert_eq!(ssize, buf.len());

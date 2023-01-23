@@ -22,12 +22,10 @@ pub(crate) mod client;
 mod error;
 pub use error::*;
 
-#[cfg_attr(docsrs, doc(cfg(feature = "acceptor")))]
-#[cfg(feature = "acceptor")]
-mod server;
-
-#[cfg(feature = "acceptor")]
-pub use server::ScramAuthenticator;
+cfg_acceptor! {
+    mod server;
+    pub use server::*;
+}
 
 use crate::sasl_profile::{SCRAM_SHA_1, SCRAM_SHA_256, SCRAM_SHA_512};
 
@@ -173,6 +171,8 @@ impl ScramVersion {
         server_first: &str,
         client_first_message_bare: &[u8],
     ) -> Result<(Vec<u8>, Vec<u8>), ScramErrorKind> {
+        use base64::Engine;
+
         let parts: Vec<&str> = server_first.split(',').collect();
 
         if parts.len() < 3 {
@@ -191,7 +191,7 @@ impl ScramVersion {
         let base64_salt = parts[1]
             .strip_prefix(SALT_KEY)
             .ok_or(ScramErrorKind::SaltNotFound)?;
-        let salt = base64::decode(base64_salt)?;
+        let salt = base64::engine::general_purpose::STANDARD.decode(base64_salt)?;
 
         let iter_count_str = parts[2]
             .strip_prefix(ITERATION_COUNT_KEY)
@@ -221,7 +221,7 @@ impl ScramVersion {
 
         let client_proof_bytes =
             self.compute_client_proof::<ScramErrorKind>(&salted_password, &auth_message)?;
-        let client_proof = base64::encode(client_proof_bytes);
+        let client_proof = base64::engine::general_purpose::STANDARD.encode(client_proof_bytes);
 
         let client_final =
             client_final(&client_final_message_without_proof, client_proof.as_bytes());
@@ -237,6 +237,8 @@ impl ScramVersion {
         server_final: &[u8],
         server_signature: &[u8],
     ) -> Result<(), ScramErrorKind> {
+        use base64::Engine;
+
         let server_final = std::str::from_utf8(server_final)?;
         let parts: Vec<&str> = server_final.split(',').collect();
 
@@ -244,74 +246,12 @@ impl ScramVersion {
             .first()
             .and_then(|signature| signature.strip_prefix(VERIFIER_KEY))
             .ok_or(ScramErrorKind::ServerSignatureMismatch)?;
-        let signature_bytes = base64::decode(signature)?;
+        let signature_bytes = base64::engine::general_purpose::STANDARD.decode(signature)?;
 
         match signature_bytes == server_signature {
             true => Ok(()),
             false => Err(ScramErrorKind::ServerSignatureMismatch),
         }
-    }
-
-    #[cfg(feature = "acceptor")]
-    fn compute_server_first_message<'a, C>(
-        &self,
-        client_first: &'a [u8],
-        base64_server_nonce: &str,
-        credentials: &C,
-    ) -> Result<Option<ServerFirstMessage<'a>>, ServerScramErrorKind>
-    where
-        C: ScramCredentialProvider,
-    {
-        let client_first = std::str::from_utf8(client_first)?;
-
-        let client_first_message_bare = client_first
-            .strip_prefix(GS2_HEADER)
-            .ok_or(ServerScramErrorKind::CannotParseGs2Header)?;
-
-        let parts: Vec<&str> = client_first_message_bare.split(',').collect();
-
-        let username = parts
-            .first()
-            .and_then(|s| s.strip_prefix(USERNAME_KEY))
-            .ok_or(ServerScramErrorKind::CannotParseUsername)?;
-        let client_nonce = parts
-            .get(1)
-            .and_then(|s| s.strip_prefix(NONCE_KEY))
-            .ok_or(ServerScramErrorKind::CannotParseClientNonce)?;
-
-        let stored_password = match credentials.get_stored_password(username) {
-            Some(stored) => stored,
-            None => return Ok(None),
-        };
-        let base64_salt = base64::encode(stored_password.salt);
-        let iterations = stored_password.iterations.to_string();
-
-        let client_server_nonce = format!("{}{}", client_nonce, base64_server_nonce);
-
-        let mut buf = BytesMut::new();
-
-        // nonce
-        buf.put_slice(NONCE_KEY.as_bytes());
-        buf.put_slice(client_server_nonce.as_bytes());
-        buf.put_u8(b',');
-
-        // salt
-        buf.put_slice(SALT_KEY.as_bytes());
-        buf.put_slice(base64_salt.as_bytes());
-        buf.put_u8(b',');
-
-        // iterations
-        buf.put_slice(ITERATION_COUNT_KEY.as_bytes());
-        buf.put_slice(iterations.as_bytes());
-
-        Ok(Some(ServerFirstMessage {
-            username,
-            client_first_message_bare: Bytes::from(
-                client_first_message_bare.to_string().into_bytes(),
-            ),
-            client_server_nonce: Bytes::from(client_server_nonce.into_bytes()),
-            message: buf.freeze(),
-        }))
     }
 
     fn compute_server_signature<E>(
@@ -327,74 +267,6 @@ impl ScramVersion {
         Ok(server_signature)
     }
 
-    #[cfg(feature = "acceptor")]
-    fn compute_server_final_message(
-        &self,
-        client_final: &[u8],
-        client_server_nonce: &[u8],
-        client_first_message_bare: &[u8],
-        server_first_message: &[u8],
-        stored_password: &StoredPassword,
-    ) -> Result<Vec<u8>, ServerScramErrorKind> {
-        let client_final = std::str::from_utf8(client_final)?;
-        let parts: Vec<&str> = client_final.split(',').collect();
-
-        let channel_binding = parts
-            .first()
-            .and_then(|s| s.strip_prefix(CHANNEL_BINDING_KEY))
-            .ok_or(ServerScramErrorKind::CannotParseClientFinalMessage)?;
-        let channel_binding = base64::decode(channel_binding)?;
-        if channel_binding != GS2_HEADER.as_bytes() {
-            return Err(ServerScramErrorKind::InvalidChannelBinding);
-        }
-
-        let nonce = parts
-            .get(1)
-            .and_then(|s| s.strip_prefix(NONCE_KEY))
-            .ok_or(ServerScramErrorKind::CannotParseClientFinalMessage)?;
-        if nonce.as_bytes() != client_server_nonce {
-            return Err(ServerScramErrorKind::IncorrectClientFinalNonce)?;
-        }
-
-        let client_proof = parts
-            .last()
-            .and_then(|s| s.strip_prefix(PROOF_KEY))
-            .ok_or(ServerScramErrorKind::ProofNotFoundInClientFinal)?;
-
-        let without_proof_message_len =
-            client_final.len() - (client_proof.len() + PROOF_KEY.len() + 1);
-        let client_final_message_without_proof =
-            &client_final[0..without_proof_message_len].as_bytes();
-
-        let auth_message = auth_message(
-            client_first_message_bare,
-            server_first_message,
-            client_final_message_without_proof,
-        );
-
-        // Verify client proof
-        // ClientProof := ClientKey XOR ClientSignature
-        // ClientSignature := HMAC(StoredKey, AuthMessage)
-        // Inverse of XOR is XOR
-        let client_signature = self.hmac(stored_password.stored_key, &auth_message)?;
-        let client_proof = base64::decode(client_proof)?;
-        let client_key = xor(&client_proof, &client_signature)?;
-        // StoredKey := H(ClientKey)
-        let stored_key_from_client = self.h(&client_key);
-        if stored_key_from_client != stored_password.stored_key {
-            return Err(ServerScramErrorKind::AuthenticationFailed);
-        }
-
-        let server_signature_bytes = self.hmac(stored_password.server_key, &auth_message)?;
-        let server_signature = base64::encode(server_signature_bytes);
-
-        // Form server final message
-        let mut server_final = Vec::new();
-        server_final.put_slice(VERIFIER_KEY.as_bytes());
-        server_final.put_slice(server_signature.as_bytes());
-        Ok(server_final)
-    }
-
     fn compute_client_proof<E>(
         &self,
         salted_password: &[u8],
@@ -408,14 +280,6 @@ impl ScramVersion {
         let client_signature = self.hmac(&stored_key, auth_message)?;
         xor(&client_key, &client_signature).map_err(Into::into)
     }
-}
-
-#[cfg(feature = "acceptor")]
-pub(crate) struct ServerFirstMessage<'a> {
-    pub username: &'a str,
-    pub client_first_message_bare: Bytes,
-    pub client_server_nonce: Bytes,
-    pub message: Bytes,
 }
 
 fn client_final(client_final_message_without_proof: &[u8], client_proof: &[u8]) -> Vec<u8> {
@@ -450,7 +314,9 @@ fn auth_message(
 }
 
 fn without_proof(client_server_nonce: &str) -> Vec<u8> {
-    let encoded_gs2_header = base64::encode(GS2_HEADER).into_bytes();
+    use base64::Engine;
+
+    let encoded_gs2_header = base64::engine::general_purpose::STANDARD.encode(GS2_HEADER).into_bytes();
     let total_len = CHANNEL_BINDING_KEY.len()
         + encoded_gs2_header.len()
         + 1
@@ -717,9 +583,10 @@ mod tests {
     #[test]
     fn test_sasl_scram_sha1_server() {
         use scram_sha1::*;
+        use base64::Engine;
 
         let base64_salt = get_base64_salt_from_server_first_message(SERVER_FIRST_MESSAGE);
-        let salt = base64::decode(base64_salt).unwrap();
+        let salt = base64::engine::general_purpose::STANDARD.decode(base64_salt).unwrap();
         let base64_server_nonce =
             get_base64_server_nonce_from_server_first_message(SERVER_FIRST_MESSAGE, CLIENT_NONCE);
         let client_server_nonce = format!("{}{}", CLIENT_NONCE, base64_server_nonce);
@@ -763,9 +630,10 @@ mod tests {
     #[test]
     fn test_sasl_scram_sha256_server() {
         use scram_sha256::*;
+        use base64::Engine;
 
         let base64_salt = get_base64_salt_from_server_first_message(SERVER_FIRST_MESSAGE);
-        let salt = base64::decode(base64_salt).unwrap();
+        let salt = base64::engine::general_purpose::STANDARD.decode(base64_salt).unwrap();
         let base64_server_nonce =
             get_base64_server_nonce_from_server_first_message(SERVER_FIRST_MESSAGE, CLIENT_NONCE);
         let client_server_nonce = format!("{}{}", CLIENT_NONCE, base64_server_nonce);
@@ -809,9 +677,10 @@ mod tests {
     #[test]
     fn test_sasl_scram_sha512_server() {
         use scram_sha512::*;
+        use base64::Engine;
 
         let base64_salt = get_base64_salt_from_server_first_message(SERVER_FIRST_MESSAGE);
-        let salt = base64::decode(base64_salt).unwrap();
+        let salt = base64::engine::general_purpose::STANDARD.decode(base64_salt).unwrap();
         let base64_server_nonce =
             get_base64_server_nonce_from_server_first_message(SERVER_FIRST_MESSAGE, CLIENT_NONCE);
         let client_server_nonce = format!("{}{}", CLIENT_NONCE, base64_server_nonce);

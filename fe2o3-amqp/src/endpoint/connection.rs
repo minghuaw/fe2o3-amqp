@@ -8,19 +8,20 @@ use fe2o3_amqp_types::{
 use futures_util::Sink;
 use tokio::sync::mpsc;
 
-use crate::{frames::amqp::Frame, session::frame::SessionIncomingItem};
+use crate::{frames::amqp::Frame, session::frame::SessionIncomingItem, SendBound};
 
 use super::{IncomingChannel, OutgoingChannel, Session};
 
 /// Trait for connection
-#[async_trait]
+#[cfg_attr(not(target_arch = "wasm32"), async_trait)]
+#[cfg_attr(target_arch="wasm32", async_trait(?Send))]
 pub(crate) trait Connection {
-    type AllocError: Send;
-    type OpenError: Send;
-    type CloseError: Send;
-    type Error: Send;
-    type State: Send;
-    type Session: Session + Send;
+    type AllocError: SendBound;
+    type OpenError: SendBound;
+    type CloseError: SendBound;
+    type Error: SendBound;
+    type State: SendBound;
+    type Session: Session + SendBound;
 
     fn local_state(&self) -> &Self::State;
     fn local_state_mut(&mut self) -> &mut Self::State;
@@ -73,7 +74,7 @@ pub(crate) trait Connection {
     /// and revert the state changes would be too complicated
     async fn send_open<W>(&mut self, writer: &mut W) -> Result<(), Self::OpenError>
     where
-        W: Sink<Frame> + Send + Unpin,
+        W: Sink<Frame> + SendBound + Unpin,
         Self::OpenError: From<W::Error>; // DO NOT remove this. This is where `Transport` will be used
 
     async fn send_close<W>(
@@ -82,7 +83,7 @@ pub(crate) trait Connection {
         error: Option<Error>,
     ) -> Result<(), Self::CloseError>
     where
-        W: Sink<Frame> + Send + Unpin,
+        W: Sink<Frame> + SendBound + Unpin,
         Self::CloseError: From<W::Error>; // DO NOT remove this. This is where `Transport` will be used
 
     /// Intercepting session frames

@@ -1,5 +1,48 @@
 # Change Log
 
+## 0.8.11
+
+1. Experimental support for `wasm32-unknown-unknown` target (see `examples/wasm32-in-browser`).
+   `Close()`/`End()` are not supported yet and the user should simply drop the
+   `ConnectionHandle`/`SessionHandle` to close the connection/session.
+
+## 0.8.10
+
+1. Ported 0.7.24
+
+## 0.7.24
+
+1. Relaxed `post` and `post_batachable` to require `&self` only.
+
+## 0.8.9
+
+1. Ported 0.7.23
+
+## 0.7.23
+
+1. Updated `base64` to "0.21"
+
+## 0.8.8
+
+1. Ported 0.7.22
+
+## 0.7.22
+
+1. Use `saturating_add/sub` when computing link credit `on_incoming_flow` for sender
+
+## 0.8.7
+
+1. Fixed clippy warnings
+
+## 0.8.6
+
+1. Ported 0.7.21
+
+## 0.7.21
+
+1. `DeliveryFut` returned by `Sender::send_batchable` and `Sender::send_batchable_ref` now will be
+   able to receive the outcome after sender is re-attached.
+
 ## 0.8.5
 
 1. Ported 0.7.20

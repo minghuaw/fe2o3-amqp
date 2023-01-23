@@ -1,9 +1,165 @@
-use fe2o3_amqp_types::definitions::{Fields, Handle, SequenceNo};
+use fe2o3_amqp_types::{
+    definitions::{Fields, Handle, SequenceNo},
+    messaging::MESSAGE_FORMAT,
+};
 use futures_util::Future;
 
 use crate::endpoint::LinkExt;
 
 use super::{resumption::resume_delivery, *};
+
+impl<T> SenderLink<T>
+where
+    T: Into<TargetArchetype>
+        + TryFrom<TargetArchetype>
+        + VerifyTargetArchetype
+        + Clone
+        + Send
+        + Sync,
+{
+    /// # Cancel safety
+    ///
+    /// This is cancel safe because all internal `.await` are cancel safe
+    pub(crate) async fn send_transfer_without_modifying_unsettled_map(
+        &mut self,
+        writer: &mpsc::Sender<LinkFrame>,
+        mut transfer: Transfer,
+        mut payload: Payload,
+    ) -> Result<bool, LinkStateError> {
+        let settled = transfer.settled.unwrap_or(match self.snd_settle_mode {
+            SenderSettleMode::Settled => true,
+            SenderSettleMode::Unsettled => false,
+            SenderSettleMode::Mixed => false,
+        });
+        let input_handle = self
+            .input_handle
+            .clone()
+            .ok_or(LinkStateError::IllegalState)?;
+
+        // Check message size
+        // If this field is zero or unset, there is no maximum size imposed by the link endpoint.
+        let more = (self.max_message_size != 0) && (payload.len() as u64 > self.max_message_size);
+        if !more {
+            transfer.more = false;
+            send_transfer(writer, input_handle, transfer, payload.clone()).await?;
+        // cancel safe
+        } else {
+            // Send the first frame
+            let partial = payload.split_to(self.max_message_size as usize);
+            transfer.more = true;
+            send_transfer(writer, input_handle.clone(), transfer.clone(), partial).await?; // cancel safe
+
+            // Send the transfers in the middle
+            while payload.len() > self.max_message_size as usize {
+                let partial = payload.split_to(self.max_message_size as usize);
+                transfer.delivery_tag = None;
+                transfer.message_format = None;
+                transfer.settled = None;
+                send_transfer(writer, input_handle.clone(), transfer.clone(), partial).await?;
+                // cancel safe
+            }
+
+            // Send the last transfer
+            // For messages that are too large to fit within the maximum frame size, additional
+            // data MAY be trans- ferred in additional transfer frames by setting the more flag on
+            // all but the last transfer frame
+            transfer.more = false;
+            send_transfer(writer, input_handle, transfer, payload).await?; // cancel safe
+        }
+
+        Ok(settled)
+    }
+
+    pub(crate) async fn get_delivery_tag_or_detached<Fut>(
+        &mut self,
+        writer: &mpsc::Sender<LinkFrame>,
+        detached: Fut,
+    ) -> Result<[u8; 4], LinkStateError>
+    where
+        Fut: Future<Output = Option<LinkFrame>> + Send,
+    {
+        use crate::util::Consume;
+
+        tokio::select! {
+            tag = self.flow_state.consume(1) => {
+                // link-credit is defined as
+                // "The current maximum number of messages that can be handled
+                // at the receiver endpoint of the link"
+
+                // Draining should already set the link credit to 0, causing
+                // sender to wait for new link credit
+                Ok(tag)
+            },
+            frame = detached => { // cancel safe
+                match frame {
+                    // If remote has detached the link
+                    Some(LinkFrame::Detach(detach)) => {
+                        // FIXME: if the sender is not trying to send anything, this is
+                        // probably not responsive enough
+                        let closed = detach.closed;
+                        self.send_detach(writer, closed, None).await?;
+                        let result = self.on_incoming_detach(detach);
+
+                        match (result, closed) {
+                            (Ok(_), true) => Err(LinkStateError::RemoteClosed),
+                            (Ok(_), false) => Err(LinkStateError::RemoteDetached),
+                            (Err(err), _) => Err(LinkStateError::from(err)),
+                        }
+                    },
+                    _ => {
+                        // Other frames should not forwarded to the sender by the session
+                        Err(LinkStateError::ExpectImmediateDetach)
+                    }
+                }
+            }
+        }
+    }
+
+    pub(crate) fn generate_non_resuming_transfer_performative(
+        &self,
+        delivery_tag: DeliveryTag,
+        message_format: MessageFormat,
+        settled: Option<bool>,
+        state: Option<DeliveryState>,
+        batchable: bool,
+    ) -> Result<Transfer, LinkStateError> {
+        let handle = self
+            .output_handle
+            .clone()
+            .ok_or(LinkStateError::IllegalState)?
+            .into();
+
+        let settled = match self.snd_settle_mode {
+            SenderSettleMode::Settled => true,
+            SenderSettleMode::Unsettled => false,
+            // If not set on the first (or only) transfer for a (multi-transfer)
+            // delivery, then the settled flag MUST be interpreted as being false.
+            SenderSettleMode::Mixed => settled.unwrap_or(false),
+        };
+
+        // If true, the resume flag indicates that the transfer is being used to reassociate an
+        // unsettled delivery from a dissociated link endpoint
+        let resume = false;
+
+        let transfer = Transfer {
+            handle,
+            delivery_id: None, // This will be set by the session
+            delivery_tag: Some(delivery_tag),
+            message_format: Some(message_format),
+            settled: Some(settled),
+            more: false, // This will be changed later
+
+            // If not set, this value is defaulted to the value negotiated
+            // on link attach.
+            rcv_settle_mode: None,
+            state,
+            resume,
+            aborted: false,
+            batchable,
+        };
+        Ok(transfer)
+    }
+}
 
 #[async_trait]
 impl<T> endpoint::SenderLink for SenderLink<T>
@@ -53,82 +209,19 @@ where
     where
         Fut: Future<Output = Option<LinkFrame>> + Send,
     {
-        use crate::endpoint::LinkDetach;
-        use crate::util::Consume;
-
-        let tag = tokio::select! {
-            tag = self.flow_state.consume(1) => {
-                // link-credit is defined as
-                // "The current maximum number of messages that can be handled
-                // at the receiver endpoint of the link"
-
-                // Draining should already set the link credit to 0, causing
-                // sender to wait for new link credit
-                tag
-            },
-            frame = detached => { // cancel safe
-                match frame {
-                    // If remote has detached the link
-                    Some(LinkFrame::Detach(detach)) => {
-                        // FIXME: if the sender is not trying to send anything, this is
-                        // probably not responsive enough
-                        let closed = detach.closed;
-                        self.send_detach(writer, closed, None).await?;
-                        let result = self.on_incoming_detach(detach);
-
-                        match (result, closed) {
-                            (Ok(_), true) => return Err(Self::TransferError::RemoteClosed),
-                            (Ok(_), false) => return Err(Self::TransferError::RemoteDetached),
-                            (Err(err), _) => return Err(Self::TransferError::from(err)),
-                        }
-                    },
-                    _ => {
-                        // Other frames should not forwarded to the sender by the session
-                        return Err(Self::TransferError::ExpectImmediateDetach)
-                    }
-                }
-            }
-        };
-
-        let handle = self
-            .output_handle
-            .clone()
-            .ok_or(Self::TransferError::IllegalState)?
-            .into();
-
+        let tag = self.get_delivery_tag_or_detached(writer, detached).await?;
         // Delivery count is incremented when consuming credit
         let delivery_tag = DeliveryTag::from(tag);
 
-        let settled = match self.snd_settle_mode {
-            SenderSettleMode::Settled => true,
-            SenderSettleMode::Unsettled => false,
-            // If not set on the first (or only) transfer for a (multi-transfer)
-            // delivery, then the settled flag MUST be interpreted as being false.
-            SenderSettleMode::Mixed => settled.unwrap_or(false),
-        };
-
-        // If true, the resume flag indicates that the transfer is being used to reassociate an
-        // unsettled delivery from a dissociated link endpoint
-        let resume = false;
-
-        let transfer = Transfer {
-            handle,
-            delivery_id: None, // This will be set by the session
-            delivery_tag: Some(delivery_tag.clone()),
-            message_format: Some(message_format),
-            settled: Some(settled),
-            more: false, // This will be changed later
-
-            // If not set, this value is defaulted to the value negotiated
-            // on link attach.
-            rcv_settle_mode: None,
+        let transfer = self.generate_non_resuming_transfer_performative(
+            delivery_tag,
+            message_format,
+            settled,
             state,
-            resume,
-            aborted: false,
             batchable,
-        };
+        )?;
 
-        self.send_payload_with_transfer(writer, transfer, payload)
+        self.send_payload_with_transfer(writer, message_format, transfer, payload)
             .await
     }
 
@@ -138,65 +231,27 @@ where
     async fn send_payload_with_transfer(
         &mut self,
         writer: &mpsc::Sender<LinkFrame>,
-        mut transfer: Transfer,
-        mut payload: Payload,
+        message_format: MessageFormat,
+        transfer: Transfer,
+        payload: Payload,
     ) -> Result<Settlement, Self::TransferError> {
-        let settled = transfer.settled.unwrap_or(match self.snd_settle_mode {
-            SenderSettleMode::Settled => true,
-            SenderSettleMode::Unsettled => false,
-            SenderSettleMode::Mixed => false,
-        });
-        let delivery_tag = transfer
-            .delivery_tag
-            .clone()
-            .ok_or(Self::TransferError::IllegalState)?;
-        let input_handle = self
-            .input_handle
-            .clone()
-            .ok_or(Self::TransferError::IllegalState)?;
-
         // Keep a copy for unsettled message
         // Clone should be very cheap on Bytes
         let payload_copy = payload.clone();
-
-        // Check message size
-        // If this field is zero or unset, there is no maximum size imposed by the link endpoint.
-        let more = (self.max_message_size != 0) && (payload.len() as u64 > self.max_message_size);
-        if !more {
-            transfer.more = false;
-            send_transfer(writer, input_handle, transfer, payload.clone()).await?;
-        // cancel safe
-        } else {
-            // Send the first frame
-            let partial = payload.split_to(self.max_message_size as usize);
-            transfer.more = true;
-            send_transfer(writer, input_handle.clone(), transfer.clone(), partial).await?; // cancel safe
-
-            // Send the transfers in the middle
-            while payload.len() > self.max_message_size as usize {
-                let partial = payload.split_to(self.max_message_size as usize);
-                transfer.delivery_tag = None;
-                transfer.message_format = None;
-                transfer.settled = None;
-                send_transfer(writer, input_handle.clone(), transfer.clone(), partial).await?;
-                // cancel safe
-            }
-
-            // Send the last transfer
-            // For messages that are too large to fit within the maximum frame size, additional
-            // data MAY be trans- ferred in additional transfer frames by setting the more flag on
-            // all but the last transfer frame
-            transfer.more = false;
-            send_transfer(writer, input_handle, transfer, payload).await?; // cancel safe
-        }
-
+        let delivery_tag = transfer
+            .delivery_tag
+            .clone()
+            .ok_or(LinkStateError::IllegalState)?;
+        let settled = self
+            .send_transfer_without_modifying_unsettled_map(writer, transfer, payload)
+            .await?;
         match settled {
             true => Ok(Settlement::Settled(delivery_tag)),
             // If not set on the first (or only) transfer for a (multi-transfer)
             // delivery, then the settled flag MUST be interpreted as being false.
             false => {
                 let (tx, rx) = oneshot::channel();
-                let unsettled = UnsettledMessage::new(payload_copy, tx);
+                let unsettled = UnsettledMessage::new(payload_copy, None, message_format, tx);
                 {
                     let mut guard = self.unsettled.write();
                     guard
@@ -232,7 +287,7 @@ where
                     let _ = msg.settle();
                 }
             } else if let Some(msg) = lock.as_mut().and_then(|m| m.get_mut(&delivery_tag)) {
-                *msg.state_mut() = Some(state.clone());
+                msg.state = Some(state.clone());
             }
         }
 
@@ -266,7 +321,7 @@ where
                         let _ = msg.settle();
                     }
                 } else if let Some(msg) = guard.as_mut().and_then(|m| m.get_mut(&delivery_tag)) {
-                    *msg.state_mut() = Some(state.clone());
+                    msg.state = Some(state.clone());
                 }
             }
 
@@ -452,7 +507,16 @@ impl<T> SenderLink<T> {
 
                 remote_map
                     .into_keys()
-                    .map(|delivery_tag| (delivery_tag, ResumingDelivery::Abort))
+                    // Local is None, assume the message format is 0
+                    .map(|delivery_tag| {
+                        (
+                            delivery_tag,
+                            ResumingDelivery::Abort {
+                                message_format: MESSAGE_FORMAT,
+                                sender: None,
+                            },
+                        )
+                    })
                     .collect()
             }
             (Some(local_map), None) => {
@@ -481,7 +545,16 @@ impl<T> SenderLink<T> {
                     .collect();
                 let remote = remote_map
                     .into_keys()
-                    .map(|tag| (tag, ResumingDelivery::Abort));
+                    // These are unsettled messages not found in the local map, assume the message format is 0
+                    .map(|tag| {
+                        (
+                            tag,
+                            ResumingDelivery::Abort {
+                                message_format: MESSAGE_FORMAT,
+                                sender: None,
+                            },
+                        )
+                    });
                 local.into_iter().chain(remote).collect()
             }
         };
