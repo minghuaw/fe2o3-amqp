@@ -143,6 +143,7 @@ impl TryFrom<Flow> for LinkFlow {
     }
 }
 
+#[derive(Debug)]
 pub(crate) enum Settlement {
     Settled(DeliveryTag),
     Unsettled {

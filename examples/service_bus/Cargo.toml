@@ -14,7 +14,7 @@ default = [
 
 dlq = ["fe2o3-amqp/transaction"]
 cbs = ["urlencoding", "sha2", "hmac", "base64", "fe2o3-amqp-cbs"]
-management = ["fe2o3-amqp-management"]
+management = ["fe2o3-amqp-management/transaction"]
 
 [dependencies]
 dotenv = "0.15.0"

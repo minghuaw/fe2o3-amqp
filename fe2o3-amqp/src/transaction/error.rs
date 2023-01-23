@@ -230,11 +230,15 @@ impl FromDeliveryState for PostResult {
     fn from_delivery_state(state: DeliveryState) -> Self {
         match state {
             DeliveryState::Received(_)
-            | DeliveryState::Accepted(_)
-            | DeliveryState::Rejected(_)
-            | DeliveryState::Released(_)
-            | DeliveryState::Modified(_)
+            // | DeliveryState::Accepted(_)
+            // | DeliveryState::Rejected(_)
+            // | DeliveryState::Released(_)
+            // | DeliveryState::Modified(_)
             | DeliveryState::Declared(_) => Err(PostError::IllegalDeliveryState),
+            DeliveryState::Accepted(value) => Ok(Outcome::Accepted(value)),
+            DeliveryState::Rejected(value) => Ok(Outcome::Rejected(value)),
+            DeliveryState::Released(value) => Ok(Outcome::Released(value)),
+            DeliveryState::Modified(value) => Ok(Outcome::Modified(value)),
             DeliveryState::TransactionalState(txn) => match txn.outcome {
                 Some(Outcome::Accepted(value)) => Ok(Outcome::Accepted(value)),
                 Some(Outcome::Rejected(value)) => Ok(Outcome::Rejected(value)),

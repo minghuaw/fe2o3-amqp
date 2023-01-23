@@ -1,8 +1,8 @@
 use dotenv::dotenv;
-use fe2o3_amqp_management::{client::MgmtClient, operations::ReadRequest};
+use fe2o3_amqp_management::{client::MgmtClient, operations::{ReadRequest, ReadResponse}, transaction::ManagementLinkTransactionExt};
 use std::env;
 
-use fe2o3_amqp::{Connection, sasl_profile::SaslProfile, Session, Sender};
+use fe2o3_amqp::{Connection, sasl_profile::SaslProfile, Session, Sender, transaction::{Controller, Transaction, TransactionDischarge}};
 
 #[tokio::main]
 async fn main() {
@@ -27,17 +27,25 @@ async fn main() {
         .unwrap();
     let mut session = Session::begin(&mut connection).await.unwrap();
 
-    // let mut mgmt_client = MgmtClient::attach(&mut session, "rust-mgmt-client-1").await.unwrap();
-    let mut mgmt_client = MgmtClient::builder()
-        .client_node_addr("rust-mgmt-client-1")
-        // .management_node_address(format!("{}/{}", queue_name, "$management"))
-        .management_node_address("$management")
-        .attach(&mut session)
-        .await.unwrap();
+    let mut mgmt_client = MgmtClient::attach(&mut session, "rust-mgmt-client-1").await.unwrap();
 
+    // let read_request = ReadRequest::name("q1", "com.microsoft:servicebus", None);
+    // let response = mgmt_client.call(read_request).await.unwrap();
+    // println!("{:?}", response);
+
+    let mut controller = Controller::attach(&mut session, "controller-1")
+        .await
+        .unwrap();
+
+    let txn = Transaction::declare(&mut controller, None).await.unwrap();
     let read_request = ReadRequest::name("q1", "com.microsoft:servicebus", None);
-    let response = mgmt_client.call(read_request).await.unwrap();
-    println!("{:?}", response);
+    let outcome = txn.send_request(&mut mgmt_client, read_request).await.unwrap();
+    println!("outcome {:?}", outcome);
+    txn.commit().await.unwrap();
+    // FIXME: there is no response from the server
+    // let response: ReadResponse = mgmt_client.recv_response().await.unwrap();
+    // println!("response: {:?}", response);
+    controller.close().await.unwrap();
 
     let sender = Sender::attach(&mut session, "rust-sender-link-1", queue_name)
         .await
