@@ -16,6 +16,7 @@ macro_rules! cfg_not_wasm32 {
     }
 }
 
+/// Acceptor/server is not supported in wasm32 targets
 macro_rules! cfg_acceptor {
     ($($item:item)*) => {
         $(
