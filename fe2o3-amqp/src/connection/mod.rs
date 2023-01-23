@@ -1,6 +1,6 @@
 //! Implements AMQP1.0 Connection
 
-use std::{cmp::min, collections::HashMap, convert::TryInto, sync::Arc};
+use std::{cmp::min, collections::HashMap, sync::Arc};
 
 use async_trait::async_trait;
 
@@ -15,7 +15,11 @@ use tokio::{
     sync::{mpsc::Sender, oneshot},
     task::JoinHandle,
 };
-use url::Url;
+
+cfg_not_wasm32! {
+    use std::convert::TryInto;
+    use url::Url;
+}
 
 use crate::{
     control::ConnectionControl,
@@ -23,6 +27,7 @@ use crate::{
     frames::amqp::{Frame, FrameBody},
     session::frame::{SessionFrame, SessionFrameBody, SessionIncomingItem},
     session::Session,
+    SendBound,
 };
 
 mod builder;
@@ -55,7 +60,8 @@ pub struct ConnectionHandle<R> {
     /// Only change this value in `on_close` method
     pub(crate) is_closed: bool,
     pub(crate) control: Sender<ConnectionControl>,
-    pub(crate) handle: JoinHandle<Result<(), Error>>,
+    pub(crate) handle: JoinHandle<()>,
+    pub(crate) outcome: oneshot::Receiver<Result<(), Error>>,
 
     // outgoing channel for session
     pub(crate) outgoing: Sender<SessionFrame>,
@@ -83,36 +89,46 @@ impl<R> ConnectionHandle<R> {
         }
     }
 
-    /// Close the connection
-    ///
-    /// An `Error::IllegalState` will be returned if this is called after executing any of
-    /// [`close`](#method.close), [`close_with_error`](#method.close_with_error) or
-    /// [`on_close`](#method.on_close). This will cause the JoinHandle to be polled after
-    /// completion, which causes a panic.
-    pub async fn close(&mut self) -> Result<(), Error> {
-        // If sending is unsuccessful, the `ConnectionEngine` event loop is
-        // already dropped, this should be reflected by `JoinError` then.
-        let _ = self.control.send(ConnectionControl::Close(None)).await;
-        self.on_close().await
-    }
-
-    /// Close the connection with an error
-    ///
-    /// An `Error::IllegalState` will be returned if this is called after executing any of
-    /// [`close`](#method.close), [`close_with_error`](#method.close_with_error) or
-    /// [`on_close`](#method.on_close). This will cause the JoinHandle to be polled after
-    /// completion, which causes a panic.
-    pub async fn close_with_error(
-        &mut self,
-        error: impl Into<definitions::Error>,
-    ) -> Result<(), Error> {
-        // If sending is unsuccessful, the `ConnectionEngine` event loop is
-        // already dropped, this should be reflected by `JoinError` then.
-        let _ = self
-            .control
-            .send(ConnectionControl::Close(Some(error.into())))
-            .await;
-        self.on_close().await
+    cfg_not_wasm32! {
+        /// Close the connection
+        ///
+        /// An `Error::IllegalState` will be returned if this is called after executing any of
+        /// [`close`](#method.close), [`close_with_error`](#method.close_with_error) or
+        /// [`on_close`](#method.on_close). This will cause the JoinHandle to be polled after
+        /// completion, which causes a panic.
+        /// 
+        /// # wasm32 support
+        /// 
+        /// This method is not supported in wasm32 targets, please use `drop()` instead.
+        pub async fn close(&mut self) -> Result<(), Error> {
+            // If sending is unsuccessful, the `ConnectionEngine` event loop is
+            // already dropped, this should be reflected by `JoinError` then.
+            let _ = self.control.send(ConnectionControl::Close(None)).await;
+            self.on_close().await
+        }
+    
+        /// Close the connection with an error
+        ///
+        /// An `Error::IllegalState` will be returned if this is called after executing any of
+        /// [`close`](#method.close), [`close_with_error`](#method.close_with_error) or
+        /// [`on_close`](#method.on_close). This will cause the JoinHandle to be polled after
+        /// completion, which causes a panic.
+        /// 
+        /// # wasm32 support
+        /// 
+        /// This method is not supported in wasm32 targets, please use `drop()` instead.
+        pub async fn close_with_error(
+            &mut self,
+            error: impl Into<definitions::Error>,
+        ) -> Result<(), Error> {
+            // If sending is unsuccessful, the `ConnectionEngine` event loop is
+            // already dropped, this should be reflected by `JoinError` then.
+            let _ = self
+                .control
+                .send(ConnectionControl::Close(Some(error.into())))
+                .await;
+            self.on_close().await
+        }
     }
 
     /// Returns when the underlying event loop has stopped
@@ -125,10 +141,15 @@ impl<R> ConnectionHandle<R> {
         if self.is_closed {
             return Err(Error::IllegalState);
         }
-        self.is_closed = true;
-        match (&mut self.handle).await {
-            Ok(res) => res,
-            Err(e) => Err(Error::JoinError(e)),
+        match (&mut self.outcome).await {
+            Ok(res) => {
+                self.is_closed = true;
+                res
+            }
+            Err(_) => {
+                self.is_closed = true;
+                Err(Error::IllegalState)
+            }
         }
     }
 
@@ -368,88 +389,90 @@ impl Connection {
         builder::Builder::new()
     }
 
-    /// Negotiate and open a [`Connection`] with the default configuration
-    ///
-    /// # Default configuration
-    ///
-    /// | Field | Default Value |
-    /// |-------|---------------|
-    /// |`max_frame_size`| [`DEFAULT_MAX_FRAME_SIZE`] |
-    /// |`channel_max`| [`DEFAULT_CHANNEL_MAX`] |
-    /// |`idle_time_out`| `None` |
-    /// |`outgoing_locales`| `None` |
-    /// |`incoming_locales`| `None` |
-    /// |`offered_capabilities`| `None` |
-    /// |`desired_capabilities`| `None` |
-    /// |`Properties`| `None` |
-    ///
-    /// The negotiation depends on the url supplied.
-    ///
-    /// # Raw AMQP
-    ///
-    /// ```rust, ignore
-    /// let connection = Connection::open("connection-1", "amqp://localhost:5672").await.unwrap();
-    /// ```
-    ///
-    /// # TLS
-    ///
-    /// TLS support is enabled by selecting one and only one of the following feature flags
-    ///
-    /// 1. `"rustls"`: enables TLS support with `tokio-rustls`
-    /// 2. `"native-tls"`: enables TLS support with `tokio-native-tls`
-    ///
-    /// ```rust, ignore
-    /// let connection = Connection::open("connection-1", "amqps://localhost:5671").await.unwrap();
-    /// ```
-    /// ## TLS with feature `"rustls"` enabled
-    ///
-    /// TLS connection can be established with a default connector or a custom `tokio_rustls::TlsConnector`.
-    /// The following connector is used unless a custom connector is supplied to the builder.
-    ///
-    /// ```rust,ignore
-    /// let mut root_cert_store = RootCertStore::empty();
-    /// root_cert_store.add_server_trust_anchors(webpki_roots::TLS_SERVER_ROOTS.0.iter().map(
-    ///     |ta| {
-    ///         OwnedTrustAnchor::from_subject_spki_name_constraints(
-    ///             ta.subject,
-    ///             ta.spki,
-    ///             ta.name_constraints,
-    ///         )
-    ///     },
-    /// ));
-    /// let config = ClientConfig::builder()
-    ///     .with_safe_defaults()
-    ///     .with_root_certificates(root_cert_store)
-    ///     .with_no_client_auth();
-    /// let connector = TlsConnector::from(Arc::new(config));
-    /// ```
-    ///
-    /// ### TLS with feature `"native-tls"` enabled
-    ///
-    /// TLS connection can be established with a default connector or a custom `tokio_native_tls::TlsConnector`.
-    /// The following connector is used unless a custom connector is supplied to the builder.
-    ///
-    /// ```rust,ignore
-    /// let connector = native_tls::TlsConnector::new().unwrap();
-    /// let connector = tokio_native_tls::TlsConnector::from(connector);
-    /// ```
-    ///
-    /// # SASL
-    ///
-    /// Start SASL negotiation with SASL PLAIN profile extracted from the url
-    ///
-    /// ```rust, ignore
-    /// let connection = Connection::open("connection-1", "amqp://guest:guest@localhost:5672").await.unwrap();
-    /// ```
-    ///
-    pub async fn open(
-        container_id: impl Into<String>,
-        url: impl TryInto<Url, Error = impl Into<OpenError>>,
-    ) -> Result<ConnectionHandle<()>, OpenError> {
-        Connection::builder()
-            .container_id(container_id)
-            .open(url)
-            .await
+    cfg_not_wasm32! {
+        /// Negotiate and open a [`Connection`] with the default configuration
+        ///
+        /// # Default configuration
+        ///
+        /// | Field | Default Value |
+        /// |-------|---------------|
+        /// |`max_frame_size`| [`DEFAULT_MAX_FRAME_SIZE`] |
+        /// |`channel_max`| [`DEFAULT_CHANNEL_MAX`] |
+        /// |`idle_time_out`| `None` |
+        /// |`outgoing_locales`| `None` |
+        /// |`incoming_locales`| `None` |
+        /// |`offered_capabilities`| `None` |
+        /// |`desired_capabilities`| `None` |
+        /// |`Properties`| `None` |
+        ///
+        /// The negotiation depends on the url supplied.
+        ///
+        /// # Raw AMQP
+        ///
+        /// ```rust, ignore
+        /// let connection = Connection::open("connection-1", "amqp://localhost:5672").await.unwrap();
+        /// ```
+        ///
+        /// # TLS
+        ///
+        /// TLS support is enabled by selecting one and only one of the following feature flags
+        ///
+        /// 1. `"rustls"`: enables TLS support with `tokio-rustls`
+        /// 2. `"native-tls"`: enables TLS support with `tokio-native-tls`
+        ///
+        /// ```rust, ignore
+        /// let connection = Connection::open("connection-1", "amqps://localhost:5671").await.unwrap();
+        /// ```
+        /// ## TLS with feature `"rustls"` enabled
+        ///
+        /// TLS connection can be established with a default connector or a custom `tokio_rustls::TlsConnector`.
+        /// The following connector is used unless a custom connector is supplied to the builder.
+        ///
+        /// ```rust,ignore
+        /// let mut root_cert_store = RootCertStore::empty();
+        /// root_cert_store.add_server_trust_anchors(webpki_roots::TLS_SERVER_ROOTS.0.iter().map(
+        ///     |ta| {
+        ///         OwnedTrustAnchor::from_subject_spki_name_constraints(
+        ///             ta.subject,
+        ///             ta.spki,
+        ///             ta.name_constraints,
+        ///         )
+        ///     },
+        /// ));
+        /// let config = ClientConfig::builder()
+        ///     .with_safe_defaults()
+        ///     .with_root_certificates(root_cert_store)
+        ///     .with_no_client_auth();
+        /// let connector = TlsConnector::from(Arc::new(config));
+        /// ```
+        ///
+        /// ### TLS with feature `"native-tls"` enabled
+        ///
+        /// TLS connection can be established with a default connector or a custom `tokio_native_tls::TlsConnector`.
+        /// The following connector is used unless a custom connector is supplied to the builder.
+        ///
+        /// ```rust,ignore
+        /// let connector = native_tls::TlsConnector::new().unwrap();
+        /// let connector = tokio_native_tls::TlsConnector::from(connector);
+        /// ```
+        ///
+        /// # SASL
+        ///
+        /// Start SASL negotiation with SASL PLAIN profile extracted from the url
+        ///
+        /// ```rust, ignore
+        /// let connection = Connection::open("connection-1", "amqp://guest:guest@localhost:5672").await.unwrap();
+        /// ```
+        ///
+        pub async fn open(
+            container_id: impl Into<String>,
+            url: impl TryInto<Url, Error = impl Into<OpenError>>,
+        ) -> Result<ConnectionHandle<()>, OpenError> {
+            Connection::builder()
+                .container_id(container_id)
+                .open(url)
+                .await
+        }
     }
 }
 
@@ -474,7 +497,8 @@ impl Connection {
     }
 }
 
-#[async_trait]
+#[cfg_attr(not(target_arch = "wasm32"), async_trait)]
+#[cfg_attr(target_arch="wasm32", async_trait(?Send))]
 impl endpoint::Connection for Connection {
     type AllocError = AllocSessionError;
     type OpenError = ConnectionStateError;
@@ -637,7 +661,7 @@ impl endpoint::Connection for Connection {
     #[cfg_attr(feature = "tracing", tracing::instrument(skip_all))]
     async fn send_open<W>(&mut self, writer: &mut W) -> Result<(), Self::OpenError>
     where
-        W: Sink<Frame> + Send + Unpin,
+        W: Sink<Frame> + SendBound + Unpin,
         Self::OpenError: From<W::Error>,
     {
         let body = FrameBody::Open(self.local_open.clone());
@@ -659,26 +683,6 @@ impl endpoint::Connection for Connection {
         Ok(())
     }
 
-    fn on_outgoing_begin(
-        &mut self,
-        outgoing_channel: OutgoingChannel,
-        begin: Begin,
-    ) -> Result<Frame, Self::Error> {
-        // TODO: check states?
-        let frame = Frame::new(outgoing_channel, FrameBody::Begin(begin));
-        Ok(frame)
-    }
-
-    #[cfg_attr(feature = "tracing", tracing::instrument(skip_all))]
-    fn on_outgoing_end(
-        &mut self,
-        channel: OutgoingChannel,
-        end: End,
-    ) -> Result<Frame, Self::Error> {
-        let frame = Frame::new(channel, FrameBody::End(end));
-        Ok(frame)
-    }
-
     // TODO: set a timeout for recving incoming Close
     async fn send_close<W>(
         &mut self,
@@ -686,7 +690,7 @@ impl endpoint::Connection for Connection {
         error: Option<definitions::Error>,
     ) -> Result<(), Self::CloseError>
     where
-        W: Sink<Frame> + Send + Unpin,
+        W: Sink<Frame> + SendBound + Unpin,
         Self::CloseError: From<W::Error>,
     {
         let error_is_some = error.is_some();
@@ -710,6 +714,26 @@ impl endpoint::Connection for Connection {
             _ => return Err(CloseError::IllegalState),
         }
         Ok(())
+    }
+
+    fn on_outgoing_begin(
+        &mut self,
+        outgoing_channel: OutgoingChannel,
+        begin: Begin,
+    ) -> Result<Frame, Self::Error> {
+        // TODO: check states?
+        let frame = Frame::new(outgoing_channel, FrameBody::Begin(begin));
+        Ok(frame)
+    }
+
+    #[cfg_attr(feature = "tracing", tracing::instrument(skip_all))]
+    fn on_outgoing_end(
+        &mut self,
+        channel: OutgoingChannel,
+        end: End,
+    ) -> Result<Frame, Self::Error> {
+        let frame = Frame::new(channel, FrameBody::End(end));
+        Ok(frame)
     }
 
     fn session_tx_by_incoming_channel(

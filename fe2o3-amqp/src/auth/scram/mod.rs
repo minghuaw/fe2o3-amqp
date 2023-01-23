@@ -22,12 +22,10 @@ pub(crate) mod client;
 mod error;
 pub use error::*;
 
-#[cfg_attr(docsrs, doc(cfg(feature = "acceptor")))]
-#[cfg(feature = "acceptor")]
-mod server;
-
-#[cfg(feature = "acceptor")]
-pub use server::ScramAuthenticator;
+cfg_acceptor! {
+    mod server;
+    pub use server::*;
+}
 
 use crate::sasl_profile::{SCRAM_SHA_1, SCRAM_SHA_256, SCRAM_SHA_512};
 
@@ -416,14 +414,6 @@ impl ScramVersion {
         let client_signature = self.hmac(&stored_key, auth_message)?;
         xor(&client_key, &client_signature).map_err(Into::into)
     }
-}
-
-#[cfg(feature = "acceptor")]
-pub(crate) struct ServerFirstMessage<'a> {
-    pub username: &'a str,
-    pub client_first_message_bare: Bytes,
-    pub client_server_nonce: Bytes,
-    pub message: Bytes,
 }
 
 fn client_final(client_final_message_without_proof: &[u8], client_proof: &[u8]) -> Vec<u8> {

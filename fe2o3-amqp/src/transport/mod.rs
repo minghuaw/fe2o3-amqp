@@ -134,7 +134,7 @@ where
     }
 
     /// Perform TLS negotiation with `tokio-native-tls`
-    #[cfg(feature = "native-tls")]
+    #[cfg(all(feature = "native-tls", not(target_arch = "wasm32")))]
     pub async fn connect_tls_with_native_tls(
         mut stream: Io,
         domain: &str,
@@ -354,6 +354,7 @@ where
     Ok(proto_header)
 }
 
+#[allow(unused)]
 #[cfg(any(feature = "rustls", feature = "native-tls"))]
 #[cfg_attr(feature = "tracing", tracing::instrument(name = "SEND", skip_all))]
 async fn send_tls_proto_header<Io>(stream: &mut Io) -> Result<(), io::Error>
@@ -367,6 +368,7 @@ where
     stream.write_all(&buf).await
 }
 
+#[allow(unused)]
 #[cfg(any(feature = "rustls", feature = "native-tls"))]
 #[cfg_attr(feature = "tracing", tracing::instrument(name = "RECV", skip_all))]
 pub(crate) async fn recv_tls_proto_header<Io>(
@@ -509,9 +511,10 @@ where
                 // check if idle timeout has exceeded
                 if let Some(delay) = this.idle_timeout.as_pin_mut() {
                     match delay.poll(cx) {
-                        Poll::Ready(()) => {
-                            return Poll::Ready(Some(Err(Error::IdleTimeoutElapsed)))
-                        }
+                        Poll::Ready(result) => match result {
+                            Ok(_) => return Poll::Ready(Some(Err(Error::IdleTimeoutElapsed))),
+                            Err(err) => return Poll::Ready(Some(Err(err.into()))),
+                        },
                         Poll::Pending => return Poll::Pending,
                     }
                 }
