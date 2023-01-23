@@ -40,4 +40,5 @@ exclude = [
     "examples/activemq",
     "examples/cancel_safety",
     "examples/quick_start",
+    "examples/wasm32-in-browser",
 ]
