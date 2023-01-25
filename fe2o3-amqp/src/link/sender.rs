@@ -41,7 +41,7 @@ use super::{
 };
 
 #[cfg(docsrs)]
-use fe2o3_amqp_types::messaging::{AmqpSequence, AmqpValue, Batch, Body, Data, IntoBody, Message};
+use fe2o3_amqp_types::messaging::{AmqpSequence, AmqpValue, Batch, Body, Data, IntoBody, Message, MESSAGE_FORMAT};
 
 /// An AMQP1.0 sender
 ///
