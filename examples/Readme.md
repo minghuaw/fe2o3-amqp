@@ -44,6 +44,7 @@ The examples below are individual examples which you need to `cd` into the corre
 | Name | Description |
 |------|-------------|
 |[websocket](./websocket/) | AMQP 1.0 over websocket |
+|[wasm32-in-browser](./wasm32-in-browser/) | AMQP 1.0 in browser |
 |[service_bus](./service_bus/) | Sending to / receiving from Azure Service Bus |
 |[service_bus_over_websocket](./service_bus_over_websocket) | Sending to / receiving from Azure Service Bus over WebSocket |
 |[event_hubs](./event_hubs) | Send to and receive from Azure Event Hubs |

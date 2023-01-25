@@ -1,5 +1,9 @@
 # fe2o3-amqp-ws
 
+## 0.3.1
+
+1. Updated readme to include `wasm32-unknown-unknown` example
+
 ## 0.3.0
 
 1. Initial `wasm32-unknown-unknown` support

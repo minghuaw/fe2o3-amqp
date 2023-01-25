@@ -4,13 +4,13 @@ members = [
     "serde_amqp", 
     "fe2o3-amqp-ext",
     "fe2o3-amqp-types", 
-    "fe2o3-amqp-management",
-    "fe2o3-amqp-cbs",
 ]
 
 exclude = [
     "fe2o3-amqp",
     "fe2o3-amqp-ws", # TODO: move back to members after wasm32 experiment
+    "fe2o3-amqp-management",
+    "fe2o3-amqp-cbs",
     "examples/alternative_tls_connection",
     "examples/batchable_send",
     "examples/dispose_multiple",
@@ -40,5 +40,5 @@ exclude = [
     "examples/activemq",
     "examples/cancel_safety",
     "examples/quick_start",
-    "examples/wasm32-in-browser",
+    "examples/wasm32_in_browser",
 ]
