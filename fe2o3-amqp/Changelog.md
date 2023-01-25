@@ -1,5 +1,9 @@
 # Change Log
 
+## 0.8.13
+
+1. Fixed docsrs build error.
+
 ## 0.8.12
 
 1. Updated readme to include `wasm32-unknown-unknown` example

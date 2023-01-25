@@ -383,7 +383,7 @@ impl<'a, Mode, Tls> Builder<'a, Mode, Tls> {
     /// If only one of `"rustls"` or `"native-tls"` is enabled, a convenience alias function `tls_connector()` is provided.
     #[cfg_attr(
         docsrs,
-        doc(cfg(all(feature = "native-tls"), not(target_arch = "wasm32")))
+        doc(cfg(all(feature = "native-tls", not(target_arch = "wasm32"))))
     )]
     #[cfg(all(feature = "native-tls", not(target_arch = "wasm32")))]
     pub fn native_tls_connector(
