@@ -1,5 +1,9 @@
 # Change Log
 
+## 0.8.12
+
+1. Updated readme to include `wasm32-unknown-unknown` example
+
 ## 0.8.11
 
 1. Experimental support for `wasm32-unknown-unknown` target (see `examples/wasm32-in-browser`).

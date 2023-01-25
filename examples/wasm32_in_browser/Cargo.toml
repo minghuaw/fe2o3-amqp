@@ -1,5 +1,5 @@
 [package]
-name = "wasm32-in-browser"
+name = "wasm32_in_browser"
 version = "0.1.0"
 edition = "2021"
 

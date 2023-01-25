@@ -2,7 +2,8 @@
 
 A rust implementation of AMQP 1.0 protocol based on serde and tokio.
 
-[![crate_version](https://img.shields.io/crates/v/fe2o3-amqp.svg?style=flat)](https://crates.io/crates/fe2o3-amqp) [![docs_version](https://img.shields.io/badge/docs-latest-blue.svg?style=flat)](https://docs.rs/fe2o3-amqp/latest/fe2o3_amqp/)
+[![crate_version](https://img.shields.io/crates/v/fe2o3-amqp.svg?style=flat)](https://crates.io/crates/fe2o3-amqp)
+[![docs_version](https://img.shields.io/badge/docs-latest-blue.svg?style=flat)](https://docs.rs/fe2o3-amqp/latest/fe2o3_amqp/)
 
 - [Quick Start](#quick-start)
 - [Documentation](https://docs.rs/fe2o3-amqp)
@@ -32,11 +33,13 @@ default = []
 2. [Listener](#listener)
 3. [WebSocket binding](#websocket)
 
-More examples including one showing how to use it with Azure Serivce Bus can be found on the [GitHub repo](https://github.com/minghuaw/fe2o3-amqp/tree/main/examples).
+More examples including one showing how to use it with Azure Serivce Bus can be found on the
+[GitHub repo](https://github.com/minghuaw/fe2o3-amqp/tree/main/examples).
 
 ### Client
 
-Below is an example with a local broker ([`TestAmqpBroker`](https://github.com/Azure/amqpnetlite/releases/download/test_broker.1609/TestAmqpBroker.zip))
+Below is an example with a local broker
+([`TestAmqpBroker`](https://github.com/Azure/amqpnetlite/releases/download/test_broker.1609/TestAmqpBroker.zip))
 listening on the localhost. The broker is executed with the following command
 
 ```powershell
@@ -149,8 +152,17 @@ async fn main() {
 
 ## More examples
 
-More examples of sending and receiving can be found on the [GitHub repo](https://github.com/minghuaw/fe2o3-amqp/tree/main/examples/).
-Please note that most examples requires a local broker running. One broker that can be used on Windows is [TestAmqpBroker](https://azure.github.io/amqpnetlite/articles/hello_amqp.html).
+More examples of sending and receiving can be found on the [GitHub
+repo](https://github.com/minghuaw/fe2o3-amqp/tree/main/examples/). Please note that most
+examples requires a local broker running. One broker that can be used on Windows is
+[TestAmqpBroker](https://azure.github.io/amqpnetlite/articles/hello_amqp.html).
+
+## WebAssembly support
+
+Experimental `wasm32-unknown-unknown` target is supported since "0.8.11" and requires use of
+`fe2o3-amqp-ws` to establish WebSocket connection to the broker. An example of sending and
+receiving message in a browser tab can be found
+[examples/wasm32-in-browser](https://github.com/minghuaw/fe2o3-amqp/tree/main/examples/wasm32-in-browser).
 
 ## Components
 

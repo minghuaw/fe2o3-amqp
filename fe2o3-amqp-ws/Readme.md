@@ -2,12 +2,12 @@
 
 WebSocket adapter for AMQP 1.0 websocket binding
 
-This provides a thin wrapper over `tokio_tungstenite::WebSocketStream`, and the wrapper
-performs the WebSocket handshake with the "Sec-WebSocket-Protocol" HTTP header set to "amqp".
+This provides a thin wrapper over `tokio_tungstenite::WebSocketStream`, and the wrapper performs
+the WebSocket handshake with the "Sec-WebSocket-Protocol" HTTP header set to "amqp".
 
-The wrapper type [`WebSocketStream`] could also be used for non-AMQP applications; however,
-the user should establish websocket stream with raw `tokio_tungstenite` API and then
-wrap the stream with the wrapper by `fe2o3_amqp_ws::WebSocketStream::from(ws_stream)`.
+The wrapper type [`WebSocketStream`] could also be used for non-AMQP applications; however, the
+user should establish websocket stream with raw `tokio_tungstenite` API and then wrap the stream
+with the wrapper by `fe2o3_amqp_ws::WebSocketStream::from(ws_stream)`.
 
 ## Feature flags
 
@@ -33,7 +33,7 @@ use fe2o3_amqp_ws::WebSocketStream;
 
 #[tokio::main]
 async fn main() {
-    let (ws_stream, _response) = WebSocketStream::connect("ws://localhost:5673")
+    let ws_stream = WebSocketStream::connect("ws://localhost:5673")
         .await
         .unwrap();
     let mut connection = Connection::builder()
@@ -64,5 +64,11 @@ async fn main() {
     connection.close().await.unwrap();
 }
 ```
+
+### WebAssembly support
+
+Experimental support for `wasm32-unknown-unknown` target has been added since "0.3.0" and uses a
+`web_sys::WebSocket` internally. An example of this can be found in
+[examples/wasm32-in-browser](https://github.com/minghuaw/fe2o3-amqp/tree/main/examples/wasm32-in-browser).
 
 License: MIT/Apache-2.0
