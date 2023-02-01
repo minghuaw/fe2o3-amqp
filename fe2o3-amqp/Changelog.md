@@ -1,5 +1,9 @@
 # Change Log
 
+## 0.8.14
+
+1. Replaced `wasm-timer` with `fluvio-wasm-timer` to work around a [`parkinglot` bug](https://github.com/tomaka/wasm-timer/pull/13).
+
 ## 0.8.13
 
 1. Fixed docsrs build error.
