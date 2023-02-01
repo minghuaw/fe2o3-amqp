@@ -1,6 +1,6 @@
 [package]
 name = "fe2o3-amqp"
-version = "0.8.13"
+version = "0.8.14"
 edition = "2021"
 description = "An implementation of AMQP1.0 protocol based on serde and tokio"
 license = "MIT/Apache-2.0"
@@ -80,7 +80,7 @@ tokio-stream = { version = "0.1", features = ["time"] }
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 tokio = { version = "^1.16.1", features = ["sync", "io-util", "rt", "macros"]} # "net" feature doesn't support wasm32
 getrandom = {version = "0.2", features = ["js"]}
-wasm-timer = "0.2"
+fluvio-wasm-timer = "0.2"
 
 [dev-dependencies]
 tokio-test = { version = "0.4" }
