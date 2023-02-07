@@ -20,7 +20,7 @@ use crate::{
         self,
         engine::SessionEngine,
         frame::{SessionFrame, SessionIncomingItem, SessionOutgoingItem},
-        AllocLinkError, BeginError, Error, SessionHandle, SessionInnerError,
+        error::{AllocLinkError, BeginError, Error, SessionInnerError}, SessionHandle, 
         DEFAULT_SESSION_CONTROL_BUFFER_SIZE,
     },
     util::Initialized,
@@ -158,7 +158,7 @@ impl SessionAcceptor {
             session_control_rx: mpsc::Receiver<SessionControl>,
             incoming: mpsc::Receiver<SessionFrame>,
             outgoing_link_frames: mpsc::Receiver<LinkFrame>,
-        ) -> Result<JoinHandle<Result<(), Error>>, BeginError> {
+        ) -> Result<(JoinHandle<()>, oneshot::Receiver<Result<(), Error>>), BeginError> {
             let engine = SessionEngine::begin_listener_session(
                 connection.control.clone(),
                 listener_session,
@@ -183,7 +183,7 @@ impl SessionAcceptor {
             session_control_rx: mpsc::Receiver<SessionControl>,
             incoming: mpsc::Receiver<SessionFrame>,
             outgoing_link_frames: mpsc::Receiver<LinkFrame>,
-        ) -> Result<JoinHandle<Result<(), Error>>, BeginError> {
+        ) -> Result<(JoinHandle<()>, oneshot::Receiver<Result<(), Error>>), BeginError> {
             match self.0.control_link_acceptor.clone() {
                 Some(control_link_acceptor) => {
                     let txn_manager =
@@ -268,7 +268,7 @@ impl SessionAcceptor {
             link_listener: link_listener_tx,
         };
 
-        let engine_handle = self
+        let (engine_handle, outcome) = self
             .launch_listener_session_engine(
                 listener_session,
                 &outgoing_tx,
@@ -284,6 +284,7 @@ impl SessionAcceptor {
             is_ended: false,
             control: session_control_tx,
             engine_handle,
+            outcome,
             outgoing: outgoing_tx,
             link_listener: link_listener_rx,
         };

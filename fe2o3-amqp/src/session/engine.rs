@@ -110,8 +110,10 @@ cfg_not_wasm32! {
         AllocLinkError: From<S::AllocError>,
         SessionInnerError: From<S::Error> + From<S::BeginError> + From<S::EndError>,
     {
-        pub fn spawn(self) -> JoinHandle<Result<(), Error>> {
-            tokio::spawn(self.event_loop())
+        pub fn spawn(self) -> (JoinHandle<()>, oneshot::Receiver<Result<(), Error>>) {
+            let (tx, rx) = oneshot::channel();
+            let handle = tokio::spawn(self.event_loop(tx));
+            (handle, rx)
         }
     }
 }

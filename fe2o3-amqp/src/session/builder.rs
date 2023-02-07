@@ -274,7 +274,7 @@ impl Builder {
             };
     
             #[cfg(not(all(feature = "transaction", feature = "acceptor")))]
-            let engine_handle = {
+            let (engine_handle, outcome) = {
                 let session = self.into_session(outgoing_channel, local_state);
                 let engine = SessionEngine::begin_client_session(
                     connection.control.clone(),
@@ -289,7 +289,7 @@ impl Builder {
             };
     
             #[cfg(all(feature = "transaction", feature = "acceptor"))]
-            let engine_handle = {
+            let (engine_handle, outcome) = {
                 let mut this = self;
                 match this.control_link_acceptor.take() {
                     Some(control_link_acceptor) => {
@@ -331,6 +331,7 @@ impl Builder {
                 is_ended: false,
                 control: session_control_tx,
                 engine_handle,
+                outcome,
                 outgoing: outgoing_tx,
                 link_listener: (),
             };
