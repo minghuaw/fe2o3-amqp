@@ -29,19 +29,21 @@ use crate::{
 
 use super::{builder::Builder, IncomingSession, ListenerConnectionHandle};
 
-#[cfg(feature = "transaction")]
-use fe2o3_amqp_types::{messaging::Accepted, transaction::TransactionError};
+cfg_transaction! {
+    use fe2o3_amqp_types::{messaging::Accepted, transaction::TransactionError};
+    
+    use crate::transaction::{manager::TransactionManager, session::TxnSession, AllocTxnIdError};
+}
 
-#[cfg(feature = "transaction")]
-use crate::transaction::{manager::TransactionManager, session::TxnSession, AllocTxnIdError};
 
 /// An empty marker trait that acts as a constraint for session engine
 pub trait ListenerSessionEndpoint {}
 
 impl ListenerSessionEndpoint for ListenerSession {}
 
-#[cfg(feature = "transaction")]
-impl ListenerSessionEndpoint for TxnSession<ListenerSession> {}
+cfg_transaction! {
+    impl ListenerSessionEndpoint for TxnSession<ListenerSession> {}
+}
 
 type SessionBuilder = crate::session::Builder;
 
@@ -145,74 +147,76 @@ impl SessionAcceptor {
         Builder::<Self, Initialized>::new()
     }
 
-    #[cfg(not(feature = "transaction"))]
-    #[allow(clippy::too_many_arguments)]
-    async fn launch_listener_session_engine<R>(
-        &self,
-        listener_session: ListenerSession,
-        _control_link_outgoing: &mpsc::Sender<LinkFrame>,
-        connection: &crate::connection::ConnectionHandle<R>,
-        _session_control_tx: &mpsc::Sender<SessionControl>,
-        session_control_rx: mpsc::Receiver<SessionControl>,
-        incoming: mpsc::Receiver<SessionFrame>,
-        outgoing_link_frames: mpsc::Receiver<LinkFrame>,
-    ) -> Result<JoinHandle<Result<(), Error>>, BeginError> {
-        let engine = SessionEngine::begin_listener_session(
-            connection.control.clone(),
-            listener_session,
-            session_control_rx,
-            incoming,
-            connection.outgoing.clone(),
-            outgoing_link_frames,
-        )
-        .await?;
-        Ok(engine.spawn())
+    cfg_not_transaction! {
+        #[allow(clippy::too_many_arguments)]
+        async fn launch_listener_session_engine<R>(
+            &self,
+            listener_session: ListenerSession,
+            _control_link_outgoing: &mpsc::Sender<LinkFrame>,
+            connection: &crate::connection::ConnectionHandle<R>,
+            _session_control_tx: &mpsc::Sender<SessionControl>,
+            session_control_rx: mpsc::Receiver<SessionControl>,
+            incoming: mpsc::Receiver<SessionFrame>,
+            outgoing_link_frames: mpsc::Receiver<LinkFrame>,
+        ) -> Result<JoinHandle<Result<(), Error>>, BeginError> {
+            let engine = SessionEngine::begin_listener_session(
+                connection.control.clone(),
+                listener_session,
+                session_control_rx,
+                incoming,
+                connection.outgoing.clone(),
+                outgoing_link_frames,
+            )
+            .await?;
+            Ok(engine.spawn())
+        }
     }
 
-    #[cfg(feature = "transaction")]
-    #[allow(clippy::too_many_arguments)]
-    async fn launch_listener_session_engine<R>(
-        &self,
-        listener_session: ListenerSession,
-        control_link_outgoing: &mpsc::Sender<LinkFrame>,
-        connection: &crate::connection::ConnectionHandle<R>,
-        session_control_tx: &mpsc::Sender<SessionControl>,
-        session_control_rx: mpsc::Receiver<SessionControl>,
-        incoming: mpsc::Receiver<SessionFrame>,
-        outgoing_link_frames: mpsc::Receiver<LinkFrame>,
-    ) -> Result<JoinHandle<Result<(), Error>>, BeginError> {
-        match self.0.control_link_acceptor.clone() {
-            Some(control_link_acceptor) => {
-                let txn_manager =
-                    TransactionManager::new(control_link_outgoing.clone(), control_link_acceptor);
-                let listener_session = TxnSession {
-                    control: session_control_tx.clone(),
-                    session: listener_session,
-                    txn_manager,
-                };
-
-                let engine = SessionEngine::begin_listener_session(
-                    connection.control.clone(),
-                    listener_session,
-                    session_control_rx,
-                    incoming,
-                    connection.outgoing.clone(),
-                    outgoing_link_frames,
-                )
-                .await?;
-                Ok(engine.spawn())
-            }
-            None => {
-                let engine = SessionEngine::begin_listener_session(
-                    connection.control.clone(),
-                    listener_session,
-                    session_control_rx,
-                    incoming,
-                    connection.outgoing.clone(),
-                    outgoing_link_frames,
-                )
-                .await?;
-                Ok(engine.spawn())
+    cfg_transaction! {
+        #[allow(clippy::too_many_arguments)]
+        async fn launch_listener_session_engine<R>(
+            &self,
+            listener_session: ListenerSession,
+            control_link_outgoing: &mpsc::Sender<LinkFrame>,
+            connection: &crate::connection::ConnectionHandle<R>,
+            session_control_tx: &mpsc::Sender<SessionControl>,
+            session_control_rx: mpsc::Receiver<SessionControl>,
+            incoming: mpsc::Receiver<SessionFrame>,
+            outgoing_link_frames: mpsc::Receiver<LinkFrame>,
+        ) -> Result<JoinHandle<Result<(), Error>>, BeginError> {
+            match self.0.control_link_acceptor.clone() {
+                Some(control_link_acceptor) => {
+                    let txn_manager =
+                        TransactionManager::new(control_link_outgoing.clone(), control_link_acceptor);
+                    let listener_session = TxnSession {
+                        control: session_control_tx.clone(),
+                        session: listener_session,
+                        txn_manager,
+                    };
+    
+                    let engine = SessionEngine::begin_listener_session(
+                        connection.control.clone(),
+                        listener_session,
+                        session_control_rx,
+                        incoming,
+                        connection.outgoing.clone(),
+                        outgoing_link_frames,
+                    )
+                    .await?;
+                    Ok(engine.spawn())
+                }
+                None => {
+                    let engine = SessionEngine::begin_listener_session(
+                        connection.control.clone(),
+                        listener_session,
+                        session_control_rx,
+                        incoming,
+                        connection.outgoing.clone(),
+                        outgoing_link_frames,
+                    )
+                    .await?;
+                    Ok(engine.spawn())
+                }
             }
         }
     }
@@ -521,32 +525,32 @@ impl endpoint::Session for ListenerSession {
     }
 }
 
-#[cfg(feature = "transaction")]
-impl endpoint::HandleDeclare for ListenerSession {
-    // This should be unreachable, but an error is probably a better way
-    fn allocate_transaction_id(
-        &mut self,
-    ) -> Result<fe2o3_amqp_types::transaction::TransactionId, AllocTxnIdError> {
-        Err(AllocTxnIdError::NotImplemented)
+cfg_transaction! {
+    impl endpoint::HandleDeclare for ListenerSession {
+        // This should be unreachable, but an error is probably a better way
+        fn allocate_transaction_id(
+            &mut self,
+        ) -> Result<fe2o3_amqp_types::transaction::TransactionId, AllocTxnIdError> {
+            Err(AllocTxnIdError::NotImplemented)
+        }
     }
-}
-
-#[cfg(feature = "transaction")]
-#[async_trait]
-impl endpoint::HandleDischarge for ListenerSession {
-    async fn commit_transaction(
-        &mut self,
-        _txn_id: fe2o3_amqp_types::transaction::TransactionId,
-    ) -> Result<Result<Accepted, TransactionError>, Self::Error> {
-        // FIXME: This should be impossible
-        Ok(Err(TransactionError::UnknownId))
-    }
-
-    fn rollback_transaction(
-        &mut self,
-        _txn_id: fe2o3_amqp_types::transaction::TransactionId,
-    ) -> Result<Result<Accepted, TransactionError>, Self::Error> {
-        // FIXME: This should be impossible
-        Ok(Err(TransactionError::UnknownId))
+    
+    #[async_trait]
+    impl endpoint::HandleDischarge for ListenerSession {
+        async fn commit_transaction(
+            &mut self,
+            _txn_id: fe2o3_amqp_types::transaction::TransactionId,
+        ) -> Result<Result<Accepted, TransactionError>, Self::Error> {
+            // FIXME: This should be impossible
+            Ok(Err(TransactionError::UnknownId))
+        }
+    
+        fn rollback_transaction(
+            &mut self,
+            _txn_id: fe2o3_amqp_types::transaction::TransactionId,
+        ) -> Result<Result<Accepted, TransactionError>, Self::Error> {
+            // FIXME: This should be impossible
+            Ok(Err(TransactionError::UnknownId))
+        }
     }
 }

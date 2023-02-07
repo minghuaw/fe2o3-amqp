@@ -13,13 +13,13 @@ use crate::{
     session::{frame::SessionIncomingItem, error::AllocLinkError},
 };
 
-#[cfg(feature = "transaction")]
-use fe2o3_amqp_types::{
-    messaging::Accepted, transaction::TransactionError, transaction::TransactionId,
-};
-
-#[cfg(feature = "transaction")]
-use crate::transaction::AllocTxnIdError;
+cfg_transaction! {
+    use fe2o3_amqp_types::{
+        messaging::Accepted, transaction::TransactionError, transaction::TransactionId,
+    };
+    
+    use crate::transaction::AllocTxnIdError;
+}
 
 #[derive(Debug)]
 pub(crate) enum ConnectionControl {

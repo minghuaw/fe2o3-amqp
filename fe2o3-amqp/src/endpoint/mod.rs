@@ -33,25 +33,26 @@ pub(crate) use self::connection::*;
 mod session;
 pub(crate) use self::session::*;
 
-#[cfg(feature = "transaction")]
-mod txn_resource;
-#[cfg(feature = "transaction")]
-pub(crate) use self::txn_resource::*;
+cfg_transaction! {
+    mod txn_resource;
+    pub(crate) use self::txn_resource::*;
+}
 
 mod link;
 pub(crate) use self::link::*;
 
-#[cfg(not(feature = "transaction"))]
-pub(crate) trait SessionEndpoint: Session {}
 
-#[cfg(not(feature = "transaction"))]
-impl<T> SessionEndpoint for T where T: Session {}
+cfg_not_transaction! {
+    pub(crate) trait SessionEndpoint: Session {}
+    
+    impl<T> SessionEndpoint for T where T: Session {}
+}
 
-#[cfg(feature = "transaction")]
-pub(crate) trait SessionEndpoint: Session + HandleDeclare + HandleDischarge {}
-
-#[cfg(feature = "transaction")]
-impl<T> SessionEndpoint for T where T: Session + HandleDeclare + HandleDischarge {}
+cfg_transaction! {
+    pub(crate) trait SessionEndpoint: Session + HandleDeclare + HandleDischarge {}
+    
+    impl<T> SessionEndpoint for T where T: Session + HandleDeclare + HandleDischarge {}
+}
 
 #[derive(Debug, Copy, Clone, PartialEq, PartialOrd, Eq, Ord)]
 pub(crate) struct OutgoingChannel(pub u16);

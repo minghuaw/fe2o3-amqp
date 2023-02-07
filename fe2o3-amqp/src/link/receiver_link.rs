@@ -390,25 +390,26 @@ pub(crate) fn is_section_header(b0: u8, b1: u8, b2: u8) -> bool {
 }
 
 impl ReceiverLink<Target> {
-    /// Set and send flow state
-    #[cfg(feature = "transaction")]
-    pub(crate) fn blocking_send_flow(
-        &mut self,
-        writer: &mpsc::Sender<LinkFrame>,
-        link_credit: Option<u32>,
-        drain: Option<bool>,
-        echo: bool,
-    ) -> Result<(), FlowError> {
-        let handle = self
-            .output_handle
-            .clone()
-            .ok_or(FlowError::IllegalState)?
-            .into();
-
-        let flow = self.get_link_flow(handle, link_credit, drain, echo);
-        writer
-            .blocking_send(LinkFrame::Flow(flow))
-            .map_err(|_| FlowError::IllegalSessionState)
+    cfg_transaction! {
+        /// Set and send flow state
+        pub(crate) fn blocking_send_flow(
+            &mut self,
+            writer: &mpsc::Sender<LinkFrame>,
+            link_credit: Option<u32>,
+            drain: Option<bool>,
+            echo: bool,
+        ) -> Result<(), FlowError> {
+            let handle = self
+                .output_handle
+                .clone()
+                .ok_or(FlowError::IllegalState)?
+                .into();
+    
+            let flow = self.get_link_flow(handle, link_credit, drain, echo);
+            writer
+                .blocking_send(LinkFrame::Flow(flow))
+                .map_err(|_| FlowError::IllegalSessionState)
+        }
     }
 }
 

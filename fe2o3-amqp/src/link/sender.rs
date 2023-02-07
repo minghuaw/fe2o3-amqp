@@ -217,15 +217,16 @@ impl Sender {
         }
     }
 
-    /// Detach the link with a timeout
-    ///
-    /// This simply wraps [`detach`](#method.detach) with a `timeout`
-    #[cfg(not(target_arch = "wasm32"))]
-    pub async fn detach_with_timeout(
-        self,
-        duration: Duration,
-    ) -> Result<Result<DetachedSender, (DetachedSender, DetachError)>, Elapsed> {
-        timeout(duration, self.detach()).await
+    cfg_not_wasm32! {
+        /// Detach the link with a timeout
+        ///
+        /// This simply wraps [`detach`](#method.detach) with a `timeout`
+        pub async fn detach_with_timeout(
+            self,
+            duration: Duration,
+        ) -> Result<Result<DetachedSender, (DetachedSender, DetachError)>, Elapsed> {
+            timeout(duration, self.detach()).await
+        }
     }
 
     /// Detach and re-attach the link to a new session
@@ -396,17 +397,19 @@ impl Sender {
         fut.await
     }
 
-    /// Send a message and wait for acknowledgement (disposition) with a timeout.
-    ///
-    /// This simply wraps [`send`](#method.send) inside a [`tokio::time::timeout`]
-    #[cfg(not(target_arch = "wasm32"))]
-    pub async fn send_with_timeout<T: SerializableBody>(
-        &mut self,
-        sendable: impl Into<Sendable<T>>,
-        duration: Duration,
-    ) -> Result<Result<Outcome, SendError>, Elapsed> {
-        timeout(duration, self.send(sendable)).await
+    cfg_not_wasm32! {
+        /// Send a message and wait for acknowledgement (disposition) with a timeout.
+        ///
+        /// This simply wraps [`send`](#method.send) inside a [`tokio::time::timeout`]
+        pub async fn send_with_timeout<T: SerializableBody>(
+            &mut self,
+            sendable: impl Into<Sendable<T>>,
+            duration: Duration,
+        ) -> Result<Result<Outcome, SendError>, Elapsed> {
+            timeout(duration, self.send(sendable)).await
+        }
     }
+
 
     /// Send a message without waiting for the acknowledgement.
     ///
@@ -1042,52 +1045,52 @@ impl DetachedSender {
         Ok(Sender { inner: self.inner })
     }
 
-    /// Resume the sender link with a timeout
-    #[cfg(not(target_arch = "wasm32"))]
-    #[cfg_attr(feature = "tracing", tracing::instrument(skip(self)))]
-    pub async fn resume_with_timeout(
-        mut self,
-        duration: Duration,
-    ) -> Result<Sender, SenderResumeError> {
-        let fut = self.inner.resume_incoming_attach(None);
-
-        match tokio::time::timeout(duration, fut).await {
-            Ok(Ok(_)) => Ok(Sender { inner: self.inner }),
-            Ok(Err(kind)) => Err(SenderResumeError {
-                detached_sender: self,
-                kind,
-            }),
-            Err(_) => {
-                try_as_sender!(self, self.inner.detach_with_error(None).await);
-                Err(SenderResumeError {
+    cfg_not_wasm32! {
+        /// Resume the sender link with a timeout
+        #[cfg_attr(feature = "tracing", tracing::instrument(skip(self)))]
+        pub async fn resume_with_timeout(
+            mut self,
+            duration: Duration,
+        ) -> Result<Sender, SenderResumeError> {
+            let fut = self.inner.resume_incoming_attach(None);
+    
+            match tokio::time::timeout(duration, fut).await {
+                Ok(Ok(_)) => Ok(Sender { inner: self.inner }),
+                Ok(Err(kind)) => Err(SenderResumeError {
                     detached_sender: self,
-                    kind: SenderResumeErrorKind::Timeout,
-                })
+                    kind,
+                }),
+                Err(_) => {
+                    try_as_sender!(self, self.inner.detach_with_error(None).await);
+                    Err(SenderResumeError {
+                        detached_sender: self,
+                        kind: SenderResumeErrorKind::Timeout,
+                    })
+                }
             }
         }
-    }
-
-    /// Resume the sender link on the original session with an Attach sent by the remote peer
-    #[cfg(not(target_arch = "wasm32"))]
-    pub async fn resume_incoming_attach_with_timeout(
-        mut self,
-        remote_attach: Attach,
-        duration: Duration,
-    ) -> Result<Sender, SenderResumeError> {
-        let fut = self.inner.resume_incoming_attach(Some(remote_attach));
-
-        match tokio::time::timeout(duration, fut).await {
-            Ok(Ok(_)) => Ok(Sender { inner: self.inner }),
-            Ok(Err(kind)) => Err(SenderResumeError {
-                detached_sender: self,
-                kind,
-            }),
-            Err(_) => {
-                try_as_sender!(self, self.inner.detach_with_error(None).await);
-                Err(SenderResumeError {
+    
+        /// Resume the sender link on the original session with an Attach sent by the remote peer
+        pub async fn resume_incoming_attach_with_timeout(
+            mut self,
+            remote_attach: Attach,
+            duration: Duration,
+        ) -> Result<Sender, SenderResumeError> {
+            let fut = self.inner.resume_incoming_attach(Some(remote_attach));
+    
+            match tokio::time::timeout(duration, fut).await {
+                Ok(Ok(_)) => Ok(Sender { inner: self.inner }),
+                Ok(Err(kind)) => Err(SenderResumeError {
                     detached_sender: self,
-                    kind: SenderResumeErrorKind::Timeout,
-                })
+                    kind,
+                }),
+                Err(_) => {
+                    try_as_sender!(self, self.inner.detach_with_error(None).await);
+                    Err(SenderResumeError {
+                        detached_sender: self,
+                        kind: SenderResumeErrorKind::Timeout,
+                    })
+                }
             }
         }
     }
@@ -1112,27 +1115,27 @@ impl DetachedSender {
         self.resume_incoming_attach(remote_attach).await
     }
 
-    /// Resume the sender on a specific session with timeout
-    #[cfg(not(target_arch = "wasm32"))]
-    pub async fn resume_on_session_with_timeout<R>(
-        mut self,
-        session: &SessionHandle<R>,
-        duration: Duration,
-    ) -> Result<Sender, SenderResumeError> {
-        *self.inner.session_control_mut() = session.control.clone();
-        self.resume_with_timeout(duration).await
-    }
-
-    /// Resume the sender on a specific session with timeout
-    #[cfg(not(target_arch = "wasm32"))]
-    pub async fn resume_incoming_attach_on_session_with_timeout<R>(
-        mut self,
-        remote_attach: Attach,
-        session: &SessionHandle<R>,
-        duration: Duration,
-    ) -> Result<Sender, SenderResumeError> {
-        *self.inner.session_control_mut() = session.control.clone();
-        self.resume_incoming_attach_with_timeout(remote_attach, duration)
-            .await
+    cfg_not_wasm32! {
+        /// Resume the sender on a specific session with timeout
+        pub async fn resume_on_session_with_timeout<R>(
+            mut self,
+            session: &SessionHandle<R>,
+            duration: Duration,
+        ) -> Result<Sender, SenderResumeError> {
+            *self.inner.session_control_mut() = session.control.clone();
+            self.resume_with_timeout(duration).await
+        }
+    
+        /// Resume the sender on a specific session with timeout
+        pub async fn resume_incoming_attach_on_session_with_timeout<R>(
+            mut self,
+            remote_attach: Attach,
+            session: &SessionHandle<R>,
+            duration: Duration,
+        ) -> Result<Sender, SenderResumeError> {
+            *self.inner.session_control_mut() = session.control.clone();
+            self.resume_incoming_attach_with_timeout(remote_attach, duration)
+                .await
+        }
     }
 }

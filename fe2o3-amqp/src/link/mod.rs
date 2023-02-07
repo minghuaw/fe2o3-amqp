@@ -38,8 +38,9 @@ use self::{
     target_archetype::VerifyTargetArchetype,
 };
 
-#[cfg(feature = "transaction")]
-use crate::transaction::TXN_ID_KEY;
+cfg_transaction! {
+    use crate::transaction::TXN_ID_KEY;
+}
 
 mod frame;
 pub(crate) use frame::*;

@@ -8,8 +8,9 @@ use tokio::{sync::mpsc, task::JoinError};
 
 use crate::transport::{self, error::NegotiationError};
 
-#[cfg(feature = "scram")]
-use crate::auth::error::ScramErrorKind;
+cfg_scram! {
+    use crate::auth::error::ScramErrorKind;
+}
 
 /// Error associated with openning a connection
 #[derive(Debug, thiserror::Error)]

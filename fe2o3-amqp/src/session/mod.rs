@@ -28,14 +28,15 @@ use crate::{
     Payload,
 };
 
-#[cfg(feature = "transaction")]
-use fe2o3_amqp_types::{messaging::Accepted, transaction::TransactionError};
+cfg_transaction! {
+    use fe2o3_amqp_types::{messaging::Accepted, transaction::TransactionError};
+    
+    use crate::{
+        endpoint::{HandleDeclare, HandleDischarge},
+        transaction::AllocTxnIdError,
+    };
+}
 
-#[cfg(feature = "transaction")]
-use crate::{
-    endpoint::{HandleDeclare, HandleDischarge},
-    transaction::AllocTxnIdError,
-};
 
 pub(crate) mod engine;
 pub(crate) mod frame;
@@ -300,32 +301,33 @@ impl Session {
         builder::Builder::new()
     }
 
-    /// Begins a new session with the default configurations
-    ///
-    /// # Default configuration
-    ///
-    /// | Field | Default Value |
-    /// |-------|---------------|
-    /// |`next_outgoing_id`| 0 |
-    /// |`incoming_window`| [`DEFAULT_WINDOW`] |
-    /// |`outgoing_window`| [`DEFAULT_WINDOW`] |
-    /// |`handle_max`| `u32::MAX` |
-    /// |`offered_capabilities` | `None` |
-    /// |`desired_capabilities`| `None` |
-    /// |`Properties`| `None` |
-    ///
-    /// # Example
-    ///
-    /// ```rust,ignore
-    /// use fe2o3_amqp::Session;
-    ///
-    /// let session = Session::begin(&mut connection).await.unwrap();
-    /// ```
-    #[cfg(not(target_arch = "wasm32"))]
-    pub async fn begin(
-        conn: &mut crate::connection::ConnectionHandle<()>,
-    ) -> Result<SessionHandle<()>, BeginError> {
-        Session::builder().begin(conn).await
+    cfg_not_wasm32! {
+        /// Begins a new session with the default configurations
+        ///
+        /// # Default configuration
+        ///
+        /// | Field | Default Value |
+        /// |-------|---------------|
+        /// |`next_outgoing_id`| 0 |
+        /// |`incoming_window`| [`DEFAULT_WINDOW`] |
+        /// |`outgoing_window`| [`DEFAULT_WINDOW`] |
+        /// |`handle_max`| `u32::MAX` |
+        /// |`offered_capabilities` | `None` |
+        /// |`desired_capabilities`| `None` |
+        /// |`Properties`| `None` |
+        ///
+        /// # Example
+        ///
+        /// ```rust,ignore
+        /// use fe2o3_amqp::Session;
+        ///
+        /// let session = Session::begin(&mut connection).await.unwrap();
+        /// ```
+        pub async fn begin(
+            conn: &mut crate::connection::ConnectionHandle<()>,
+        ) -> Result<SessionHandle<()>, BeginError> {
+            Session::builder().begin(conn).await
+        }
     }
 
     fn on_outgoing_transfer_inner(
@@ -954,34 +956,34 @@ fn num_messages_settled_by_disposition(first: u32, last: Option<u32>) -> u32 {
     last.and_then(|last| last.checked_sub(first)).unwrap_or(0) + 1
 }
 
-#[cfg(feature = "transaction")]
-impl HandleDeclare for Session {
-    // This should be unreachable, but an error is probably a better way
-    fn allocate_transaction_id(
-        &mut self,
-    ) -> Result<fe2o3_amqp_types::transaction::TransactionId, AllocTxnIdError> {
-        // Err(Error::amqp_error(AmqpError::NotImplemented, "Resource side transaction is not enabled".to_string()))
-        Err(AllocTxnIdError::NotImplemented)
+cfg_transaction! {
+    impl HandleDeclare for Session {
+        // This should be unreachable, but an error is probably a better way
+        fn allocate_transaction_id(
+            &mut self,
+        ) -> Result<fe2o3_amqp_types::transaction::TransactionId, AllocTxnIdError> {
+            // Err(Error::amqp_error(AmqpError::NotImplemented, "Resource side transaction is not enabled".to_string()))
+            Err(AllocTxnIdError::NotImplemented)
+        }
     }
-}
-
-#[cfg(feature = "transaction")]
-#[async_trait]
-impl HandleDischarge for Session {
-    async fn commit_transaction(
-        &mut self,
-        _txn_id: fe2o3_amqp_types::transaction::TransactionId,
-    ) -> Result<Result<Accepted, TransactionError>, Self::Error> {
-        // FIXME: This should be impossible
-        Ok(Err(TransactionError::UnknownId))
-    }
-
-    fn rollback_transaction(
-        &mut self,
-        _txn_id: fe2o3_amqp_types::transaction::TransactionId,
-    ) -> Result<Result<Accepted, TransactionError>, Self::Error> {
-        // FIXME: This should be impossible
-        Ok(Err(TransactionError::UnknownId))
+    
+    #[async_trait]
+    impl HandleDischarge for Session {
+        async fn commit_transaction(
+            &mut self,
+            _txn_id: fe2o3_amqp_types::transaction::TransactionId,
+        ) -> Result<Result<Accepted, TransactionError>, Self::Error> {
+            // FIXME: This should be impossible
+            Ok(Err(TransactionError::UnknownId))
+        }
+    
+        fn rollback_transaction(
+            &mut self,
+            _txn_id: fe2o3_amqp_types::transaction::TransactionId,
+        ) -> Result<Result<Accepted, TransactionError>, Self::Error> {
+            // FIXME: This should be impossible
+            Ok(Err(TransactionError::UnknownId))
+        }
     }
 }
 
