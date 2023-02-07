@@ -981,7 +981,7 @@ impl<'a> Builder<'a, mode::ConnectorWithId, ()> {
                 {
                     let domain = self.domain.ok_or(OpenError::InvalidDomain)?;
                     let spawn_engine_fn = |engine, control_tx, outgoing_tx| {
-                        spawn_local_engine(engine, control_tx, outgoing_tx, local_set)
+                        spawn_engine_on_current_local_set(engine, control_tx, outgoing_tx)
                     };
                     return self
                         .connect_tls_with_rustls_default(stream, domain, spawn_engine_fn)
@@ -1028,7 +1028,7 @@ impl<'a> Builder<'a, mode::ConnectorWithId, ()> {
                 {
                     let domain = self.domain.ok_or(OpenError::InvalidDomain)?;
                     let spawn_engine_fn = |engine, control_tx, outgoing_tx| {
-                        spawn_local_engine(engine, control_tx, outgoing_tx, local_set)
+                        spawn_engine_on_local_set(engine, control_tx, outgoing_tx, local_set)
                     };
                     return self
                         .connect_tls_with_rustls_default(stream, domain, spawn_engine_fn)
