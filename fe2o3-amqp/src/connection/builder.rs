@@ -958,14 +958,8 @@ impl<'a> Builder<'a, mode::ConnectorWithId, ()> {
     }
 }
 
+#[cfg(target_arch = "wasm32")]
 impl<'a> Builder<'a, mode::ConnectorWithId, ()> {
-    pub async fn open_local<Io>(
-        self,
-        url: impl TryInto<Url, Error = impl Into<OpenError>>,
-    ) -> Result<ConnectionHandle<()>, OpenError> {
-        todo!()
-    }
-
     /// Open a connection with the given stream onto a [`tokio::task::LocalSet`].
     pub async fn open_with_stream_on_local_set<Io>(
         self,
@@ -1267,7 +1261,7 @@ impl<'a> Builder<'a, mode::ConnectorWithId, tokio_native_tls::TlsConnector> {
 }
 
 #[cfg(not(target_arch = "wasm32"))]
-fn engine_spawn_and_get_handle<Io>(
+fn spawn_engine<Io>(
     engine: ConnectionEngine<Io, Connection>,
     control_tx: mpsc::Sender<ConnectionControl>,
     outgoing_tx: mpsc::Sender<SessionFrame>,
@@ -1289,38 +1283,17 @@ where
     Ok(connection_handle)
 }
 
-fn engine_spawn_local_and_get_handle<Io>(
+#[cfg(target_arch = "wasm32")]
+fn spawn_local_engine<Io>(
     engine: ConnectionEngine<Io, Connection>,
     control_tx: mpsc::Sender<ConnectionControl>,
     outgoing_tx: mpsc::Sender<SessionFrame>,
+    local_set: &tokio::task::LocalSet,
 ) -> Result<ConnectionHandle<()>, OpenError>
 where
     Io: AsyncRead + AsyncWrite + std::fmt::Debug + Unpin + 'static,
 {
-    let (handle, outcome) = engine.spawn_local();
-
-    let connection_handle = ConnectionHandle {
-        is_closed: false,
-        control: control_tx,
-        handle,
-        outcome,
-        outgoing: outgoing_tx, // session_control: session_control_tx
-        session_listener: (),
-    };
-
-    Ok(connection_handle)
-}
-
-fn engine_spawn_on_local_set_and_get_handle<Io>(
-    engine: ConnectionEngine<Io, Connection>,
-    control_tx: mpsc::Sender<ConnectionControl>,
-    outgoing_tx: mpsc::Sender<SessionFrame>,
-    local_set: &mut tokio::task::LocalSet,
-) -> Result<ConnectionHandle<()>, OpenError>
-where
-    Io: AsyncRead + AsyncWrite + std::fmt::Debug + Unpin + 'static,
-{
-    let (handle, outcome) = engine.spawn_on_local_set(local_set);
+    let (handle, outcome) = engine.spawn_local(local_set);
 
     let connection_handle = ConnectionHandle {
         is_closed: false,

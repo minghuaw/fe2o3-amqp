@@ -35,7 +35,7 @@ pub(crate) struct ConnectionEngine<Io, C> {
 impl<Io, C> ConnectionEngine<Io, C>
 where
     Io: AsyncRead + AsyncWrite + std::fmt::Debug + SendBound + Unpin + 'static,
-    C: endpoint::Connection<State = ConnectionState> + std::fmt::Debug + SendBound + Sync + 'static,
+    C: endpoint::Connection<State = ConnectionState> + std::fmt::Debug + Send + Sync + 'static,
     C::AllocError: Into<AllocSessionError>,
     C::CloseError: From<transport::Error>,
     C::OpenError: From<transport::Error>,
@@ -43,21 +43,15 @@ where
     ConnectionStateError: From<C::OpenError> + From<C::CloseError>,
     OpenError: From<C::OpenError>,
 {
-    cfg_not_wasm32! {
-        pub(crate) fn spawn(self) -> (JoinHandle<()>, oneshot::Receiver<Result<(), Error>>) {
-            let (tx, rx) = oneshot::channel();
-            let handle = tokio::spawn(self.event_loop(tx));
-            (handle, rx)
-        }
-    }
-
-    pub(crate) fn spawn_local(self) -> (JoinHandle<()>, oneshot::Receiver<Result<(), Error>>) {
+    #[cfg(not(target_arch = "wasm32"))]
+    pub fn spawn(self) -> (JoinHandle<()>, oneshot::Receiver<Result<(), Error>>) {
         let (tx, rx) = oneshot::channel();
-        let handle = tokio::task::spawn_local(self.event_loop(tx));
+        let handle = tokio::spawn(self.event_loop(tx));
         (handle, rx)
     }
 
-    pub(crate) fn spawn_on_local_set(
+    #[cfg(target_arch = "wasm32")]
+    pub fn spawn_local(
         self,
         local_set: &tokio::task::LocalSet,
     ) -> (JoinHandle<()>, oneshot::Receiver<Result<(), Error>>) {
