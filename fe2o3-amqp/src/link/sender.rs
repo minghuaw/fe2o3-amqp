@@ -41,7 +41,9 @@ use super::{
 };
 
 #[cfg(docsrs)]
-use fe2o3_amqp_types::messaging::{AmqpSequence, AmqpValue, Batch, Body, Data, IntoBody, Message, MESSAGE_FORMAT};
+use fe2o3_amqp_types::messaging::{
+    AmqpSequence, AmqpValue, Batch, Body, Data, IntoBody, Message, MESSAGE_FORMAT,
+};
 
 /// An AMQP1.0 sender
 ///
@@ -409,7 +411,6 @@ impl Sender {
             timeout(duration, self.send(sendable)).await
         }
     }
-
 
     /// Send a message without waiting for the acknowledgement.
     ///
@@ -1053,7 +1054,7 @@ impl DetachedSender {
             duration: Duration,
         ) -> Result<Sender, SenderResumeError> {
             let fut = self.inner.resume_incoming_attach(None);
-    
+
             match tokio::time::timeout(duration, fut).await {
                 Ok(Ok(_)) => Ok(Sender { inner: self.inner }),
                 Ok(Err(kind)) => Err(SenderResumeError {
@@ -1069,7 +1070,7 @@ impl DetachedSender {
                 }
             }
         }
-    
+
         /// Resume the sender link on the original session with an Attach sent by the remote peer
         pub async fn resume_incoming_attach_with_timeout(
             mut self,
@@ -1077,7 +1078,7 @@ impl DetachedSender {
             duration: Duration,
         ) -> Result<Sender, SenderResumeError> {
             let fut = self.inner.resume_incoming_attach(Some(remote_attach));
-    
+
             match tokio::time::timeout(duration, fut).await {
                 Ok(Ok(_)) => Ok(Sender { inner: self.inner }),
                 Ok(Err(kind)) => Err(SenderResumeError {
@@ -1125,7 +1126,7 @@ impl DetachedSender {
             *self.inner.session_control_mut() = session.control.clone();
             self.resume_with_timeout(duration).await
         }
-    
+
         /// Resume the sender on a specific session with timeout
         pub async fn resume_incoming_attach_on_session_with_timeout<R>(
             mut self,

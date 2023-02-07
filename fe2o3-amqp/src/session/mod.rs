@@ -30,13 +30,12 @@ use crate::{
 
 cfg_transaction! {
     use fe2o3_amqp_types::{messaging::Accepted, transaction::TransactionError};
-    
+
     use crate::{
         endpoint::{HandleDeclare, HandleDischarge},
         transaction::AllocTxnIdError,
     };
 }
-
 
 pub(crate) mod engine;
 pub(crate) mod frame;
@@ -91,16 +90,16 @@ impl<R> SessionHandle<R> {
     }
 
     /// Tries to end the session
-    /// 
+    ///
     /// # Returns
-    /// 
+    ///
     /// - `Ok(Ok(()))` if the session has ended successfully
     /// - `Ok(Err(_))` if an error occurred during the session ending on either side
     /// - `Err(TryEndError::AlreadyEnded)` if the session has already ended
     /// - `Err(TryEndError::RemoteEndNotReceived)` if the remote end has not been received yet
     pub fn try_end(&mut self) -> Result<Result<(), Error>, TryEndError> {
         if self.is_ended {
-            return Err(TryEndError::AlreadyEnded)
+            return Err(TryEndError::AlreadyEnded);
         }
 
         let _ = self.control.try_send(SessionControl::End(None));
@@ -108,7 +107,7 @@ impl<R> SessionHandle<R> {
             Ok(res) => {
                 self.is_ended = true;
                 Ok(res)
-            },
+            }
             Err(TryRecvError::Empty) => Err(TryEndError::RemoteEndNotReceived),
             Err(TryRecvError::Closed) => {
                 self.is_ended = true;
@@ -123,9 +122,9 @@ impl<R> SessionHandle<R> {
         /// An `Error::IllegalState` will be returned if called after any of [`end`](#method.end),
         /// [`end_with_error`](#method.end_with_error), [`on_end`](#on_end) has beend executed. This
         /// will cause the JoinHandle to be polled after completion, which causes a panic.
-        /// 
+        ///
         /// # wasm32 support
-        /// 
+        ///
         /// This method is not supported on wasm32 targets, please use `drop()` instead.
         pub async fn end(&mut self) -> Result<(), Error> {
             // If sending is unsuccessful, the `SessionEngine` event loop is
@@ -133,24 +132,24 @@ impl<R> SessionHandle<R> {
             let _ = self.control.send(SessionControl::End(None)).await;
             self.on_end().await
         }
-    
+
         /// Alias for [`end`](#method.end)
-        /// 
+        ///
         /// # wasm32 support
-        /// 
+        ///
         /// This method is not supported on wasm32 targets, please use `drop()` instead.
         pub async fn close(&mut self) -> Result<(), Error> {
             self.end().await
         }
-    
+
         /// End the session with an error
         ///
         /// An `Error::IllegalState` will be returned if called after any of [`end`](#method.end),
-        /// [`end_with_error`](#method.end_with_error), [`on_end`](#on_end) has beend executed.    
+        /// [`end_with_error`](#method.end_with_error), [`on_end`](#on_end) has beend executed.
         /// This will cause the JoinHandle to be polled after completion, which causes a panic.
-        /// 
+        ///
         /// # wasm32 support
-        /// 
+        ///
         /// This method is not supported on wasm32 targets, please use `drop()` instead.
         pub async fn end_with_error(
             &mut self,
@@ -966,7 +965,7 @@ cfg_transaction! {
             Err(AllocTxnIdError::NotImplemented)
         }
     }
-    
+
     #[async_trait]
     impl HandleDischarge for Session {
         async fn commit_transaction(
@@ -976,7 +975,7 @@ cfg_transaction! {
             // FIXME: This should be impossible
             Ok(Err(TransactionError::UnknownId))
         }
-    
+
         fn rollback_transaction(
             &mut self,
             _txn_id: fe2o3_amqp_types::transaction::TransactionId,

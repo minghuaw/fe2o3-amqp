@@ -260,7 +260,7 @@ impl Builder {
                 mpsc::channel::<SessionControl>(DEFAULT_SESSION_CONTROL_BUFFER_SIZE);
             let (incoming_tx, incoming_rx) = mpsc::channel(self.buffer_size);
             let (outgoing_tx, outgoing_rx) = mpsc::channel(self.buffer_size);
-    
+
             // create session in connection::Engine
             let outgoing_channel = match connection.allocate_session(incoming_tx).await {
                 Ok(channel) => channel,
@@ -272,7 +272,7 @@ impl Builder {
                     }
                 },
             };
-    
+
             #[cfg(not(all(feature = "transaction", feature = "acceptor")))]
             let (engine_handle, outcome) = {
                 let session = self.into_session(outgoing_channel, local_state);
@@ -287,7 +287,7 @@ impl Builder {
                 .await?;
                 engine.spawn()
             };
-    
+
             #[cfg(all(feature = "transaction", feature = "acceptor"))]
             let (engine_handle, outcome) = {
                 let mut this = self;
@@ -326,7 +326,7 @@ impl Builder {
                     }
                 }
             };
-    
+
             let handle = SessionHandle {
                 is_ended: false,
                 control: session_control_tx,
@@ -338,7 +338,6 @@ impl Builder {
             Ok(handle)
         }
     }
-
 
     cfg_wasm32! {
         /// Begins a new session on a local set
@@ -362,7 +361,7 @@ impl Builder {
                 mpsc::channel::<SessionControl>(DEFAULT_SESSION_CONTROL_BUFFER_SIZE);
             let (incoming_tx, incoming_rx) = mpsc::channel(self.buffer_size);
             let (outgoing_tx, outgoing_rx) = mpsc::channel(self.buffer_size);
-    
+
             // create session in connection::Engine
             let outgoing_channel = match connection.allocate_session(incoming_tx).await {
                 Ok(channel) => channel,
@@ -374,7 +373,7 @@ impl Builder {
                     }
                 },
             };
-    
+
             let (engine_handle, outcome) = {
                 let session = self.into_session(outgoing_channel, local_state);
                 let engine = SessionEngine::begin_client_session(
@@ -388,7 +387,7 @@ impl Builder {
                 .await?;
                 engine.spawn_on_local_set(local_set)
             };
-    
+
             let handle = SessionHandle {
                 is_ended: false,
                 control: session_control_tx,
@@ -399,8 +398,8 @@ impl Builder {
             };
             Ok(handle)
         }
-    
-        
+
+
         /// Begins a new session on the current local set. This internally uses [`tokio::task::spawn_local()`]
         /// and must be called within a [`tokio::task::LocalSet`].
         ///
@@ -422,7 +421,7 @@ impl Builder {
                 mpsc::channel::<SessionControl>(DEFAULT_SESSION_CONTROL_BUFFER_SIZE);
             let (incoming_tx, incoming_rx) = mpsc::channel(self.buffer_size);
             let (outgoing_tx, outgoing_rx) = mpsc::channel(self.buffer_size);
-    
+
             // create session in connection::Engine
             let outgoing_channel = match connection.allocate_session(incoming_tx).await {
                 Ok(channel) => channel,
@@ -434,7 +433,7 @@ impl Builder {
                     }
                 },
             };
-    
+
             let (engine_handle, outcome) = {
                 let session = self.into_session(outgoing_channel, local_state);
                 let engine = SessionEngine::begin_client_session(
@@ -448,7 +447,7 @@ impl Builder {
                 .await?;
                 engine.spawn_local()
             };
-    
+
             let handle = SessionHandle {
                 is_ended: false,
                 control: session_control_tx,

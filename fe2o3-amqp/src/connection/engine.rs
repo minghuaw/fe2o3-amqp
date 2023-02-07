@@ -71,7 +71,7 @@ cfg_wasm32! {
             let handle = tokio::task::spawn_local(self.event_loop(tx));
             (handle, rx)
         }
-    
+
         pub fn spawn_on_local_set(
             self,
             local_set: &tokio::task::LocalSet,
@@ -82,7 +82,6 @@ cfg_wasm32! {
         }
     }
 }
-
 
 impl<Io, C> ConnectionEngine<Io, C>
 where

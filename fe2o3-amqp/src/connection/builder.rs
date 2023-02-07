@@ -345,18 +345,17 @@ impl<'a, Mode, Tls> Builder<'a, Mode, Tls> {
                 offered_capabilities: self.offered_capabilities,
                 desired_capabilities: self.desired_capabilities,
                 properties: self.properties,
-    
+
                 tls_connector,
-    
+
                 buffer_size: self.buffer_size,
                 sasl_profile: self.sasl_profile,
                 alt_tls_estab: self.alt_tls_estab,
-    
+
                 marker: PhantomData,
             }
         }
     }
-
 
     /// Alias for [`native_tls_connector`](#method.native_tls_connector) if only `"native-tls"` is
     /// enabled.
@@ -409,19 +408,18 @@ impl<'a, Mode, Tls> Builder<'a, Mode, Tls> {
                     offered_capabilities: self.offered_capabilities,
                     desired_capabilities: self.desired_capabilities,
                     properties: self.properties,
-        
+
                     tls_connector,
-        
+
                     buffer_size: self.buffer_size,
                     sasl_profile: self.sasl_profile,
                     alt_tls_estab: self.alt_tls_estab,
-        
+
                     marker: PhantomData,
                 }
             }
         }
     }
-
 }
 
 impl<'a, Mode, Tls> Builder<'a, Mode, Tls> {
@@ -871,7 +869,7 @@ cfg_not_wasm32! {
             url: impl TryInto<Url, Error = impl Into<OpenError>>,
         ) -> Result<ConnectionHandle<()>, OpenError> {
             let url = url.try_into().map_err(Into::into)?;
-    
+
             // Url info will override the builder fields
             // only override if value exists
             self.scheme = url.scheme();
@@ -884,13 +882,13 @@ cfg_not_wasm32! {
             if let Ok(profile) = SaslProfile::try_from(&url) {
                 self.sasl_profile = Some(profile);
             }
-    
+
             let addr = url.socket_addrs(|| default_port(url.scheme()))?;
             let stream = TcpStream::connect(&*addr).await?; // std::io::Error
-    
+
             self.open_with_stream(stream).await
         }
-    
+
         /// Open with an IO that implements `AsyncRead` and `AsyncWrite`.
         ///
         /// The stream will be wrapped in `BufReader` and `BufWriter` so it is not necessary
@@ -943,7 +941,7 @@ cfg_not_wasm32! {
                             .connect_tls_with_rustls_default(stream, domain, spawn_engine)
                             .await;
                     }
-    
+
                     #[cfg(all(
                         feature = "native-tls",
                         not(feature = "rustls"),
@@ -955,7 +953,7 @@ cfg_not_wasm32! {
                             .connect_tls_with_native_tls_default(stream, domain, spawn_engine)
                             .await;
                     }
-    
+
                     Err(OpenError::TlsConnectorNotFound)
                 }
                 _ => Err(OpenError::InvalidScheme),
@@ -993,7 +991,7 @@ cfg_wasm32! {
                             .connect_tls_with_rustls_default(stream, domain, spawn_engine_fn)
                             .await;
                     }
-    
+
                     #[cfg(all(
                         feature = "native-tls",
                         not(feature = "rustls"),
@@ -1005,14 +1003,14 @@ cfg_wasm32! {
                             .connect_tls_with_native_tls_default(stream, domain, spawn_engine)
                             .await;
                     }
-    
+
                     #[allow(unused)]
                     Err(OpenError::TlsConnectorNotFound)
                 }
                 _ => Err(OpenError::InvalidScheme),
             }
         }
-    
+
         /// Open a connection with the given stream onto a [`tokio::task::LocalSet`].
         pub async fn open_with_stream_on_local_set<Io>(
             self,
@@ -1040,7 +1038,7 @@ cfg_wasm32! {
                             .connect_tls_with_rustls_default(stream, domain, spawn_engine_fn)
                             .await;
                     }
-    
+
                     #[cfg(all(
                         feature = "native-tls",
                         not(feature = "rustls"),
@@ -1052,7 +1050,7 @@ cfg_wasm32! {
                             .connect_tls_with_native_tls_default(stream, domain, spawn_engine)
                             .await;
                     }
-    
+
                     #[allow(unused)]
                     Err(OpenError::TlsConnectorNotFound)
                 }
@@ -1061,7 +1059,6 @@ cfg_wasm32! {
         }
     }
 }
-
 
 /* -------------------------------------------------------------------------- */
 /*                               TLS with rustls                              */
@@ -1140,7 +1137,7 @@ cfg_not_wasm32! {
                 url: impl TryInto<Url, Error = impl Into<OpenError>>,
             ) -> Result<ConnectionHandle<()>, OpenError> {
                 let url = url.try_into().map_err(Into::into)?;
-        
+
                 // Url info will override the builder fields
                 // only override if value exists
                 self.scheme = url.scheme();
@@ -1153,13 +1150,13 @@ cfg_not_wasm32! {
                 if let Ok(profile) = SaslProfile::try_from(&url) {
                     self.sasl_profile = Some(profile);
                 }
-        
+
                 let addr = url.socket_addrs(|| default_port(url.scheme()))?;
                 let stream = TcpStream::connect(&*addr).await?; // std::io::Error
-        
+
                 self.open_with_stream(stream).await
             }
-        
+
             /// Open with an IO that implements `AsyncRead` and `AsyncWrite`
             ///
             /// # TLS
@@ -1190,7 +1187,6 @@ cfg_not_wasm32! {
         }
     }
 }
-
 
 /* -------------------------------------------------------------------------- */
 /*                             TLS with native-tls                            */
@@ -1269,7 +1265,7 @@ cfg_not_wasm32! {
                 url: impl TryInto<Url, Error = impl Into<OpenError>>,
             ) -> Result<ConnectionHandle<()>, OpenError> {
                 let url = url.try_into().map_err(Into::into)?;
-        
+
                 // Url info will override the builder fields
                 // only override if value exists
                 self.scheme = url.scheme();
@@ -1282,13 +1278,13 @@ cfg_not_wasm32! {
                 if let Ok(profile) = SaslProfile::try_from(&url) {
                     self.sasl_profile = Some(profile);
                 }
-        
+
                 let addr = url.socket_addrs(|| default_port(url.scheme()))?;
                 let stream = TcpStream::connect(&*addr).await?; // std::io::Error
-        
+
                 self.open_with_stream(stream).await
             }
-        
+
             /// Open with an IO that implements `AsyncRead` and `AsyncWrite`
             ///
             /// # TLS
@@ -1320,7 +1316,6 @@ cfg_not_wasm32! {
     }
 }
 
-
 cfg_not_wasm32! {
     fn spawn_engine<Io>(
         engine: ConnectionEngine<Io, Connection>,
@@ -1331,7 +1326,7 @@ cfg_not_wasm32! {
         Io: AsyncRead + AsyncWrite + std::fmt::Debug + Send + Unpin + 'static,
     {
         let (handle, outcome) = engine.spawn();
-    
+
         let connection_handle = ConnectionHandle {
             is_closed: false,
             control: control_tx,
@@ -1340,7 +1335,7 @@ cfg_not_wasm32! {
             outgoing: outgoing_tx, // session_control: session_control_tx
             session_listener: (),
         };
-    
+
         Ok(connection_handle)
     }
 }
@@ -1356,7 +1351,7 @@ cfg_wasm32! {
         Io: AsyncRead + AsyncWrite + std::fmt::Debug + Unpin + 'static,
     {
         let (handle, outcome) = engine.spawn_on_local_set(local_set);
-    
+
         let connection_handle = ConnectionHandle {
             is_closed: false,
             control: control_tx,
@@ -1365,10 +1360,10 @@ cfg_wasm32! {
             outgoing: outgoing_tx, // session_control: session_control_tx
             session_listener: (),
         };
-    
+
         Ok(connection_handle)
     }
-    
+
     fn spawn_engine_on_current_local_set<Io>(
         engine: ConnectionEngine<Io, Connection>,
         control_tx: mpsc::Sender<ConnectionControl>,
@@ -1378,7 +1373,7 @@ cfg_wasm32! {
         Io: AsyncRead + AsyncWrite + std::fmt::Debug + Unpin + 'static,
     {
         let (handle, outcome) = engine.spawn_local();
-    
+
         let connection_handle = ConnectionHandle {
             is_closed: false,
             control: control_tx,
@@ -1387,7 +1382,7 @@ cfg_wasm32! {
             outgoing: outgoing_tx, // session_control: session_control_tx
             session_listener: (),
         };
-    
+
         Ok(connection_handle)
     }
 }

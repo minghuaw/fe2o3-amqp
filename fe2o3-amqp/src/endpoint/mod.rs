@@ -41,16 +41,15 @@ cfg_transaction! {
 mod link;
 pub(crate) use self::link::*;
 
-
 cfg_not_transaction! {
     pub(crate) trait SessionEndpoint: Session {}
-    
+
     impl<T> SessionEndpoint for T where T: Session {}
 }
 
 cfg_transaction! {
     pub(crate) trait SessionEndpoint: Session + HandleDeclare + HandleDischarge {}
-    
+
     impl<T> SessionEndpoint for T where T: Session + HandleDeclare + HandleDischarge {}
 }
 

@@ -128,11 +128,12 @@ impl<T> TargetArchetypeExt for T where
         + TargetArchetypeCapabilities
         + VariantOfTargetArchetype
         + DynamicTarget
-{ }
+{
+}
 
 cfg_transaction! {
     use fe2o3_amqp_types::transaction::{Coordinator, TxnCapability};
-    
+
     impl VerifyTargetArchetype for Coordinator {
         fn verify_as_sender(&self, other: &Self) -> Result<(), SenderAttachError> {
             // Note that it is the responsibility of the transaction controller to verify that the
@@ -156,36 +157,36 @@ cfg_transaction! {
                 (None, Some(_)) | (None, None) => Ok(()),
             }
         }
-    
+
         fn verify_as_receiver(&self, _other: &Self) -> Result<(), ReceiverAttachError> {
             // Note that it is the responsibility of the transaction controller to verify that the
             // capabilities of the controller meet its requirements.
             Ok(())
         }
     }
-    
+
     impl TargetArchetypeCapabilities for Coordinator {
         type Capability = TxnCapability;
-    
+
         fn capabilities(&self) -> &Option<Array<TxnCapability>> {
             &self.capabilities
         }
-    
+
         fn capabilities_mut(&mut self) -> &mut Option<Array<TxnCapability>> {
             &mut self.capabilities
         }
     }
-    
+
     impl VariantOfTargetArchetype for Coordinator {
         fn is_target(&self) -> bool {
             false
         }
-    
+
         fn is_coordinator(&self) -> bool {
             true
         }
     }
-    
+
     impl DynamicTarget for Coordinator {
         fn is_dynamic(&self) -> Option<bool> {
             None

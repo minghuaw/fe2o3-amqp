@@ -10,14 +10,14 @@ use crate::{
     connection::AllocSessionError,
     endpoint::{InputHandle, OutgoingChannel, OutputHandle},
     link::LinkRelay,
-    session::{frame::SessionIncomingItem, error::AllocLinkError},
+    session::{error::AllocLinkError, frame::SessionIncomingItem},
 };
 
 cfg_transaction! {
     use fe2o3_amqp_types::{
         messaging::Accepted, transaction::TransactionError, transaction::TransactionId,
     };
-    
+
     use crate::transaction::AllocTxnIdError;
 }
 

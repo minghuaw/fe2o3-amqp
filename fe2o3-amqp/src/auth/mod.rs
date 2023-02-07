@@ -4,7 +4,7 @@ pub(crate) mod error;
 
 pub(crate) mod plain;
 
-cfg_scram!{
+cfg_scram! {
     pub mod scram;
 }
 

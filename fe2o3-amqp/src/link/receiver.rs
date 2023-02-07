@@ -339,7 +339,6 @@ impl Receiver {
         }
     }
 
-
     /// Detach the link and then resume on a new session.
     ///
     /// This will still attemt to re-attach even if the detach fails.
@@ -1196,7 +1195,7 @@ impl DetachedReceiver {
             duration: Duration,
         ) -> Result<ResumingReceiver, ReceiverResumeError> {
             let fut = self.inner.resume_incoming_attach(None);
-    
+
             match tokio::time::timeout(duration, fut).await {
                 Ok(Ok(exchange)) => {
                     let receiver = Receiver { inner: self.inner };
@@ -1224,7 +1223,6 @@ impl DetachedReceiver {
         }
     }
 
-
     /// Resume the receiver on a specific session
     ///
     /// Please note that the link may need to be detached and then resume multiple
@@ -1237,7 +1235,6 @@ impl DetachedReceiver {
         self.inner.outgoing = session.outgoing.clone();
         self.resume().await
     }
-
 
     /// Resume the receiver link on the original session with an Attach sent by the remote peer
     ///
@@ -1261,7 +1258,6 @@ impl DetachedReceiver {
         };
         Ok(resuming_receiver)
     }
-
 
     /// Resume the receiver on a specific session
     ///
@@ -1291,7 +1287,7 @@ impl DetachedReceiver {
             self.inner.outgoing = session.outgoing.clone();
             self.resume_with_timeout(duration).await
         }
-    
+
         /// Resume the receiver link on the original session with an Attach sent by the remote peer
         ///
         /// Please note that the link may need to be detached and then resume multiple
@@ -1302,7 +1298,7 @@ impl DetachedReceiver {
             duration: Duration,
         ) -> Result<ResumingReceiver, ReceiverResumeError> {
             let fut = self.inner.resume_incoming_attach(Some(remote_attach));
-    
+
             match tokio::time::timeout(duration, fut).await {
                 Ok(Ok(exchange)) => {
                     let receiver = Receiver { inner: self.inner };
@@ -1328,7 +1324,7 @@ impl DetachedReceiver {
                 }
             }
         }
-    
+
         /// Resume the receiver on a specific session with timeout
         ///
         /// Please note that the link may need to be detached and then resume multiple

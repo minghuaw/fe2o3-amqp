@@ -404,7 +404,7 @@ impl ReceiverLink<Target> {
                 .clone()
                 .ok_or(FlowError::IllegalState)?
                 .into();
-    
+
             let flow = self.get_link_flow(handle, link_credit, drain, echo);
             writer
                 .blocking_send(LinkFrame::Flow(flow))

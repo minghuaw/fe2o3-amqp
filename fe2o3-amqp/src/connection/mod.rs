@@ -12,7 +12,10 @@ use fe2o3_amqp_types::{
 use futures_util::{Sink, SinkExt};
 use slab::Slab;
 use tokio::{
-    sync::{mpsc::Sender, oneshot::{self, error::TryRecvError}},
+    sync::{
+        mpsc::Sender,
+        oneshot::{self, error::TryRecvError},
+    },
     task::JoinHandle,
 };
 
@@ -90,29 +93,29 @@ impl<R> ConnectionHandle<R> {
     }
 
     /// Tries to close the connection
-    /// 
+    ///
     /// # Returns
-    /// 
+    ///
     /// - `Ok(Ok(()))` if the connection is closed successfully
     /// - `Ok(Err(error))` if an error occurred on either side during exchange of close frames
     /// - `Err(TryCloseError::AlreadyClosed)` if the connection is already closed
     /// - `Err(TryCloseError::RemoteCloseNotReceived)` if the remote close is not received
     pub fn try_close(&mut self) -> Result<Result<(), Error>, TryCloseError> {
         if self.is_closed {
-            return Err(TryCloseError::AlreadyClosed)
+            return Err(TryCloseError::AlreadyClosed);
         }
-        
+
         let _ = self.control.try_send(ConnectionControl::Close(None));
         match self.outcome.try_recv() {
             Ok(res) => {
                 self.is_closed = true;
                 Ok(res)
-            },
+            }
             Err(TryRecvError::Empty) => Err(TryCloseError::RemoteCloseNotReceived),
             Err(TryRecvError::Closed) => {
-                    self.is_closed = true;
-                    // The engine somehow has already stopped running
-                    Ok(Err(Error::IllegalState))
+                self.is_closed = true;
+                // The engine somehow has already stopped running
+                Ok(Err(Error::IllegalState))
             }
         }
     }
@@ -124,9 +127,9 @@ impl<R> ConnectionHandle<R> {
         /// [`close`](#method.close), [`close_with_error`](#method.close_with_error) or
         /// [`on_close`](#method.on_close). This will cause the JoinHandle to be polled after
         /// completion, which causes a panic.
-        /// 
+        ///
         /// # wasm32 support
-        /// 
+        ///
         /// This method is not supported in wasm32 targets, please use `drop()` instead.
         pub async fn close(&mut self) -> Result<(), Error> {
             // If sending is unsuccessful, the `ConnectionEngine` event loop is
@@ -134,16 +137,16 @@ impl<R> ConnectionHandle<R> {
             let _ = self.control.send(ConnectionControl::Close(None)).await;
             self.on_close().await
         }
-    
+
         /// Close the connection with an error
         ///
         /// An `Error::IllegalState` will be returned if this is called after executing any of
         /// [`close`](#method.close), [`close_with_error`](#method.close_with_error) or
         /// [`on_close`](#method.on_close). This will cause the JoinHandle to be polled after
         /// completion, which causes a panic.
-        /// 
+        ///
         /// # wasm32 support
-        /// 
+        ///
         /// This method is not supported in wasm32 targets, please use `drop()` instead.
         pub async fn close_with_error(
             &mut self,

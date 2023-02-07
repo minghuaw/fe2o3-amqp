@@ -115,18 +115,18 @@ where
             alt_tls: bool,
         ) -> Result<tokio_rustls::client::TlsStream<Io>, NegotiationError> {
             use librustls::ServerName;
-    
+
             if !alt_tls {
                 send_tls_proto_header(&mut stream).await?;
                 let incoming_header = recv_tls_proto_header(&mut stream).await?;
-    
+
                 if !incoming_header.is_tls() {
                     return Err(NegotiationError::ProtocolHeaderMismatch(
                         incoming_header.into(),
                     ));
                 }
             }
-    
+
             // TLS negotiation
             let domain = ServerName::try_from(domain).map_err(|_| NegotiationError::InvalidDomain)?;
             let tls = connector.connect(domain, stream).await?;
@@ -146,14 +146,14 @@ where
                 if !alt_tls {
                     send_tls_proto_header(&mut stream).await?;
                     let incoming_header = recv_tls_proto_header(&mut stream).await?;
-        
+
                     if !incoming_header.is_tls() {
                         return Err(NegotiationError::ProtocolHeaderMismatch(
                             incoming_header.into(),
                         ));
                     }
                 }
-        
+
                 connector.connect(domain, stream).await.map_err(|e| {
                     NegotiationError::Io(io::Error::new(io::ErrorKind::Other, format!("{:?}", e)))
                 })

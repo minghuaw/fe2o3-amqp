@@ -34,10 +34,9 @@ use super::{
 
 cfg_transaction! {
     use crate::transaction::Controller;
-    
+
     use fe2o3_amqp_types::transaction::Coordinator;
 }
-
 
 /// Type state for link::builder::Builder;
 #[derive(Debug)]
@@ -331,17 +330,16 @@ impl<Role, T, NameState, SS, TS> Builder<Role, T, NameState, SS, TS> {
                 buffer_size: self.buffer_size,
                 credit_mode: self.credit_mode,
                 properties: Default::default(),
-    
+
                 role: self.role,
                 name_state: self.name_state,
                 source_state: self.source_state,
                 target_state: PhantomData,
-    
+
                 auto_accept: false,
             }
         }
     }
-
 
     /// The maximum message size supported by the link endpoint
     pub fn max_message_size(mut self, max_size: impl Into<ULong>) -> Self {
@@ -668,11 +666,10 @@ cfg_transaction! {
             session: &mut SessionHandle<R>,
         ) -> Result<Controller, SenderAttachError> {
             use tokio::sync::Mutex;
-    
+
             self.attach_inner(session).await.map(|inner| Controller {
                 inner: Mutex::new(inner),
             })
         }
     }
 }
-

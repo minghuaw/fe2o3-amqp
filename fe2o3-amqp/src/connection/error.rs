@@ -270,7 +270,7 @@ pub enum TryCloseError {
     #[error("Illegal local state")]
     AlreadyClosed,
 
-    /// An close frame has been sent to the remote peer, 
+    /// An close frame has been sent to the remote peer,
     /// but the connection has not received a close frame from the remote peer
     #[error("The connection has not received a close frame from the remote peer")]
     RemoteCloseNotReceived,

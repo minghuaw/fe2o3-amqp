@@ -9,7 +9,6 @@ use url::Url;
 
 use crate::frames::sasl;
 
-
 mod error;
 pub use error::Error;
 
@@ -17,13 +16,13 @@ cfg_scram! {
     use crate::auth::error::ScramErrorKind;
 
     pub mod scram;
-    
+
     pub use self::scram::{SaslScramSha1, SaslScramSha256, SaslScramSha512};
 
     pub(crate) const SCRAM_SHA_1: &str = "SCRAM-SHA-1";
-    
+
     pub(crate) const SCRAM_SHA_256: &str = "SCRAM-SHA-256";
-    
+
     pub(crate) const SCRAM_SHA_512: &str = "SCRAM-SHA-512";
 }
 
