@@ -52,6 +52,15 @@ where
 
     #[cfg(target_arch = "wasm32")]
     pub fn spawn_local(
+        self
+    ) -> (JoinHandle<()>, oneshot::Receiver<Result<(), Error>>) {
+        let (tx, rx) = oneshot::channel();
+        let handle = tokio::task::spawn_local(self.event_loop(tx));
+        (handle, rx)
+    }
+
+    #[cfg(target_arch = "wasm32")]
+    pub fn spawn_on_local_set(
         self,
         local_set: &tokio::task::LocalSet,
     ) -> (JoinHandle<()>, oneshot::Receiver<Result<(), Error>>) {
