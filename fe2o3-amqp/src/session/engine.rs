@@ -122,7 +122,11 @@ where
     AllocLinkError: From<S::AllocError>,
     SessionInnerError: From<S::Error> + From<S::BeginError> + From<S::EndError>,
 {
-    pub fn spawn_local(self, local_set: &tokio::task::LocalSet) -> JoinHandle<Result<(), Error>> {
+    pub fn spawn_local(self) -> JoinHandle<Result<(), Error>> {
+        tokio::task::spawn_local(self.event_loop())
+    }
+
+    pub fn spawn_on_local_set(self, local_set: &tokio::task::LocalSet) -> JoinHandle<Result<(), Error>> {
         local_set.spawn_local(self.event_loop())
     }
 }

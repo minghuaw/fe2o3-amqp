@@ -337,7 +337,7 @@ impl Builder {
         Ok(handle)
     }
 
-    /// Begins a new session
+    /// Begins a new session on a local set
     ///
     /// # Example
     ///
@@ -383,7 +383,67 @@ impl Builder {
                 outgoing_rx,
             )
             .await?;
-            engine.spawn_local(local_set)
+            engine.spawn_on_local_set(local_set)
+        };
+
+        let handle = SessionHandle {
+            is_ended: false,
+            control: session_control_tx,
+            engine_handle,
+            outgoing: outgoing_tx,
+            link_listener: (),
+        };
+        Ok(handle)
+    }
+
+    
+    /// Begins a new session on the current local set. This internally uses [`tokio::task::spawn_local()`]
+    /// and must be called within a [`tokio::task::LocalSet`].
+    ///
+    /// # Example
+    ///
+    /// ```rust, ignore
+    /// let session = Session::builder()
+    ///     .handle_max(128u32)
+    ///     .begin(&mut connection)
+    ///     .await.unwrap();
+    /// ```
+    ///
+    #[cfg(target_arch = "wasm32")]
+    pub async fn begin_on_current_local_set(
+        self,
+        connection: &mut ConnectionHandle<()>,
+    ) -> Result<SessionHandle<()>, BeginError> {
+        let local_state = SessionState::Unmapped;
+        let (session_control_tx, session_control_rx) =
+            mpsc::channel::<SessionControl>(DEFAULT_SESSION_CONTROL_BUFFER_SIZE);
+        let (incoming_tx, incoming_rx) = mpsc::channel(self.buffer_size);
+        let (outgoing_tx, outgoing_rx) = mpsc::channel(self.buffer_size);
+
+        // create session in connection::Engine
+        let outgoing_channel = match connection.allocate_session(incoming_tx).await {
+            Ok(channel) => channel,
+            Err(alloc_error) => match alloc_error {
+                AllocSessionError::IllegalState => return Err(BeginError::IllegalConnectionState),
+                AllocSessionError::ChannelMaxReached => {
+                    // Locally initiating session exceeded channel max
+                    return Err(BeginError::LocalChannelMaxReached);
+                }
+            },
+        };
+
+        let engine_handle = {
+            let session = self.into_session(outgoing_channel, local_state);
+            let engine = SessionEngine::begin_client_session(
+                connection.control.clone(),
+                session,
+                session_control_rx,
+                incoming_rx,
+                connection.outgoing.clone(),
+                outgoing_rx,
+            )
+            .await?;
+            engine.spawn_local()
         };
 
         let handle = SessionHandle {

@@ -1,5 +1,9 @@
 # Change Log
 
+## 0.8.15
+
+1. Added `spawn_local` for connection builder and session builder for `target_arch = "wasm32"`.
+
 ## 0.8.14
 
 1. Replaced `wasm-timer` with `fluvio-wasm-timer` to work around a [`parkinglot` bug](https://github.com/tomaka/wasm-timer/pull/13).

@@ -960,6 +960,53 @@ impl<'a> Builder<'a, mode::ConnectorWithId, ()> {
 
 #[cfg(target_arch = "wasm32")]
 impl<'a> Builder<'a, mode::ConnectorWithId, ()> {
+    /// Open a connection with the given stream on the current [`tokio::task::LocalSet`]. This
+    /// internally uses `tokio::task::spawn_local` and must be called within a `LocalSet`.
+    pub async fn open_with_stream_on_current_local_set<Io> (
+        self,
+        stream: Io,
+    ) -> Result<ConnectionHandle<()>, OpenError>
+    where
+        Io: AsyncRead + AsyncWrite + std::fmt::Debug + Unpin + 'static,
+    {
+        match self.scheme {
+            "amqp" => {
+                let spawn_engine_fn = |engine, control_tx, outgoing_tx| {
+                    spawn_engine_on_current_local_set(engine, control_tx, outgoing_tx)
+                };
+                self.connect_with_stream(stream, spawn_engine_fn).await
+            }
+            "amqps" => {
+                #[cfg(all(feature = "rustls", not(feature = "native-tls")))]
+                {
+                    let domain = self.domain.ok_or(OpenError::InvalidDomain)?;
+                    let spawn_engine_fn = |engine, control_tx, outgoing_tx| {
+                        spawn_local_engine(engine, control_tx, outgoing_tx, local_set)
+                    };
+                    return self
+                        .connect_tls_with_rustls_default(stream, domain, spawn_engine_fn)
+                        .await;
+                }
+
+                #[cfg(all(
+                    feature = "native-tls",
+                    not(feature = "rustls"),
+                    not(target_arch = "wasm32")
+                ))]
+                {
+                    let domain = self.domain.ok_or_else(|| OpenError::InvalidDomain)?;
+                    return self
+                        .connect_tls_with_native_tls_default(stream, domain, spawn_engine)
+                        .await;
+                }
+
+                #[allow(unused)]
+                Err(OpenError::TlsConnectorNotFound)
+            }
+            _ => Err(OpenError::InvalidScheme),
+        }
+    }
+
     /// Open a connection with the given stream onto a [`tokio::task::LocalSet`].
     pub async fn open_with_stream_on_local_set<Io>(
         self,
@@ -972,7 +1019,7 @@ impl<'a> Builder<'a, mode::ConnectorWithId, ()> {
         match self.scheme {
             "amqp" => {
                 let spawn_engine_fn = |engine, control_tx, outgoing_tx| {
-                    spawn_local_engine(engine, control_tx, outgoing_tx, local_set)
+                    spawn_engine_on_local_set(engine, control_tx, outgoing_tx, local_set)
                 };
                 self.connect_with_stream(stream, spawn_engine_fn).await
             }
@@ -1284,7 +1331,7 @@ where
 }
 
 #[cfg(target_arch = "wasm32")]
-fn spawn_local_engine<Io>(
+fn spawn_engine_on_local_set<Io>(
     engine: ConnectionEngine<Io, Connection>,
     control_tx: mpsc::Sender<ConnectionControl>,
     outgoing_tx: mpsc::Sender<SessionFrame>,
@@ -1293,7 +1340,30 @@ fn spawn_local_engine<Io>(
 where
     Io: AsyncRead + AsyncWrite + std::fmt::Debug + Unpin + 'static,
 {
-    let (handle, outcome) = engine.spawn_local(local_set);
+    let (handle, outcome) = engine.spawn_on_local_set(local_set);
+
+    let connection_handle = ConnectionHandle {
+        is_closed: false,
+        control: control_tx,
+        handle,
+        outcome,
+        outgoing: outgoing_tx, // session_control: session_control_tx
+        session_listener: (),
+    };
+
+    Ok(connection_handle)
+}
+
+#[cfg(target_arch = "wasm32")]
+fn spawn_engine_on_current_local_set<Io>(
+    engine: ConnectionEngine<Io, Connection>,
+    control_tx: mpsc::Sender<ConnectionControl>,
+    outgoing_tx: mpsc::Sender<SessionFrame>,
+) -> Result<ConnectionHandle<()>, OpenError>
+where
+    Io: AsyncRead + AsyncWrite + std::fmt::Debug + Unpin + 'static,
+{
+    let (handle, outcome) = engine.spawn_local();
 
     let connection_handle = ConnectionHandle {
         is_closed: false,
