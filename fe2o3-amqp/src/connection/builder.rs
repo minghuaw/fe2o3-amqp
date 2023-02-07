@@ -1307,74 +1307,75 @@ impl<'a> Builder<'a, mode::ConnectorWithId, tokio_native_tls::TlsConnector> {
     }
 }
 
-#[cfg(not(target_arch = "wasm32"))]
-fn spawn_engine<Io>(
-    engine: ConnectionEngine<Io, Connection>,
-    control_tx: mpsc::Sender<ConnectionControl>,
-    outgoing_tx: mpsc::Sender<SessionFrame>,
-) -> Result<ConnectionHandle<()>, OpenError>
-where
-    Io: AsyncRead + AsyncWrite + std::fmt::Debug + Send + Unpin + 'static,
-{
-    let (handle, outcome) = engine.spawn();
-
-    let connection_handle = ConnectionHandle {
-        is_closed: false,
-        control: control_tx,
-        handle,
-        outcome,
-        outgoing: outgoing_tx, // session_control: session_control_tx
-        session_listener: (),
-    };
-
-    Ok(connection_handle)
+cfg_not_wasm32! {
+    fn spawn_engine<Io>(
+        engine: ConnectionEngine<Io, Connection>,
+        control_tx: mpsc::Sender<ConnectionControl>,
+        outgoing_tx: mpsc::Sender<SessionFrame>,
+    ) -> Result<ConnectionHandle<()>, OpenError>
+    where
+        Io: AsyncRead + AsyncWrite + std::fmt::Debug + Send + Unpin + 'static,
+    {
+        let (handle, outcome) = engine.spawn();
+    
+        let connection_handle = ConnectionHandle {
+            is_closed: false,
+            control: control_tx,
+            handle,
+            outcome,
+            outgoing: outgoing_tx, // session_control: session_control_tx
+            session_listener: (),
+        };
+    
+        Ok(connection_handle)
+    }
 }
 
-#[cfg(target_arch = "wasm32")]
-fn spawn_engine_on_local_set<Io>(
-    engine: ConnectionEngine<Io, Connection>,
-    control_tx: mpsc::Sender<ConnectionControl>,
-    outgoing_tx: mpsc::Sender<SessionFrame>,
-    local_set: &tokio::task::LocalSet,
-) -> Result<ConnectionHandle<()>, OpenError>
-where
-    Io: AsyncRead + AsyncWrite + std::fmt::Debug + Unpin + 'static,
-{
-    let (handle, outcome) = engine.spawn_on_local_set(local_set);
-
-    let connection_handle = ConnectionHandle {
-        is_closed: false,
-        control: control_tx,
-        handle,
-        outcome,
-        outgoing: outgoing_tx, // session_control: session_control_tx
-        session_listener: (),
-    };
-
-    Ok(connection_handle)
-}
-
-#[cfg(target_arch = "wasm32")]
-fn spawn_engine_on_current_local_set<Io>(
-    engine: ConnectionEngine<Io, Connection>,
-    control_tx: mpsc::Sender<ConnectionControl>,
-    outgoing_tx: mpsc::Sender<SessionFrame>,
-) -> Result<ConnectionHandle<()>, OpenError>
-where
-    Io: AsyncRead + AsyncWrite + std::fmt::Debug + Unpin + 'static,
-{
-    let (handle, outcome) = engine.spawn_local();
-
-    let connection_handle = ConnectionHandle {
-        is_closed: false,
-        control: control_tx,
-        handle,
-        outcome,
-        outgoing: outgoing_tx, // session_control: session_control_tx
-        session_listener: (),
-    };
-
-    Ok(connection_handle)
+cfg_wasm32! {
+    fn spawn_engine_on_local_set<Io>(
+        engine: ConnectionEngine<Io, Connection>,
+        control_tx: mpsc::Sender<ConnectionControl>,
+        outgoing_tx: mpsc::Sender<SessionFrame>,
+        local_set: &tokio::task::LocalSet,
+    ) -> Result<ConnectionHandle<()>, OpenError>
+    where
+        Io: AsyncRead + AsyncWrite + std::fmt::Debug + Unpin + 'static,
+    {
+        let (handle, outcome) = engine.spawn_on_local_set(local_set);
+    
+        let connection_handle = ConnectionHandle {
+            is_closed: false,
+            control: control_tx,
+            handle,
+            outcome,
+            outgoing: outgoing_tx, // session_control: session_control_tx
+            session_listener: (),
+        };
+    
+        Ok(connection_handle)
+    }
+    
+    fn spawn_engine_on_current_local_set<Io>(
+        engine: ConnectionEngine<Io, Connection>,
+        control_tx: mpsc::Sender<ConnectionControl>,
+        outgoing_tx: mpsc::Sender<SessionFrame>,
+    ) -> Result<ConnectionHandle<()>, OpenError>
+    where
+        Io: AsyncRead + AsyncWrite + std::fmt::Debug + Unpin + 'static,
+    {
+        let (handle, outcome) = engine.spawn_local();
+    
+        let connection_handle = ConnectionHandle {
+            is_closed: false,
+            control: control_tx,
+            handle,
+            outcome,
+            outgoing: outgoing_tx, // session_control: session_control_tx
+            session_listener: (),
+        };
+    
+        Ok(connection_handle)
+    }
 }
 
 #[cfg(test)]

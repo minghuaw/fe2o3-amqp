@@ -5,7 +5,7 @@ use tokio::sync::mpsc;
 use crate::{
     control::SessionControl,
     endpoint::{self, LinkAttach, LinkDetach, LinkExt},
-    session::{self, AllocLinkError},
+    session::{self, error::AllocLinkError},
 };
 
 use super::{state::LinkState, DetachError, LinkFrame, LinkRelay};

@@ -1,7 +1,7 @@
 use fe2o3_amqp_types::definitions::{self, AmqpError, ErrorCondition, SessionError};
 use tokio::sync::TryLockError;
 
-use crate::session::AllocLinkError;
+use crate::session::error::AllocLinkError;
 
 #[cfg(docsrs)]
 use fe2o3_amqp_types::transaction::Coordinator;

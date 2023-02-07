@@ -15,7 +15,7 @@ use slab::Slab;
 use tokio::{
     sync::{
         mpsc::{self},
-        oneshot,
+        oneshot::{self, error::TryRecvError},
     },
     task::JoinHandle,
 };
@@ -40,9 +40,9 @@ use crate::{
 pub(crate) mod engine;
 pub(crate) mod frame;
 
-mod error;
-pub(crate) use error::{AllocLinkError, SessionInnerError, SessionStateError};
-pub use error::{BeginError, Error};
+pub mod error;
+use error::{AllocLinkError, SessionInnerError, SessionStateError};
+pub use error::{BeginError, Error, TryEndError};
 
 mod builder;
 pub use builder::*;
@@ -60,7 +60,8 @@ pub struct SessionHandle<R> {
     /// This value should only be changed in the `on_end` method
     pub(crate) is_ended: bool,
     pub(crate) control: mpsc::Sender<SessionControl>,
-    pub(crate) engine_handle: JoinHandle<Result<(), Error>>,
+    pub(crate) engine_handle: JoinHandle<()>,
+    pub(crate) outcome: oneshot::Receiver<Result<(), Error>>,
 
     // outgoing for Link
     pub(crate) outgoing: mpsc::Sender<LinkFrame>,
@@ -85,6 +86,33 @@ impl<R> SessionHandle<R> {
         match self.is_ended {
             true => true,
             false => self.control.is_closed(),
+        }
+    }
+
+    /// Tries to end the session
+    /// 
+    /// # Returns
+    /// 
+    /// - `Ok(Ok(()))` if the session has ended successfully
+    /// - `Ok(Err(_))` if an error occurred during the session ending on either side
+    /// - `Err(TryEndError::AlreadyEnded)` if the session has already ended
+    /// - `Err(TryEndError::RemoteEndNotReceived)` if the remote end has not been received yet
+    pub fn try_end(&mut self) -> Result<Result<(), Error>, TryEndError> {
+        if self.is_ended {
+            return Err(TryEndError::AlreadyEnded)
+        }
+
+        let _ = self.control.try_send(SessionControl::End(None));
+        match self.outcome.try_recv() {
+            Ok(res) => {
+                self.is_ended = true;
+                Ok(res)
+            },
+            Err(TryRecvError::Empty) => Err(TryEndError::RemoteEndNotReceived),
+            Err(TryRecvError::Closed) => {
+                self.is_ended = true;
+                Ok(Err(Error::IllegalState))
+            }
         }
     }
 
@@ -147,14 +175,14 @@ impl<R> SessionHandle<R> {
             return Err(Error::IllegalState);
         }
 
-        match (&mut self.engine_handle).await {
+        match (&mut self.outcome).await {
             Ok(res) => {
                 self.is_ended = true;
                 res
             }
-            Err(join_error) => {
+            Err(_) => {
                 self.is_ended = true;
-                Err(Error::JoinError(join_error))
+                Err(Error::IllegalState)
             }
         }
     }

@@ -12,7 +12,7 @@ use fe2o3_amqp_types::{
 use futures_util::{Sink, SinkExt};
 use slab::Slab;
 use tokio::{
-    sync::{mpsc::Sender, oneshot},
+    sync::{mpsc::Sender, oneshot::{self, error::TryRecvError}},
     task::JoinHandle,
 };
 
@@ -86,6 +86,34 @@ impl<R> ConnectionHandle<R> {
         match self.is_closed {
             true => true,
             false => self.control.is_closed(),
+        }
+    }
+
+    /// Tries to close the connection
+    /// 
+    /// # Returns
+    /// 
+    /// - `Ok(Ok(()))` if the connection is closed successfully
+    /// - `Ok(Err(error))` if an error occurred on either side during exchange of close frames
+    /// - `Err(TryCloseError::AlreadyClosed)` if the connection is already closed
+    /// - `Err(TryCloseError::RemoteCloseNotReceived)` if the remote close is not received
+    pub fn try_close(&mut self) -> Result<Result<(), Error>, TryCloseError> {
+        if self.is_closed {
+            return Err(TryCloseError::AlreadyClosed)
+        }
+        
+        let _ = self.control.try_send(ConnectionControl::Close(None));
+        match self.outcome.try_recv() {
+            Ok(res) => {
+                self.is_closed = true;
+                Ok(res)
+            },
+            Err(TryRecvError::Empty) => Err(TryCloseError::RemoteCloseNotReceived),
+            Err(TryRecvError::Closed) => {
+                    self.is_closed = true;
+                    // The engine somehow has already stopped running
+                    Ok(Err(Error::IllegalState))
+            }
         }
     }
 

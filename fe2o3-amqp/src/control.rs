@@ -10,7 +10,7 @@ use crate::{
     connection::AllocSessionError,
     endpoint::{InputHandle, OutgoingChannel, OutputHandle},
     link::LinkRelay,
-    session::{frame::SessionIncomingItem, AllocLinkError},
+    session::{frame::SessionIncomingItem, error::AllocLinkError},
 };
 
 #[cfg(feature = "transaction")]
