@@ -136,13 +136,15 @@ impl ScramVersion {
     }
 }
 
-#[cfg(feature = "acceptor")]
-pub(crate) struct ServerFirstMessage<'a> {
-    pub username: &'a str,
-    pub client_first_message_bare: Bytes,
-    pub client_server_nonce: Bytes,
-    pub message: Bytes,
+cfg_acceptor! {
+    pub(crate) struct ServerFirstMessage<'a> {
+        pub username: &'a str,
+        pub client_first_message_bare: Bytes,
+        pub client_server_nonce: Bytes,
+        pub message: Bytes,
+    }
 }
+
 
 #[derive(Debug, Clone)]
 enum ScramAuthenticatorState {

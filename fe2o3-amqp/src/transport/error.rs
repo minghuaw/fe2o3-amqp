@@ -5,8 +5,9 @@ use fe2o3_amqp_types::{primitives::Binary, sasl::SaslCode};
 
 use crate::{frames, sasl_profile};
 
-#[cfg(feature = "scram")]
-use crate::auth::error::ScramErrorKind;
+cfg_scram! {
+    use crate::auth::error::ScramErrorKind;
+}
 
 /// Transport error
 #[derive(Debug, thiserror::Error)]

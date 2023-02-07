@@ -357,31 +357,32 @@ macro_rules! connect_tls {
     };
 }
 
-#[cfg(feature = "native-tls")]
-impl ConnectionAcceptor<tokio_native_tls::TlsAcceptor, ()> {
-    connect_tls!(negotiate_tls_with_native_tls, negotiate_amqp_with_stream);
+cfg_native_tls! {
+    impl ConnectionAcceptor<tokio_native_tls::TlsAcceptor, ()> {
+        connect_tls!(negotiate_tls_with_native_tls, negotiate_amqp_with_stream);
+    }
+    
+    impl<Sasl> ConnectionAcceptor<tokio_native_tls::TlsAcceptor, Sasl>
+    where
+        Sasl: SaslAcceptor,
+    {
+        connect_tls!(negotiate_tls_with_native_tls, negotiate_sasl_with_stream);
+    }
 }
 
-#[cfg(feature = "native-tls")]
-impl<Sasl> ConnectionAcceptor<tokio_native_tls::TlsAcceptor, Sasl>
-where
-    Sasl: SaslAcceptor,
-{
-    connect_tls!(negotiate_tls_with_native_tls, negotiate_sasl_with_stream);
+cfg_rustls! {
+    impl ConnectionAcceptor<tokio_rustls::TlsAcceptor, ()> {
+        connect_tls!(negotiate_tls_with_rustls, negotiate_amqp_with_stream);
+    }
+    
+    impl<Sasl> ConnectionAcceptor<tokio_rustls::TlsAcceptor, Sasl>
+    where
+        Sasl: SaslAcceptor,
+    {
+        connect_tls!(negotiate_tls_with_rustls, negotiate_sasl_with_stream);
+    }
 }
 
-#[cfg(feature = "rustls")]
-impl ConnectionAcceptor<tokio_rustls::TlsAcceptor, ()> {
-    connect_tls!(negotiate_tls_with_rustls, negotiate_amqp_with_stream);
-}
-
-#[cfg(feature = "rustls")]
-impl<Sasl> ConnectionAcceptor<tokio_rustls::TlsAcceptor, Sasl>
-where
-    Sasl: SaslAcceptor,
-{
-    connect_tls!(negotiate_tls_with_rustls, negotiate_sasl_with_stream);
-}
 
 impl ConnectionAcceptor<(), ()> {
     /// Accepts an incoming connection
@@ -406,53 +407,53 @@ where
     }
 }
 
-#[cfg(feature = "native-tls")]
-impl ConnectionAcceptor<tokio_native_tls::TlsAcceptor, ()> {
-    /// Accepts an incoming connection
-    pub async fn accept<Io>(&self, stream: Io) -> Result<ListenerConnectionHandle, OpenError>
+cfg_native_tls! {
+    impl ConnectionAcceptor<tokio_native_tls::TlsAcceptor, ()> {
+        /// Accepts an incoming connection
+        pub async fn accept<Io>(&self, stream: Io) -> Result<ListenerConnectionHandle, OpenError>
+        where
+            Io: AsyncRead + AsyncWrite + std::fmt::Debug + Send + Unpin + 'static,
+        {
+            self.negotiate_tls_with_native_tls(stream).await
+        }
+    }
+    
+    impl<Sasl> ConnectionAcceptor<tokio_native_tls::TlsAcceptor, Sasl>
     where
-        Io: AsyncRead + AsyncWrite + std::fmt::Debug + Send + Unpin + 'static,
+        Sasl: SaslAcceptor,
     {
-        self.negotiate_tls_with_native_tls(stream).await
+        /// Accepts an incoming connection
+        pub async fn accept<Io>(&self, stream: Io) -> Result<ListenerConnectionHandle, OpenError>
+        where
+            Io: AsyncRead + AsyncWrite + std::fmt::Debug + Send + Unpin + 'static,
+        {
+            self.negotiate_tls_with_native_tls(stream).await
+        }
     }
 }
 
-#[cfg(feature = "native-tls")]
-impl<Sasl> ConnectionAcceptor<tokio_native_tls::TlsAcceptor, Sasl>
-where
-    Sasl: SaslAcceptor,
-{
-    /// Accepts an incoming connection
-    pub async fn accept<Io>(&self, stream: Io) -> Result<ListenerConnectionHandle, OpenError>
-    where
-        Io: AsyncRead + AsyncWrite + std::fmt::Debug + Send + Unpin + 'static,
-    {
-        self.negotiate_tls_with_native_tls(stream).await
+cfg_rustls! {
+    impl ConnectionAcceptor<tokio_rustls::TlsAcceptor, ()> {
+        /// Accepts an incoming connection
+        pub async fn accept<Io>(&self, stream: Io) -> Result<ListenerConnectionHandle, OpenError>
+        where
+            Io: AsyncRead + AsyncWrite + std::fmt::Debug + Send + Unpin + 'static,
+        {
+            self.negotiate_tls_with_rustls(stream).await
+        }
     }
-}
-
-#[cfg(feature = "rustls")]
-impl ConnectionAcceptor<tokio_rustls::TlsAcceptor, ()> {
-    /// Accepts an incoming connection
-    pub async fn accept<Io>(&self, stream: Io) -> Result<ListenerConnectionHandle, OpenError>
+    
+    impl<Sasl> ConnectionAcceptor<tokio_rustls::TlsAcceptor, Sasl>
     where
-        Io: AsyncRead + AsyncWrite + std::fmt::Debug + Send + Unpin + 'static,
+        Sasl: SaslAcceptor,
     {
-        self.negotiate_tls_with_rustls(stream).await
-    }
-}
-
-#[cfg(feature = "rustls")]
-impl<Sasl> ConnectionAcceptor<tokio_rustls::TlsAcceptor, Sasl>
-where
-    Sasl: SaslAcceptor,
-{
-    /// Accepts an incoming connection
-    pub async fn accept<Io>(&self, stream: Io) -> Result<ListenerConnectionHandle, OpenError>
-    where
-        Io: AsyncRead + AsyncWrite + std::fmt::Debug + Send + Unpin + 'static,
-    {
-        self.negotiate_tls_with_rustls(stream).await
+        /// Accepts an incoming connection
+        pub async fn accept<Io>(&self, stream: Io) -> Result<ListenerConnectionHandle, OpenError>
+        where
+            Io: AsyncRead + AsyncWrite + std::fmt::Debug + Send + Unpin + 'static,
+        {
+            self.negotiate_tls_with_rustls(stream).await
+        }
     }
 }
 

@@ -15,7 +15,7 @@ use slab::Slab;
 use tokio::{
     sync::{
         mpsc::{self},
-        oneshot,
+        oneshot::{self, error::TryRecvError},
     },
     task::JoinHandle,
 };
@@ -28,21 +28,21 @@ use crate::{
     Payload,
 };
 
-#[cfg(feature = "transaction")]
-use fe2o3_amqp_types::{messaging::Accepted, transaction::TransactionError};
+cfg_transaction! {
+    use fe2o3_amqp_types::{messaging::Accepted, transaction::TransactionError};
 
-#[cfg(feature = "transaction")]
-use crate::{
-    endpoint::{HandleDeclare, HandleDischarge},
-    transaction::AllocTxnIdError,
-};
+    use crate::{
+        endpoint::{HandleDeclare, HandleDischarge},
+        transaction::AllocTxnIdError,
+    };
+}
 
 pub(crate) mod engine;
 pub(crate) mod frame;
 
-mod error;
-pub(crate) use error::{AllocLinkError, SessionInnerError, SessionStateError};
-pub use error::{BeginError, Error};
+pub mod error;
+use error::{AllocLinkError, SessionInnerError, SessionStateError};
+pub use error::{BeginError, Error, TryEndError};
 
 mod builder;
 pub use builder::*;
@@ -60,7 +60,8 @@ pub struct SessionHandle<R> {
     /// This value should only be changed in the `on_end` method
     pub(crate) is_ended: bool,
     pub(crate) control: mpsc::Sender<SessionControl>,
-    pub(crate) engine_handle: JoinHandle<Result<(), Error>>,
+    pub(crate) engine_handle: JoinHandle<()>,
+    pub(crate) outcome: oneshot::Receiver<Result<(), Error>>,
 
     // outgoing for Link
     pub(crate) outgoing: mpsc::Sender<LinkFrame>,
@@ -88,15 +89,42 @@ impl<R> SessionHandle<R> {
         }
     }
 
+    /// Tries to end the session
+    ///
+    /// # Returns
+    ///
+    /// - `Ok(Ok(()))` if the session has ended successfully
+    /// - `Ok(Err(_))` if an error occurred during the session ending on either side
+    /// - `Err(TryEndError::AlreadyEnded)` if the session has already ended
+    /// - `Err(TryEndError::RemoteEndNotReceived)` if the remote end has not been received yet
+    pub fn try_end(&mut self) -> Result<Result<(), Error>, TryEndError> {
+        if self.is_ended {
+            return Err(TryEndError::AlreadyEnded);
+        }
+
+        let _ = self.control.try_send(SessionControl::End(None));
+        match self.outcome.try_recv() {
+            Ok(res) => {
+                self.is_ended = true;
+                Ok(res)
+            }
+            Err(TryRecvError::Empty) => Err(TryEndError::RemoteEndNotReceived),
+            Err(TryRecvError::Closed) => {
+                self.is_ended = true;
+                Ok(Err(Error::IllegalState))
+            }
+        }
+    }
+
     cfg_not_wasm32! {
         /// End the session
         ///
         /// An `Error::IllegalState` will be returned if called after any of [`end`](#method.end),
         /// [`end_with_error`](#method.end_with_error), [`on_end`](#on_end) has beend executed. This
         /// will cause the JoinHandle to be polled after completion, which causes a panic.
-        /// 
+        ///
         /// # wasm32 support
-        /// 
+        ///
         /// This method is not supported on wasm32 targets, please use `drop()` instead.
         pub async fn end(&mut self) -> Result<(), Error> {
             // If sending is unsuccessful, the `SessionEngine` event loop is
@@ -104,24 +132,24 @@ impl<R> SessionHandle<R> {
             let _ = self.control.send(SessionControl::End(None)).await;
             self.on_end().await
         }
-    
+
         /// Alias for [`end`](#method.end)
-        /// 
+        ///
         /// # wasm32 support
-        /// 
+        ///
         /// This method is not supported on wasm32 targets, please use `drop()` instead.
         pub async fn close(&mut self) -> Result<(), Error> {
             self.end().await
         }
-    
+
         /// End the session with an error
         ///
         /// An `Error::IllegalState` will be returned if called after any of [`end`](#method.end),
-        /// [`end_with_error`](#method.end_with_error), [`on_end`](#on_end) has beend executed.    
+        /// [`end_with_error`](#method.end_with_error), [`on_end`](#on_end) has beend executed.
         /// This will cause the JoinHandle to be polled after completion, which causes a panic.
-        /// 
+        ///
         /// # wasm32 support
-        /// 
+        ///
         /// This method is not supported on wasm32 targets, please use `drop()` instead.
         pub async fn end_with_error(
             &mut self,
@@ -147,14 +175,14 @@ impl<R> SessionHandle<R> {
             return Err(Error::IllegalState);
         }
 
-        match (&mut self.engine_handle).await {
+        match (&mut self.outcome).await {
             Ok(res) => {
                 self.is_ended = true;
                 res
             }
-            Err(join_error) => {
+            Err(_) => {
                 self.is_ended = true;
-                Err(Error::JoinError(join_error))
+                Err(Error::IllegalState)
             }
         }
     }
@@ -272,32 +300,33 @@ impl Session {
         builder::Builder::new()
     }
 
-    /// Begins a new session with the default configurations
-    ///
-    /// # Default configuration
-    ///
-    /// | Field | Default Value |
-    /// |-------|---------------|
-    /// |`next_outgoing_id`| 0 |
-    /// |`incoming_window`| [`DEFAULT_WINDOW`] |
-    /// |`outgoing_window`| [`DEFAULT_WINDOW`] |
-    /// |`handle_max`| `u32::MAX` |
-    /// |`offered_capabilities` | `None` |
-    /// |`desired_capabilities`| `None` |
-    /// |`Properties`| `None` |
-    ///
-    /// # Example
-    ///
-    /// ```rust,ignore
-    /// use fe2o3_amqp::Session;
-    ///
-    /// let session = Session::begin(&mut connection).await.unwrap();
-    /// ```
-    #[cfg(not(target_arch = "wasm32"))]
-    pub async fn begin(
-        conn: &mut crate::connection::ConnectionHandle<()>,
-    ) -> Result<SessionHandle<()>, BeginError> {
-        Session::builder().begin(conn).await
+    cfg_not_wasm32! {
+        /// Begins a new session with the default configurations
+        ///
+        /// # Default configuration
+        ///
+        /// | Field | Default Value |
+        /// |-------|---------------|
+        /// |`next_outgoing_id`| 0 |
+        /// |`incoming_window`| [`DEFAULT_WINDOW`] |
+        /// |`outgoing_window`| [`DEFAULT_WINDOW`] |
+        /// |`handle_max`| `u32::MAX` |
+        /// |`offered_capabilities` | `None` |
+        /// |`desired_capabilities`| `None` |
+        /// |`Properties`| `None` |
+        ///
+        /// # Example
+        ///
+        /// ```rust,ignore
+        /// use fe2o3_amqp::Session;
+        ///
+        /// let session = Session::begin(&mut connection).await.unwrap();
+        /// ```
+        pub async fn begin(
+            conn: &mut crate::connection::ConnectionHandle<()>,
+        ) -> Result<SessionHandle<()>, BeginError> {
+            Session::builder().begin(conn).await
+        }
     }
 
     fn on_outgoing_transfer_inner(
@@ -926,34 +955,34 @@ fn num_messages_settled_by_disposition(first: u32, last: Option<u32>) -> u32 {
     last.and_then(|last| last.checked_sub(first)).unwrap_or(0) + 1
 }
 
-#[cfg(feature = "transaction")]
-impl HandleDeclare for Session {
-    // This should be unreachable, but an error is probably a better way
-    fn allocate_transaction_id(
-        &mut self,
-    ) -> Result<fe2o3_amqp_types::transaction::TransactionId, AllocTxnIdError> {
-        // Err(Error::amqp_error(AmqpError::NotImplemented, "Resource side transaction is not enabled".to_string()))
-        Err(AllocTxnIdError::NotImplemented)
-    }
-}
-
-#[cfg(feature = "transaction")]
-#[async_trait]
-impl HandleDischarge for Session {
-    async fn commit_transaction(
-        &mut self,
-        _txn_id: fe2o3_amqp_types::transaction::TransactionId,
-    ) -> Result<Result<Accepted, TransactionError>, Self::Error> {
-        // FIXME: This should be impossible
-        Ok(Err(TransactionError::UnknownId))
+cfg_transaction! {
+    impl HandleDeclare for Session {
+        // This should be unreachable, but an error is probably a better way
+        fn allocate_transaction_id(
+            &mut self,
+        ) -> Result<fe2o3_amqp_types::transaction::TransactionId, AllocTxnIdError> {
+            // Err(Error::amqp_error(AmqpError::NotImplemented, "Resource side transaction is not enabled".to_string()))
+            Err(AllocTxnIdError::NotImplemented)
+        }
     }
 
-    fn rollback_transaction(
-        &mut self,
-        _txn_id: fe2o3_amqp_types::transaction::TransactionId,
-    ) -> Result<Result<Accepted, TransactionError>, Self::Error> {
-        // FIXME: This should be impossible
-        Ok(Err(TransactionError::UnknownId))
+    #[async_trait]
+    impl HandleDischarge for Session {
+        async fn commit_transaction(
+            &mut self,
+            _txn_id: fe2o3_amqp_types::transaction::TransactionId,
+        ) -> Result<Result<Accepted, TransactionError>, Self::Error> {
+            // FIXME: This should be impossible
+            Ok(Err(TransactionError::UnknownId))
+        }
+
+        fn rollback_transaction(
+            &mut self,
+            _txn_id: fe2o3_amqp_types::transaction::TransactionId,
+        ) -> Result<Result<Accepted, TransactionError>, Self::Error> {
+            // FIXME: This should be impossible
+            Ok(Err(TransactionError::UnknownId))
+        }
     }
 }
 

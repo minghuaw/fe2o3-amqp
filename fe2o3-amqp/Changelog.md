@@ -1,5 +1,10 @@
 # Change Log
 
+## 0.8.16
+
+1. Added `try_close()`/`try_end()` for `ConnectionHandle`/`SessionHandle` that immediately returns a result indicating whether the
+   exchange of `Close`/`End` frames are complete.
+
 ## 0.8.15
 
 1. Added `spawn_local` for connection builder and session builder for `target_arch = "wasm32"`.
