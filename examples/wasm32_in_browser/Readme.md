@@ -8,7 +8,7 @@ This will need to use the `wasm-pack` tool to build the project.
 1. Build the project with `wasm-pack`:
 
     ```sh
-    wasm-pack build
+    wasm-pack build --target web
     ```
 
 2. Host the `pkg` directory with a web server. For example, with `python`:
