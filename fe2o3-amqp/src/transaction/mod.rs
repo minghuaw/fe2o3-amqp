@@ -127,7 +127,7 @@ pub trait TransactionalRetirement {
     /// different non-discharged transaction than the outcome. If this happens then the control link
     /// MUST be terminated with a transaction-rollback error.
     async fn retire<T>(
-        &mut self,
+        &self,
         recver: &mut Receiver,
         delivery: &Delivery<T>,
         outcome: Outcome,
@@ -137,7 +137,7 @@ pub trait TransactionalRetirement {
 
     /// Associate an Accepted outcome with a transaction
     async fn accept<T>(
-        &mut self,
+        &self,
         recver: &mut Receiver,
         delivery: &Delivery<T>,
     ) -> Result<(), Self::RetireError>
@@ -150,7 +150,7 @@ pub trait TransactionalRetirement {
 
     /// Associate a Rejected outcome with a transaction
     async fn reject<T>(
-        &mut self,
+        &self,
         recver: &mut Receiver,
         delivery: &Delivery<T>,
         error: Option<definitions::Error>,
@@ -164,7 +164,7 @@ pub trait TransactionalRetirement {
 
     /// Associate a Released outcome with a transaction
     async fn release<T>(
-        &mut self,
+        &self,
         recver: &mut Receiver,
         delivery: &Delivery<T>,
     ) -> Result<(), Self::RetireError>
@@ -177,7 +177,7 @@ pub trait TransactionalRetirement {
 
     /// Associate a Modified outcome with a transaction
     async fn modify<T>(
-        &mut self,
+        &self,
         recver: &mut Receiver,
         delivery: &Delivery<T>,
         modified: Modified,
@@ -307,7 +307,7 @@ impl<'t> TransactionalRetirement for Transaction<'t> {
     /// different non-discharged transaction than the outcome. If this happens then the control link
     /// MUST be terminated with a transaction-rollback error.
     async fn retire<T>(
-        &mut self,
+        &self,
         recver: &mut Receiver,
         delivery: &Delivery<T>,
         outcome: Outcome,

@@ -1,5 +1,44 @@
 # Change Log
 
+## 0.8.18
+
+1. Relaxed `TransactionRetirement` to take immutable reference to `Self`.
+
+## 0.8.17
+
+1. Relaxed `TransactionRetirement` methods to take `delivery: T where T: Into<DeliveryInfo>`.
+
+## 0.8.16
+
+1. Added `try_close()`/`try_end()` for `ConnectionHandle`/`SessionHandle` that immediately returns a result indicating whether the
+   exchange of `Close`/`End` frames are complete.
+
+## 0.8.15
+
+1. Added `spawn_local` for connection builder and session builder for `target_arch = "wasm32"`.
+
+## 0.8.14
+
+1. Replaced `wasm-timer` with `fluvio-wasm-timer` to work around a [`parkinglot` bug](https://github.com/tomaka/wasm-timer/pull/13).
+
+## 0.8.13
+
+1. Fixed docsrs build error.
+
+## 0.8.12
+
+1. Updated readme to include `wasm32-unknown-unknown` example
+
+## 0.8.11
+
+1. Experimental support for `wasm32-unknown-unknown` target (see `examples/wasm32-in-browser`).
+   `Close()`/`End()` are not supported yet and the user should simply drop the
+   `ConnectionHandle`/`SessionHandle` to close the connection/session.
+
+## 0.8.10
+
+1. Ported 0.7.24
+
 ## 0.7.24
 
 1. Relaxed `post` and `post_batachable` to require `&self` only.
