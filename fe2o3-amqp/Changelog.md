@@ -1,5 +1,9 @@
 # Change Log
 
+## 0.8.18
+
+1. Relaxed `TransactionRetirement` to take immutable reference to `Self`.
+
 ## 0.8.17
 
 1. Relaxed `TransactionRetirement` methods to take `delivery: T where T: Into<DeliveryInfo>`.

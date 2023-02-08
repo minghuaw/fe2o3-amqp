@@ -131,7 +131,7 @@ impl TransactionalRetirement for OwnedTransaction {
     /// different non-discharged transaction than the outcome. If this happens then the control link
     /// MUST be terminated with a transaction-rollback error.
     async fn retire<T>(
-        &mut self,
+        &self,
         recver: &mut Receiver,
         delivery: T,
         outcome: Outcome,
