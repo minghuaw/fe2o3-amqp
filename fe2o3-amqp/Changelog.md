@@ -1,5 +1,9 @@
 # Change Log
 
+## 0.8.17
+
+1. Relaxed `TransactionRetirement` methods to take `delivery: T where T: Into<DeliveryInfo>`.
+
 ## 0.8.16
 
 1. Added `try_close()`/`try_end()` for `ConnectionHandle`/`SessionHandle` that immediately returns a result indicating whether the

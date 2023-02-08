@@ -11,9 +11,12 @@ use serde_amqp::Value;
 
 use crate::{
     endpoint::ReceiverLink,
-    link::{delivery::DeliveryFut, DispositionError, FlowError},
+    link::{
+        delivery::{DeliveryFut, DeliveryInfo},
+        DispositionError, FlowError,
+    },
     session::SessionHandle,
-    Delivery, Receiver, Sendable, Sender,
+    Receiver, Sendable, Sender,
 };
 
 use super::{
@@ -130,11 +133,11 @@ impl TransactionalRetirement for OwnedTransaction {
     async fn retire<T>(
         &mut self,
         recver: &mut Receiver,
-        delivery: &Delivery<T>,
+        delivery: T,
         outcome: Outcome,
     ) -> Result<(), Self::RetireError>
     where
-        T: Send + Sync,
+        T: Into<DeliveryInfo> + Send,
     {
         let txn_state = TransactionalState {
             txn_id: self.declared.txn_id.clone(),
@@ -182,7 +185,7 @@ impl OwnedTransaction {
         &self,
         sender: &mut Sender,
         sendable: &Sendable<T>,
-    ) -> Result<DeliveryFut<Result<Outcome, PostError>>, PostError>{
+    ) -> Result<DeliveryFut<Result<Outcome, PostError>>, PostError> {
         let state = TransactionalState {
             txn_id: self.declared.txn_id.clone(),
             outcome: None,

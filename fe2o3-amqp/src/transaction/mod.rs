@@ -27,11 +27,11 @@
 use crate::{
     endpoint::ReceiverLink,
     link::{
-        delivery::{DeliveryFut, UnsettledMessage},
+        delivery::{DeliveryFut, DeliveryInfo, UnsettledMessage},
         DispositionError, FlowError, LinkFrame,
     },
     util::TryConsume,
-    Delivery, Receiver, Sendable, Sender,
+    Receiver, Sendable, Sender,
 };
 use async_trait::async_trait;
 use bytes::{BufMut, BytesMut};
@@ -120,20 +120,20 @@ pub trait TransactionalRetirement {
     async fn retire<T>(
         &mut self,
         recver: &mut Receiver,
-        delivery: &Delivery<T>,
+        delivery: T,
         outcome: Outcome,
     ) -> Result<(), Self::RetireError>
     where
-        T: Send + Sync;
+        T: Into<DeliveryInfo> + Send;
 
     /// Associate an Accepted outcome with a transaction
     async fn accept<T>(
         &mut self,
         recver: &mut Receiver,
-        delivery: &Delivery<T>,
+        delivery: T,
     ) -> Result<(), Self::RetireError>
     where
-        T: Send + Sync,
+        T: Into<DeliveryInfo> + Send,
     {
         let outcome = Outcome::Accepted(Accepted {});
         self.retire(recver, delivery, outcome).await
@@ -143,11 +143,11 @@ pub trait TransactionalRetirement {
     async fn reject<T>(
         &mut self,
         recver: &mut Receiver,
-        delivery: &Delivery<T>,
+        delivery: T,
         error: Option<definitions::Error>,
     ) -> Result<(), Self::RetireError>
     where
-        T: Send + Sync,
+        T: Into<DeliveryInfo> + Send,
     {
         let outcome = Outcome::Rejected(Rejected { error });
         self.retire(recver, delivery, outcome).await
@@ -157,10 +157,10 @@ pub trait TransactionalRetirement {
     async fn release<T>(
         &mut self,
         recver: &mut Receiver,
-        delivery: &Delivery<T>,
+        delivery: T,
     ) -> Result<(), Self::RetireError>
     where
-        T: Send + Sync,
+        T: Into<DeliveryInfo> + Send,
     {
         let outcome = Outcome::Released(Released {});
         self.retire(recver, delivery, outcome).await
@@ -170,11 +170,11 @@ pub trait TransactionalRetirement {
     async fn modify<T>(
         &mut self,
         recver: &mut Receiver,
-        delivery: &Delivery<T>,
+        delivery: T,
         modified: Modified,
     ) -> Result<(), Self::RetireError>
     where
-        T: Send + Sync,
+        T: Into<DeliveryInfo> + Send,
     {
         let outcome = Outcome::Modified(modified);
         self.retire(recver, delivery, outcome).await
@@ -300,11 +300,11 @@ impl<'t> TransactionalRetirement for Transaction<'t> {
     async fn retire<T>(
         &mut self,
         recver: &mut Receiver,
-        delivery: &Delivery<T>,
+        delivery: T,
         outcome: Outcome,
     ) -> Result<(), Self::RetireError>
     where
-        T: Send + Sync,
+        T: Into<DeliveryInfo> + Send,
     {
         let txn_state = TransactionalState {
             txn_id: self.declared.txn_id.clone(),
@@ -342,7 +342,7 @@ impl<'t> Transaction<'t> {
         &self,
         sender: &mut Sender,
         sendable: &Sendable<T>,
-    ) -> Result<DeliveryFut<Result<Outcome, PostError>>, PostError>{
+    ) -> Result<DeliveryFut<Result<Outcome, PostError>>, PostError> {
         let state = TransactionalState {
             txn_id: self.declared.txn_id.clone(),
             outcome: None,
