@@ -490,7 +490,19 @@ impl<'t> Drop for Transaction<'t> {
             let payload = payload.freeze();
             let payload_copy = payload.clone();
 
-            let mut inner = self.controller.inner.blocking_lock();
+            // let mut inner = self.controller.inner.blocking_lock();
+            // TODO: what if lock fails
+            let mut inner = match self.controller.inner.try_lock() {
+                Ok(inner) => break inner,
+                Err(_error) => {
+                    #[cfg(feature = "tracing")]
+                    tracing::error!(error = ?_error);
+                    #[cfg(feature = "log")]
+                    log::error!("error = {:?}", _error);
+
+                    return;
+                }
+            };
 
             match inner.link.flow_state.try_consume(1) {
                 Ok(_) => {
