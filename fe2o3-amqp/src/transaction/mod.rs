@@ -469,6 +469,8 @@ impl<'t> Transaction<'t> {
 impl<'t> Drop for Transaction<'t> {
     #[cfg_attr(feature = "tracing", tracing::instrument)]
     fn drop(&mut self) {
+        const TRIALS_BEFORE_GIVE_UP: u64 = 20;
+
         if !self.is_discharged {
             // rollback
             let discharge = Discharge {
@@ -492,15 +494,23 @@ impl<'t> Drop for Transaction<'t> {
 
             // let mut inner = self.controller.inner.blocking_lock();
             // TODO: what if lock fails
-            let mut inner = match self.controller.inner.try_lock() {
-                Ok(inner) => break inner,
-                Err(_error) => {
-                    #[cfg(feature = "tracing")]
-                    tracing::error!(error = ?_error);
-                    #[cfg(feature = "log")]
-                    log::error!("error = {:?}", _error);
-
+            let mut counter = 0;
+            let mut inner = loop {
+                if counter > TRIALS_BEFORE_GIVE_UP {
                     return;
+                }
+                counter += 1;
+
+                match self.controller.inner.try_lock() {
+                    Ok(inner) => break inner,
+                    Err(_error) => {
+                        #[cfg(feature = "tracing")]
+                        tracing::error!(error = ?_error);
+                        #[cfg(feature = "log")]
+                        log::error!("error = {:?}", _error);
+
+                        std::thread::sleep(std::time::Duration::from_millis(10 * counter + 1))
+                    }
                 }
             };
 
@@ -564,7 +574,7 @@ impl<'t> Drop for Transaction<'t> {
                         performative: transfer,
                         payload,
                     };
-                    if inner.outgoing.blocking_send(frame).is_err() {
+                    if inner.outgoing.try_send(frame).is_err() {
                         // Channel is already closed
                         return;
                     }
@@ -572,7 +582,7 @@ impl<'t> Drop for Transaction<'t> {
                     // TODO: Wait for accept or not?
                     // The transfer is sent unsettled and will be
                     // inserted into
-                    let (tx, rx) = oneshot::channel();
+                    let (tx, mut rx) = oneshot::channel();
                     let unsettled = UnsettledMessage::new(payload_copy, None, MESSAGE_FORMAT, tx);
                     {
                         let mut guard = match inner.link.unsettled.try_write() {
@@ -583,29 +593,40 @@ impl<'t> Drop for Transaction<'t> {
                             .get_or_insert(OrderedMap::new())
                             .insert(delivery_tag, unsettled);
                     }
-                    match rx.blocking_recv() {
-                        Ok(Some(state)) => match state {
-                            DeliveryState::Accepted(_) => {}
-                            _ => {
-                                #[cfg(feature = "tracing")]
-                                tracing::error!(error = ?state);
-                                #[cfg(feature = "log")]
-                                log::error!("error = {:?}", state);
+                    let mut counter = 0;
+                    loop {
+                        // TODO:: limits?
+                        if counter > TRIALS_BEFORE_GIVE_UP {
+                            return;
+                        }
+                        counter += 1;
+
+                        match rx.try_recv() {
+                            Ok(Some(state)) => match state {
+                                DeliveryState::Accepted(_) => break,
+                                _ => {
+                                    #[cfg(feature = "tracing")]
+                                    tracing::error!(error = ?state);
+                                    #[cfg(feature = "log")]
+                                    log::error!("error = {:?}", state);
+                                    break;
+                                }
+                            },
+                            Ok(None) => {
+                                // #[cfg(feature = "tracing")]
+                                // tracing::error!(error = ?ControllerSendError::IllegalDeliveryState);
+                                // #[cfg(feature = "log")]
+                                // log::error!("error = {:?}", ControllerSendError::IllegalDeliveryState);
+                                std::thread::sleep(std::time::Duration::from_millis(10 * counter + 1));
                             }
-                        },
-                        Ok(None) => {
-                            #[cfg(feature = "tracing")]
-                            tracing::error!(error = ?ControllerSendError::IllegalDeliveryState);
-                            #[cfg(feature = "log")]
-                            log::error!("error = {:?}", ControllerSendError::IllegalDeliveryState);
-                        }
-                        Err(_error) => {
-                            #[cfg(feature = "tracing")]
-                            tracing::error!(error = ?_error);
-                            #[cfg(feature = "log")]
-                            log::error!("error = {:?}", _error);
-                        }
-                    };
+                            Err(_error) => {
+                                #[cfg(feature = "tracing")]
+                                tracing::error!(error = ?_error);
+                                #[cfg(feature = "log")]
+                                log::error!("error = {:?}", _error);
+                            }
+                        };
+                    }
                 }
                 Err(_error) => {
                     #[cfg(feature = "tracing")]
