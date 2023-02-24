@@ -1,5 +1,13 @@
 # Change Log
 
+## 0.7.25
+
+1. Backported 0.8.18 and 0.8.19.
+
+## 0.8.19
+
+1. Fixed #185 by trying to rollback when the txn is dropped without being committed or rolled back.
+
 ## 0.8.18
 
 1. Relaxed `TransactionRetirement` to take immutable reference to `Self`.
