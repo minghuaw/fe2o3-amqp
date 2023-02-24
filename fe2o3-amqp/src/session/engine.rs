@@ -2,7 +2,10 @@ use fe2o3_amqp_types::{
     definitions::{self, AmqpError, SessionError},
     performatives::End,
 };
-use tokio::{sync::mpsc, task::JoinHandle};
+use tokio::{
+    sync::{mpsc, oneshot},
+    task::JoinHandle,
+};
 
 use crate::{
     connection::{self},
@@ -103,27 +106,39 @@ where
     }
 }
 
-#[cfg(not(target_arch = "wasm32"))]
-impl<S> SessionEngine<S>
-where
-    S: endpoint::SessionEndpoint<State = SessionState> + Send + Sync + 'static,
-    AllocLinkError: From<S::AllocError>,
-    SessionInnerError: From<S::Error> + From<S::BeginError> + From<S::EndError>,
-{
-    pub fn spawn(self) -> JoinHandle<Result<(), Error>> {
-        tokio::spawn(self.event_loop())
+cfg_not_wasm32! {
+    impl<S> SessionEngine<S>
+    where
+        S: endpoint::SessionEndpoint<State = SessionState> + Send + Sync + 'static,
+        AllocLinkError: From<S::AllocError>,
+        SessionInnerError: From<S::Error> + From<S::BeginError> + From<S::EndError>,
+    {
+        pub fn spawn(self) -> (JoinHandle<()>, oneshot::Receiver<Result<(), Error>>) {
+            let (tx, rx) = oneshot::channel();
+            let handle = tokio::spawn(self.event_loop(tx));
+            (handle, rx)
+        }
     }
 }
 
-#[cfg(target_arch = "wasm32")]
-impl<S> SessionEngine<S>
-where
-    S: endpoint::SessionEndpoint<State = SessionState> + SendBound + Sync + 'static,
-    AllocLinkError: From<S::AllocError>,
-    SessionInnerError: From<S::Error> + From<S::BeginError> + From<S::EndError>,
-{
-    pub fn spawn_local(self, local_set: &tokio::task::LocalSet) -> JoinHandle<Result<(), Error>> {
-        local_set.spawn_local(self.event_loop())
+cfg_wasm32! {
+    impl<S> SessionEngine<S>
+    where
+        S: endpoint::SessionEndpoint<State = SessionState> + SendBound + Sync + 'static,
+        AllocLinkError: From<S::AllocError>,
+        SessionInnerError: From<S::Error> + From<S::BeginError> + From<S::EndError>,
+    {
+        pub fn spawn_local(self) -> (JoinHandle<()>, oneshot::Receiver<Result<(), Error>>) {
+            let (tx, rx) = oneshot::channel();
+            let handle = tokio::task::spawn_local(self.event_loop(tx));
+            (handle, rx)
+        }
+
+        pub fn spawn_on_local_set(self, local_set: &tokio::task::LocalSet) -> (JoinHandle<()>, oneshot::Receiver<Result<(), Error>>) {
+            let (tx, rx) = oneshot::channel();
+            let handle = local_set.spawn_local(self.event_loop(tx));
+            (handle, rx)
+        }
     }
 }
 
@@ -470,7 +485,7 @@ where
     }
 
     #[cfg_attr(feature = "tracing", tracing::instrument(name = "Session::event_loop", skip(self), fields(outgoing_channel = %self.session.outgoing_channel().0)))]
-    async fn event_loop(mut self) -> Result<(), Error> {
+    async fn event_loop(mut self, tx: oneshot::Sender<Result<(), Error>>) {
         let mut outcome = Ok(());
         loop {
             let result = tokio::select! {
@@ -548,6 +563,7 @@ where
         let _ =
             connection::deallocate_session(&mut self.conn_control, self.session.outgoing_channel())
                 .await;
-        outcome.map_err(Into::into)
+        let result = outcome.map_err(Into::into);
+        let _ = tx.send(result);
     }
 }

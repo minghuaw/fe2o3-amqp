@@ -38,8 +38,9 @@ use self::{
     target_archetype::VerifyTargetArchetype,
 };
 
-#[cfg(feature = "transaction")]
-use crate::transaction::TXN_ID_KEY;
+cfg_transaction! {
+    use crate::transaction::TXN_ID_KEY;
+}
 
 mod frame;
 pub(crate) use frame::*;
@@ -841,9 +842,7 @@ pub(crate) fn get_max_message_size(local: u64, remote: Option<u64>) -> u64 {
 
 #[cfg(test)]
 mod tests {
-    use crate::link::{
-        state::LinkFlowStateInner,
-    };
+    use crate::link::state::LinkFlowStateInner;
 
     #[tokio::test]
     async fn test_producer_notify() {

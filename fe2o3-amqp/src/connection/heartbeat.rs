@@ -39,7 +39,7 @@ cfg_not_wasm32! {
 }
 
 cfg_wasm32! {
-    use wasm_timer::{Delay};
+    use fluvio_wasm_timer::{Delay};
     use futures_util::{Future, ready};
 
     #[derive(Debug)]

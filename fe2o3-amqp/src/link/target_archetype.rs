@@ -5,9 +5,6 @@ use fe2o3_amqp_types::{
     primitives::{Array, Symbol},
 };
 
-#[cfg(feature = "transaction")]
-use fe2o3_amqp_types::transaction::{Coordinator, TxnCapability};
-
 use super::{ReceiverAttachError, SenderAttachError};
 
 /// Performs verification on whether the incoming `Target` field complies with the specification
@@ -47,38 +44,6 @@ impl VerifyTargetArchetype for Target {
     }
 }
 
-#[cfg(feature = "transaction")]
-impl VerifyTargetArchetype for Coordinator {
-    fn verify_as_sender(&self, other: &Self) -> Result<(), SenderAttachError> {
-        // Note that it is the responsibility of the transaction controller to verify that the
-        // capabilities of the controller meet its requirements.
-        match (&self.capabilities, &other.capabilities) {
-            (Some(desired), Some(provided)) => {
-                for cap in desired.0.iter() {
-                    if !provided.0.contains(cap) {
-                        return Err(SenderAttachError::DesireTxnCapabilitiesNotSupported);
-                    }
-                }
-                Ok(())
-            }
-            (Some(desired), None) => {
-                if desired.0.is_empty() {
-                    Ok(())
-                } else {
-                    Err(SenderAttachError::DesireTxnCapabilitiesNotSupported)
-                }
-            }
-            (None, Some(_)) | (None, None) => Ok(()),
-        }
-    }
-
-    fn verify_as_receiver(&self, _other: &Self) -> Result<(), ReceiverAttachError> {
-        // Note that it is the responsibility of the transaction controller to verify that the
-        // capabilities of the controller meet its requirements.
-        Ok(())
-    }
-}
-
 pub trait TargetArchetypeCapabilities {
     type Capability;
 
@@ -99,19 +64,6 @@ impl TargetArchetypeCapabilities for Target {
     }
 }
 
-#[cfg(feature = "transaction")]
-impl TargetArchetypeCapabilities for Coordinator {
-    type Capability = TxnCapability;
-
-    fn capabilities(&self) -> &Option<Array<TxnCapability>> {
-        &self.capabilities
-    }
-
-    fn capabilities_mut(&mut self) -> &mut Option<Array<TxnCapability>> {
-        &mut self.capabilities
-    }
-}
-
 pub trait VariantOfTargetArchetype {
     fn is_target(&self) -> bool;
     fn is_coordinator(&self) -> bool;
@@ -124,17 +76,6 @@ impl VariantOfTargetArchetype for Target {
 
     fn is_coordinator(&self) -> bool {
         false
-    }
-}
-
-#[cfg(feature = "transaction")]
-impl VariantOfTargetArchetype for Coordinator {
-    fn is_target(&self) -> bool {
-        false
-    }
-
-    fn is_coordinator(&self) -> bool {
-        true
     }
 }
 
@@ -166,13 +107,6 @@ impl DynamicTarget for Target {
     }
 }
 
-#[cfg(feature = "transaction")]
-impl DynamicTarget for Coordinator {
-    fn is_dynamic(&self) -> Option<bool> {
-        None
-    }
-}
-
 impl DynamicTarget for TargetArchetype {
     fn is_dynamic(&self) -> Option<bool> {
         match self {
@@ -195,4 +129,67 @@ impl<T> TargetArchetypeExt for T where
         + VariantOfTargetArchetype
         + DynamicTarget
 {
+}
+
+cfg_transaction! {
+    use fe2o3_amqp_types::transaction::{Coordinator, TxnCapability};
+
+    impl VerifyTargetArchetype for Coordinator {
+        fn verify_as_sender(&self, other: &Self) -> Result<(), SenderAttachError> {
+            // Note that it is the responsibility of the transaction controller to verify that the
+            // capabilities of the controller meet its requirements.
+            match (&self.capabilities, &other.capabilities) {
+                (Some(desired), Some(provided)) => {
+                    for cap in desired.0.iter() {
+                        if !provided.0.contains(cap) {
+                            return Err(SenderAttachError::DesireTxnCapabilitiesNotSupported);
+                        }
+                    }
+                    Ok(())
+                }
+                (Some(desired), None) => {
+                    if desired.0.is_empty() {
+                        Ok(())
+                    } else {
+                        Err(SenderAttachError::DesireTxnCapabilitiesNotSupported)
+                    }
+                }
+                (None, Some(_)) | (None, None) => Ok(()),
+            }
+        }
+
+        fn verify_as_receiver(&self, _other: &Self) -> Result<(), ReceiverAttachError> {
+            // Note that it is the responsibility of the transaction controller to verify that the
+            // capabilities of the controller meet its requirements.
+            Ok(())
+        }
+    }
+
+    impl TargetArchetypeCapabilities for Coordinator {
+        type Capability = TxnCapability;
+
+        fn capabilities(&self) -> &Option<Array<TxnCapability>> {
+            &self.capabilities
+        }
+
+        fn capabilities_mut(&mut self) -> &mut Option<Array<TxnCapability>> {
+            &mut self.capabilities
+        }
+    }
+
+    impl VariantOfTargetArchetype for Coordinator {
+        fn is_target(&self) -> bool {
+            false
+        }
+
+        fn is_coordinator(&self) -> bool {
+            true
+        }
+    }
+
+    impl DynamicTarget for Coordinator {
+        fn is_dynamic(&self) -> Option<bool> {
+            None
+        }
+    }
 }

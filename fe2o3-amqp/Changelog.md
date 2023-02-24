@@ -1,5 +1,34 @@
 # Change Log
 
+## 0.7.25
+
+1. Backported 0.8.17, 0.8.18 and 0.8.19.
+
+## 0.8.19
+
+1. Fixed #185 by trying to rollback when the txn is dropped without being committed or rolled back.
+
+## 0.8.18
+
+1. Relaxed `TransactionRetirement` to take immutable reference to `Self`.
+
+## 0.8.17
+
+1. Relaxed `TransactionRetirement` methods to take `delivery: T where T: Into<DeliveryInfo>`.
+
+## 0.8.16
+
+1. Added `try_close()`/`try_end()` for `ConnectionHandle`/`SessionHandle` that immediately returns a result indicating whether the
+   exchange of `Close`/`End` frames are complete.
+
+## 0.8.15
+
+1. Added `spawn_local` for connection builder and session builder for `target_arch = "wasm32"`.
+
+## 0.8.14
+
+1. Replaced `wasm-timer` with `fluvio-wasm-timer` to work around a [`parkinglot` bug](https://github.com/tomaka/wasm-timer/pull/13).
+
 ## 0.8.13
 
 1. Fixed docsrs build error.

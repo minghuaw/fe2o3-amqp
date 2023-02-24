@@ -10,16 +10,16 @@ use crate::{
     connection::AllocSessionError,
     endpoint::{InputHandle, OutgoingChannel, OutputHandle},
     link::LinkRelay,
-    session::{frame::SessionIncomingItem, AllocLinkError},
+    session::{error::AllocLinkError, frame::SessionIncomingItem},
 };
 
-#[cfg(feature = "transaction")]
-use fe2o3_amqp_types::{
-    messaging::Accepted, transaction::TransactionError, transaction::TransactionId,
-};
+cfg_transaction! {
+    use fe2o3_amqp_types::{
+        messaging::Accepted, transaction::TransactionError, transaction::TransactionId,
+    };
 
-#[cfg(feature = "transaction")]
-use crate::transaction::AllocTxnIdError;
+    use crate::transaction::AllocTxnIdError;
+}
 
 #[derive(Debug)]
 pub(crate) enum ConnectionControl {

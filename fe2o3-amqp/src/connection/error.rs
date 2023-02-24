@@ -8,8 +8,9 @@ use tokio::{sync::mpsc, task::JoinError};
 
 use crate::transport::{self, error::NegotiationError};
 
-#[cfg(feature = "scram")]
-use crate::auth::error::ScramErrorKind;
+cfg_scram! {
+    use crate::auth::error::ScramErrorKind;
+}
 
 /// Error associated with openning a connection
 #[derive(Debug, thiserror::Error)]
@@ -260,4 +261,17 @@ pub(crate) enum AllocSessionError {
 
 pub(crate) enum DeallcoSessionError {
     IllegalState,
+}
+
+/// Error associated with trying to close the connection
+#[derive(Debug, thiserror::Error)]
+pub enum TryCloseError {
+    /// Illegal local connection state
+    #[error("Illegal local state")]
+    AlreadyClosed,
+
+    /// An close frame has been sent to the remote peer,
+    /// but the connection has not received a close frame from the remote peer
+    #[error("The connection has not received a close frame from the remote peer")]
+    RemoteCloseNotReceived,
 }

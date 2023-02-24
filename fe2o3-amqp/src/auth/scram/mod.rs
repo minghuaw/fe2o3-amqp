@@ -579,144 +579,144 @@ mod tests {
             .is_ok());
     }
 
-    #[cfg(feature = "acceptor")]
-    #[test]
-    fn test_sasl_scram_sha1_server() {
-        use scram_sha1::*;
-        use base64::Engine;
-
-        let base64_salt = get_base64_salt_from_server_first_message(SERVER_FIRST_MESSAGE);
-        let salt = base64::engine::general_purpose::STANDARD.decode(base64_salt).unwrap();
-        let base64_server_nonce =
-            get_base64_server_nonce_from_server_first_message(SERVER_FIRST_MESSAGE, CLIENT_NONCE);
-        let client_server_nonce = format!("{}{}", CLIENT_NONCE, base64_server_nonce);
-        let client_first_message_bare =
-            get_client_first_message_bare(EXPECTED_CLIENT_INITIAL_RESPONSE);
-
-        let test_credential = TestScramCredential::new(
-            VERSION.clone(),
-            TEST_USERNAME,
-            TEST_PASSWORD,
-            salt,
-            ITERATIONS,
-        );
-
-        let server_first = VERSION
-            .compute_server_first_message(
-                EXPECTED_CLIENT_INITIAL_RESPONSE.as_bytes(),
-                base64_server_nonce,
-                &test_credential,
-            )
-            .unwrap()
-            .unwrap();
-
-        assert_eq!(server_first.username, TEST_USERNAME);
-        assert_eq!(server_first.message, SERVER_FIRST_MESSAGE.as_bytes());
-
-        let stored_password = test_credential.get_stored_password(TEST_USERNAME).unwrap();
-        let server_final = VERSION
-            .compute_server_final_message(
-                EXPECTED_CLIENT_FINAL_MESSAGE.as_bytes(),
-                client_server_nonce.as_bytes(),
-                client_first_message_bare.as_bytes(),
-                SERVER_FIRST_MESSAGE.as_bytes(),
-                &stored_password,
-            )
-            .unwrap();
-        assert_eq!(server_final, SERVER_FINAL_MESSAGE.as_bytes())
+    cfg_acceptor! {
+        #[test]
+        fn test_sasl_scram_sha1_server() {
+            use scram_sha1::*;
+            use base64::Engine;
+    
+            let base64_salt = get_base64_salt_from_server_first_message(SERVER_FIRST_MESSAGE);
+            let salt = base64::engine::general_purpose::STANDARD.decode(base64_salt).unwrap();
+            let base64_server_nonce =
+                get_base64_server_nonce_from_server_first_message(SERVER_FIRST_MESSAGE, CLIENT_NONCE);
+            let client_server_nonce = format!("{}{}", CLIENT_NONCE, base64_server_nonce);
+            let client_first_message_bare =
+                get_client_first_message_bare(EXPECTED_CLIENT_INITIAL_RESPONSE);
+    
+            let test_credential = TestScramCredential::new(
+                VERSION.clone(),
+                TEST_USERNAME,
+                TEST_PASSWORD,
+                salt,
+                ITERATIONS,
+            );
+    
+            let server_first = VERSION
+                .compute_server_first_message(
+                    EXPECTED_CLIENT_INITIAL_RESPONSE.as_bytes(),
+                    base64_server_nonce,
+                    &test_credential,
+                )
+                .unwrap()
+                .unwrap();
+    
+            assert_eq!(server_first.username, TEST_USERNAME);
+            assert_eq!(server_first.message, SERVER_FIRST_MESSAGE.as_bytes());
+    
+            let stored_password = test_credential.get_stored_password(TEST_USERNAME).unwrap();
+            let server_final = VERSION
+                .compute_server_final_message(
+                    EXPECTED_CLIENT_FINAL_MESSAGE.as_bytes(),
+                    client_server_nonce.as_bytes(),
+                    client_first_message_bare.as_bytes(),
+                    SERVER_FIRST_MESSAGE.as_bytes(),
+                    &stored_password,
+                )
+                .unwrap();
+            assert_eq!(server_final, SERVER_FINAL_MESSAGE.as_bytes())
+        }
+    
+        #[test]
+        fn test_sasl_scram_sha256_server() {
+            use scram_sha256::*;
+            use base64::Engine;
+    
+            let base64_salt = get_base64_salt_from_server_first_message(SERVER_FIRST_MESSAGE);
+            let salt = base64::engine::general_purpose::STANDARD.decode(base64_salt).unwrap();
+            let base64_server_nonce =
+                get_base64_server_nonce_from_server_first_message(SERVER_FIRST_MESSAGE, CLIENT_NONCE);
+            let client_server_nonce = format!("{}{}", CLIENT_NONCE, base64_server_nonce);
+            let client_first_message_bare =
+                get_client_first_message_bare(EXPECTED_CLIENT_INITIAL_RESPONSE);
+    
+            let test_credential = TestScramCredential::new(
+                VERSION.clone(),
+                TEST_USERNAME,
+                TEST_PASSWORD,
+                salt,
+                ITERATIONS,
+            );
+    
+            let server_first = VERSION
+                .compute_server_first_message(
+                    EXPECTED_CLIENT_INITIAL_RESPONSE.as_bytes(),
+                    base64_server_nonce,
+                    &test_credential,
+                )
+                .unwrap()
+                .unwrap();
+    
+            assert_eq!(server_first.username, TEST_USERNAME);
+            assert_eq!(server_first.message, SERVER_FIRST_MESSAGE.as_bytes());
+    
+            let stored_password = test_credential.get_stored_password(TEST_USERNAME).unwrap();
+            let server_final = VERSION
+                .compute_server_final_message(
+                    EXPECTED_CLIENT_FINAL_MESSAGE.as_bytes(),
+                    client_server_nonce.as_bytes(),
+                    client_first_message_bare.as_bytes(),
+                    SERVER_FIRST_MESSAGE.as_bytes(),
+                    &stored_password,
+                )
+                .unwrap();
+            assert_eq!(server_final, SERVER_FINAL_MESSAGE.as_bytes())
+        }
+    
+        #[test]
+        fn test_sasl_scram_sha512_server() {
+            use scram_sha512::*;
+            use base64::Engine;
+    
+            let base64_salt = get_base64_salt_from_server_first_message(SERVER_FIRST_MESSAGE);
+            let salt = base64::engine::general_purpose::STANDARD.decode(base64_salt).unwrap();
+            let base64_server_nonce =
+                get_base64_server_nonce_from_server_first_message(SERVER_FIRST_MESSAGE, CLIENT_NONCE);
+            let client_server_nonce = format!("{}{}", CLIENT_NONCE, base64_server_nonce);
+            let client_first_message_bare =
+                get_client_first_message_bare(EXPECTED_CLIENT_INITIAL_RESPONSE);
+    
+            let test_credential = TestScramCredential::new(
+                VERSION.clone(),
+                TEST_USERNAME,
+                TEST_PASSWORD,
+                salt,
+                ITERATIONS,
+            );
+    
+            let server_first = VERSION
+                .compute_server_first_message(
+                    EXPECTED_CLIENT_INITIAL_RESPONSE.as_bytes(),
+                    base64_server_nonce,
+                    &test_credential,
+                )
+                .unwrap()
+                .unwrap();
+    
+            assert_eq!(server_first.username, TEST_USERNAME);
+            assert_eq!(server_first.message, SERVER_FIRST_MESSAGE.as_bytes());
+    
+            let stored_password = test_credential.get_stored_password(TEST_USERNAME).unwrap();
+            let server_final = VERSION
+                .compute_server_final_message(
+                    EXPECTED_CLIENT_FINAL_MESSAGE.as_bytes(),
+                    client_server_nonce.as_bytes(),
+                    client_first_message_bare.as_bytes(),
+                    SERVER_FIRST_MESSAGE.as_bytes(),
+                    &stored_password,
+                )
+                .unwrap();
+            assert_eq!(server_final, SERVER_FINAL_MESSAGE.as_bytes())
+        }
     }
 
-    #[cfg(feature = "acceptor")]
-    #[test]
-    fn test_sasl_scram_sha256_server() {
-        use scram_sha256::*;
-        use base64::Engine;
-
-        let base64_salt = get_base64_salt_from_server_first_message(SERVER_FIRST_MESSAGE);
-        let salt = base64::engine::general_purpose::STANDARD.decode(base64_salt).unwrap();
-        let base64_server_nonce =
-            get_base64_server_nonce_from_server_first_message(SERVER_FIRST_MESSAGE, CLIENT_NONCE);
-        let client_server_nonce = format!("{}{}", CLIENT_NONCE, base64_server_nonce);
-        let client_first_message_bare =
-            get_client_first_message_bare(EXPECTED_CLIENT_INITIAL_RESPONSE);
-
-        let test_credential = TestScramCredential::new(
-            VERSION.clone(),
-            TEST_USERNAME,
-            TEST_PASSWORD,
-            salt,
-            ITERATIONS,
-        );
-
-        let server_first = VERSION
-            .compute_server_first_message(
-                EXPECTED_CLIENT_INITIAL_RESPONSE.as_bytes(),
-                base64_server_nonce,
-                &test_credential,
-            )
-            .unwrap()
-            .unwrap();
-
-        assert_eq!(server_first.username, TEST_USERNAME);
-        assert_eq!(server_first.message, SERVER_FIRST_MESSAGE.as_bytes());
-
-        let stored_password = test_credential.get_stored_password(TEST_USERNAME).unwrap();
-        let server_final = VERSION
-            .compute_server_final_message(
-                EXPECTED_CLIENT_FINAL_MESSAGE.as_bytes(),
-                client_server_nonce.as_bytes(),
-                client_first_message_bare.as_bytes(),
-                SERVER_FIRST_MESSAGE.as_bytes(),
-                &stored_password,
-            )
-            .unwrap();
-        assert_eq!(server_final, SERVER_FINAL_MESSAGE.as_bytes())
-    }
-
-    #[cfg(feature = "acceptor")]
-    #[test]
-    fn test_sasl_scram_sha512_server() {
-        use scram_sha512::*;
-        use base64::Engine;
-
-        let base64_salt = get_base64_salt_from_server_first_message(SERVER_FIRST_MESSAGE);
-        let salt = base64::engine::general_purpose::STANDARD.decode(base64_salt).unwrap();
-        let base64_server_nonce =
-            get_base64_server_nonce_from_server_first_message(SERVER_FIRST_MESSAGE, CLIENT_NONCE);
-        let client_server_nonce = format!("{}{}", CLIENT_NONCE, base64_server_nonce);
-        let client_first_message_bare =
-            get_client_first_message_bare(EXPECTED_CLIENT_INITIAL_RESPONSE);
-
-        let test_credential = TestScramCredential::new(
-            VERSION.clone(),
-            TEST_USERNAME,
-            TEST_PASSWORD,
-            salt,
-            ITERATIONS,
-        );
-
-        let server_first = VERSION
-            .compute_server_first_message(
-                EXPECTED_CLIENT_INITIAL_RESPONSE.as_bytes(),
-                base64_server_nonce,
-                &test_credential,
-            )
-            .unwrap()
-            .unwrap();
-
-        assert_eq!(server_first.username, TEST_USERNAME);
-        assert_eq!(server_first.message, SERVER_FIRST_MESSAGE.as_bytes());
-
-        let stored_password = test_credential.get_stored_password(TEST_USERNAME).unwrap();
-        let server_final = VERSION
-            .compute_server_final_message(
-                EXPECTED_CLIENT_FINAL_MESSAGE.as_bytes(),
-                client_server_nonce.as_bytes(),
-                client_first_message_bare.as_bytes(),
-                SERVER_FIRST_MESSAGE.as_bytes(),
-                &stored_password,
-            )
-            .unwrap();
-        assert_eq!(server_final, SERVER_FINAL_MESSAGE.as_bytes())
-    }
 }

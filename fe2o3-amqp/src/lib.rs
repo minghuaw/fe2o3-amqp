@@ -160,12 +160,12 @@
 //! [TestAmqpBroker](https://azure.github.io/amqpnetlite/articles/hello_amqp.html).
 //!
 //! # WebAssembly support
-//! 
+//!
 //! Experimental support for `wasm32-unknown-unknown` target is added since "0.8.11" and requires use of
 //! `fe2o3-amqp-ws` to establish WebSocket connection to the broker. An example of sending and
 //! receiving message in a browser tab can be found
 //! [examples/wasm32-in-browser](https://github.com/minghuaw/fe2o3-amqp/tree/main/examples/wasm32-in-browser).
-//! 
+//!
 //! # Components
 //!
 //! | Name | Description |

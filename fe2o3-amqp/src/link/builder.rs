@@ -32,11 +32,11 @@ use super::{
     SenderRelayFlowState,
 };
 
-#[cfg(feature = "transaction")]
-use crate::transaction::Controller;
+cfg_transaction! {
+    use crate::transaction::Controller;
 
-#[cfg(feature = "transaction")]
-use fe2o3_amqp_types::transaction::Coordinator;
+    use fe2o3_amqp_types::transaction::Coordinator;
+}
 
 /// Type state for link::builder::Builder;
 #[derive(Debug)]
@@ -311,32 +311,33 @@ impl<Role, T, NameState, SS, TS> Builder<Role, T, NameState, SS, TS> {
         }
     }
 
-    /// Desired coordinator for transaction
-    #[cfg(feature = "transaction")]
-    pub fn coordinator(
-        self,
-        coordinator: Coordinator,
-    ) -> Builder<Role, Coordinator, NameState, SS, WithTarget> {
-        Builder {
-            name: self.name,
-            snd_settle_mode: self.snd_settle_mode,
-            rcv_settle_mode: self.rcv_settle_mode,
-            source: self.source,
-            target: Some(coordinator), // setting target
-            initial_delivery_count: self.initial_delivery_count,
-            max_message_size: self.max_message_size,
-            offered_capabilities: self.offered_capabilities,
-            desired_capabilities: self.desired_capabilities,
-            buffer_size: self.buffer_size,
-            credit_mode: self.credit_mode,
-            properties: Default::default(),
+    cfg_transaction! {
+        /// Desired coordinator for transaction
+        pub fn coordinator(
+            self,
+            coordinator: Coordinator,
+        ) -> Builder<Role, Coordinator, NameState, SS, WithTarget> {
+            Builder {
+                name: self.name,
+                snd_settle_mode: self.snd_settle_mode,
+                rcv_settle_mode: self.rcv_settle_mode,
+                source: self.source,
+                target: Some(coordinator), // setting target
+                initial_delivery_count: self.initial_delivery_count,
+                max_message_size: self.max_message_size,
+                offered_capabilities: self.offered_capabilities,
+                desired_capabilities: self.desired_capabilities,
+                buffer_size: self.buffer_size,
+                credit_mode: self.credit_mode,
+                properties: Default::default(),
 
-            role: self.role,
-            name_state: self.name_state,
-            source_state: self.source_state,
-            target_state: PhantomData,
+                role: self.role,
+                name_state: self.name_state,
+                source_state: self.source_state,
+                target_state: PhantomData,
 
-            auto_accept: false,
+                auto_accept: false,
+            }
         }
     }
 
@@ -657,38 +658,18 @@ where
     }
 }
 
-// async fn perform_attach_exchange<L, E>(
-//     link: &mut L,
-//     writer: &mpsc::Sender<LinkFrame>,
-//     reader: &mut mpsc::Receiver<LinkFrame>,
-//     session: &mpsc::Sender<SessionControl>,
-//     complete_or_err: E,
-// ) -> Result<(), E>
-// where
-//     L: LinkExt<AttachError = E>,
-// {
-//     match link.exchange_attach(writer, reader, false).await {
-//         Ok(outcome) => outcome.complete_or(complete_or_err),
-//         Err(attach_error) => {
-//             let err = link
-//                 .handle_attach_error(attach_error, writer, reader, session)
-//                 .await;
-//             Err(err)
-//         }
-//     }
-// }
+cfg_transaction! {
+    impl Builder<role::SenderMarker, Coordinator, WithName, WithSource, WithTarget> {
+        /// Attach the link as a transaction controller
+        pub async fn attach<R>(
+            self,
+            session: &mut SessionHandle<R>,
+        ) -> Result<Controller, SenderAttachError> {
+            use tokio::sync::Mutex;
 
-#[cfg(feature = "transaction")]
-impl Builder<role::SenderMarker, Coordinator, WithName, WithSource, WithTarget> {
-    /// Attach the link as a transaction controller
-    pub async fn attach<R>(
-        self,
-        session: &mut SessionHandle<R>,
-    ) -> Result<Controller, SenderAttachError> {
-        use tokio::sync::Mutex;
-
-        self.attach_inner(session).await.map(|inner| Controller {
-            inner: Mutex::new(inner),
-        })
+            self.attach_inner(session).await.map(|inner| Controller {
+                inner: Mutex::new(inner),
+            })
+        }
     }
 }

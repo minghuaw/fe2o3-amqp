@@ -1,3 +1,5 @@
+//! Error types for session operations
+
 use fe2o3_amqp_types::definitions::{self};
 use tokio::task::JoinError;
 
@@ -157,6 +159,7 @@ pub enum Error {
 
     /// Event loop exitted with error
     #[error(transparent)]
+    #[deprecated]
     JoinError(#[from] JoinError),
 
     /// Unknown transaction ID
@@ -215,4 +218,16 @@ pub(crate) enum AllocLinkError {
 
     #[error("Link name must be unique")]
     DuplicatedLinkName,
+}
+
+/// Error with attempting to end a session
+#[derive(Debug, thiserror::Error)]
+pub enum TryEndError {
+    /// The session is already ended
+    #[error("Session is already ended")]
+    AlreadyEnded,
+
+    /// The exchange of end frame is not completed because it has not received a remote end frame
+    #[error("The sesssion has not received a remote end frame")]
+    RemoteEndNotReceived,
 }

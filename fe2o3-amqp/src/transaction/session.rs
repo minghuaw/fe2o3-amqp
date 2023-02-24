@@ -85,14 +85,14 @@ where
 }
 
 impl<S> TxnSession<S> where
-    S: endpoint::Session<Error = session::SessionInnerError> + endpoint::SessionExt + Send + Sync
+    S: endpoint::Session<Error = session::error::SessionInnerError> + endpoint::SessionExt + Send + Sync
 {
 }
 
 #[async_trait]
 impl<S> HandleControlLink for TxnSession<S>
 where
-    S: endpoint::Session<Error = session::SessionInnerError> + endpoint::SessionExt + Send + Sync,
+    S: endpoint::Session<Error = session::error::SessionInnerError> + endpoint::SessionExt + Send + Sync,
 {
     type Error = S::Error;
 
@@ -120,7 +120,7 @@ where
 
 impl<S> endpoint::HandleDeclare for TxnSession<S>
 where
-    S: endpoint::Session<Error = session::SessionInnerError> + endpoint::SessionExt + Send + Sync,
+    S: endpoint::Session<Error = session::error::SessionInnerError> + endpoint::SessionExt + Send + Sync,
 {
     fn allocate_transaction_id(&mut self) -> Result<TransactionId, AllocTxnIdError> {
         let mut txn_id = TransactionId::from(Uuid::new_v4().into_bytes());
@@ -139,7 +139,7 @@ where
 #[async_trait]
 impl<S> endpoint::HandleDischarge for TxnSession<S>
 where
-    S: endpoint::Session<Error = session::SessionInnerError> + endpoint::SessionExt + Send + Sync,
+    S: endpoint::Session<Error = session::error::SessionInnerError> + endpoint::SessionExt + Send + Sync,
 {
     #[cfg_attr(feature = "tracing", tracing::instrument(skip_all))]
     async fn commit_transaction(
@@ -213,7 +213,7 @@ where
 #[async_trait]
 impl<S> endpoint::Session for TxnSession<S>
 where
-    S: endpoint::Session<Error = session::SessionInnerError> + endpoint::SessionExt + Send + Sync,
+    S: endpoint::Session<Error = session::error::SessionInnerError> + endpoint::SessionExt + Send + Sync,
 {
     type AllocError = S::AllocError;
     type BeginError = S::BeginError;

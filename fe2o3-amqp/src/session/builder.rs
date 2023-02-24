@@ -239,160 +239,224 @@ impl Builder {
     //     self
     // }
 
-    /// Begins a new session
-    ///
-    /// # Example
-    ///
-    /// ```rust, ignore
-    /// let session = Session::builder()
-    ///     .handle_max(128u32)
-    ///     .begin(&mut connection)
-    ///     .await.unwrap();
-    /// ```
-    ///
-    #[cfg(not(target_arch = "wasm32"))]
-    pub async fn begin(
-        self,
-        connection: &mut ConnectionHandle<()>,
-    ) -> Result<SessionHandle<()>, BeginError> {
-        let local_state = SessionState::Unmapped;
-        let (session_control_tx, session_control_rx) =
-            mpsc::channel::<SessionControl>(DEFAULT_SESSION_CONTROL_BUFFER_SIZE);
-        let (incoming_tx, incoming_rx) = mpsc::channel(self.buffer_size);
-        let (outgoing_tx, outgoing_rx) = mpsc::channel(self.buffer_size);
+    cfg_not_wasm32! {
+        /// Begins a new session
+        ///
+        /// # Example
+        ///
+        /// ```rust, ignore
+        /// let session = Session::builder()
+        ///     .handle_max(128u32)
+        ///     .begin(&mut connection)
+        ///     .await.unwrap();
+        /// ```
+        ///
+        pub async fn begin(
+            self,
+            connection: &mut ConnectionHandle<()>,
+        ) -> Result<SessionHandle<()>, BeginError> {
+            let local_state = SessionState::Unmapped;
+            let (session_control_tx, session_control_rx) =
+                mpsc::channel::<SessionControl>(DEFAULT_SESSION_CONTROL_BUFFER_SIZE);
+            let (incoming_tx, incoming_rx) = mpsc::channel(self.buffer_size);
+            let (outgoing_tx, outgoing_rx) = mpsc::channel(self.buffer_size);
 
-        // create session in connection::Engine
-        let outgoing_channel = match connection.allocate_session(incoming_tx).await {
-            Ok(channel) => channel,
-            Err(alloc_error) => match alloc_error {
-                AllocSessionError::IllegalState => return Err(BeginError::IllegalConnectionState),
-                AllocSessionError::ChannelMaxReached => {
-                    // Locally initiating session exceeded channel max
-                    return Err(BeginError::LocalChannelMaxReached);
+            // create session in connection::Engine
+            let outgoing_channel = match connection.allocate_session(incoming_tx).await {
+                Ok(channel) => channel,
+                Err(alloc_error) => match alloc_error {
+                    AllocSessionError::IllegalState => return Err(BeginError::IllegalConnectionState),
+                    AllocSessionError::ChannelMaxReached => {
+                        // Locally initiating session exceeded channel max
+                        return Err(BeginError::LocalChannelMaxReached);
+                    }
+                },
+            };
+
+            #[cfg(not(all(feature = "transaction", feature = "acceptor")))]
+            let (engine_handle, outcome) = {
+                let session = self.into_session(outgoing_channel, local_state);
+                let engine = SessionEngine::begin_client_session(
+                    connection.control.clone(),
+                    session,
+                    session_control_rx,
+                    incoming_rx,
+                    connection.outgoing.clone(),
+                    outgoing_rx,
+                )
+                .await?;
+                engine.spawn()
+            };
+
+            #[cfg(all(feature = "transaction", feature = "acceptor"))]
+            let (engine_handle, outcome) = {
+                let mut this = self;
+                match this.control_link_acceptor.take() {
+                    Some(control_link_acceptor) => {
+                        let session = this.into_txn_session(
+                            session_control_tx.clone(),
+                            outgoing_tx.clone(),
+                            outgoing_channel,
+                            control_link_acceptor,
+                            local_state,
+                        );
+                        let engine = SessionEngine::begin_client_session(
+                            connection.control.clone(),
+                            session,
+                            session_control_rx,
+                            incoming_rx,
+                            connection.outgoing.clone(),
+                            outgoing_rx,
+                        )
+                        .await?;
+                        engine.spawn()
+                    }
+                    None => {
+                        let session = this.into_session(outgoing_channel, local_state);
+                        let engine = SessionEngine::begin_client_session(
+                            connection.control.clone(),
+                            session,
+                            session_control_rx,
+                            incoming_rx,
+                            connection.outgoing.clone(),
+                            outgoing_rx,
+                        )
+                        .await?;
+                        engine.spawn()
+                    }
                 }
-            },
-        };
+            };
 
-        #[cfg(not(all(feature = "transaction", feature = "acceptor")))]
-        let engine_handle = {
-            let session = self.into_session(outgoing_channel, local_state);
-            let engine = SessionEngine::begin_client_session(
-                connection.control.clone(),
-                session,
-                session_control_rx,
-                incoming_rx,
-                connection.outgoing.clone(),
-                outgoing_rx,
-            )
-            .await?;
-            engine.spawn()
-        };
-
-        #[cfg(all(feature = "transaction", feature = "acceptor"))]
-        let engine_handle = {
-            let mut this = self;
-            match this.control_link_acceptor.take() {
-                Some(control_link_acceptor) => {
-                    let session = this.into_txn_session(
-                        session_control_tx.clone(),
-                        outgoing_tx.clone(),
-                        outgoing_channel,
-                        control_link_acceptor,
-                        local_state,
-                    );
-                    let engine = SessionEngine::begin_client_session(
-                        connection.control.clone(),
-                        session,
-                        session_control_rx,
-                        incoming_rx,
-                        connection.outgoing.clone(),
-                        outgoing_rx,
-                    )
-                    .await?;
-                    engine.spawn()
-                }
-                None => {
-                    let session = this.into_session(outgoing_channel, local_state);
-                    let engine = SessionEngine::begin_client_session(
-                        connection.control.clone(),
-                        session,
-                        session_control_rx,
-                        incoming_rx,
-                        connection.outgoing.clone(),
-                        outgoing_rx,
-                    )
-                    .await?;
-                    engine.spawn()
-                }
-            }
-        };
-
-        let handle = SessionHandle {
-            is_ended: false,
-            control: session_control_tx,
-            engine_handle,
-            outgoing: outgoing_tx,
-            link_listener: (),
-        };
-        Ok(handle)
+            let handle = SessionHandle {
+                is_ended: false,
+                control: session_control_tx,
+                engine_handle,
+                outcome,
+                outgoing: outgoing_tx,
+                link_listener: (),
+            };
+            Ok(handle)
+        }
     }
 
-    /// Begins a new session
-    ///
-    /// # Example
-    ///
-    /// ```rust, ignore
-    /// let session = Session::builder()
-    ///     .handle_max(128u32)
-    ///     .begin(&mut connection)
-    ///     .await.unwrap();
-    /// ```
-    ///
-    #[cfg(target_arch = "wasm32")]
-    pub async fn begin_on_local_set(
-        self,
-        connection: &mut ConnectionHandle<()>,
-        local_set: &tokio::task::LocalSet,
-    ) -> Result<SessionHandle<()>, BeginError> {
-        let local_state = SessionState::Unmapped;
-        let (session_control_tx, session_control_rx) =
-            mpsc::channel::<SessionControl>(DEFAULT_SESSION_CONTROL_BUFFER_SIZE);
-        let (incoming_tx, incoming_rx) = mpsc::channel(self.buffer_size);
-        let (outgoing_tx, outgoing_rx) = mpsc::channel(self.buffer_size);
+    cfg_wasm32! {
+        /// Begins a new session on a local set
+        ///
+        /// # Example
+        ///
+        /// ```rust, ignore
+        /// let session = Session::builder()
+        ///     .handle_max(128u32)
+        ///     .begin(&mut connection)
+        ///     .await.unwrap();
+        /// ```
+        ///
+        pub async fn begin_on_local_set(
+            self,
+            connection: &mut ConnectionHandle<()>,
+            local_set: &tokio::task::LocalSet,
+        ) -> Result<SessionHandle<()>, BeginError> {
+            let local_state = SessionState::Unmapped;
+            let (session_control_tx, session_control_rx) =
+                mpsc::channel::<SessionControl>(DEFAULT_SESSION_CONTROL_BUFFER_SIZE);
+            let (incoming_tx, incoming_rx) = mpsc::channel(self.buffer_size);
+            let (outgoing_tx, outgoing_rx) = mpsc::channel(self.buffer_size);
 
-        // create session in connection::Engine
-        let outgoing_channel = match connection.allocate_session(incoming_tx).await {
-            Ok(channel) => channel,
-            Err(alloc_error) => match alloc_error {
-                AllocSessionError::IllegalState => return Err(BeginError::IllegalConnectionState),
-                AllocSessionError::ChannelMaxReached => {
-                    // Locally initiating session exceeded channel max
-                    return Err(BeginError::LocalChannelMaxReached);
-                }
-            },
-        };
+            // create session in connection::Engine
+            let outgoing_channel = match connection.allocate_session(incoming_tx).await {
+                Ok(channel) => channel,
+                Err(alloc_error) => match alloc_error {
+                    AllocSessionError::IllegalState => return Err(BeginError::IllegalConnectionState),
+                    AllocSessionError::ChannelMaxReached => {
+                        // Locally initiating session exceeded channel max
+                        return Err(BeginError::LocalChannelMaxReached);
+                    }
+                },
+            };
 
-        let engine_handle = {
-            let session = self.into_session(outgoing_channel, local_state);
-            let engine = SessionEngine::begin_client_session(
-                connection.control.clone(),
-                session,
-                session_control_rx,
-                incoming_rx,
-                connection.outgoing.clone(),
-                outgoing_rx,
-            )
-            .await?;
-            engine.spawn_local(local_set)
-        };
+            let (engine_handle, outcome) = {
+                let session = self.into_session(outgoing_channel, local_state);
+                let engine = SessionEngine::begin_client_session(
+                    connection.control.clone(),
+                    session,
+                    session_control_rx,
+                    incoming_rx,
+                    connection.outgoing.clone(),
+                    outgoing_rx,
+                )
+                .await?;
+                engine.spawn_on_local_set(local_set)
+            };
 
-        let handle = SessionHandle {
-            is_ended: false,
-            control: session_control_tx,
-            engine_handle,
-            outgoing: outgoing_tx,
-            link_listener: (),
-        };
-        Ok(handle)
+            let handle = SessionHandle {
+                is_ended: false,
+                control: session_control_tx,
+                engine_handle,
+                outcome,
+                outgoing: outgoing_tx,
+                link_listener: (),
+            };
+            Ok(handle)
+        }
+
+
+        /// Begins a new session on the current local set. This internally uses [`tokio::task::spawn_local()`]
+        /// and must be called within a [`tokio::task::LocalSet`].
+        ///
+        /// # Example
+        ///
+        /// ```rust, ignore
+        /// let session = Session::builder()
+        ///     .handle_max(128u32)
+        ///     .begin(&mut connection)
+        ///     .await.unwrap();
+        /// ```
+        ///
+        pub async fn begin_on_current_local_set(
+            self,
+            connection: &mut ConnectionHandle<()>,
+        ) -> Result<SessionHandle<()>, BeginError> {
+            let local_state = SessionState::Unmapped;
+            let (session_control_tx, session_control_rx) =
+                mpsc::channel::<SessionControl>(DEFAULT_SESSION_CONTROL_BUFFER_SIZE);
+            let (incoming_tx, incoming_rx) = mpsc::channel(self.buffer_size);
+            let (outgoing_tx, outgoing_rx) = mpsc::channel(self.buffer_size);
+
+            // create session in connection::Engine
+            let outgoing_channel = match connection.allocate_session(incoming_tx).await {
+                Ok(channel) => channel,
+                Err(alloc_error) => match alloc_error {
+                    AllocSessionError::IllegalState => return Err(BeginError::IllegalConnectionState),
+                    AllocSessionError::ChannelMaxReached => {
+                        // Locally initiating session exceeded channel max
+                        return Err(BeginError::LocalChannelMaxReached);
+                    }
+                },
+            };
+
+            let (engine_handle, outcome) = {
+                let session = self.into_session(outgoing_channel, local_state);
+                let engine = SessionEngine::begin_client_session(
+                    connection.control.clone(),
+                    session,
+                    session_control_rx,
+                    incoming_rx,
+                    connection.outgoing.clone(),
+                    outgoing_rx,
+                )
+                .await?;
+                engine.spawn_local()
+            };
+
+            let handle = SessionHandle {
+                is_ended: false,
+                control: session_control_tx,
+                engine_handle,
+                outcome,
+                outgoing: outgoing_tx,
+                link_listener: (),
+            };
+            Ok(handle)
+        }
     }
 }

@@ -27,11 +27,11 @@
 use crate::{
     endpoint::ReceiverLink,
     link::{
-        delivery::{DeliveryFut, UnsettledMessage},
+        delivery::{DeliveryFut, DeliveryInfo, UnsettledMessage},
         DispositionError, FlowError, LinkFrame,
     },
     util::TryConsume,
-    Delivery, Receiver, Sendable, Sender,
+    Receiver, Sendable, Sender,
 };
 use async_trait::async_trait;
 use bytes::{BufMut, BytesMut};
@@ -118,22 +118,22 @@ pub trait TransactionalRetirement {
     /// different non-discharged transaction than the outcome. If this happens then the control link
     /// MUST be terminated with a transaction-rollback error.
     async fn retire<T>(
-        &mut self,
+        &self,
         recver: &mut Receiver,
-        delivery: &Delivery<T>,
+        delivery: T,
         outcome: Outcome,
     ) -> Result<(), Self::RetireError>
     where
-        T: Send + Sync;
+        T: Into<DeliveryInfo> + Send;
 
     /// Associate an Accepted outcome with a transaction
     async fn accept<T>(
-        &mut self,
+        &self,
         recver: &mut Receiver,
-        delivery: &Delivery<T>,
+        delivery: T,
     ) -> Result<(), Self::RetireError>
     where
-        T: Send + Sync,
+        T: Into<DeliveryInfo> + Send,
     {
         let outcome = Outcome::Accepted(Accepted {});
         self.retire(recver, delivery, outcome).await
@@ -141,13 +141,13 @@ pub trait TransactionalRetirement {
 
     /// Associate a Rejected outcome with a transaction
     async fn reject<T>(
-        &mut self,
+        &self,
         recver: &mut Receiver,
-        delivery: &Delivery<T>,
+        delivery: T,
         error: Option<definitions::Error>,
     ) -> Result<(), Self::RetireError>
     where
-        T: Send + Sync,
+        T: Into<DeliveryInfo> + Send,
     {
         let outcome = Outcome::Rejected(Rejected { error });
         self.retire(recver, delivery, outcome).await
@@ -155,12 +155,12 @@ pub trait TransactionalRetirement {
 
     /// Associate a Released outcome with a transaction
     async fn release<T>(
-        &mut self,
+        &self,
         recver: &mut Receiver,
-        delivery: &Delivery<T>,
+        delivery: T,
     ) -> Result<(), Self::RetireError>
     where
-        T: Send + Sync,
+        T: Into<DeliveryInfo> + Send,
     {
         let outcome = Outcome::Released(Released {});
         self.retire(recver, delivery, outcome).await
@@ -168,13 +168,13 @@ pub trait TransactionalRetirement {
 
     /// Associate a Modified outcome with a transaction
     async fn modify<T>(
-        &mut self,
+        &self,
         recver: &mut Receiver,
-        delivery: &Delivery<T>,
+        delivery: T,
         modified: Modified,
     ) -> Result<(), Self::RetireError>
     where
-        T: Send + Sync,
+        T: Into<DeliveryInfo> + Send,
     {
         let outcome = Outcome::Modified(modified);
         self.retire(recver, delivery, outcome).await
@@ -298,13 +298,13 @@ impl<'t> TransactionalRetirement for Transaction<'t> {
     /// different non-discharged transaction than the outcome. If this happens then the control link
     /// MUST be terminated with a transaction-rollback error.
     async fn retire<T>(
-        &mut self,
+        &self,
         recver: &mut Receiver,
-        delivery: &Delivery<T>,
+        delivery: T,
         outcome: Outcome,
     ) -> Result<(), Self::RetireError>
     where
-        T: Send + Sync,
+        T: Into<DeliveryInfo> + Send,
     {
         let txn_state = TransactionalState {
             txn_id: self.declared.txn_id.clone(),
@@ -342,7 +342,7 @@ impl<'t> Transaction<'t> {
         &self,
         sender: &mut Sender,
         sendable: &Sendable<T>,
-    ) -> Result<DeliveryFut<Result<Outcome, PostError>>, PostError>{
+    ) -> Result<DeliveryFut<Result<Outcome, PostError>>, PostError> {
         let state = TransactionalState {
             txn_id: self.declared.txn_id.clone(),
             outcome: None,
@@ -469,6 +469,8 @@ impl<'t> Transaction<'t> {
 impl<'t> Drop for Transaction<'t> {
     #[cfg_attr(feature = "tracing", tracing::instrument)]
     fn drop(&mut self) {
+        const TRIALS_BEFORE_GIVE_UP: u64 = 20;
+
         if !self.is_discharged {
             // rollback
             let discharge = Discharge {
@@ -490,7 +492,27 @@ impl<'t> Drop for Transaction<'t> {
             let payload = payload.freeze();
             let payload_copy = payload.clone();
 
-            let mut inner = self.controller.inner.blocking_lock();
+            // let mut inner = self.controller.inner.blocking_lock();
+            // TODO: what if lock fails
+            let mut counter = 0;
+            let mut inner = loop {
+                if counter > TRIALS_BEFORE_GIVE_UP {
+                    return;
+                }
+                counter += 1;
+
+                match self.controller.inner.try_lock() {
+                    Ok(inner) => break inner,
+                    Err(_error) => {
+                        #[cfg(feature = "tracing")]
+                        tracing::error!(error = ?_error);
+                        #[cfg(feature = "log")]
+                        log::error!("error = {:?}", _error);
+
+                        std::thread::sleep(std::time::Duration::from_millis(10 * counter + 1))
+                    }
+                }
+            };
 
             match inner.link.flow_state.try_consume(1) {
                 Ok(_) => {
@@ -552,7 +574,7 @@ impl<'t> Drop for Transaction<'t> {
                         performative: transfer,
                         payload,
                     };
-                    if inner.outgoing.blocking_send(frame).is_err() {
+                    if inner.outgoing.try_send(frame).is_err() {
                         // Channel is already closed
                         return;
                     }
@@ -560,7 +582,7 @@ impl<'t> Drop for Transaction<'t> {
                     // TODO: Wait for accept or not?
                     // The transfer is sent unsettled and will be
                     // inserted into
-                    let (tx, rx) = oneshot::channel();
+                    let (tx, mut rx) = oneshot::channel();
                     let unsettled = UnsettledMessage::new(payload_copy, None, MESSAGE_FORMAT, tx);
                     {
                         let mut guard = match inner.link.unsettled.try_write() {
@@ -571,29 +593,40 @@ impl<'t> Drop for Transaction<'t> {
                             .get_or_insert(OrderedMap::new())
                             .insert(delivery_tag, unsettled);
                     }
-                    match rx.blocking_recv() {
-                        Ok(Some(state)) => match state {
-                            DeliveryState::Accepted(_) => {}
-                            _ => {
-                                #[cfg(feature = "tracing")]
-                                tracing::error!(error = ?state);
-                                #[cfg(feature = "log")]
-                                log::error!("error = {:?}", state);
+                    let mut counter = 0;
+                    loop {
+                        // TODO:: limits?
+                        if counter > TRIALS_BEFORE_GIVE_UP {
+                            return;
+                        }
+                        counter += 1;
+
+                        match rx.try_recv() {
+                            Ok(Some(state)) => match state {
+                                DeliveryState::Accepted(_) => break,
+                                _ => {
+                                    #[cfg(feature = "tracing")]
+                                    tracing::error!(error = ?state);
+                                    #[cfg(feature = "log")]
+                                    log::error!("error = {:?}", state);
+                                    break;
+                                }
+                            },
+                            Ok(None) => {
+                                // #[cfg(feature = "tracing")]
+                                // tracing::error!(error = ?ControllerSendError::IllegalDeliveryState);
+                                // #[cfg(feature = "log")]
+                                // log::error!("error = {:?}", ControllerSendError::IllegalDeliveryState);
+                                std::thread::sleep(std::time::Duration::from_millis(10 * counter + 1));
                             }
-                        },
-                        Ok(None) => {
-                            #[cfg(feature = "tracing")]
-                            tracing::error!(error = ?ControllerSendError::IllegalDeliveryState);
-                            #[cfg(feature = "log")]
-                            log::error!("error = {:?}", ControllerSendError::IllegalDeliveryState);
-                        }
-                        Err(_error) => {
-                            #[cfg(feature = "tracing")]
-                            tracing::error!(error = ?_error);
-                            #[cfg(feature = "log")]
-                            log::error!("error = {:?}", _error);
-                        }
-                    };
+                            Err(_error) => {
+                                #[cfg(feature = "tracing")]
+                                tracing::error!(error = ?_error);
+                                #[cfg(feature = "log")]
+                                log::error!("error = {:?}", _error);
+                            }
+                        };
+                    }
                 }
                 Err(_error) => {
                     #[cfg(feature = "tracing")]
