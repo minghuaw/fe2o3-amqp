@@ -5,6 +5,8 @@
 1. Allow user to configure whether to perform checks on the `source` and `target` fields of the
    incoming `Attach` frame to link builders (ie. `verify_incoming_source()` and
    `verify_incoming_target()`). This is useful when the broker doesn't strictly follow the spec.
+2. Fixed a bug where `Sender/Receiver` builder's `auto_accept` is reset to `false`.
+
 
 ## 0.7.25
 
