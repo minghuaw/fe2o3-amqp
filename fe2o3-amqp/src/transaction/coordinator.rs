@@ -55,6 +55,10 @@ impl Default for ControlLinkAcceptor {
                 auto_accept: false,
                 on_dynamic_target: unreachable_dynamic_coordinator,
                 target_marker: std::marker::PhantomData,
+
+                // Should always be true for control links
+                verify_incoming_source: true,
+                verify_incoming_target: true,
             },
         }
     }

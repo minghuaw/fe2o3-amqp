@@ -477,6 +477,20 @@ where
         self
     }
 
+    /// Set whether the link should verify the `source` field of incoming Attach frames
+    pub fn verify_incoming_source(mut self, verify: bool) -> Self {
+        self.inner.local_receiver_acceptor.verify_incoming_source = verify;
+        self.inner.local_sender_acceptor.verify_incoming_source = verify;
+        self
+    }
+
+    /// Set whether the link should verify the `target` field of incoming Attach frames
+    pub fn verify_incoming_target(mut self, verify: bool) -> Self {
+        self.inner.local_sender_acceptor.verify_incoming_target = verify;
+        self.inner.local_receiver_acceptor.verify_incoming_target = verify;
+        self
+    }
+
     /// Sets how to handle dynamic target
     ///
     /// If a valid target is created, a `Some(target)` should be returned. If dynamic
@@ -493,6 +507,8 @@ where
             auto_accept: self.inner.local_receiver_acceptor.auto_accept,
             on_dynamic_target: op,
             target_marker: PhantomData,
+            verify_incoming_source: self.inner.local_receiver_acceptor.verify_incoming_source,
+            verify_incoming_target: self.inner.local_receiver_acceptor.verify_incoming_target,
         };
         let inner = LinkAcceptor {
             shared: self.inner.shared,
@@ -520,6 +536,8 @@ where
             initial_delivery_count: self.inner.local_sender_acceptor.initial_delivery_count,
             source_capabilities: self.inner.local_sender_acceptor.source_capabilities,
             on_dynamic_source: op,
+            verify_incoming_source: self.inner.local_sender_acceptor.verify_incoming_source,
+            verify_incoming_target: self.inner.local_sender_acceptor.verify_incoming_target,
         };
         let inner = LinkAcceptor {
             shared: self.inner.shared,
