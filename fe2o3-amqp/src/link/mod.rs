@@ -213,6 +213,9 @@ pub(crate) struct Link<R, T, F, M> {
     /// See Section 2.6.7 Flow Control
     pub(crate) flow_state: F,
     pub(crate) unsettled: ArcUnsettledMap<M>,
+
+    pub(crate) verify_incoming_source: bool,
+    pub(crate) verify_incoming_target: bool,
 }
 
 impl<R, T, F, M> Link<R, T, F, M>

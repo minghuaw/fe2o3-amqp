@@ -43,6 +43,10 @@ where
     pub source_capabilities: Option<Vec<C>>,
 
     pub on_dynamic_source: F,
+
+    /// Whether the local link will verify the incoming source/target
+    pub verify_incoming_source: bool,
+    pub verify_incoming_target: bool,
 }
 
 fn reject_dynamic_source(_: Source) -> Option<Source> {
@@ -58,6 +62,8 @@ where
             initial_delivery_count: 0,
             source_capabilities: None,
             on_dynamic_source: reject_dynamic_source,
+            verify_incoming_source: true,
+            verify_incoming_target: true,
         }
     }
 }
@@ -155,6 +161,8 @@ where
             desired_capabilities: shared.desired_capabilities.clone(),
             flow_state: flow_state_consumer,
             unsettled,
+            verify_incoming_source: self.verify_incoming_source,
+            verify_incoming_target: self.verify_incoming_target,
         };
 
         let outgoing = session.outgoing.clone();

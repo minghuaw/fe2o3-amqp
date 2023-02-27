@@ -1,5 +1,11 @@
 # Change Log
 
+## 0.7.26
+
+1. Allow user to configure whether to perform checks on the `source` and `target` fields of the
+   incoming `Attach` frame to link builders (ie. `verify_incoming_source()` and
+   `verify_incoming_target()`). This is useful when the broker doesn't strictly follow the spec.
+
 ## 0.7.25
 
 1. Backported 0.8.17, 0.8.18 and 0.8.19.

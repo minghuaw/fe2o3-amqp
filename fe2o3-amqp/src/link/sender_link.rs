@@ -617,8 +617,10 @@ where
         //
         // If there is no pre-existing terminus, and the peer does not wish to create a new one,
         // this is indicated by setting the local terminus (source or target as appropriate) to null.
-        if let (Some(local_source), Some(remote_source)) = (&self.source, &remote_attach.source) {
-            local_source.verify_as_sender(remote_source)?;
+        if self.verify_incoming_source {
+            if let (Some(local_source), Some(remote_source)) = (&self.source, &remote_attach.source) {
+                local_source.verify_as_sender(remote_source)?;
+            }
         }
 
         let target = remote_attach
@@ -633,7 +635,9 @@ where
         // the receiver is considered to hold the authoritative version of the target properties
         match (&self.target, &target) {
             (Some(local_target), Some(remote_target)) => {
-                local_target.verify_as_sender(remote_target)?
+                if self.verify_incoming_target {
+                    local_target.verify_as_sender(remote_target)?
+                }
             }
             // Only need to check the target
             //

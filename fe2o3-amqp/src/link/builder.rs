@@ -114,6 +114,16 @@ pub struct Builder<Role, T, NameState, SS, TS> {
     /// ```
     pub auto_accept: bool,
 
+    /// Whether to verify the `source` field of the incoming Attach frame
+    /// 
+    /// Default to true
+    pub verify_incoming_source: bool,
+
+    /// Whether to verify the `target` field of the incoming Attach frame
+    /// 
+    /// Default to true
+    pub verify_incoming_target: bool,
+
     // Type state markers
     role: PhantomData<Role>,
     name_state: PhantomData<NameState>,
@@ -143,6 +153,8 @@ impl<Role, T> Default for Builder<Role, T, WithoutName, WithoutSource, WithoutTa
             target_state: PhantomData,
 
             auto_accept: false,
+            verify_incoming_source: true,
+            verify_incoming_target: true,
         }
     }
 }
@@ -192,7 +204,9 @@ impl<Role, T, NameState, SS, TS> Builder<Role, T, NameState, SS, TS> {
             source_state: self.source_state,
             target_state: self.target_state,
 
-            auto_accept: false,
+            auto_accept: self.auto_accept,
+            verify_incoming_source: self.verify_incoming_source,
+            verify_incoming_target: self.verify_incoming_target,
         }
     }
 
@@ -217,7 +231,9 @@ impl<Role, T, NameState, SS, TS> Builder<Role, T, NameState, SS, TS> {
             source_state: self.source_state,
             target_state: self.target_state,
 
-            auto_accept: false,
+            auto_accept: self.auto_accept,
+            verify_incoming_source: self.verify_incoming_source,
+            verify_incoming_target: self.verify_incoming_target,
         }
     }
 
@@ -242,7 +258,9 @@ impl<Role, T, NameState, SS, TS> Builder<Role, T, NameState, SS, TS> {
             source_state: self.source_state,
             target_state: self.target_state,
 
-            auto_accept: false,
+            auto_accept: self.auto_accept,
+            verify_incoming_source: self.verify_incoming_source,
+            verify_incoming_target: self.verify_incoming_target,
         }
     }
 
@@ -279,7 +297,9 @@ impl<Role, T, NameState, SS, TS> Builder<Role, T, NameState, SS, TS> {
             source_state: PhantomData,
             target_state: self.target_state,
 
-            auto_accept: false,
+            auto_accept: self.auto_accept,
+            verify_incoming_source: self.verify_incoming_source,
+            verify_incoming_target: self.verify_incoming_target,
         }
     }
 
@@ -307,7 +327,9 @@ impl<Role, T, NameState, SS, TS> Builder<Role, T, NameState, SS, TS> {
             source_state: self.source_state,
             target_state: PhantomData,
 
-            auto_accept: false,
+            auto_accept: self.auto_accept,
+            verify_incoming_source: self.verify_incoming_source,
+            verify_incoming_target: self.verify_incoming_target,
         }
     }
 
@@ -336,7 +358,9 @@ impl<Role, T, NameState, SS, TS> Builder<Role, T, NameState, SS, TS> {
             source_state: self.source_state,
             target_state: PhantomData,
 
-            auto_accept: false,
+            auto_accept: self.auto_accept,
+            verify_incoming_source: self.verify_incoming_source,
+            verify_incoming_target: self.verify_incoming_target,
         }
     }
 
@@ -382,6 +406,18 @@ impl<Role, T, NameState, SS, TS> Builder<Role, T, NameState, SS, TS> {
         self
     }
 
+    /// Set whether the link should verify incoming source
+    pub fn verify_incoming_source(mut self, verify: bool) -> Self {
+        self.verify_incoming_source = verify;
+        self
+    }
+
+    /// Set whether the link should verify incoming target
+    pub fn verify_incoming_target(mut self, verify: bool) -> Self {
+        self.verify_incoming_target = verify;
+        self
+    }
+
     pub(crate) fn create_link<C, M>(
         self,
         unsettled: ArcUnsettledMap<M>,
@@ -414,6 +450,8 @@ impl<Role, T, NameState, SS, TS> Builder<Role, T, NameState, SS, TS> {
             // flow_state: Consumer::new(notifier, flow_state),
             flow_state: flow_state_consumer,
             unsettled,
+            verify_incoming_source: self.verify_incoming_source,
+            verify_incoming_target: self.verify_incoming_target,
         }
     }
 }

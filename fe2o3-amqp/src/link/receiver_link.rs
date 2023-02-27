@@ -622,8 +622,10 @@ where
             // If there is no pre-existing terminus, and the peer does not wish to create a new one,
             // this is indicated by setting the local terminus (source or target as appropriate) to null.
             .ok_or(ReceiverAttachError::IncomingSourceIsNone)?;
-        if let Some(local_source) = &self.source {
-            local_source.verify_as_receiver(&remote_source)?;
+        if self.verify_incoming_source {
+            if let Some(local_source) = &self.source {
+                local_source.verify_as_receiver(&remote_source)?;
+            }
         }
         self.source = Some(*remote_source);
 
@@ -654,12 +656,12 @@ where
         // **the receiver is considered to hold the authoritative version of the target properties**,
         // Is this verification necessary?
         //
-        // Only need to check the source
-        //
         // If there is no pre-existing terminus, and the peer does not wish to create a new one,
         // this is indicated by setting the local terminus (source or target as appropriate) to null.
-        if let (Some(local_target), Some(remote_target)) = (&self.target, &target) {
-            local_target.verify_as_receiver(remote_target)?
+        if self.verify_incoming_target {
+            if let (Some(local_target), Some(remote_target)) = (&self.target, &target) {
+                local_target.verify_as_receiver(remote_target)?
+            }
         }
 
         self.max_message_size =
