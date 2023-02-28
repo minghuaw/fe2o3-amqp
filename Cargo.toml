@@ -41,4 +41,5 @@ exclude = [
     "examples/cancel_safety",
     "examples/quick_start",
     "examples/wasm32_in_browser",
+    "examples/qpid_management_framework",
 ]
