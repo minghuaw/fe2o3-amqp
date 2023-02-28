@@ -53,6 +53,11 @@ where
 
     pub on_dynamic_target: F,
     pub target_marker: PhantomData<T>,
+
+    /// Whether the local link will verify the incoming source/target
+    pub verify_incoming_source: bool,
+    /// Whether the local link will verify the incoming source/target
+    pub verify_incoming_target: bool,
 }
 
 fn reject_dynamic_target<T>(_: T) -> Option<T> {
@@ -67,6 +72,8 @@ impl<C, T> Default for LocalReceiverLinkAcceptor<C, T, fn(T) -> Option<T>> {
             auto_accept: false,
             on_dynamic_target: reject_dynamic_target,
             target_marker: PhantomData,
+            verify_incoming_source: true,
+            verify_incoming_target: true,
         }
     }
 }
@@ -210,6 +217,8 @@ where
             desired_capabilities: shared.desired_capabilities.clone(),
             flow_state: flow_state_consumer,
             unsettled,
+            verify_incoming_source: self.verify_incoming_source,
+            verify_incoming_target: self.verify_incoming_target,
         };
 
         // `on_incoming_attach` should always be evaluated

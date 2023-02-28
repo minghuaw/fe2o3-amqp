@@ -50,6 +50,7 @@ The examples below are individual examples which you need to `cd` into the corre
 |[event_hubs](./event_hubs) | Send to and receive from Azure Event Hubs |
 |[activemq](./activemq)| `ActiveMQ` requires alternative TLS establishment |
 |[cancel safety](./cancel_safety)| Shows cancel safety with `Receiver::recv()` |
+|[qpid_management_framework](./qpid_management_framework)| Shows how to work with Qpid Management Framework |
 
 ## More examples coming
 
