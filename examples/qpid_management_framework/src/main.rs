@@ -28,7 +28,7 @@ async fn create_dynamic_receiver(
 ///      '_arguments': {'strict': True, 'type': 'exchange', 'name': u'test-fanout', 'properties': {'exchange-type': u'fanout'}}
 /// }
 /// ```
-fn command_message_create_content() -> OrderedMap<Symbol, Value> {
+fn command_message_content() -> OrderedMap<Symbol, Value> {
     let mut map = OrderedMap::new();
 
     // '_object_id': {'_object_name': 'org.apache.qpid.broker:broker:amqp-broker'},
@@ -76,8 +76,8 @@ fn command_message_create_content() -> OrderedMap<Symbol, Value> {
 ///     }
 /// )
 /// ```
-fn command_message_create(reply_to: String) -> Message<AmqpValue<OrderedMap<Symbol, Value>>> {
-    let content = command_message_create_content();
+fn command_message(reply_to: String) -> Message<AmqpValue<OrderedMap<Symbol, Value>>> {
+    let content = command_message_content();
 
     Message::builder()
         // ```
@@ -134,7 +134,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // https://access.redhat.com/documentation/en-us/red_hat_enterprise_mrg/3/html/messaging_programming_reference/command_messages
     //
     // The command message is essentially a message whose body section is a map, and some entries may be nested maps.
-    let request = command_message_create(source_addr.to_string());
+    let request = command_message(source_addr.to_string());
     sender.send(request).await?.accepted_or("not accepted")?;
     println!("Sent");
 
