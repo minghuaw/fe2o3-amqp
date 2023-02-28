@@ -144,6 +144,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     receiver.accept(&message).await?;
     println!("Received {:?}", message);
 
+    receiver.close().await?;
     sender.close().await?;
     session.end().await?;
     connection.close().await?;
