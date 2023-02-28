@@ -6,6 +6,7 @@
 //!
 //! [![crate_version](https://img.shields.io/crates/v/fe2o3-amqp.svg?style=flat)](https://crates.io/crates/fe2o3-amqp)
 //! [![docs_version](https://img.shields.io/badge/docs-latest-blue.svg?style=flat)](https://docs.rs/fe2o3-amqp/latest/fe2o3_amqp/)
+//! [![discord](https://img.shields.io/discord/1016422034592497665?label=&logo=discord&logoColor=ffffff&color=7389D8&labelColor=6A7EC2")](https://discord.gg/YMkaETwnFW)
 //!
 //! - [Quick Start](#quick-start)
 //! - [Documentation](https://docs.rs/fe2o3-amqp)
