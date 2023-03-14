@@ -1,5 +1,9 @@
 # Change Log
 
+## 0.6.3
+
+1. Derive `Hash` for `Message` and related types.
+
 ## 0.6.2
 
 1. Added impl of `BodySection` and `SerializableBody` for the following pointer types
