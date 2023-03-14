@@ -17,7 +17,7 @@ pub mod header;
 pub use header::Header;
 
 /// relative message priority
-#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize, Eq, PartialOrd, Ord)]
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize, Eq, PartialOrd, Ord, Hash)]
 pub struct Priority(pub UByte);
 
 impl Default for Priority {
@@ -59,6 +59,7 @@ impl From<Priority> for UByte {
 /// section containing an empty map of annotations.
 #[derive(
     Debug, Clone, Default, DeserializeComposite, SerializeComposite, PartialEq, Eq, PartialOrd, Ord,
+    Hash
 )]
 #[amqp_contract(
     name = "amqp:delivery-annotations:map",
@@ -121,6 +122,7 @@ impl From<MapBuilder<OwnedKey, Value, DeliveryAnnotations>> for Option<DeliveryA
 /// containing an empty map of annotations.
 #[derive(
     Debug, Clone, Default, SerializeComposite, DeserializeComposite, PartialEq, Eq, PartialOrd, Ord,
+    Hash
 )]
 #[amqp_contract(
     name = "amqp:message-annotations:map",
@@ -173,6 +175,7 @@ use self::{annotations::OwnedKey, map_builder::MapBuilder};
 /// </type>
 #[derive(
     Debug, Clone, Default, SerializeComposite, DeserializeComposite, PartialEq, Eq, PartialOrd, Ord,
+    Hash
 )]
 #[amqp_contract(
     name = "amqp:application-properties:map",
@@ -232,6 +235,7 @@ pub use amqp_value::*;
 /// </type>
 #[derive(
     Debug, Clone, Default, SerializeComposite, DeserializeComposite, PartialEq, Eq, PartialOrd, Ord,
+    Hash
 )]
 #[amqp_contract(
     name = "amqp:footer:map",

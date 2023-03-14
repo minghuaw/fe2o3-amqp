@@ -1,5 +1,9 @@
 # Change Log
 
+## 0.7.1
+
+1. Derive `Hash` for `Message` and related types
+
 ## 0.7.0
 
 1. Changed type alias `FilterSet` to

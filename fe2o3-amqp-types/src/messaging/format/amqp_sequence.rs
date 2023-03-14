@@ -14,6 +14,7 @@ use crate::messaging::{
 /// </type>
 #[derive(
     Debug, Clone, Default, PartialEq, Eq, PartialOrd, Ord, SerializeComposite, DeserializeComposite,
+    Hash
 )]
 #[amqp_contract(
     name = "amqp:amqp-sequence:list",

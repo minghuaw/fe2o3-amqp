@@ -56,7 +56,7 @@ where
 }
 
 /// AMQP 1.0 Message
-#[derive(Debug, Clone, Default, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Message<B> {
     /// Transport headers for a message.
     pub header: Option<Header>,
