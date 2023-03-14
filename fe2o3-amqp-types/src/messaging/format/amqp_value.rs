@@ -13,7 +13,7 @@ use crate::messaging::{
 ///     <descriptor name="amqp:amqp-value:*" code="0x00000000:0x00000077"/>
 /// </type>
 #[derive(
-    Debug, Clone, PartialEq, Eq, PartialOrd, Ord, SerializeComposite, DeserializeComposite,
+    Debug, Clone, PartialEq, Eq, PartialOrd, Ord, SerializeComposite, DeserializeComposite, Hash
 )]
 #[amqp_contract(
     name = "amqp:amqp-value:*",

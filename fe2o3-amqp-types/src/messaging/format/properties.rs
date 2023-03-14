@@ -15,7 +15,7 @@ use super::{Address, MessageId};
 ///     <descriptor name="amqp:properties:list" code="0x00000000:0x00000073"/>
 /// </type>
 #[derive(
-    Debug, Clone, SerializeComposite, DeserializeComposite, PartialEq, Eq, PartialOrd, Ord,
+    Debug, Clone, SerializeComposite, DeserializeComposite, PartialEq, Eq, PartialOrd, Ord, Hash
 )]
 #[amqp_contract(
     name = "amqp:properties:list",

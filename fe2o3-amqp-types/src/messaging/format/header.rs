@@ -16,6 +16,7 @@ use super::Priority;
 /// </type>
 #[derive(
     Debug, Clone, Default, DeserializeComposite, SerializeComposite, PartialEq, Eq, PartialOrd, Ord,
+    Hash,
 )]
 #[amqp_contract(
     name = "amqp:header:list",

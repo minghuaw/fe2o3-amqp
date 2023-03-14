@@ -13,7 +13,7 @@ use crate::messaging::{
 
 /// The body consists of one of the following three choices: one or more data sections, one or more
 /// amqp-sequence sections, or a single amqp-value section.
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Body<T> {
     /// An amqp-value section contains a single AMQP value
     Value(AmqpValue<T>),
