@@ -19,8 +19,16 @@ Then you can run the example with
 cargo run --bin simple_sender
 ```
 
+```sh
+cargo run --bin simple_receiver
+```
+
+```sh
+cargo run --bin send_to_partition
+```
+
 OR
 
 ```sh
-cargo run --bin simple_receiver
+cargo run --bin receiver_with_filter
 ```
