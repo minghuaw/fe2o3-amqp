@@ -11,7 +11,7 @@ use fe2o3_amqp_types::{
 };
 
 use crate::{
-    error::{AttachError, Error},
+    error::{AttachError, Error, DetachThenResumeError},
     request::Request,
     response::Response,
     DEFAULT_CLIENT_NODE_ADDRESS, MANAGEMENT_NODE_ADDRESS,
@@ -41,6 +41,16 @@ impl MgmtClient {
             .client_node_addr(client_node_addr)
             .attach(session)
             .await
+    }
+
+    /// Detach and then resume the management client on a session.
+    pub async fn detach_then_resume_on_session<R>(
+        &mut self,
+        session: &SessionHandle<R>
+    ) -> Result<(), DetachThenResumeError> {
+        self.sender.detach_then_resume_on_session(session).await?;
+        self.receiver.detach_then_resume_on_session(session).await?;
+        Ok(())
     }
 
     /// Close/detach the management client.

@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.2.2
+
+1. Ported 0.1.2
+
+## 0.1.2
+
+1. Added `detach_then_resume_on_session()`
+
 ## 0.2.1
 
 1. Ported 0.1.1
