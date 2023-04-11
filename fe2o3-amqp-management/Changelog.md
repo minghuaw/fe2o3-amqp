@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.2
+
+1. Added `detach_then_resume_on_session()`
+
 ## 0.1.1
 
 1. Fixed potential add/sub with overflow by using wrapping/checked/saturating add/sub
