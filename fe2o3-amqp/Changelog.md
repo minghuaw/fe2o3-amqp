@@ -1,5 +1,19 @@
 # Change Log
 
+## 0.7.27
+
+1. Back ported 0.8.21
+
+## 0.8.21
+
+1. Fixed session ending handshake and connection closing handshake not completed if the session
+   handle is dropped before the session is ended or the connection handle is dropped before the
+   connection is closed.
+
+## 0.8.20
+
+1. Ported 0.7.26
+
 ## 0.7.26
 
 1. Allow user to configure whether to perform checks on the `source` and `target` fields of the

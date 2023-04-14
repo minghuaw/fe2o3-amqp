@@ -122,7 +122,7 @@ impl<R> ConnectionHandle<R> {
     /// [`on_close`](#method.on_close). This will cause the JoinHandle to be polled after
     /// completion, which causes a panic.
     pub async fn on_close(&mut self) -> Result<(), Error> {
-        if self.is_closed {
+        if self.is_closed() {
             return Err(Error::IllegalState);
         }
         self.is_closed = true;

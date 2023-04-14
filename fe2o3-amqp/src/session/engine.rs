@@ -473,6 +473,35 @@ where
                         },
                         None => {
                             // all Links and SessionHandle are dropped
+                            // Complete ending session
+                            'inner: loop {
+                                match self.session.local_state() {
+                                    SessionState::Mapped 
+                                    | SessionState::EndReceived => {
+                                        if let Err(_err) = self.on_control(SessionControl::End(None)).await {
+                                            #[cfg(feature = "tracing")]
+                                            tracing::error!("err {:?}", _err);
+                                            #[cfg(feature = "log")]
+                                            log::error!("err {:?}", _err);
+                                        }
+                                    },
+                                    // Wait for remote end
+                                    SessionState::Discarding | SessionState::EndSent => {
+                                        match self.incoming.recv().await {
+                                            Some(incoming) => {
+                                                let _ = self.on_incoming(incoming).await;
+                                            },
+                                            None => {
+                                                // The connection must have already stopped before session negotiated ending
+                                                break 'inner
+                                            }
+                                        }
+                                    },
+                                    SessionState::Unmapped => break 'inner,
+                                    _ => break 'inner,
+                                }
+                            }
+
                             Ok(Running::Stop)
                         }
                     }
