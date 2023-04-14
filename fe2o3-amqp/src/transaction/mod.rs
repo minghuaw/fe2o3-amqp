@@ -136,11 +136,7 @@ pub trait TransactionalRetirement {
         T: Into<DeliveryInfo> + Send;
 
     /// Associate an Accepted outcome with a transaction
-    async fn accept<T>(
-        &self,
-        recver: &mut Receiver,
-        delivery: T,
-    ) -> Result<(), Self::RetireError>
+    async fn accept<T>(&self, recver: &mut Receiver, delivery: T) -> Result<(), Self::RetireError>
     where
         T: Into<DeliveryInfo> + Send,
     {
@@ -163,11 +159,7 @@ pub trait TransactionalRetirement {
     }
 
     /// Associate a Released outcome with a transaction
-    async fn release<T>(
-        &self,
-        recver: &mut Receiver,
-        delivery: T,
-    ) -> Result<(), Self::RetireError>
+    async fn release<T>(&self, recver: &mut Receiver, delivery: T) -> Result<(), Self::RetireError>
     where
         T: Into<DeliveryInfo> + Send,
     {
@@ -625,7 +617,9 @@ impl<'t> Drop for Transaction<'t> {
                                 // tracing::error!(error = ?ControllerSendError::IllegalDeliveryState);
                                 // #[cfg(feature = "log")]
                                 // log::error!("error = {:?}", ControllerSendError::IllegalDeliveryState);
-                                std::thread::sleep(std::time::Duration::from_millis(10 * counter + 1));
+                                std::thread::sleep(std::time::Duration::from_millis(
+                                    10 * counter + 1,
+                                ));
                             }
                             Err(_error) => {
                                 #[cfg(feature = "tracing")]

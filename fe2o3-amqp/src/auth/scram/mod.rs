@@ -394,7 +394,8 @@ impl ScramVersion {
         }
 
         let server_signature_bytes = self.hmac(stored_password.server_key, &auth_message)?;
-        let server_signature = base64::engine::general_purpose::STANDARD.encode(server_signature_bytes);
+        let server_signature =
+            base64::engine::general_purpose::STANDARD.encode(server_signature_bytes);
 
         // Form server final message
         let mut server_final = Vec::new();
@@ -460,7 +461,9 @@ fn auth_message(
 fn without_proof(client_server_nonce: &str) -> Vec<u8> {
     use base64::Engine;
 
-    let encoded_gs2_header = base64::engine::general_purpose::STANDARD.encode(GS2_HEADER).into_bytes();
+    let encoded_gs2_header = base64::engine::general_purpose::STANDARD
+        .encode(GS2_HEADER)
+        .into_bytes();
     let total_len = CHANNEL_BINDING_KEY.len()
         + encoded_gs2_header.len()
         + 1
@@ -726,11 +729,13 @@ mod tests {
     #[cfg(feature = "acceptor")]
     #[test]
     fn test_sasl_scram_sha1_server() {
-        use scram_sha1::*;
         use base64::Engine;
+        use scram_sha1::*;
 
         let base64_salt = get_base64_salt_from_server_first_message(SERVER_FIRST_MESSAGE);
-        let salt = base64::engine::general_purpose::STANDARD.decode(base64_salt).unwrap();
+        let salt = base64::engine::general_purpose::STANDARD
+            .decode(base64_salt)
+            .unwrap();
         let base64_server_nonce =
             get_base64_server_nonce_from_server_first_message(SERVER_FIRST_MESSAGE, CLIENT_NONCE);
         let client_server_nonce = format!("{}{}", CLIENT_NONCE, base64_server_nonce);
@@ -773,11 +778,13 @@ mod tests {
     #[cfg(feature = "acceptor")]
     #[test]
     fn test_sasl_scram_sha256_server() {
-        use scram_sha256::*;
         use base64::Engine;
+        use scram_sha256::*;
 
         let base64_salt = get_base64_salt_from_server_first_message(SERVER_FIRST_MESSAGE);
-        let salt = base64::engine::general_purpose::STANDARD.decode(base64_salt).unwrap();
+        let salt = base64::engine::general_purpose::STANDARD
+            .decode(base64_salt)
+            .unwrap();
         let base64_server_nonce =
             get_base64_server_nonce_from_server_first_message(SERVER_FIRST_MESSAGE, CLIENT_NONCE);
         let client_server_nonce = format!("{}{}", CLIENT_NONCE, base64_server_nonce);
@@ -820,11 +827,13 @@ mod tests {
     #[cfg(feature = "acceptor")]
     #[test]
     fn test_sasl_scram_sha512_server() {
-        use scram_sha512::*;
         use base64::Engine;
+        use scram_sha512::*;
 
         let base64_salt = get_base64_salt_from_server_first_message(SERVER_FIRST_MESSAGE);
-        let salt = base64::engine::general_purpose::STANDARD.decode(base64_salt).unwrap();
+        let salt = base64::engine::general_purpose::STANDARD
+            .decode(base64_salt)
+            .unwrap();
         let base64_server_nonce =
             get_base64_server_nonce_from_server_first_message(SERVER_FIRST_MESSAGE, CLIENT_NONCE);
         let client_server_nonce = format!("{}{}", CLIENT_NONCE, base64_server_nonce);

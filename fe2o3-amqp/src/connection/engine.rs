@@ -489,7 +489,7 @@ where
                             // Finish closing the connection
                             loop {
                                 match self.connection.local_state() {
-                                    ConnectionState::Opened 
+                                    ConnectionState::Opened
                                     | ConnectionState::CloseReceived
                                     | ConnectionState::OpenSent
                                     | ConnectionState::OpenPipe => {
