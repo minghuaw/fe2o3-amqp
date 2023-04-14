@@ -171,7 +171,7 @@ impl<R> SessionHandle<R> {
     /// [`end_with_error`](#method.end_with_error), [`on_end`](#on_end) has beend executed. This
     /// will cause the JoinHandle to be polled after completion, which causes a panic.
     pub async fn on_end(&mut self) -> Result<(), Error> {
-        if self.is_ended {
+        if self.is_ended() {
             return Err(Error::IllegalState);
         }
 

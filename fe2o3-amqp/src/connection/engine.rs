@@ -534,6 +534,42 @@ where
                         Some(control) => self.on_control(control).await,
                         None => {
                             // All control channel are dropped (which is impossible)
+                            // Finish closing the connection
+                            loop {
+                                match self.connection.local_state() {
+                                    ConnectionState::Opened 
+                                    | ConnectionState::CloseReceived
+                                    | ConnectionState::OpenSent
+                                    | ConnectionState::OpenPipe => {
+                                        if let Err(_err) = self.on_control(ConnectionControl::Close(None)).await {
+                                            #[cfg(feature = "tracing")]
+                                            tracing::error!("err {:?}", _err);
+                                            #[cfg(feature = "log")]
+                                            log::error!("err {:?}", _err);
+                                        }
+                                    }
+                                    ConnectionState::Discarding
+                                    | ConnectionState::CloseSent
+                                    | ConnectionState::OpenClosePipe
+                                    | ConnectionState::ClosePipe => {
+                                        match self.transport.next().await {
+                                            Some(Ok(frame)) => {
+                                                let _ = self.on_incoming(frame).await;
+                                            },
+                                            Some(Err(_err)) => {
+                                                #[cfg(feature = "tracing")]
+                                                tracing::error!("err {:?}", _err);
+                                                #[cfg(feature = "log")]
+                                                log::error!("err {:?}", _err);
+                                            },
+                                            None => break
+                                        }
+                                    },
+                                    ConnectionState::End => break,
+                                    _ => break, // This should not happen
+                                }
+                            }
+
                             Ok(Running::Stop)
                         }
                     }
