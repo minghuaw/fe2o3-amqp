@@ -514,7 +514,7 @@ where
                             // Complete ending session
                             'inner: loop {
                                 match self.session.local_state() {
-                                    SessionState::Mapped 
+                                    SessionState::Mapped
                                     | SessionState::EndReceived => {
                                         if let Err(_err) = self.on_control(SessionControl::End(None)).await {
                                             #[cfg(feature = "tracing")]

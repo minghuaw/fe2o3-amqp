@@ -618,7 +618,8 @@ where
         // If there is no pre-existing terminus, and the peer does not wish to create a new one,
         // this is indicated by setting the local terminus (source or target as appropriate) to null.
         if self.verify_incoming_source {
-            if let (Some(local_source), Some(remote_source)) = (&self.source, &remote_attach.source) {
+            if let (Some(local_source), Some(remote_source)) = (&self.source, &remote_attach.source)
+            {
                 local_source.verify_as_sender(remote_source)?;
             }
         }

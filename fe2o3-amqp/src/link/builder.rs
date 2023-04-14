@@ -115,12 +115,12 @@ pub struct Builder<Role, T, NameState, SS, TS> {
     pub auto_accept: bool,
 
     /// Whether to verify the `source` field of the incoming Attach frame
-    /// 
+    ///
     /// Default to true
     pub verify_incoming_source: bool,
 
     /// Whether to verify the `target` field of the incoming Attach frame
-    /// 
+    ///
     /// Default to true
     pub verify_incoming_target: bool,
 
