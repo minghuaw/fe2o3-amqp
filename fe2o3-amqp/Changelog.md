@@ -1,5 +1,9 @@
 # Change Log
 
+## 0.7.29
+
+1. Updated dependencies
+
 ## 0.7.28
 
 1. Added `source_mut()` and `target_mut()` methods to Sender/DetachedSender and
