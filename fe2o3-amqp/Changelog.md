@@ -1,5 +1,18 @@
 # Change Log
 
+## 0.8.22
+
+1. Ported 0.7.28
+
+## 0.7.28
+
+1. Added `source_mut()` and `target_mut()` methods to Sender/DetachedSender and
+   Receiver/DetachedReceiver.
+
+## 0.7.27
+
+1. Back ported 0.8.21
+
 ## 0.8.21
 
 1. Fixed session ending handshake and connection closing handshake not completed if the session
