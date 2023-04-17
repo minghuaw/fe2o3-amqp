@@ -1,5 +1,13 @@
 # Change Log
 
+## 0.8.23
+
+1. Updated dependencies
+
+## 0.7.29
+
+1. Updated dependencies
+
 ## 0.8.22
 
 1. Ported 0.7.28

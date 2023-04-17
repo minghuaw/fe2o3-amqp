@@ -3,7 +3,7 @@ use bytes::Bytes;
 use super::*;
 
 impl ScramVersion {
-    fn compute_server_first_message<'a, C>(
+    pub(crate) fn compute_server_first_message<'a, C>(
         &self,
         client_first: &'a [u8],
         base64_server_nonce: &str,
@@ -66,7 +66,7 @@ impl ScramVersion {
         }))
     }
 
-    fn compute_server_final_message(
+    pub(crate) fn compute_server_final_message(
         &self,
         client_final: &[u8],
         client_server_nonce: &[u8],

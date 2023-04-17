@@ -36,7 +36,7 @@ impl SingleScramCredential {
     ) -> Result<Self, ServerScramErrorKind> {
         let salt: [u8; 32] = rand::thread_rng().gen();
         let salt = Vec::from(salt);
-        let salted_password = scram_version.compute_salted_password(
+        let salted_password = scram_version.compute_salted_password::<ServerScramErrorKind>(
             password.as_ref(),
             &salt,
             DEFAULT_SCRAM_ITERATIONS,
