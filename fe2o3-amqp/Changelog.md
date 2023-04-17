@@ -1,10 +1,18 @@
 # Change Log
 
-## 0.8.23
+## 0.8.24
+
+1. Reset default features
+
+~~## 0.8.23~~
 
 1. Updated dependencies
 
-## 0.7.29
+## 0.7.30
+
+1. Reset default features
+
+~~## 0.7.29~~
 
 1. Updated dependencies
 
