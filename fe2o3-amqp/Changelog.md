@@ -1,6 +1,10 @@
 # Change Log
 
-## 0.7.29
+## 0.7.30
+
+1. Reset default features
+
+~~## 0.7.29~~
 
 1. Updated dependencies
 
