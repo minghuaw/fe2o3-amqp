@@ -1,5 +1,10 @@
 # Change Log
 
+## 0.7.28
+
+1. Added `source_mut()` and `target_mut()` methods to Sender/DetachedSender and
+   Receiver/DetachedReceiver.
+
 ## 0.7.27
 
 1. Back ported 0.8.21
@@ -20,7 +25,6 @@
    incoming `Attach` frame to link builders (ie. `verify_incoming_source()` and
    `verify_incoming_target()`). This is useful when the broker doesn't strictly follow the spec.
 2. Fixed a bug where `Sender/Receiver` builder's `auto_accept` is reset to `false`.
-
 
 ## 0.7.25
 

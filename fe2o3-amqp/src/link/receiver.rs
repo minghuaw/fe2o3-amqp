@@ -160,9 +160,19 @@ impl Receiver {
         &self.inner.link.source
     }
 
+    /// Get a mutable reference to the link's source field
+    pub fn source_mut(&mut self) -> &mut Option<Source> {
+        &mut self.inner.link.source
+    }
+
     /// Get a reference to the link's target field
     pub fn target(&self) -> &Option<Target> {
         &self.inner.link.target
+    }
+
+    /// Get a mutable reference to the link's target field
+    pub fn target_mut(&mut self) -> &mut Option<Target> {
+        &mut self.inner.link.target
     }
 
     /// Get a reference to the link's properties field in the op
@@ -1158,6 +1168,26 @@ impl From<ResumingReceiver> for Receiver {
 }
 
 impl DetachedReceiver {
+    /// Get a reference to the link's source field
+    pub fn source(&self) -> &Option<Source> {
+        &self.inner.link.source
+    }
+
+    /// Get a mutable reference to the link's source field
+    pub fn source_mut(&mut self) -> &mut Option<Source> {
+        &mut self.inner.link.source
+    }
+
+    /// Get a reference to the link's target field
+    pub fn target(&self) -> &Option<Target> {
+        &self.inner.link.target
+    }
+
+    /// Get a mutable reference to the link's target field
+    pub fn target_mut(&mut self) -> &mut Option<Target> {
+        &mut self.inner.link.target
+    }
+
     /// Resume the receiver link
     ///
     /// Please note that the link may need to be detached and then resume multiple

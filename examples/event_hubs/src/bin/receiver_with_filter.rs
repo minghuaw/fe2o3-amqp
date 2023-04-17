@@ -61,7 +61,7 @@ async fn main() {
         .await
         .unwrap();
 
-    for _ in 0..3 {
+    for _ in 0..100 {
         let delivery = receiver.recv::<Body<Value>>().await.unwrap();
         let msg = std::str::from_utf8(&delivery.body().try_as_data().unwrap().next().unwrap()[..])
             .unwrap();
