@@ -129,9 +129,19 @@ impl Sender {
         &self.inner.link.source
     }
 
+    /// Get a mutable reference to the link's source field
+    pub fn source_mut(&mut self) -> &mut Option<Source> {
+        &mut self.inner.link.source
+    }
+
     /// Get a reference to the link's target field
     pub fn target(&self) -> &Option<Target> {
         &self.inner.link.target
+    }
+
+    /// Get a mutable reference to the link's target field
+    pub fn target_mut(&mut self) -> &mut Option<Target> {
+        &mut self.inner.link.target
     }
 
     /// Get a reference to the link's properties field in the op
@@ -1025,6 +1035,26 @@ macro_rules! try_as_sender {
 impl DetachedSender {
     fn new(inner: SenderInner<SenderLink<Target>>) -> Self {
         Self { inner }
+    }
+
+    /// Get a reference to the link's source field
+    pub fn source(&self) -> &Option<Source> {
+        &self.inner.link.source
+    }
+
+    /// Get a mutable reference to the link's source field
+    pub fn source_mut(&mut self) -> &mut Option<Source> {
+        &mut self.inner.link.source
+    }
+
+    /// Get a reference to the link's target field
+    pub fn target(&self) -> &Option<Target> {
+        &self.inner.link.target
+    }
+
+    /// Get a mutable reference to the link's target field
+    pub fn target_mut(&mut self) -> &mut Option<Target> {
+        &mut self.inner.link.target
     }
 
     /// Resume the sender link on the original session

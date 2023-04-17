@@ -1,7 +1,7 @@
 //! Error types for the management client.
 
 use fe2o3_amqp::link::{
-    DispositionError, ReceiverAttachError, RecvError, SendError, SenderAttachError,
+    DispositionError, ReceiverAttachError, RecvError, SendError, SenderAttachError, DetachThenResumeSenderError, DetachThenResumeReceiverError,
 };
 use fe2o3_amqp_types::messaging::Outcome;
 
@@ -118,4 +118,16 @@ impl From<StatusCodeNotFound> for Error {
     fn from(_: StatusCodeNotFound) -> Self {
         Self::StatusCodeNotFound
     }
+}
+
+/// Error with detaching and then resuming the management client.
+#[derive(Debug, thiserror::Error)]
+pub enum DetachThenResumeError {
+    /// Error with detaching then resuming the sender link.
+    #[error(transparent)]
+    Sender(#[from] DetachThenResumeSenderError),
+
+    /// Error with detaching then resuming the receiver link.
+    #[error(transparent)]
+    Receiver(#[from] DetachThenResumeReceiverError),
 }

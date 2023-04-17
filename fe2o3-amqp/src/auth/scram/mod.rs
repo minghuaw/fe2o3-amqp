@@ -116,7 +116,12 @@ impl ScramVersion {
         (client_first_message, client_first_message_bare)
     }
 
-    pub(crate) fn h_i(&self, password: &[u8], salt: &[u8], iterations: u32) -> Vec<u8> {
+    pub(crate) fn h_i(
+        &self,
+        password: &[u8],
+        salt: &[u8],
+        iterations: u32,
+    ) -> Result<Vec<u8>, InvalidLength> {
         match self {
             ScramVersion::Sha1 => h_i::<Hmac<Sha1>>(password, salt, iterations, 160 / 8),
             ScramVersion::Sha256 => h_i::<Hmac<Sha256>>(password, salt, iterations, 256 / 8),
@@ -124,14 +129,17 @@ impl ScramVersion {
         }
     }
 
-    pub(crate) fn compute_salted_password(
+    pub(crate) fn compute_salted_password<E>(
         &self,
         password: &str,
         salt: &[u8],
         iterations: u32,
-    ) -> Result<Vec<u8>, stringprep::Error> {
+    ) -> Result<Vec<u8>, E>
+    where
+        E: From<stringprep::Error> + From<InvalidLength>,
+    {
         let normalized_password = stringprep::saslprep(password)?;
-        Ok(self.h_i(normalized_password.as_bytes(), salt, iterations))
+        Ok(self.h_i(normalized_password.as_bytes(), salt, iterations)?)
     }
 
     /// HMAC function used as part of SCRAM authentication.
@@ -211,7 +219,8 @@ impl ScramVersion {
         // ServerKey := HMAC(SaltedPassword, "Server Key")
         // ServerSignature := HMAC(ServerKey, AuthMessage)
 
-        let salted_password = self.compute_salted_password(password, &salt[..], iterations)?;
+        let salted_password =
+            self.compute_salted_password::<ScramErrorKind>(password, &salt[..], iterations)?;
         let client_final_message_without_proof = without_proof(client_server_nonce);
         let auth_message = auth_message(
             client_first_message_bare,
@@ -344,10 +353,10 @@ fn h_i<M: KeyInit + FixedOutput + Mac + Sync + Clone>(
     salt: &[u8],
     iterations: u32,
     output_size: usize,
-) -> Vec<u8> {
+) -> Result<Vec<u8>, InvalidLength> {
     let mut buf = vec![0u8; output_size];
-    pbkdf2::pbkdf2::<M>(password, salt, iterations, buf.as_mut_slice());
-    buf
+    pbkdf2::pbkdf2::<M>(password, salt, iterations, buf.as_mut_slice())?;
+    Ok(buf)
 }
 
 fn mac<M: Mac + KeyInit>(key: &[u8], input: &[u8]) -> Result<impl AsRef<[u8]>, InvalidLength> {
@@ -382,7 +391,7 @@ fn generate_nonce() -> [u8; 32] {
 #[allow(unused)]
 mod tests {
     use super::attributes::{GS2_HEADER, NONCE_KEY, SALT_KEY};
-    use super::{ScramCredentialProvider, ScramVersion, StoredPassword};
+    use super::{ScramCredentialProvider, ScramErrorKind, ScramVersion, StoredPassword};
 
     struct TestScramCredential {
         scram_version: ScramVersion,
@@ -402,7 +411,7 @@ mod tests {
             iterations: u32,
         ) -> Self {
             let salted_password = scram_version
-                .compute_salted_password(password, &salt, iterations)
+                .compute_salted_password::<ScramErrorKind>(password, &salt, iterations)
                 .unwrap();
             let client_key = scram_version.hmac(&salted_password, b"Client Key").unwrap();
             let stored_key = scram_version.h(&client_key);
