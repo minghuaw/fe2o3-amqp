@@ -1,5 +1,13 @@
 # Change Log
 
+## 0.5.9
+
+1. Fixed a bug where `str` and `bytes` of length `u8::MAX` are serialized incorrectly as `str8-utf8`
+   and `vbin8`, respectively. After the fix, `str` and `bytes` with length less than or equal to
+   `u8::MAX - 1` are serialized as `str8-utf8` and `vbin8`, respectively. `str` and `bytes` with
+   length greater than or equal to `u8::MAX` and less than `u32::MAX - 4` are serialized as
+   `str32-utf8` and `vbin32`, respectively.
+
 ## 0.5.8
 
 1. Fixed clippy warnings
