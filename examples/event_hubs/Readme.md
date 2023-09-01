@@ -1,6 +1,8 @@
 # Event Hubs Example
 
-This is a simple example demonstrating how to work with Azure Event Hub with fe2p3-amqp.
+## Alternative: 
+
+[azeventhubs](https://crates.io/crates/azeventhubs) is built on top of `fe2o3-amqp` and should look familiar for those who have used the SDK for dotnet or golang.
 
 ## Basic Usage
 
