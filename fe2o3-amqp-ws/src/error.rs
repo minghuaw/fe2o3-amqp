@@ -33,9 +33,9 @@ pub enum Error {
     #[error("WebSocket protocol error: {0}")]
     Protocol(ProtocolError),
 
-    /// A `tungsteninte::Error::SendQueueFull` error
+    /// A `tungsteninte::Error::WriteBufferFull` error
     #[error("Send queue is full")]
-    SendQueueFull(Message),
+    WriteBufferFull(Message),
 
     /// A `tungsteninte::Error::Utf8` error
     #[error("UTF-8 encoding error")]
@@ -64,6 +64,10 @@ pub enum Error {
     /// The client expects an HTTP Sec-WebSocket-Protocol equal to the US-ASCII text string “amqp”
     #[error("Expect \"Sec-WebSocket-Protocol\" equal to \"amqp\"")]
     SecWebSocketProtocolIsNotAmqp,
+
+    /// `tungstenite::Error::AttackAttempt` error. Attack attempt detected.
+    #[error("Attack attempt detected")]
+    AttackAttempt,
 }
 
 impl<T: Into<tungstenite::Error>> From<T> for Error {
@@ -76,11 +80,12 @@ impl<T: Into<tungstenite::Error>> From<T> for Error {
             tungstenite::Error::Tls(val) => Self::Tls(val),
             tungstenite::Error::Capacity(val) => Self::Capacity(val),
             tungstenite::Error::Protocol(val) => Self::Protocol(val),
-            tungstenite::Error::SendQueueFull(val) => Self::SendQueueFull(val),
+            tungstenite::Error::WriteBufferFull(val) => Self::WriteBufferFull(val),
             tungstenite::Error::Utf8 => Self::Utf8,
             tungstenite::Error::Url(val) => Self::Url(val),
             tungstenite::Error::Http(val) => Self::Http(val),
             tungstenite::Error::HttpFormat(val) => Self::HttpFormat(val),
+            tungstenite::Error::AttackAttempt => Self::AttackAttempt,
         }
     }
 }

@@ -25,7 +25,7 @@
 //!
 //! # Example
 //!
-//! ```rust
+//! ```rust,no_run
 //! use fe2o3_amqp::{
 //!     types::{messaging::Outcome, primitives::Value},
 //!     Connection, Delivery, Receiver, Sender, Session,
@@ -122,7 +122,7 @@ pin_project! {
     ///
     /// # Example
     ///
-    /// ```rust
+    /// ```rust,no_run
     /// use fe2o3_amqp::{
     ///     types::{messaging::Outcome, primitives::Value},
     ///     Connection, Delivery, Receiver, Sender, Session,

@@ -1,5 +1,13 @@
 # fe2o3-amqp-ws
 
+## 0.4.0
+
+1. Updated `tungstenite` and `tokio-tungstenite` to "0.20.1", which fixes [CVE-2023-43669](https://github.com/snapview/tungstenite-rs/pull/379).
+
+### Breaking Changes
+
+1. As part of the upgrade, `connect_with_config()` and `connect_tls_with_config()` are added with one argument `disable_nagle: bool`.
+
 ## 0.3.1
 
 1. Updated readme to include `wasm32-unknown-unknown` example

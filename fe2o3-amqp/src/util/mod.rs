@@ -287,7 +287,7 @@ mod tests {
     use super::{AsByteIterator, IntoReader};
 
     #[test]
-    fn test_multile_payload_reader() {
+    fn test_multiple_payload_reader() {
         let b0 = Bytes::from(vec![1, 2, 3]);
         let b1 = Bytes::from(vec![4, 5, 6, 7, 8]);
         let b2 = Bytes::from(vec![9]);
@@ -327,7 +327,7 @@ mod tests {
     }
 
     #[test]
-    fn test_multiply_payload_iter() {
+    fn test_multiple_payload_iter() {
         let b0 = Bytes::from(vec![1, 2, 3]);
         let b1 = Bytes::from(vec![4, 5, 6, 7, 8]);
         let b2 = Bytes::from(vec![9]);
