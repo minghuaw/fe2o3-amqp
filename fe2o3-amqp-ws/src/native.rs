@@ -114,13 +114,18 @@ impl WebSocketStream<TokioWebSocketStream<MaybeTlsStream<TcpStream>>> {
 
     /// Calls [`tokio_tungstenite::connect_async_with_config`] internally with
     /// `"Sec-WebSocket-Protocol"` HTTP header of the `req` set to `"amqp"`
+    /// 
+    /// `disable_nagle` specifies if the Nagle’s algorithm must be disabled, 
+    /// i.e. `set_nodelay(true)`. If you don’t know what the Nagle’s algorithm is, 
+    /// better leave it set to `false`.
     pub async fn connect_with_config(
         addr: impl AsRef<str>,
         config: Option<WebSocketConfig>,
+        disable_nagle: bool,
     ) -> Result<Self, Error> {
         let req = addr.as_ref();
         let request = map_amqp_websocket_request(req)?;
-        let (mut ws_stream, response) = connect_async_with_config(request, config).await?;
+        let (mut ws_stream, response) = connect_async_with_config(request, config, disable_nagle).await?;
         match verify_response(response) {
             Ok(response) => Ok(Self::from(TokioWebSocketStream::new(ws_stream, response))),
             Err(error) => {
@@ -257,15 +262,20 @@ where
 impl WebSocketStream<TokioWebSocketStream<MaybeTlsStream<TcpStream>>> {
     /// Calls [`tokio_tungstenite::connect_async_tls_with_config`] internally with
     /// `"Sec-WebSocket-Protocol"` HTTP header of the `req` set to `"amqp"`
+    /// 
+    /// `disable_nagle` specifies if the Nagle’s algorithm must be disabled, 
+    /// i.e. `set_nodelay(true)`. If you don’t know what the Nagle’s algorithm is, 
+    /// better leave it to `false`
     pub async fn connect_tls_with_config(
         addr: impl AsRef<str>,
         config: Option<WebSocketConfig>,
+        disable_nagle: bool,
         connector: Option<tokio_tungstenite::Connector>,
     ) -> Result<Self, Error> {
         let req = addr.as_ref();
         let request = map_amqp_websocket_request(req)?;
         let (mut ws_stream, response) =
-            tokio_tungstenite::connect_async_tls_with_config(request, config, connector).await?;
+            tokio_tungstenite::connect_async_tls_with_config(request, config, disable_nagle, connector).await?;
         match verify_response(response) {
             Ok(response) => Ok(Self::from(TokioWebSocketStream::new(ws_stream, response))),
             Err(error) => {
