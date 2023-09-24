@@ -65,7 +65,7 @@ where
         let this = self.project();
         this.stream
             .poll_next(cx)
-            .map(|item| item.map(|item| item.map(|msg| WsMessage(msg))))
+            .map(|item| item.map(|item| item.map(WsMessage)))
     }
 }
 
