@@ -1,4 +1,4 @@
-//! This example assumes you have an ActiveMQ instant that supports AMQP 1.0
+//! This example assumes you have an ActiveMQ instance that supports AMQP 1.0
 //! running on your localhost
 
 use fe2o3_amqp::{connection::Connection, session::Session, Receiver, Sender};
