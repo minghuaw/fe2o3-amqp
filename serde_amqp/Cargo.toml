@@ -32,10 +32,9 @@ json = ["serde_json"]
 chrono-preview = ["chrono"]
 
 [dev-dependencies]
-
-# [dependencies.serde_amqp_derive]
-# version = "0.1"
-# optional = true
+criterion = "0.5"
+rand = "0.8"
+uuid = { version = "1", features = ["v4"] }
 
 [dependencies]
 ordered-float = { version = "3", features = ["serde"] }
@@ -54,3 +53,7 @@ serde_json = { version = "1", optional = true }
 chrono = { version = "0.4", optional = true }
 uuid = { version = "1", optional = true }
 time = { version = "0.3", optional = true }
+
+[[bench]]
+name = "serialize"
+harness = false
