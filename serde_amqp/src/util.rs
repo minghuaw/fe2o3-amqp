@@ -131,7 +131,8 @@ impl<T> Stack<T> {
     }
 }
 
+#[derive(Debug)]
 pub(crate) enum SequenceLength {
-    Unknown(usize),
+    Unknown,
     Known(usize),
 }

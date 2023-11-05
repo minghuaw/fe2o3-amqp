@@ -16,7 +16,8 @@ use crate::{
     error::Error,
     format::{OFFSET_LIST32, OFFSET_LIST8, OFFSET_MAP32, OFFSET_MAP8},
     format_code::EncodingCodes,
-    util::{FieldRole, IsArrayElement, NewType, StructEncoding, Stack}, serialized_size,
+    serialized_size,
+    util::{FieldRole, IsArrayElement, NewType, SequenceLength, Stack, StructEncoding},
 };
 
 pub(crate) const U8_MAX: usize = u8::MAX as usize;
@@ -38,7 +39,7 @@ where
         let expected_size = serialized_size(value)?;
         Vec::with_capacity(expected_size)
     };
-    
+
     // let expected_size = serialized_size(value)?;
     // let mut writer = Vec::with_capacity(expected_size);
 
@@ -700,9 +701,9 @@ impl<'a, W: Write + 'a> ser::Serializer for &'a mut Serializer<W> {
     //
     // This will be encoded as primitive type `Array`
     #[inline]
-    fn serialize_seq(self, _len: Option<usize>) -> Result<Self::SerializeSeq, Self::Error> {
+    fn serialize_seq(self, len: Option<usize>) -> Result<Self::SerializeSeq, Self::Error> {
         // The most external array should be treated as IsArrayElement::False
-        Ok(SeqSerializer::new(self))
+        Ok(SeqSerializer::new(self, len))
     }
 
     // A statically sized heterogeneous sequence of values
@@ -821,14 +822,20 @@ impl<'a, W: Write + 'a> ser::Serializer for &'a mut Serializer<W> {
 #[derive(Debug)]
 pub struct SeqSerializer<'a, W: 'a> {
     se: &'a mut Serializer<W>,
+    expected_num: SequenceLength,
     num: usize,
     buf: Vec<u8>,
 }
 
 impl<'a, W: 'a> SeqSerializer<'a, W> {
-    fn new(se: &'a mut Serializer<W>) -> Self {
+    fn new(se: &'a mut Serializer<W>, num: Option<usize>) -> Self {
+        let expected_num = match num {
+            Some(num) => SequenceLength::Known(num),
+            None => SequenceLength::Unknown,
+        };
         Self {
             se,
+            expected_num,
             num: 0,
             buf: Vec::new(),
         }
@@ -848,7 +855,13 @@ impl<'a, W: Write + 'a> ser::SerializeSeq for SeqSerializer<'a, W> {
     fn serialize_element<T: ?Sized>(&mut self, value: &T) -> Result<(), Self::Error>
     where
         T: Serialize,
-    {
+    {   
+        if self.num == 0 {
+            if let SequenceLength::Known(num) = &self.expected_num {
+                self.buf.reserve(std::mem::size_of_val(value) * num);
+            }
+        }
+
         match self.se.new_type {
             NewType::None => {
                 // Element in the list always has it own constructor
@@ -892,7 +905,12 @@ impl<'a, W: Write + 'a> ser::SerializeSeq for SeqSerializer<'a, W> {
 
     #[inline]
     fn end(self) -> Result<Self::Ok, Self::Error> {
-        let Self { se, num, buf } = self;
+        let Self {
+            se,
+            expected_num: _, // TODO: how to use this information?
+            num,
+            buf,
+        } = self;
         match se.new_type {
             NewType::None => write_list(&mut se.writer, num, &buf, &se.is_array_elem),
             NewType::Array => write_array(&mut se.writer, num, &buf, &se.is_array_elem),
