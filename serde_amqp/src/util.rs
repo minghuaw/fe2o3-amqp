@@ -1,3 +1,5 @@
+use smallvec::{SmallVec, smallvec};
+
 use crate::{descriptor::PeekDescriptor, value::de::ValueType};
 
 #[derive(Debug)]
@@ -73,4 +75,63 @@ pub trait TryFromSerializable<T: serde::ser::Serialize>: Sized {
 pub(crate) enum PeekTypeCode {
     Primitive(ValueType),
     Composite(PeekDescriptor),
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct Stack<T> {
+    inner: StackInner<T>,
+}
+
+#[derive(Debug, Clone)]
+enum StackInner<T> {
+    Empty,
+    Single(T),
+    Multiple(SmallVec<[T; 4]>),
+}
+
+impl<T> Stack<T> {
+    pub fn new() -> Self {
+        Self {
+            inner: StackInner::Empty,
+        }
+    }
+
+    pub fn push(&mut self, value: T) {
+        match &mut self.inner {
+            StackInner::Empty => self.inner = StackInner::Single(value),
+            StackInner::Single(_) => {
+                let old = std::mem::replace(&mut self.inner, StackInner::Empty);
+                if let StackInner::Single(old) = old {
+                    self.inner = StackInner::Multiple(smallvec![old, value]);
+                } else {
+                    unreachable!()
+                }
+            }
+            StackInner::Multiple(vec) => vec.push(value),
+        }
+    }
+
+    pub fn pop(&mut self) -> Option<T> {
+        match &mut self.inner {
+            StackInner::Empty => None,
+            StackInner::Single(_) => match std::mem::replace(&mut self.inner, StackInner::Empty) {
+                StackInner::Single(value) => Some(value),
+                _ => unreachable!(),
+            }
+            StackInner::Multiple(vec) => vec.pop(),
+        }
+    }
+
+    pub fn peek(&self) -> Option<&T> {
+        match &self.inner {
+            StackInner::Empty => None,
+            StackInner::Single(value) => Some(value),
+            StackInner::Multiple(vec) => vec.last(),
+        }
+    }
+}
+
+pub(crate) enum SequenceLength {
+    Unknown(usize),
+    Known(usize),
 }

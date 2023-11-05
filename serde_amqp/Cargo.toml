@@ -43,6 +43,7 @@ serde_bytes = "0.11"
 thiserror = "1"
 bytes = "1"
 indexmap = { version = "1.9.1", features = ["serde"] }
+smallvec = "1"
 
 # derive
 serde_amqp_derive = { version = "0.2.0", path = "../serde_amqp_derive", optional = true }

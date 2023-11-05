@@ -9,7 +9,7 @@ use crate::{
         DESCRIPTOR, SYMBOL, SYMBOL_REF, TIMESTAMP, TRANSPARENT_VEC, UUID,
     },
     ser::{U32_MAX_MINUS_4, U8_MAX, U8_MAX_MINUS_1},
-    util::{FieldRole, IsArrayElement, NewType, StructEncoding},
+    util::{FieldRole, IsArrayElement, NewType, StructEncoding, Stack},
 };
 
 /// Obtain the serialized size without allocating `Vec<u8>`
@@ -25,7 +25,7 @@ where
 #[derive(Debug)]
 pub struct SizeSerializer {
     /// How a struct should be encoded
-    pub(crate) struct_encoding: Vec<StructEncoding>,
+    pub(crate) struct_encoding: Stack<StructEncoding>,
     pub(crate) new_type: NewType,
     pub(crate) is_array_element: IsArrayElement,
 }
@@ -40,30 +40,34 @@ impl SizeSerializer {
     /// Create a new `SizeSerializer`
     pub fn new() -> Self {
         Self {
-            struct_encoding: Vec::new(),
+            struct_encoding: Stack::new(),
             new_type: NewType::None,
             is_array_element: IsArrayElement::False,
         }
     }
 
     fn described_list() -> Self {
+        let mut struct_encoding = Stack::new();
+        struct_encoding.push(StructEncoding::DescribedList);
         Self {
-            struct_encoding: vec![StructEncoding::DescribedList],
+            struct_encoding,
             new_type: NewType::None,
             is_array_element: IsArrayElement::False,
         }
     }
 
     fn described_map() -> Self {
+        let mut struct_encoding = Stack::new();
+        struct_encoding.push(StructEncoding::DescribedMap);
         Self {
-            struct_encoding: vec![StructEncoding::DescribedMap],
+            struct_encoding,
             new_type: NewType::None,
             is_array_element: IsArrayElement::False,
         }
     }
 
     fn struct_encoding(&self) -> &StructEncoding {
-        self.struct_encoding.last().unwrap_or(&StructEncoding::None)
+        self.struct_encoding.peek().unwrap_or(&StructEncoding::None)
     }
 }
 

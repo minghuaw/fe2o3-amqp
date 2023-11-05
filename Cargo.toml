@@ -43,3 +43,5 @@ exclude = [
     "examples/wasm32_in_browser",
     "examples/qpid_management_framework",
 ]
+
+resolver = "2"

@@ -16,7 +16,7 @@ use crate::{
     error::Error,
     format::{OFFSET_LIST32, OFFSET_LIST8, OFFSET_MAP32, OFFSET_MAP8},
     format_code::EncodingCodes,
-    util::{FieldRole, IsArrayElement, NewType, StructEncoding},
+    util::{FieldRole, IsArrayElement, NewType, StructEncoding, Stack}, serialized_size,
 };
 
 pub(crate) const U8_MAX: usize = u8::MAX as usize;
@@ -32,7 +32,16 @@ pub fn to_vec<T>(value: &T) -> Result<Vec<u8>, Error>
 where
     T: Serialize,
 {
-    let mut writer = Vec::new();
+    let mut writer = if std::mem::size_of_val(value) < 4 {
+        Vec::new()
+    } else {
+        let expected_size = serialized_size(value)?;
+        Vec::with_capacity(expected_size)
+    };
+    
+    // let expected_size = serialized_size(value)?;
+    // let mut writer = Vec::with_capacity(expected_size);
+
     let mut serializer = Serializer::new(&mut writer);
     value.serialize(&mut serializer)?;
     Ok(writer)
@@ -48,7 +57,7 @@ pub struct Serializer<W> {
     new_type: NewType,
 
     /// How a struct should be encoded
-    struct_encoding: Vec<StructEncoding>,
+    struct_encoding: Stack<StructEncoding>,
 
     /// Whether we are serializing an array
     /// NOTE: This should only be changed by `SeqSerializer`
@@ -67,7 +76,7 @@ impl<W: Write> Serializer<W> {
         Self {
             writer,
             new_type: Default::default(),
-            struct_encoding: Default::default(),
+            struct_encoding: Stack::new(),
             is_array_elem: IsArrayElement::False,
         }
     }
@@ -82,43 +91,49 @@ impl<W: Write> Serializer<W> {
         Self {
             writer,
             new_type: NewType::Symbol,
-            struct_encoding: Default::default(),
+            struct_encoding: Stack::new(),
             is_array_elem: IsArrayElement::False,
         }
     }
 
     /// Creates an AMQP1.0 serializer for described list
     pub fn described_list(writer: W) -> Self {
+        let mut struct_encoding = Stack::new();
+        struct_encoding.push(StructEncoding::DescribedList);
         Self {
             writer,
             new_type: Default::default(),
-            struct_encoding: vec![StructEncoding::DescribedList],
+            struct_encoding,
             is_array_elem: IsArrayElement::False,
         }
     }
 
     /// Creates an AMQP1.0 serilaizer for described map
     pub fn described_map(writer: W) -> Self {
+        let mut struct_encoding = Stack::new();
+        struct_encoding.push(StructEncoding::DescribedMap);
         Self {
             writer,
             new_type: Default::default(),
-            struct_encoding: vec![StructEncoding::DescribedMap],
+            struct_encoding,
             is_array_elem: IsArrayElement::False,
         }
     }
 
     /// Creates an AMQP1.0 serializer for a described wrapper
     pub fn described_basic(writer: W) -> Self {
+        let mut struct_encoding = Stack::new();
+        struct_encoding.push(StructEncoding::DescribedBasic);
         Self {
             writer,
             new_type: Default::default(),
-            struct_encoding: vec![StructEncoding::DescribedBasic],
+            struct_encoding,
             is_array_elem: IsArrayElement::False,
         }
     }
 
     fn struct_encoding(&self) -> &StructEncoding {
-        self.struct_encoding.last().unwrap_or(&StructEncoding::None)
+        self.struct_encoding.peek().unwrap_or(&StructEncoding::None)
     }
 }
 
