@@ -26,14 +26,14 @@ rustls-tls-webpki-roots = ["tokio-tungstenite/rustls-tls-webpki-roots"]
 
 [dependencies]
 futures-util = { version = "0.3", features = ["sink"] }
-http = "0.2"
+http = "1"
 pin-project-lite = "0.2"
 thiserror = "1"
-tungstenite = "0.20.1"
+tungstenite = "0.21"
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 tokio = {version = "1", default-features = false, features = ["net"]}
-tokio-tungstenite = "0.20.1"
+tokio-tungstenite = "0.21"
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 tokio = {version = "1", default-features = false, features = ["sync", "macros"]}
