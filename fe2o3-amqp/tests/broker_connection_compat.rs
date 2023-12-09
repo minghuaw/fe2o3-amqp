@@ -41,7 +41,7 @@ cfg_not_wasm32! {
     #[tokio::test]
     async fn rabbitmq_amqp10_sasl_plain_connection() {
         let (_node, port) = common::setup_rabbitmq_amqp10(Some("guest"), Some("guest")).await;
-        let url = format!("amqp://guest1:guest@localhost:{}", port);
+        let url = format!("amqp://guest:guest@localhost:{}", port);
         let mut connection = Connection::open("test-connection", &url[..]).await.unwrap();
         connection.close().await.unwrap();
     }
