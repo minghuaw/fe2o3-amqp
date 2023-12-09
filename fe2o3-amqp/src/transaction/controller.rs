@@ -33,7 +33,7 @@ pub(crate) type ControlLink = SenderLink<Coordinator>;
 ///
 /// # Example
 ///
-/// ```rust
+/// ```rust,ignore
 /// let controller = Controller::attach(&mut session, "controller").await.unwrap();
 /// let mut txn = Transaction::declare(&controller, None).await.unwrap();
 /// txn.commit().await.unwrap();

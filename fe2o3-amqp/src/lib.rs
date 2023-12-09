@@ -51,7 +51,7 @@
 //!
 //! The following code requires the [`tokio`] async runtime added to the dependencies.
 //!
-//! ```rust
+//! ```rust,no_run
 //! use fe2o3_amqp::{Connection, Session, Sender, Receiver};
 //! use fe2o3_amqp::types::messaging::Outcome;
 //!
@@ -100,7 +100,7 @@
 //!
 //! ## Listener
 //!
-//! ```rust
+//! ```rust,no_run
 //! use tokio::net::TcpListener;
 //! use fe2o3_amqp::acceptor::{ConnectionAcceptor, SessionAcceptor, LinkAcceptor, LinkEndpoint};
 //!
@@ -131,7 +131,7 @@
 //!
 //! [`fe2o3-amqp-ws`](https://crates.io/crates/fe2o3-amqp-ws) is needed for WebSocket binding
 //!
-//! ```rust
+//! ```rust,ignore
 //! use fe2o3_amqp::{
 //!     types::{messaging::Outcome, primitives::Value},
 //!     Connection, Delivery, Receiver, Sender, Session,

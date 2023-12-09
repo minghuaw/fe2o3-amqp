@@ -44,11 +44,10 @@ where
     pub target_capabilities: Option<Vec<C>>,
 
     /// Whether the receiver will automatically accept all incoming deliveries
+    /// 
     /// # Default
     ///
-    /// ```rust
-    /// auto_accept = false;
-    /// ```
+    /// `false`
     pub auto_accept: bool,
 
     pub on_dynamic_target: F,

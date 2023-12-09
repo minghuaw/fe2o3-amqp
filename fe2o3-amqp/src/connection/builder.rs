@@ -792,7 +792,7 @@ cfg_not_wasm32! {
         ///
         /// # Raw AMQP connection
         ///
-        /// ```rust
+        /// ```rust,ignore
         /// let connection = Connection::builder()
         ///     .container_id("connection-1")
         ///     .open("amqp://localhost:5672")
@@ -1062,7 +1062,7 @@ cfg_not_wasm32! {
             ///
             /// # Raw AMQP connection
             ///
-            /// ```rust
+            /// ```rust,ignore
             /// let connection = Connection::builder()
             ///     .container_id("connection-1")
             ///     .open("amqp://localhost:5672")
@@ -1190,7 +1190,7 @@ cfg_not_wasm32! {
             ///
             /// # Raw AMQP connection
             ///
-            /// ```rust
+            /// ```rust,ignore
             /// let connection = Connection::builder()
             ///     .container_id("connection-1")
             ///     .open("amqp://localhost:5672")

@@ -109,9 +109,7 @@ pub struct Builder<Role, T, NameState, SS, TS> {
     ///
     /// # Default
     ///
-    /// ```rust
-    /// auto_accept = false;
-    /// ```
+    /// `false`
     pub auto_accept: bool,
 
     /// Whether to verify the `source` field of the incoming Attach frame

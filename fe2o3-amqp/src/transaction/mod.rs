@@ -18,6 +18,9 @@
 //! to a session acceptor.
 //!
 //! ```rust
+//! use fe2o3_amqp::acceptor::SessionAcceptor;
+//! use fe2o3_amqp::transaction::coordinator::ControlLinkAcceptor;
+//! 
 //! let session_acceptor = SessionAcceptor::builder()
 //!     .control_link_acceptor(ControlLinkAcceptor::default())
 //!     .build();
@@ -199,7 +202,7 @@ pub trait TransactionExt: TransactionDischarge + TransactionalRetirement {
 ///
 /// ## Transactional posting
 ///
-/// ```rust
+/// ```rust,ignore
 /// let controller = Controller::attach(&mut session, "controller").await.unwrap();
 /// let mut sender = Sender::attach(&mut session, "rust-sender-link-1", "q1")
 ///     .await
@@ -222,7 +225,7 @@ pub trait TransactionExt: TransactionDischarge + TransactionalRetirement {
 ///
 /// ## Transactional retirement
 ///
-/// ```rust
+/// ```rust,ignore
 /// let controller = Controller::attach(&mut session, "controller").await.unwrap();
 /// let mut receiver = Receiver::attach(&mut session, "rust-recver-1", "q1")
 ///     .await
@@ -243,7 +246,7 @@ pub trait TransactionExt: TransactionDischarge + TransactionalRetirement {
 ///
 /// Please note that this is not supported on the resource side yet.
 ///
-/// ```rust
+/// ```rust,ignore
 /// let controller = Controller::attach(&mut session, "controller").await.unwrap();
 /// let mut receiver = Receiver::attach(&mut session, "rust-recver-1", "q1")
 ///     .await

@@ -12,7 +12,7 @@ use super::SaslProfile;
 ///
 /// # Example
 ///
-/// ```rust
+/// ```rust,ignore
 /// use fe2o3_amqp::{Connection, sasl_profile::SaslScramSha1};
 ///
 /// let mut connection = Connection::builder()
@@ -45,7 +45,7 @@ impl From<SaslScramSha1> for SaslProfile {
 ///
 /// # Example
 ///
-/// ```rust
+/// ```rust,ignore
 /// use fe2o3_amqp::{Connection, sasl_profile::SaslScramSha256};
 ///
 /// let mut connection = Connection::builder()
@@ -78,7 +78,7 @@ impl From<SaslScramSha256> for SaslProfile {
 ///
 /// # Example
 ///
-/// ```rust
+/// ```rust,ignore
 /// use fe2o3_amqp::{Connection, sasl_profile::SaslScramSha512};
 ///
 /// let mut connection = Connection::builder()

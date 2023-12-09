@@ -53,7 +53,7 @@ impl ListenerConnectionHandle {
 ///
 /// ```rust, ignore
 /// use tokio::net::TcpListener;
-/// use crate::acceptor::ConnectionAcceptor;
+/// use fe2o3_amqp::acceptor::ConnectionAcceptor;
 ///
 /// let tcp_listener = TcpListener::bind("localhost:5672").await.unwrap();
 /// let connection_acceptor = ConnectionAcceptor::new("example-listener");
@@ -83,7 +83,7 @@ impl ListenerConnectionHandle {
 /// or modifying particular field after the acceptor is built.
 ///
 /// ```rust
-/// use crate::acceptor::ConnectionAcceptor;
+/// use fe2o3_amqp::acceptor::ConnectionAcceptor;
 ///
 /// let connection_acceptor = ConnectionAcceptor::builder()
 ///     .container_id("example-listener")
@@ -97,8 +97,8 @@ impl ListenerConnectionHandle {
 ///
 /// ## `tokio-native-tls` (requires `"native-tls"` feature)
 ///
-/// ```rust
-/// use crate::acceptor::ConnectionAcceptor;
+/// ```rust,ignore
+/// use fe2o3_amqp::acceptor::ConnectionAcceptor;
 ///
 /// let tls_acceptor =
 ///     tokio_native_tls::TlsAcceptor::from(native_tls::TlsAcceptor::builder(cert).build()?);
@@ -110,8 +110,9 @@ impl ListenerConnectionHandle {
 ///
 /// ## `tokio-rustls` (requires `"rustls"` feature)
 ///
-/// ```rust
-/// use crate::acceptor::ConnectionAcceptor;
+/// ```rust,ignore
+/// use std::sync::Arc;
+/// use fe2o3_amqp::acceptor::ConnectionAcceptor;
 ///
 /// let tls_acceptor = tokio_rustls::TlsAcceptor::from(Arc::new(config));;
 /// let connection_acceptor = ConnectionAcceptor::builder()
@@ -128,7 +129,7 @@ impl ListenerConnectionHandle {
 /// ## Simple PLAIN SASL Acceptor
 ///
 /// ```rust,ignore
-/// use crate::acceptor::{ConnectionAcceptor, SaslPlainMechanism};
+/// use fe2o3_amqp::acceptor::{ConnectionAcceptor, SaslPlainMechanism};
 ///
 /// let connection_acceptor = ConnectionAcceptor::builder()
 ///     .container_id("example-listener")

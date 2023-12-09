@@ -32,7 +32,7 @@ use super::{
 ///
 /// ## Transactional posting
 ///
-/// ```rust
+/// ```rust,ignore
 /// let mut sender = Sender::attach(&mut session, "rust-sender-link-1", "q1")
 ///     .await
 ///     .unwrap();
@@ -51,7 +51,7 @@ use super::{
 ///
 /// ## Transactional retirement
 ///
-/// ```rust
+/// ```rust,ignore
 /// let mut receiver = Receiver::attach(&mut session, "rust-recver-1", "q1")
 ///     .await
 ///     .unwrap();
@@ -68,7 +68,7 @@ use super::{
 ///
 /// Please note that this is not supported on the resource side yet.
 ///
-/// ```rust
+/// ```rust,ignore
 /// let mut receiver = Receiver::attach(&mut session, "rust-recver-1", "q1")
 ///     .await
 ///     .unwrap();
