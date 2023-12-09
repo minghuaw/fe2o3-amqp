@@ -114,7 +114,7 @@ where
             connector: &tokio_rustls::TlsConnector,
             alt_tls: bool,
         ) -> Result<tokio_rustls::client::TlsStream<Io>, NegotiationError> {
-            use librustls::ServerName;
+            use librustls::pki_types::ServerName;
 
             if !alt_tls {
                 send_tls_proto_header(&mut stream).await?;
@@ -128,7 +128,7 @@ where
             }
 
             // TLS negotiation
-            let domain = ServerName::try_from(domain).map_err(|_| NegotiationError::InvalidDomain)?;
+            let domain = ServerName::try_from(domain).map_err(|_| NegotiationError::InvalidDomain)?.to_owned();
             let tls = connector.connect(domain, stream).await?;
             Ok(tls)
         }
