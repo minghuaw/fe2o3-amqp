@@ -225,10 +225,12 @@ A raw u64 can be used as the descriptor code in the macro attribute. This is use
 that are not strictly compliant.
 
 ```rust
+use serde_amqp::macros::{SerializeComposite, DeserializeComposite};
+
 #[derive(Debug, Clone, SerializeComposite, DeserializeComposite)]
 #[amqp_contract(
     name = "amqp:application-properties:map",
-    code = "0x000_0000_0000_0007",
+    code = "0x000_0000_0000_0007"   ,
     encoding = "list",
     rename_all = "kebab-case"
 )]
