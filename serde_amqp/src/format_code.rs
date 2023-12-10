@@ -18,20 +18,20 @@ pub enum EncodingCodes {
     BooleanFalse = 0x42,
 
     /// u8
-    UByte = 0x50,
+    Ubyte = 0x50,
 
     /// u16
-    UShort = 0x60,
+    Ushort = 0x60,
 
     /// u32
-    UInt = 0x70,
-    SmallUInt = 0x52,
-    UInt0 = 0x43,
+    Uint = 0x70,
+    SmallUint = 0x52,
+    Uint0 = 0x43,
 
     /// u64
-    ULong = 0x80,
-    SmallULong = 0x53,
-    ULong0 = 0x44,
+    Ulong = 0x80,
+    SmallUlong = 0x53,
+    Ulong0 = 0x44,
 
     /// i8
     Byte = 0x51,
@@ -66,8 +66,8 @@ pub enum EncodingCodes {
     Uuid = 0x98,
 
     // Binary
-    VBin8 = 0xa0,
-    VBin32 = 0xb0,
+    Vbin8 = 0xa0,
+    Vbin32 = 0xb0,
 
     // String
     Str8 = 0xa1,
@@ -108,20 +108,20 @@ impl TryFrom<u8> for EncodingCodes {
             0x42 => EncodingCodes::BooleanFalse,
 
             // u8
-            0x50 => EncodingCodes::UByte,
+            0x50 => EncodingCodes::Ubyte,
 
             // u16
-            0x60 => EncodingCodes::UShort,
+            0x60 => EncodingCodes::Ushort,
 
             // u32
-            0x70 => EncodingCodes::UInt,
-            0x52 => EncodingCodes::SmallUInt,
-            0x43 => EncodingCodes::UInt0,
+            0x70 => EncodingCodes::Uint,
+            0x52 => EncodingCodes::SmallUint,
+            0x43 => EncodingCodes::Uint0,
 
             // u64
-            0x80 => EncodingCodes::ULong,
-            0x53 => EncodingCodes::SmallULong,
-            0x44 => EncodingCodes::ULong0,
+            0x80 => EncodingCodes::Ulong,
+            0x53 => EncodingCodes::SmallUlong,
+            0x44 => EncodingCodes::Ulong0,
 
             // i8
             0x51 => EncodingCodes::Byte,
@@ -153,8 +153,8 @@ impl TryFrom<u8> for EncodingCodes {
 
             0x98 => EncodingCodes::Uuid,
 
-            0xa0 => EncodingCodes::VBin8,
-            0xb0 => EncodingCodes::VBin32,
+            0xa0 => EncodingCodes::Vbin8,
+            0xb0 => EncodingCodes::Vbin32,
 
             0xa1 => EncodingCodes::Str8,
             0xb1 => EncodingCodes::Str32,

@@ -91,10 +91,10 @@
 
 1. Breaking Changes
    1. For consistencies, changed:
-      1. `EncodingCodes::Ulong0` to `EncodingCodes::ULong0`
-      2. `EncodingCodes::SmallUlong` to `EncodingCodes::SmallULong`
-      3. `EncodingCodes::Uint0` to `EncodingCodes::UInt0`
-      4. `EncodingCodes::SmallUint` to `EncodingCodes::SmallUInt`
+      1. `EncodingCodes::Ulong0` to `EncodingCodes::Ulong0`
+      2. `EncodingCodes::SmallUlong` to `EncodingCodes::SmallUlong`
+      3. `EncodingCodes::Uint0` to `EncodingCodes::Uint0`
+      4. `EncodingCodes::SmallUint` to `EncodingCodes::SmallUint`
 
 ## 0.2.5
 

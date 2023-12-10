@@ -40,7 +40,7 @@ pub type Boolean = bool;
 /// encoding code = 0x50,
 /// category = fixed, width = 1
 /// label = "8-bit unsigned integer"
-pub type UByte = u8;
+pub type Ubyte = u8;
 
 /// Integer in the range 0 to 2^16-1 inclusive
 ///
@@ -48,7 +48,7 @@ pub type UByte = u8;
 /// category = fixed, width = 2
 /// label = "16-bit unsigned integer in network byte order"
 /// (AKA. Big-Endian, rust uses BigEndian by default)
-pub type UShort = u16;
+pub type Ushort = u16;
 
 /// Integer in the range 0 to 2^32-1 inclusive
 ///
@@ -64,7 +64,7 @@ pub type UShort = u16;
 /// encoding name = "uint0", encoding code = 0x43
 /// category = fixed, width = 0
 /// label = "the uint value 0"
-pub type UInt = u32;
+pub type Uint = u32;
 
 /// Integer in the range 0 to 2^64-1 inclusive
 ///
@@ -80,7 +80,7 @@ pub type UInt = u32;
 /// encoding name = "ulong0", encoding code = 0x44
 /// category = fixed, width = 0
 /// label = "the ulong value 0"
-pub type ULong = u64;
+pub type Ulong = u64;
 
 /// Integer in the range -(2^7) to 2^7-1 inclusive
 ///

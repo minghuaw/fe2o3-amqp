@@ -1,6 +1,6 @@
 use serde_amqp::{
     macros::{DeserializeComposite, SerializeComposite},
-    primitives::{Boolean, UInt},
+    primitives::{Boolean, Uint},
 };
 
 use crate::definitions::{Fields, Handle, SequenceNo, TransferNumber};
@@ -31,7 +31,7 @@ pub struct Flow {
     ///
     /// Defines the maximum number of incoming transfer frames that the endpoint
     /// can currently receive. See subsection 2.5.6 for more details.
-    pub incoming_window: UInt,
+    pub incoming_window: Uint,
 
     /// <field name="next-outgoing-id" type="transfer-number" mandatory="true"/>
     ///
@@ -44,7 +44,7 @@ pub struct Flow {
     /// Defines the maximum number of outgoing transfer frames that the endpoint
     /// could potentially currently send, if it was not constrained by restrictions
     /// imposed by the incoming-window from its peer. See subsection 2.5.6 for more details.
-    pub outgoing_window: UInt,
+    pub outgoing_window: Uint,
 
     /// <field name="handle" type="handle"/>
     ///
@@ -82,7 +82,7 @@ pub struct Flow {
     /// 2.6.7 for more details.
     ///
     /// When the handle field is not set, this field MUST NOT be set.
-    pub link_credit: Option<UInt>,
+    pub link_credit: Option<Uint>,
 
     /// <field name="available" type="uint"/>
     /// The number of messages awaiting credit at the link sender endpoint.
@@ -91,7 +91,7 @@ pub struct Flow {
     /// See subsection 2.6.7 for more details.
     ///
     /// When the handle field is not set, this field MUST NOT be set.
-    pub available: Option<UInt>,
+    pub available: Option<Uint>,
 
     /// <field name="drain" type="boolean" default="false"/>
     ///

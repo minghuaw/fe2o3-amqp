@@ -10,7 +10,7 @@ use fe2o3_amqp_types::{
     definitions::{Fields, ReceiverSettleMode, Role, SenderSettleMode},
     messaging::{Source, Target},
     performatives::Attach,
-    primitives::{Symbol, ULong},
+    primitives::{Symbol, Ulong},
 };
 
 use crate::{connection::DEFAULT_OUTGOING_BUFFER_SIZE, session::SessionHandle, util::Initialized};
@@ -34,7 +34,7 @@ pub enum LinkEndpoint {
 #[derive(Debug, Clone)]
 pub(crate) struct SharedLinkAcceptorFields {
     /// The maximum message size supported by the link endpoint
-    pub max_message_size: Option<ULong>,
+    pub max_message_size: Option<Ulong>,
 
     /// Link properties
     pub properties: Option<Fields>,

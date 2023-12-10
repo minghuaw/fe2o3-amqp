@@ -82,20 +82,20 @@ impl TryFrom<EncodingCodes> for Category {
             EncodingCodes::BooleanFalse => Category::Fixed(FixedWidth::Zero),
 
             // u8
-            EncodingCodes::UByte => Category::Fixed(FixedWidth::One),
+            EncodingCodes::Ubyte => Category::Fixed(FixedWidth::One),
 
             // u16
-            EncodingCodes::UShort => Category::Fixed(FixedWidth::Two),
+            EncodingCodes::Ushort => Category::Fixed(FixedWidth::Two),
 
             // u32
-            EncodingCodes::UInt => Category::Fixed(FixedWidth::Four),
-            EncodingCodes::SmallUInt => Category::Fixed(FixedWidth::One),
-            EncodingCodes::UInt0 => Category::Fixed(FixedWidth::Zero),
+            EncodingCodes::Uint => Category::Fixed(FixedWidth::Four),
+            EncodingCodes::SmallUint => Category::Fixed(FixedWidth::One),
+            EncodingCodes::Uint0 => Category::Fixed(FixedWidth::Zero),
 
             // u64
-            EncodingCodes::ULong => Category::Fixed(FixedWidth::Eight),
-            EncodingCodes::SmallULong => Category::Fixed(FixedWidth::One),
-            EncodingCodes::ULong0 => Category::Fixed(FixedWidth::Zero),
+            EncodingCodes::Ulong => Category::Fixed(FixedWidth::Eight),
+            EncodingCodes::SmallUlong => Category::Fixed(FixedWidth::One),
+            EncodingCodes::Ulong0 => Category::Fixed(FixedWidth::Zero),
 
             // i8
             EncodingCodes::Byte => Category::Fixed(FixedWidth::One),
@@ -127,8 +127,8 @@ impl TryFrom<EncodingCodes> for Category {
 
             EncodingCodes::Uuid => Category::Fixed(FixedWidth::Sixteen),
 
-            EncodingCodes::VBin8 => Category::Encoded(EncodedWidth::One),
-            EncodingCodes::VBin32 => Category::Encoded(EncodedWidth::Four),
+            EncodingCodes::Vbin8 => Category::Encoded(EncodedWidth::One),
+            EncodingCodes::Vbin32 => Category::Encoded(EncodedWidth::Four),
 
             EncodingCodes::Str8 => Category::Encoded(EncodedWidth::One),
             EncodingCodes::Str32 => Category::Encoded(EncodedWidth::Four),

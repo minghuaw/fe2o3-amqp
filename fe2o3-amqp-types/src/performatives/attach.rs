@@ -1,6 +1,6 @@
 use serde_amqp::{
     macros::{DeserializeComposite, SerializeComposite},
-    primitives::{Array, Boolean, OrderedMap, Symbol, ULong},
+    primitives::{Array, Boolean, OrderedMap, Symbol, Ulong},
 };
 
 use crate::{
@@ -101,7 +101,7 @@ pub struct Attach {
     pub initial_delivery_count: Option<SequenceNo>,
 
     /// <field name="max-message-size" type="ulong"/>
-    pub max_message_size: Option<ULong>,
+    pub max_message_size: Option<Ulong>,
 
     /// <field name="offered-capabilities" type="symbol" multiple="true"/>
     pub offered_capabilities: Option<Array<Symbol>>,
@@ -205,7 +205,7 @@ mod tests {
         let s = std::mem::size_of::<Option<SequenceNo>>();
         println!("initial_delivery_count {:?}", s);
 
-        let s = std::mem::size_of::<Option<ULong>>();
+        let s = std::mem::size_of::<Option<Ulong>>();
         println!("max_message_size {:?}", s);
 
         let s = std::mem::size_of::<Option<Vec<Symbol>>>();

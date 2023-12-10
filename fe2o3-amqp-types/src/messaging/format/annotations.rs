@@ -11,7 +11,7 @@ use serde::{
 };
 use serde_amqp::{
     format_code::EncodingCodes,
-    primitives::{OrderedMap, Symbol, SymbolRef, ULong},
+    primitives::{OrderedMap, Symbol, SymbolRef, Ulong},
     Value,
     __constants::VALUE,
 };
@@ -52,8 +52,8 @@ pub enum OwnedKey {
     /// Symbol
     Symbol(Symbol),
 
-    /// ULong
-    ULong(ULong),
+    /// Ulong
+    Ulong(Ulong),
 }
 
 impl Default for OwnedKey {
@@ -76,7 +76,7 @@ impl<'a> From<SymbolRef<'a>> for OwnedKey {
 
 impl From<u64> for OwnedKey {
     fn from(value: u64) -> Self {
-        Self::ULong(value)
+        Self::Ulong(value)
     }
 }
 
@@ -99,14 +99,14 @@ impl Serialize for OwnedKey {
     {
         match self {
             OwnedKey::Symbol(value) => value.serialize(serializer),
-            OwnedKey::ULong(value) => value.serialize(serializer),
+            OwnedKey::Ulong(value) => value.serialize(serializer),
         }
     }
 }
 
 enum Field {
     Symbol,
-    ULong,
+    Ulong,
 }
 
 struct FieldVisitor {}
@@ -127,8 +127,8 @@ impl<'de> de::Visitor<'de> for FieldVisitor {
             .map_err(|_| de::Error::custom("Unable to convert to EncodingCodes"))?
         {
             EncodingCodes::Sym8 | EncodingCodes::Sym32 => Ok(Field::Symbol),
-            EncodingCodes::ULong0 | EncodingCodes::SmallULong | EncodingCodes::ULong => {
-                Ok(Field::ULong)
+            EncodingCodes::Ulong0 | EncodingCodes::SmallUlong | EncodingCodes::Ulong => {
+                Ok(Field::Ulong)
             }
             _ => Err(de::Error::custom("Invalid format code")),
         }
@@ -164,9 +164,9 @@ impl<'de> de::Visitor<'de> for Visitor {
                 let val = de.newtype_variant()?;
                 Ok(OwnedKey::Symbol(val))
             }
-            Field::ULong => {
+            Field::Ulong => {
                 let val = de.newtype_variant()?;
-                Ok(OwnedKey::ULong(val))
+                Ok(OwnedKey::Ulong(val))
             }
         }
     }
@@ -177,7 +177,7 @@ impl<'de> de::Deserialize<'de> for OwnedKey {
     where
         D: serde::Deserializer<'de>,
     {
-        const VARIANTS: &[&str] = &["Symbol", "ULong"];
+        const VARIANTS: &[&str] = &["Symbol", "Ulong"];
         deserializer.deserialize_enum(VALUE, VARIANTS, Visitor {})
     }
 }
@@ -190,7 +190,7 @@ pub enum BorrowedKey<'k> {
     Symbol(SymbolRef<'k>),
 
     /// u64
-    ULong(&'k u64),
+    Ulong(&'k u64),
 }
 
 /// This trait allows using different types as keys to get entry/value from [`Annotations`]
@@ -209,14 +209,14 @@ impl AnnotationKey for OwnedKey {
     fn key(&self) -> BorrowedKey<'_> {
         match self {
             OwnedKey::Symbol(Symbol(s)) => BorrowedKey::Symbol(SymbolRef(s)),
-            OwnedKey::ULong(v) => BorrowedKey::ULong(v),
+            OwnedKey::Ulong(v) => BorrowedKey::Ulong(v),
         }
     }
 }
 
 impl AnnotationKey for u64 {
     fn key(&self) -> BorrowedKey<'_> {
-        BorrowedKey::ULong(self)
+        BorrowedKey::Ulong(self)
     }
 }
 
@@ -323,7 +323,7 @@ mod tests {
     }
 
     fn u64_val() -> Value {
-        Value::ULong(U64_VAL)
+        Value::Ulong(U64_VAL)
     }
 
     fn create_annotations() -> Annotations {
@@ -351,7 +351,7 @@ mod tests {
         let val = 6u64;
         let buf = to_vec(&val).unwrap();
         let owned: OwnedKey = from_slice(&buf).unwrap();
-        assert_eq!(owned, OwnedKey::ULong(val));
+        assert_eq!(owned, OwnedKey::Ulong(val));
         let buf2 = to_vec(&owned).unwrap();
         assert_eq!(buf, buf2);
 

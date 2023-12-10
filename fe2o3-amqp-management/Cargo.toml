@@ -17,3 +17,6 @@ fe2o3-amqp = { version = "0.9.0", path = "../fe2o3-amqp" }
 fe2o3-amqp-types =  { version = "0.9.0", path = "../fe2o3-amqp-types/" }
 serde = "1"
 thiserror = "1"
+
+log = { version = "0.4", optional = true }
+tracing = { version = "0.1", optional = true }

@@ -190,31 +190,31 @@ mod tests {
     fn test_serialize_deserialize_sasl_code() {
         let code = SaslCode::Ok;
         let buf = to_vec(&code).unwrap();
-        let expected = vec![EncodingCodes::UByte as u8, code.clone() as u8];
+        let expected = vec![EncodingCodes::Ubyte as u8, code.clone() as u8];
         assert_eq!(&buf, &expected);
         assert_eq_on_sasl_code_and_deserialized(code, expected);
 
         let code = SaslCode::Auth;
         let buf = to_vec(&code).unwrap();
-        let expected = vec![EncodingCodes::UByte as u8, code.clone() as u8];
+        let expected = vec![EncodingCodes::Ubyte as u8, code.clone() as u8];
         assert_eq!(&buf, &expected);
         assert_eq_on_sasl_code_and_deserialized(code, expected);
 
         let code = SaslCode::Sys;
         let buf = to_vec(&code).unwrap();
-        let expected = vec![EncodingCodes::UByte as u8, code.clone() as u8];
+        let expected = vec![EncodingCodes::Ubyte as u8, code.clone() as u8];
         assert_eq!(&buf, &expected);
         assert_eq_on_sasl_code_and_deserialized(code, expected);
 
         let code = SaslCode::SysPerm;
         let buf = to_vec(&code).unwrap();
-        let expected = vec![EncodingCodes::UByte as u8, code.clone() as u8];
+        let expected = vec![EncodingCodes::Ubyte as u8, code.clone() as u8];
         assert_eq!(&buf, &expected);
         assert_eq_on_sasl_code_and_deserialized(code, expected);
 
         let code = SaslCode::SysTemp;
         let buf = to_vec(&code).unwrap();
-        let expected = vec![EncodingCodes::UByte as u8, code.clone() as u8];
+        let expected = vec![EncodingCodes::Ubyte as u8, code.clone() as u8];
         assert_eq!(&buf, &expected);
         assert_eq_on_sasl_code_and_deserialized(code, expected);
     }

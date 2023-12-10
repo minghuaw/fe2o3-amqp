@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 use serde_bytes::ByteBuf;
 
 use serde_amqp::{
-    primitives::{OrderedMap, Symbol, UInt},
+    primitives::{OrderedMap, Symbol, Uint},
     value::Value,
 };
 
@@ -22,7 +22,7 @@ pub use rcv_settle_mode::ReceiverSettleMode;
 
 /// 2.8.4 Handle
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Deserialize, Serialize)]
-pub struct Handle(pub UInt);
+pub struct Handle(pub Uint);
 
 impl Default for Handle {
     fn default() -> Self {
@@ -30,23 +30,23 @@ impl Default for Handle {
     }
 }
 
-impl From<UInt> for Handle {
-    fn from(val: UInt) -> Self {
+impl From<Uint> for Handle {
+    fn from(val: Uint) -> Self {
         Self(val)
     }
 }
 
-impl From<Handle> for UInt {
+impl From<Handle> for Uint {
     fn from(val: Handle) -> Self {
         val.0
     }
 }
 
 /// 2.8.5 Seconds
-pub type Seconds = UInt;
+pub type Seconds = Uint;
 
 /// 2.8.6 Milliseconds
-pub type Milliseconds = UInt;
+pub type Milliseconds = Uint;
 
 /// 2.8.7 Delivery Tag
 /// A delivery-tag can be up to 32 octets of binary data
@@ -59,10 +59,10 @@ pub type DeliveryNumber = SequenceNo;
 pub type TransferNumber = SequenceNo;
 
 /// 2.8.10 Sequence No
-pub type SequenceNo = UInt;
+pub type SequenceNo = Uint;
 
 /// 2.8.11 Message Format
-pub type MessageFormat = UInt;
+pub type MessageFormat = Uint;
 
 /// 2.8.12 IETF Language Tag
 pub type IetfLanguageTag = Symbol;

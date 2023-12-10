@@ -23,7 +23,7 @@ use fe2o3_amqp_types::{
     definitions::{DeliveryTag, Fields, Handle, SequenceNo},
     messaging::DeliveryState,
     performatives::Flow,
-    primitives::{Boolean, UInt},
+    primitives::{Boolean, Uint},
 };
 use tokio::sync::oneshot;
 
@@ -72,7 +72,7 @@ impl From<IncomingChannel> for u16 {
 }
 
 #[derive(Debug, Clone, PartialEq, PartialOrd, Eq, Ord, Hash)]
-pub(crate) struct OutputHandle(pub UInt);
+pub(crate) struct OutputHandle(pub Uint);
 
 impl From<Handle> for OutputHandle {
     fn from(handle: Handle) -> Self {
@@ -87,7 +87,7 @@ impl From<OutputHandle> for Handle {
 }
 
 #[derive(Debug, Clone, PartialEq, PartialOrd, Eq, Ord, Hash)]
-pub(crate) struct InputHandle(pub UInt);
+pub(crate) struct InputHandle(pub Uint);
 
 impl From<Handle> for InputHandle {
     fn from(handle: Handle) -> Self {
@@ -111,10 +111,10 @@ pub(crate) struct LinkFlow {
     pub delivery_count: Option<SequenceNo>,
 
     /// The current maximum number of messages that can be received
-    pub link_credit: Option<UInt>,
+    pub link_credit: Option<Uint>,
 
     /// The number of available messages
-    pub available: Option<UInt>,
+    pub available: Option<Uint>,
 
     /// Indicates drain mode
     pub drain: Boolean,

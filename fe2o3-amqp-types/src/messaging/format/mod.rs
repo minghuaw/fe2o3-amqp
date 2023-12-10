@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 use serde_amqp::{
     macros::{DeserializeComposite, SerializeComposite},
-    primitives::{OrderedMap, UByte},
+    primitives::{OrderedMap, Ubyte},
     value::Value,
 };
 use std::ops::{Deref, DerefMut};
@@ -18,7 +18,7 @@ pub use header::Header;
 
 /// relative message priority
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize, Eq, PartialOrd, Ord, Hash)]
-pub struct Priority(pub UByte);
+pub struct Priority(pub Ubyte);
 
 impl Default for Priority {
     fn default() -> Self {
@@ -26,13 +26,13 @@ impl Default for Priority {
     }
 }
 
-impl From<UByte> for Priority {
-    fn from(value: UByte) -> Self {
+impl From<Ubyte> for Priority {
+    fn from(value: Ubyte) -> Self {
         Self(value)
     }
 }
 
-impl From<Priority> for UByte {
+impl From<Priority> for Ubyte {
     fn from(value: Priority) -> Self {
         value.0
     }

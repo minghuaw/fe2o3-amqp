@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 use serde_amqp::{
     macros::{DeserializeComposite, SerializeComposite},
-    primitives::{Array, Symbol, UInt, UShort},
+    primitives::{Array, Symbol, Uint, Ushort},
 };
 
 use crate::definitions::{Fields, IetfLanguageTag, Milliseconds};
@@ -62,7 +62,7 @@ pub struct Open {
 /// the connection with the framing-error error-code.
 /// Both peers MUST accept frames of up to 512 (MIN-MAX-FRAME-SIZE) octets.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct MaxFrameSize(pub UInt);
+pub struct MaxFrameSize(pub Uint);
 
 impl Default for MaxFrameSize {
     fn default() -> Self {
@@ -70,13 +70,13 @@ impl Default for MaxFrameSize {
     }
 }
 
-impl From<UInt> for MaxFrameSize {
-    fn from(value: UInt) -> Self {
+impl From<Uint> for MaxFrameSize {
+    fn from(value: Uint) -> Self {
         Self(value)
     }
 }
 
-impl From<MaxFrameSize> for UInt {
+impl From<MaxFrameSize> for Uint {
     fn from(value: MaxFrameSize) -> Self {
         value.0
     }
@@ -96,7 +96,7 @@ impl From<MaxFrameSize> for usize {
 /// A peer that receives a channel number outside the supported range MUST close the connection
 /// with the framing-error error-code.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct ChannelMax(pub UShort);
+pub struct ChannelMax(pub Ushort);
 
 impl Default for ChannelMax {
     fn default() -> Self {
@@ -104,13 +104,13 @@ impl Default for ChannelMax {
     }
 }
 
-impl From<UShort> for ChannelMax {
-    fn from(value: UShort) -> Self {
+impl From<Ushort> for ChannelMax {
+    fn from(value: Ushort) -> Self {
         Self(value)
     }
 }
 
-impl From<ChannelMax> for UShort {
+impl From<ChannelMax> for Ushort {
     fn from(value: ChannelMax) -> Self {
         value.0
     }

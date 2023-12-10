@@ -30,10 +30,10 @@ impl ser::Serialize for Value {
             Value::Described(v) => v.serialize(serializer),
             Value::Null => serializer.serialize_unit(),
             Value::Bool(v) => serializer.serialize_bool(*v),
-            Value::UByte(v) => serializer.serialize_u8(*v),
-            Value::UShort(v) => serializer.serialize_u16(*v),
-            Value::UInt(v) => serializer.serialize_u32(*v),
-            Value::ULong(v) => serializer.serialize_u64(*v),
+            Value::Ubyte(v) => serializer.serialize_u8(*v),
+            Value::Ushort(v) => serializer.serialize_u16(*v),
+            Value::Uint(v) => serializer.serialize_u32(*v),
+            Value::Ulong(v) => serializer.serialize_u64(*v),
             Value::Byte(v) => serializer.serialize_i8(*v),
             Value::Short(v) => serializer.serialize_i16(*v),
             Value::Int(v) => serializer.serialize_i32(*v),
@@ -132,22 +132,22 @@ impl<'a> ser::Serializer for &'a mut Serializer {
 
     #[inline]
     fn serialize_u8(self, v: u8) -> Result<Self::Ok, Self::Error> {
-        Ok(Value::UByte(v))
+        Ok(Value::Ubyte(v))
     }
 
     #[inline]
     fn serialize_u16(self, v: u16) -> Result<Self::Ok, Self::Error> {
-        Ok(Value::UShort(v))
+        Ok(Value::Ushort(v))
     }
 
     #[inline]
     fn serialize_u32(self, v: u32) -> Result<Self::Ok, Self::Error> {
-        Ok(Value::UInt(v))
+        Ok(Value::Uint(v))
     }
 
     #[inline]
     fn serialize_u64(self, v: u64) -> Result<Self::Ok, Self::Error> {
-        Ok(Value::ULong(v))
+        Ok(Value::Ulong(v))
     }
 
     #[inline]
@@ -536,7 +536,7 @@ impl<'a> ser::SerializeTupleStruct for TupleStructSerializer<'a> {
                 let value = value.serialize(self.as_mut())?;
                 match value {
                     Value::Symbol(name) => self.descriptor = Some(Descriptor::Name(name)),
-                    Value::ULong(code) => self.descriptor = Some(Descriptor::Code(code)),
+                    Value::Ulong(code) => self.descriptor = Some(Descriptor::Code(code)),
                     _ => return Err(Error::InvalidValue),
                 }
                 Ok(())
@@ -653,7 +653,7 @@ impl<'a> ser::SerializeStruct for StructSerializer<'a> {
             let value = value.serialize(self.as_mut())?;
             match value {
                 Value::Symbol(name) => self.descriptor = Some(Descriptor::Name(name)),
-                Value::ULong(code) => self.descriptor = Some(Descriptor::Code(code)),
+                Value::Ulong(code) => self.descriptor = Some(Descriptor::Code(code)),
                 _ => return Err(Error::InvalidValue),
             }
             Ok(())
@@ -800,7 +800,7 @@ impl<'a> ser::SerializeTupleVariant for VariantSerializer<'a> {
 
     fn end(self) -> Result<Self::Ok, Self::Error> {
         let value = Value::List(self.buf);
-        let index = Value::UInt(self.variant_index);
+        let index = Value::Uint(self.variant_index);
         Ok(Value::List(vec![index, value]))
     }
 }
@@ -915,7 +915,7 @@ mod tests {
         }
 
         let val = Foo::B;
-        let expected = Value::UInt(1);
+        let expected = Value::Uint(1);
         assert_eq_on_value_vs_expected(val, expected);
     }
 
@@ -930,7 +930,7 @@ mod tests {
         }
 
         let val = Foo::B(13);
-        let expected = Value::List(vec![Value::UInt(1), Value::ULong(13)]);
+        let expected = Value::List(vec![Value::Uint(1), Value::Ulong(13)]);
         assert_eq_on_value_vs_expected(val, expected);
     }
 
@@ -945,7 +945,7 @@ mod tests {
         }
         let val = Foo::B(13, "amqp".to_string());
         let expected = Value::List(vec![
-            Value::UInt(1),
+            Value::Uint(1),
             Value::List(vec![Value::Int(13), Value::String(String::from("amqp"))]),
         ]);
         assert_eq_on_value_vs_expected(val, expected);
@@ -966,8 +966,8 @@ mod tests {
             is_a: true,
         };
         let expected = Value::List(vec![
-            Value::UInt(0),
-            Value::List(vec![Value::UInt(13), Value::Bool(true)]),
+            Value::Uint(0),
+            Value::List(vec![Value::Uint(13), Value::Bool(true)]),
         ]);
         assert_eq_on_value_vs_expected(val, expected);
     }

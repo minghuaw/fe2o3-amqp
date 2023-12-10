@@ -12,8 +12,8 @@ use crate::{
 use super::{delivery::DeliveryInfo, *};
 
 pub(crate) const DESCRIBED_TYPE: u8 = EncodingCodes::DescribedType as u8;
-pub(crate) const SMALL_ULONG_TYPE: u8 = EncodingCodes::SmallULong as u8;
-pub(crate) const ULONG_TYPE: u8 = EncodingCodes::ULong as u8;
+pub(crate) const SMALL_ULONG_TYPE: u8 = EncodingCodes::SmallUlong as u8;
+pub(crate) const ULONG_TYPE: u8 = EncodingCodes::Ulong as u8;
 pub(crate) const HEADER_CODE: u8 = 0x70;
 pub(crate) const DELIV_ANNOT_CODE: u8 = 0x71;
 pub(crate) const MSG_ANNOT_CODE: u8 = 0x72;
@@ -376,7 +376,7 @@ pub(crate) fn is_section_header(b0: u8, b1: u8, b2: u8) -> bool {
         | (DESCRIBED_TYPE, SMALL_ULONG_TYPE, AMQP_SEQ_CODE)
         | (DESCRIBED_TYPE, SMALL_ULONG_TYPE, AMQP_VAL_CODE)
         | (DESCRIBED_TYPE, SMALL_ULONG_TYPE, FOOTER_CODE)
-        // Some implementation may use ULong for all u64 numbers
+        // Some implementation may use Ulong for all u64 numbers
         | (DESCRIBED_TYPE, ULONG_TYPE, HEADER_CODE)
         | (DESCRIBED_TYPE, ULONG_TYPE, DELIV_ANNOT_CODE)
         | (DESCRIBED_TYPE, ULONG_TYPE, MSG_ANNOT_CODE)

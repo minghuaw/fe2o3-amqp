@@ -7,15 +7,15 @@ use serde::{
 use serde_amqp::{
     __constants::VALUE,
     format_code::EncodingCodes,
-    primitives::{Binary, ULong, Uuid},
+    primitives::{Binary, Ulong, Uuid},
 };
 
 /// Message ID
 #[derive(Debug, Clone, PartialEq, PartialOrd, Eq, Ord, Hash)]
 pub enum MessageId {
-    /// 3.2.11 Message ID ULong
+    /// 3.2.11 Message ID Ulong
     /// <type name="message-id-ulong" class="restricted" source="ulong" provides="message-id"/>
-    ULong(ULong),
+    Ulong(Ulong),
 
     /// 3.2.12 Message ID UUID
     /// <type name="message-id-uuid" class="restricted" source="uuid" provides="message-id"/>
@@ -32,7 +32,7 @@ pub enum MessageId {
 
 impl From<u64> for MessageId {
     fn from(value: u64) -> Self {
-        Self::ULong(value)
+        Self::Ulong(value)
     }
 }
 
@@ -60,7 +60,7 @@ impl Serialize for MessageId {
         S: serde::Serializer,
     {
         match self {
-            MessageId::ULong(value) => value.serialize(serializer),
+            MessageId::Ulong(value) => value.serialize(serializer),
             MessageId::Uuid(value) => value.serialize(serializer),
             MessageId::Binary(value) => value.serialize(serializer),
             MessageId::String(value) => value.serialize(serializer),
@@ -69,7 +69,7 @@ impl Serialize for MessageId {
 }
 
 enum Field {
-    ULong,
+    Ulong,
     Uuid,
     Binary,
     String,
@@ -92,11 +92,11 @@ impl<'de> de::Visitor<'de> for FieldVisitor {
             .try_into()
             .map_err(|_| de::Error::custom("Unable to convert to EncodingCodes"))?
         {
-            EncodingCodes::ULong0 | EncodingCodes::SmallULong | EncodingCodes::ULong => {
-                Ok(Field::ULong)
+            EncodingCodes::Ulong0 | EncodingCodes::SmallUlong | EncodingCodes::Ulong => {
+                Ok(Field::Ulong)
             }
             EncodingCodes::Uuid => Ok(Field::Uuid),
-            EncodingCodes::VBin8 | EncodingCodes::VBin32 => Ok(Field::Binary),
+            EncodingCodes::Vbin8 | EncodingCodes::Vbin32 => Ok(Field::Binary),
             EncodingCodes::Str8 | EncodingCodes::Str32 => Ok(Field::String),
             _ => Err(de::Error::custom("Invalid format code")),
         }
@@ -128,9 +128,9 @@ impl<'de> de::Visitor<'de> for Visitor {
         let (val, de) = data.variant()?;
 
         match val {
-            Field::ULong => {
+            Field::Ulong => {
                 let val = de.newtype_variant()?;
-                Ok(MessageId::ULong(val))
+                Ok(MessageId::Ulong(val))
             }
             Field::Uuid => {
                 let val = de.newtype_variant()?;
@@ -153,7 +153,7 @@ impl<'de> de::Deserialize<'de> for MessageId {
     where
         D: serde::Deserializer<'de>,
     {
-        const VARIANTS: &[&str] = &["ULong", "Uuid", "Binary", "String"];
+        const VARIANTS: &[&str] = &["Ulong", "Uuid", "Binary", "String"];
         // VALUE will peek the format code
         deserializer.deserialize_enum(VALUE, VARIANTS, Visitor {})
     }
@@ -171,7 +171,7 @@ mod tests {
 
     #[test]
     fn test_message_id_ulong() {
-        let id = MessageId::ULong(123456789);
+        let id = MessageId::Ulong(123456789);
         let buf = to_vec(&id).unwrap();
         let deserialized: MessageId = from_slice(&buf).unwrap();
         assert_eq!(id, deserialized);

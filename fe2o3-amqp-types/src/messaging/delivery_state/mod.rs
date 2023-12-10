@@ -1,7 +1,7 @@
 //! Part 3.4 delivery state
 
 use serde_amqp::macros::{DeserializeComposite, SerializeComposite};
-use serde_amqp::primitives::{Boolean, UInt, ULong};
+use serde_amqp::primitives::{Boolean, Uint, Ulong};
 
 use crate::definitions::{Error, Fields};
 
@@ -493,10 +493,10 @@ impl From<Outcome> for DeliveryState {
 )]
 pub struct Received {
     /// <field name="section-number" type="uint" mandatory="true"/>
-    pub section_number: UInt,
+    pub section_number: Uint,
 
     /// <field name="section-offset" type="ulong" mandatory="true"/>
-    pub section_offset: ULong,
+    pub section_offset: Ulong,
 }
 
 impl From<Received> for DeliveryState {
@@ -643,7 +643,7 @@ mod tests {
         // try deserialize from list8
         let buf = vec![
             EncodingCodes::DescribedType as u8,
-            EncodingCodes::SmallULong as u8,
+            EncodingCodes::SmallUlong as u8,
             0x24, // descriptor code
             EncodingCodes::List8 as u8,
             0, // size
@@ -657,7 +657,7 @@ mod tests {
         // try deserialize from list8
         let buf = vec![
             EncodingCodes::DescribedType as u8,
-            EncodingCodes::SmallULong as u8,
+            EncodingCodes::SmallUlong as u8,
             0x24, // descriptor code
             EncodingCodes::List32 as u8,
             0,
@@ -686,7 +686,7 @@ mod tests {
         // try deserialize from list8
         let buf = vec![
             EncodingCodes::DescribedType as u8,
-            EncodingCodes::SmallULong as u8,
+            EncodingCodes::SmallUlong as u8,
             0x25, // descriptor code
             EncodingCodes::List8 as u8,
             0, // size
