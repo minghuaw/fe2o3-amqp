@@ -2260,7 +2260,7 @@ mod test {
         assert_eq!(decoded, value);
     }
 
-    #[allow(dead_code)]
+    #[allow(dead_code, clippy::all)]
     #[derive(Serialize)]
     enum Enumeration {
         UnitVariant,

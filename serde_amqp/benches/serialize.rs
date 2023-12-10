@@ -1,3 +1,5 @@
+#![allow(clippy::all)]
+
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
 use rand::{
     distributions::{Alphanumeric, DistString},

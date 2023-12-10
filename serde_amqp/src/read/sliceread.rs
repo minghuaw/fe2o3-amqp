@@ -76,6 +76,8 @@ impl<'s> Read<'s> for SliceReader<'s> {
         visitor.visit_borrowed_str(str_slice)
     }
 }
+
+#[allow(clippy::all)]
 #[cfg(test)]
 mod tests {
     use super::{Read, SliceReader};
