@@ -58,8 +58,16 @@ impl From<Priority> for Ubyte {
 /// If the delivery-annotations section is omitted, it is equivalent to a delivery-annotations
 /// section containing an empty map of annotations.
 #[derive(
-    Debug, Clone, Default, DeserializeComposite, SerializeComposite, PartialEq, Eq, PartialOrd, Ord,
-    Hash
+    Debug,
+    Clone,
+    Default,
+    DeserializeComposite,
+    SerializeComposite,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    Hash,
 )]
 #[amqp_contract(
     name = "amqp:delivery-annotations:map",
@@ -121,8 +129,16 @@ impl From<MapBuilder<OwnedKey, Value, DeliveryAnnotations>> for Option<DeliveryA
 /// If the message-annotations section is omitted, it is equivalent to a message-annotations section
 /// containing an empty map of annotations.
 #[derive(
-    Debug, Clone, Default, SerializeComposite, DeserializeComposite, PartialEq, Eq, PartialOrd, Ord,
-    Hash
+    Debug,
+    Clone,
+    Default,
+    SerializeComposite,
+    DeserializeComposite,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    Hash,
 )]
 #[amqp_contract(
     name = "amqp:message-annotations:map",
@@ -174,8 +190,16 @@ use self::{annotations::OwnedKey, map_builder::MapBuilder};
 ///     <descriptor name="amqp:application-properties:map" code="0x00000000:0x00000074"/>
 /// </type>
 #[derive(
-    Debug, Clone, Default, SerializeComposite, DeserializeComposite, PartialEq, Eq, PartialOrd, Ord,
-    Hash
+    Debug,
+    Clone,
+    Default,
+    SerializeComposite,
+    DeserializeComposite,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    Hash,
 )]
 #[amqp_contract(
     name = "amqp:application-properties:map",
@@ -234,8 +258,16 @@ pub use amqp_value::*;
 ///     <descriptor name="amqp:footer:map" code="0x00000000:0x00000078"/>
 /// </type>
 #[derive(
-    Debug, Clone, Default, SerializeComposite, DeserializeComposite, PartialEq, Eq, PartialOrd, Ord,
-    Hash
+    Debug,
+    Clone,
+    Default,
+    SerializeComposite,
+    DeserializeComposite,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    Hash,
 )]
 #[amqp_contract(
     name = "amqp:footer:map",

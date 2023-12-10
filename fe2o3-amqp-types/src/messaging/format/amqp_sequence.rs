@@ -13,8 +13,16 @@ use crate::messaging::{
 ///     <descriptor name="amqp:amqp-sequence:list" code="0x00000000:0x00000076"/>
 /// </type>
 #[derive(
-    Debug, Clone, Default, PartialEq, Eq, PartialOrd, Ord, SerializeComposite, DeserializeComposite,
-    Hash
+    Debug,
+    Clone,
+    Default,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    SerializeComposite,
+    DeserializeComposite,
+    Hash,
 )]
 #[amqp_contract(
     name = "amqp:amqp-sequence:list",

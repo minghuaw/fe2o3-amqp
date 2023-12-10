@@ -1,6 +1,9 @@
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
-use rand::{RngCore, distributions::{Alphanumeric, DistString}, Rng};
-use serde_amqp::primitives::{Dec32, Dec64, Dec128, Timestamp, Binary};
+use rand::{
+    distributions::{Alphanumeric, DistString},
+    Rng, RngCore,
+};
+use serde_amqp::primitives::{Binary, Dec128, Dec32, Dec64, Timestamp};
 
 fn criterion_benchmark(c: &mut Criterion) {
     let value = ();
@@ -175,7 +178,7 @@ fn criterion_benchmark(c: &mut Criterion) {
     // Symbol is very similar to String, so we don't benchmark it.
 
     // TODO: How to bench list, map, and array? Define number of items or bytes?
-    
+
     // 16 bytes of u64
     let mut value = vec![0u64; 16 / std::mem::size_of::<u64>()];
     rand::thread_rng().fill(&mut value[..]);

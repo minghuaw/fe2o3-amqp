@@ -15,7 +15,15 @@ use super::Priority;
 ///     <descriptor name="amqp:header:list" code="0x00000000:0x00000070"/>
 /// </type>
 #[derive(
-    Debug, Clone, Default, DeserializeComposite, SerializeComposite, PartialEq, Eq, PartialOrd, Ord,
+    Debug,
+    Clone,
+    Default,
+    DeserializeComposite,
+    SerializeComposite,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
     Hash,
 )]
 #[amqp_contract(

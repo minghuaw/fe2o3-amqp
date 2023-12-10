@@ -1,9 +1,4 @@
-use testcontainers::{
-    clients::Cli,
-    core::WaitFor,
-    GenericImage,
-    Container,
-};
+use testcontainers::{clients::Cli, core::WaitFor, Container, GenericImage};
 use tokio::sync::OnceCell;
 
 static DOCKER: OnceCell<Cli> = OnceCell::const_new();
