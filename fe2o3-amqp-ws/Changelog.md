@@ -1,5 +1,11 @@
 # fe2o3-amqp-ws
 
+## 0.9.0
+
+1. Unified versioning with other `fe2o3-amqp` crates
+2. Updated `http` to "1"
+3. Updated `tungstenite` and `tokio-tungstenite` to "0.21"
+
 ## 0.4.0
 
 1. Updated `tungstenite` and `tokio-tungstenite` to "0.20.1", which fixes [CVE-2023-43669](https://github.com/snapview/tungstenite-rs/pull/379).
