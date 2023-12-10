@@ -119,7 +119,6 @@ mod tests {
 
     use crate::{
         definitions::{ReceiverSettleMode, Role, SenderSettleMode},
-        messaging::Source,
     };
 
     use super::Attach;
@@ -132,7 +131,7 @@ mod tests {
             role: Role::Sender,
             snd_settle_mode: SenderSettleMode::Unsettled,
             rcv_settle_mode: ReceiverSettleMode::First,
-            source: Some(Box::new(Source::default())),
+            source: Some(Box::default()),
             target: None,
             unsettled: None,
             incomplete_unsettled: false,
@@ -165,7 +164,7 @@ mod tests {
             0x40, 0x40,
         ];
 
-        let result: Result<Attach, _> = from_slice(&buf);
+        let result: Result<Attach, _> = from_slice(buf);
         assert!(result.is_ok());
     }
 

@@ -1840,7 +1840,7 @@ mod tests {
 
     use super::{from_reader, from_slice};
 
-    fn assert_eq_from_reader_vs_expected<'de, T>(buf: &'de [u8], expected: T)
+    fn assert_eq_from_reader_vs_expected<T>(buf: &[u8], expected: T)
     where
         T: DeserializeOwned + std::fmt::Debug + PartialEq,
     {
@@ -2047,7 +2047,7 @@ mod tests {
     #[test]
     fn test_deserialize_symbol() {
         use crate::primitives::Symbol;
-        let buf = &[0xa3 as u8, 0x04, 0x61, 0x6d, 0x71, 0x70];
+        let buf = &[0xa3_u8, 0x04, 0x61, 0x6d, 0x71, 0x70];
         let expected = Symbol::from("amqp");
         assert_eq_from_reader_vs_expected(buf, expected);
     }

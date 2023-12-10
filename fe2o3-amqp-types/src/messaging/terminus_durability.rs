@@ -5,8 +5,10 @@ use serde::{Deserialize, Serialize};
 /// <type name="terminus-durability" class="restricted" source="uint">
 /// </type>
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Default)]
 pub enum TerminusDurability {
     /// <choice name="none" value="0"/>
+    #[default]
     None,
 
     /// <choice name="configuration" value="1"/>
@@ -16,10 +18,6 @@ pub enum TerminusDurability {
     UnsettledState,
 }
 
-impl Default for TerminusDurability {
-    fn default() -> Self {
-        TerminusDurability::None
-    }
-}
+
 
 // TODO: test serialization and deserialization

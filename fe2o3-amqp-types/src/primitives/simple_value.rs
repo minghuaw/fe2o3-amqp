@@ -4,12 +4,14 @@ use super::*;
 
 /// A subset of `Value`
 #[derive(Debug, Clone, Hash, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Default)]
 pub enum SimpleValue {
     /// Indicates an empty value
     ///
     /// encoding code = 0x40,
     /// category = fixed, width = 0,
     /// label = "the null value"
+    #[default]
     Null,
 
     /// Represents a true or false value
@@ -212,11 +214,7 @@ pub enum SimpleValue {
     Symbol(Symbol),
 }
 
-impl Default for SimpleValue {
-    fn default() -> Self {
-        SimpleValue::Null
-    }
-}
+
 
 impl SimpleValue {
     /// Get the format code of the type

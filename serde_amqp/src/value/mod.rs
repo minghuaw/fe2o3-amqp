@@ -22,6 +22,7 @@ pub(crate) mod ser;
 
 /// Primitive type definitions
 #[derive(Debug, Clone, Hash, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Default)]
 pub enum Value {
     /// Described type
     ///
@@ -33,6 +34,7 @@ pub enum Value {
     /// encoding code = 0x40,
     /// category = fixed, width = 0,
     /// label = "the null value"
+    #[default]
     Null,
 
     /// Represents a true or false value
@@ -274,11 +276,7 @@ pub enum Value {
     Array(Array<Value>),
 }
 
-impl Default for Value {
-    fn default() -> Self {
-        Value::Null
-    }
-}
+
 
 impl Value {
     /// Get the format code of the value type
@@ -877,7 +875,7 @@ mod tests {
     #[test]
     fn test_value_list() {
         let expected = Value::List(
-            vec![1u32, 2, 3, 4]
+            [1u32, 2, 3, 4]
                 .iter()
                 .map(|v| Value::Uint(*v))
                 .collect(),
@@ -899,7 +897,7 @@ mod tests {
     #[test]
     fn test_value_array() {
         use crate::primitives::Array;
-        let vec: Vec<Value> = vec![1i32, 2, 3, 4]
+        let vec: Vec<Value> = [1i32, 2, 3, 4]
             .iter()
             .map(|val| Value::Int(*val))
             .collect();

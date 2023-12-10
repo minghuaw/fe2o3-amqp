@@ -1713,9 +1713,8 @@ mod test {
 
     #[test]
     fn test_unit() {
-        let val = ();
         let expected = vec![EncodingCodes::Null as u8];
-        assert_eq_on_serialized_vs_expected(val, &expected);
+        assert_eq_on_serialized_vs_expected((), &expected);
     }
 
     #[test]
@@ -1903,7 +1902,7 @@ mod test {
     fn test_serialize_symbol() {
         use crate::primitives::Symbol;
         let symbol = Symbol::from("amqp");
-        let expected = vec![0xa3 as u8, 0x04, 0x61, 0x6d, 0x71, 0x70];
+        let expected = vec![0xa3_u8, 0x04, 0x61, 0x6d, 0x71, 0x70];
         assert_eq_on_serialized_vs_expected(symbol, &expected);
     }
 

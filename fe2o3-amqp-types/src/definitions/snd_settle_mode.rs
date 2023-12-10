@@ -7,20 +7,18 @@ use serde::{de, ser};
 /// <type name="sender-settle-mode" class="restricted" source="ubyte">
 /// </type>
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Default)]
 pub enum SenderSettleMode {
     /// <choice name="unsettled" value="0"/>
     Unsettled,
     /// <choice name="settled" value="1"/>
     Settled,
     /// <choice name="mixed" value="2"/>
+    #[default]
     Mixed,
 }
 
-impl Default for SenderSettleMode {
-    fn default() -> Self {
-        SenderSettleMode::Mixed
-    }
-}
+
 
 impl From<SenderSettleMode> for u8 {
     fn from(mode: SenderSettleMode) -> Self {

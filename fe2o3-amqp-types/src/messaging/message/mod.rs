@@ -258,7 +258,7 @@ impl<'de> de::Visitor<'de> for FieldVisitor {
             0x0000_0000_0000_0072 => Field::MessageAnnotations,
             0x0000_0000_0000_0073 => Field::Properties,
             0x0000_0000_0000_0074 => Field::ApplicationProperties,
-            0x0000_0000_0000_0075 | 0x0000_0000_0000_0076 | 0x0000_0000_0000_0077 => Field::Body,
+            0x0000_0000_0000_0075..=0x0000_0000_0000_0077 => Field::Body,
             0x0000_0000_0000_0078 => Field::Footer,
             _ => return Err(serde_amqp::serde::de::Error::custom("Unknown identifier")),
         };
