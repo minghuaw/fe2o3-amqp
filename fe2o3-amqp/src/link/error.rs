@@ -1,4 +1,5 @@
 use fe2o3_amqp_types::definitions::{self, AmqpError, ErrorCondition, SessionError};
+use serde_amqp::primitives::Symbol;
 use tokio::sync::TryLockError;
 
 use crate::session::error::AllocLinkError;
@@ -174,6 +175,25 @@ impl From<TryLockError> for SenderTryConsumeError {
     }
 }
 
+/// The desired filter(s) on the receiver is not supported by the remote peer
+#[derive(Debug)]
+pub struct DesiredFilterNotSupported {
+    /// The desired filter(s)
+    pub not_supported: Vec<Symbol>,
+}
+
+impl std::fmt::Display for DesiredFilterNotSupported {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "Desired filter(s) {:?} are not supported.",
+            self.not_supported
+        )
+    }
+}
+
+impl std::error::Error for DesiredFilterNotSupported {}
+
 /// Errors associated with attaching a link as receiver
 #[derive(Debug, thiserror::Error)]
 pub enum ReceiverAttachError {
@@ -248,6 +268,10 @@ pub enum ReceiverAttachError {
     /// Remote peer closed the link with an error
     #[error("Remote peer closed with error {:?}", .0)]
     RemoteClosedWithError(definitions::Error),
+
+    /// The desired filter(s) on the receiver is not supported by the remote peer
+    #[error("{:?}", .0)]
+    DesiredFilterNotSupported(#[from] DesiredFilterNotSupported),
 }
 
 impl From<AllocLinkError> for ReceiverAttachError {
