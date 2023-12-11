@@ -117,9 +117,7 @@ pub struct Attach {
 mod tests {
     use serde_amqp::{from_slice, to_vec};
 
-    use crate::{
-        definitions::{ReceiverSettleMode, Role, SenderSettleMode},
-    };
+    use crate::definitions::{ReceiverSettleMode, Role, SenderSettleMode};
 
     use super::Attach;
 

@@ -29,7 +29,7 @@ impl VerifySource for Source {
         // sets the filter actually in place (including any filters defaulted at the node). The receiving endpoint
         // MUST check that the filter in place meets its needs and take responsibility for detaching if it does
         // not.
-        // 
+        //
         // This does NOT check if the value is the same because some brokers uses the draft version of the
         // spec where the value is not a described type.
         verify_filter(&self.filter, &other.filter)?;
@@ -97,7 +97,10 @@ mod tests {
         let filter = filters::LegacyAmqpDirectBinding("DESIRED".to_string());
 
         let mut desired = FilterSet::new();
-        desired.insert(filters::LegacyAmqpDirectBinding::descriptor_name(), Value::Described(Box::new(filter.into())));
+        desired.insert(
+            filters::LegacyAmqpDirectBinding::descriptor_name(),
+            Value::Described(Box::new(filter.into())),
+        );
 
         let supported = None;
 
@@ -109,12 +112,18 @@ mod tests {
         let filter = filters::LegacyAmqpDirectBinding("DESIRED".to_string());
 
         let mut desired = FilterSet::new();
-        desired.insert(filters::LegacyAmqpDirectBinding::descriptor_name(), Value::Described(Box::new(filter.into())));
+        desired.insert(
+            filters::LegacyAmqpDirectBinding::descriptor_name(),
+            Value::Described(Box::new(filter.into())),
+        );
 
         let filter = filters::LegacyAmqpTopicBinding("SUPPORTED".to_string());
 
         let mut supported = FilterSet::new();
-        supported.insert(filters::LegacyAmqpTopicBinding::descriptor_name(), Value::Described(Box::new(filter.into())));
+        supported.insert(
+            filters::LegacyAmqpTopicBinding::descriptor_name(),
+            Value::Described(Box::new(filter.into())),
+        );
 
         assert!(verify_filter(&Some(desired), &Some(supported)).is_err());
     }
@@ -124,10 +133,16 @@ mod tests {
         let filter = filters::LegacyAmqpDirectBinding("DESIRED".to_string());
 
         let mut desired = FilterSet::new();
-        desired.insert(filters::LegacyAmqpDirectBinding::descriptor_name(), Value::Described(Box::new(filter.into())));
+        desired.insert(
+            filters::LegacyAmqpDirectBinding::descriptor_name(),
+            Value::Described(Box::new(filter.into())),
+        );
 
         let mut supported = FilterSet::new();
-        supported.insert(filters::LegacyAmqpDirectBinding::descriptor_name(), Value::Null);
+        supported.insert(
+            filters::LegacyAmqpDirectBinding::descriptor_name(),
+            Value::Null,
+        );
 
         assert!(verify_filter(&Some(desired), &Some(supported)).is_err());
     }
@@ -137,12 +152,18 @@ mod tests {
         let filter = filters::LegacyAmqpDirectBinding("DESIRED".to_string());
 
         let mut desired = FilterSet::new();
-        desired.insert(filters::LegacyAmqpDirectBinding::descriptor_name(), Value::Described(Box::new(filter.into())));
+        desired.insert(
+            filters::LegacyAmqpDirectBinding::descriptor_name(),
+            Value::Described(Box::new(filter.into())),
+        );
 
         let filter = filters::LegacyAmqpDirectBinding("DESIRED".to_string());
 
         let mut supported = FilterSet::new();
-        supported.insert(filters::LegacyAmqpDirectBinding::descriptor_name(), Value::Described(Box::new(filter.into())));
+        supported.insert(
+            filters::LegacyAmqpDirectBinding::descriptor_name(),
+            Value::Described(Box::new(filter.into())),
+        );
 
         assert!(verify_filter(&Some(desired), &Some(supported)).is_ok());
     }
