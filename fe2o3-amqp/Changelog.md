@@ -6,6 +6,7 @@
 2. Updated `tokio-rustls` to "0.25"
 3. Updated `rustls` to "0.22"
 4. Updated `webpkit-roots` to "0.26"
+5. Added `DesiredFilterNotSupported` error variant to `ReceiverAttachError` (issue #62)
 
 ## 0.8.24
 
