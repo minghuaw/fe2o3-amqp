@@ -1,6 +1,6 @@
 [package]
 name = "serde_amqp"
-version = "0.5.9"
+version = "0.9.0"
 edition = "2021"
 description = "A serde implementation of AMQP1.0 protocol."
 license = "MIT/Apache-2.0"
@@ -37,12 +37,12 @@ rand = "0.8"
 uuid = { version = "1", features = ["v4"] }
 
 [dependencies]
-ordered-float = { version = "3", features = ["serde"] }
+ordered-float = { version = "4", features = ["serde"] }
 serde = { version = "1", features = ["derive"] }
 serde_bytes = "0.11"
 thiserror = "1"
 bytes = "1"
-indexmap = { version = "1.9.1", features = ["serde"] }
+indexmap = { version = "2", features = ["serde"] }
 
 # derive
 serde_amqp_derive = { version = "0.2.0", path = "../serde_amqp_derive", optional = true }

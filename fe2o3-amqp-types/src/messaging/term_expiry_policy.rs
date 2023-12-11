@@ -11,11 +11,13 @@ use serde_amqp::primitives::Symbol;
 /// </type>
 ///
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Default)]
 pub enum TerminusExpiryPolicy {
     /// <choice name="link-detach" value="link-detach"/>
     LinkDetach,
 
     /// <choice name="session-end" value="session-end"/>
+    #[default]
     SessionEnd,
 
     /// <choice name="connection-close" value="connection-close"/>
@@ -25,11 +27,7 @@ pub enum TerminusExpiryPolicy {
     Never,
 }
 
-impl Default for TerminusExpiryPolicy {
-    fn default() -> Self {
-        TerminusExpiryPolicy::SessionEnd
-    }
-}
+
 
 impl From<&TerminusExpiryPolicy> for Symbol {
     fn from(value: &TerminusExpiryPolicy) -> Self {

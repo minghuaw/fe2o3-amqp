@@ -863,7 +863,7 @@ impl<'a> ser::SerializeStructVariant for VariantSerializer<'a> {
     }
 }
 
-#[allow(unused_imports)]
+#[allow(unused_imports, clippy::all)]
 #[cfg(test)]
 mod tests {
     use std::collections::{BTreeMap, HashMap};

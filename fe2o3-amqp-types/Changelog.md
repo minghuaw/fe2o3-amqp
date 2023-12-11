@@ -1,5 +1,10 @@
 # Change Log
 
+## 0.9.0
+
+1. Unified versioning with other `fe2o3-amqp` crates
+2. Updated `ordered-float` to "4"
+
 ## 0.7.1
 
 1. Derive `Hash` for `Message` and related types

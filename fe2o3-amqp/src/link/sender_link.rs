@@ -106,7 +106,16 @@ where
                             (Err(err), _) => Err(LinkStateError::from(err)),
                         }
                     },
-                    _ => {
+                    Some(_frame) => {
+                        // Other frames should not forwarded to the sender by the session
+                        #[cfg(feature = "tracing")]
+                        tracing::error!("Unexpected frame: {:?}", _frame);
+                        #[cfg(feature = "log")]
+                        log::error!("Unexpected frame: {:?}", _frame);
+
+                        Err(LinkStateError::ExpectImmediateDetach)
+                    }
+                    None => {
                         // Other frames should not forwarded to the sender by the session
                         Err(LinkStateError::ExpectImmediateDetach)
                     }

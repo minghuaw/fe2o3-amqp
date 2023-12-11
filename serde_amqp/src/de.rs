@@ -189,7 +189,7 @@ impl<'de, R: Read<'de>> Deserializer<R> {
             .get_elem_code_or_read_format_code()
             .ok_or_else(|| Error::unexpected_eof("parse_u8"))??
         {
-            EncodingCodes::UByte => {
+            EncodingCodes::Ubyte => {
                 let byte = self
                     .reader
                     .next()
@@ -206,7 +206,7 @@ impl<'de, R: Read<'de>> Deserializer<R> {
             .get_elem_code_or_read_format_code()
             .ok_or_else(|| Error::unexpected_eof("parse_u16"))??
         {
-            EncodingCodes::UShort => {
+            EncodingCodes::Ushort => {
                 let bytes = self
                     .reader
                     .read_const_bytes()
@@ -223,21 +223,21 @@ impl<'de, R: Read<'de>> Deserializer<R> {
             .get_elem_code_or_read_format_code()
             .ok_or_else(|| Error::unexpected_eof("parse_u32"))??
         {
-            EncodingCodes::UInt => {
+            EncodingCodes::Uint => {
                 let bytes = self
                     .reader
                     .read_const_bytes()
                     .ok_or_else(|| Error::unexpected_eof("Expecting u32"))?;
                 Ok(u32::from_be_bytes(bytes))
             }
-            EncodingCodes::SmallUInt => {
+            EncodingCodes::SmallUint => {
                 let byte = self
                     .reader
                     .next()
                     .ok_or_else(|| Error::unexpected_eof("Expecting small u32"))?;
                 Ok(byte as u32)
             }
-            EncodingCodes::UInt0 => Ok(0),
+            EncodingCodes::Uint0 => Ok(0),
             _ => Err(Error::InvalidFormatCode),
         }
     }
@@ -248,21 +248,21 @@ impl<'de, R: Read<'de>> Deserializer<R> {
             .get_elem_code_or_read_format_code()
             .ok_or_else(|| Error::unexpected_eof("parse_u64"))??
         {
-            EncodingCodes::ULong => {
+            EncodingCodes::Ulong => {
                 let bytes = self
                     .reader
                     .read_const_bytes()
                     .ok_or_else(|| Error::unexpected_eof("Expecting u64"))?;
                 Ok(u64::from_be_bytes(bytes))
             }
-            EncodingCodes::SmallULong => {
+            EncodingCodes::SmallUlong => {
                 let byte = self
                     .reader
                     .next()
                     .ok_or_else(|| Error::unexpected_eof("Expecting small u64"))?;
                 Ok(byte as u64)
             }
-            EncodingCodes::ULong0 => Ok(0),
+            EncodingCodes::Ulong0 => Ok(0),
             _ => Err(Error::InvalidFormatCode),
         }
     }
@@ -372,7 +372,7 @@ impl<'de, R: Read<'de>> Deserializer<R> {
             .get_elem_code_or_read_format_code()
             .ok_or_else(|| Error::unexpected_eof("parse_byte_buf"))??
         {
-            EncodingCodes::VBin8 => {
+            EncodingCodes::Vbin8 => {
                 let len = self
                     .reader
                     .next()
@@ -381,7 +381,7 @@ impl<'de, R: Read<'de>> Deserializer<R> {
                     .read_bytes(len as usize)
                     .ok_or_else(|| Error::unexpected_eof("Expecting vbin8"))
             }
-            EncodingCodes::VBin32 => {
+            EncodingCodes::Vbin32 => {
                 let len_bytes = self
                     .reader
                     .read_const_bytes()
@@ -500,8 +500,8 @@ impl<'de, R: Read<'de>> Deserializer<R> {
                 let slice = std::str::from_utf8(&_buf[6..])?;
                 visitor.visit_str(slice)
             }
-            EncodingCodes::ULong0 => visitor.visit_u64(0),
-            EncodingCodes::SmallULong => {
+            EncodingCodes::Ulong0 => visitor.visit_u64(0),
+            EncodingCodes::SmallUlong => {
                 // [0] is 0x00,
                 // [1] is format code
                 // [2] is the value
@@ -512,7 +512,7 @@ impl<'de, R: Read<'de>> Deserializer<R> {
                 let value = buf[2];
                 visitor.visit_u64(value as u64)
             }
-            EncodingCodes::ULong => {
+            EncodingCodes::Ulong => {
                 // [0] is 0x00,
                 // [1] is format code
                 // [2..10] is value bytes
@@ -558,19 +558,19 @@ where
             EncodingCodes::Short => self.deserialize_i16(visitor),
             EncodingCodes::Int | EncodingCodes::SmallInt => self.deserialize_i32(visitor),
             EncodingCodes::Long | EncodingCodes::SmallLong => self.deserialize_i64(visitor),
-            EncodingCodes::UByte => self.deserialize_u8(visitor),
-            EncodingCodes::UShort => self.deserialize_u16(visitor),
-            EncodingCodes::UInt | EncodingCodes::SmallUInt | EncodingCodes::UInt0 => {
+            EncodingCodes::Ubyte => self.deserialize_u8(visitor),
+            EncodingCodes::Ushort => self.deserialize_u16(visitor),
+            EncodingCodes::Uint | EncodingCodes::SmallUint | EncodingCodes::Uint0 => {
                 self.deserialize_u32(visitor)
             }
-            EncodingCodes::ULong | EncodingCodes::SmallULong | EncodingCodes::ULong0 => {
+            EncodingCodes::Ulong | EncodingCodes::SmallUlong | EncodingCodes::Ulong0 => {
                 self.deserialize_u64(visitor)
             }
             EncodingCodes::Float => self.deserialize_f32(visitor),
             EncodingCodes::Double => self.deserialize_f64(visitor),
             EncodingCodes::Char => self.deserialize_char(visitor),
             EncodingCodes::Str32 | EncodingCodes::Str8 => self.deserialize_string(visitor),
-            EncodingCodes::VBin32 | EncodingCodes::VBin8 => self.deserialize_byte_buf(visitor),
+            EncodingCodes::Vbin32 | EncodingCodes::Vbin8 => self.deserialize_byte_buf(visitor),
             EncodingCodes::Null => self.deserialize_unit(visitor),
 
             EncodingCodes::Sym32 | EncodingCodes::Sym8 => {
@@ -767,12 +767,12 @@ where
                     .get_elem_code_or_read_format_code()
                     .ok_or_else(|| Error::unexpected_eof("Expecting format code"))??
                 {
-                    EncodingCodes::VBin8 => self
+                    EncodingCodes::Vbin8 => self
                         .reader
                         .next()
                         .ok_or_else(|| Error::unexpected_eof(""))?
                         as usize,
-                    EncodingCodes::VBin32 => {
+                    EncodingCodes::Vbin32 => {
                         let bytes = self
                             .reader
                             .read_const_bytes()
@@ -1173,7 +1173,7 @@ where
                 .ok_or_else(|| Error::unexpected_eof("Expecting format code"))??
                 .try_into()?
             {
-                EncodingCodes::UInt | EncodingCodes::UInt0 | EncodingCodes::SmallUInt => {
+                EncodingCodes::Uint | EncodingCodes::Uint0 | EncodingCodes::SmallUint => {
                     visitor.visit_enum(VariantAccess::new(self))
                 }
                 EncodingCodes::List0 => Err(Error::InvalidFormatCode),
@@ -1279,7 +1279,7 @@ where
                     // If a struct is serialized as a map, then the fields are serialized as str
                     EncodingCodes::Str32 | EncodingCodes::Str8 => self.deserialize_str(visitor),
                     // FIXME: Enum variant currently are serialzied as list of with variant index and a list
-                    EncodingCodes::UInt | EncodingCodes::SmallUInt | EncodingCodes::UInt0 => {
+                    EncodingCodes::Uint | EncodingCodes::SmallUint | EncodingCodes::Uint0 => {
                         self.deserialize_u32(visitor)
                     }
                     // Potentially using `Descriptor::Name` as identifier
@@ -1287,7 +1287,7 @@ where
                         self.deserialize_newtype_struct(SYMBOL, visitor)
                     }
                     // Potentially using `Descriptor::Code` as identifier
-                    EncodingCodes::ULong | EncodingCodes::SmallULong | EncodingCodes::ULong0 => {
+                    EncodingCodes::Ulong | EncodingCodes::SmallUlong | EncodingCodes::Ulong0 => {
                         self.deserialize_u64(visitor)
                     }
                     // Other types should not be used to serialize identifiers
@@ -1840,7 +1840,7 @@ mod tests {
 
     use super::{from_reader, from_slice};
 
-    fn assert_eq_from_reader_vs_expected<'de, T>(buf: &'de [u8], expected: T)
+    fn assert_eq_from_reader_vs_expected<T>(buf: &[u8], expected: T)
     where
         T: DeserializeOwned + std::fmt::Debug + PartialEq,
     {
@@ -1916,14 +1916,14 @@ mod tests {
 
     #[test]
     fn test_deserialize_u8() {
-        let buf = &[EncodingCodes::UByte as u8, 5u8];
+        let buf = &[EncodingCodes::Ubyte as u8, 5u8];
         let expected = 5u8;
         assert_eq_from_reader_vs_expected(buf, expected);
     }
 
     #[test]
     fn test_deserialize_u16() {
-        let mut buf = vec![EncodingCodes::UShort as u8];
+        let mut buf = vec![EncodingCodes::Ushort as u8];
         buf.append(&mut 300u16.to_be_bytes().to_vec());
         let expected = 300u16;
         assert_eq_from_reader_vs_expected(&buf, expected);
@@ -1931,22 +1931,22 @@ mod tests {
 
     #[test]
     fn test_deserialize_u32() {
-        let buf = &[EncodingCodes::UInt0 as u8];
+        let buf = &[EncodingCodes::Uint0 as u8];
         let expected = 0u32;
         assert_eq_from_reader_vs_expected(buf, expected);
 
-        let buf = &[EncodingCodes::SmallUInt as u8, 5u8];
+        let buf = &[EncodingCodes::SmallUint as u8, 5u8];
         let expected = 5u32;
         assert_eq_from_reader_vs_expected(buf, expected);
     }
 
     #[test]
     fn test_deserialize_u64() {
-        let buf = &[EncodingCodes::ULong0 as u8];
+        let buf = &[EncodingCodes::Ulong0 as u8];
         let expected = 0u64;
         assert_eq_from_reader_vs_expected(buf, expected);
 
-        let buf = &[EncodingCodes::SmallULong as u8, 5u8];
+        let buf = &[EncodingCodes::SmallUlong as u8, 5u8];
         let expected = 5u64;
         assert_eq_from_reader_vs_expected(buf, expected);
     }
@@ -1991,7 +1991,7 @@ mod tests {
     fn test_deserialize_bytes() {
         use serde_bytes::ByteBuf;
 
-        let buf = [EncodingCodes::VBin8 as u8, 4, 1, 2, 3, 4];
+        let buf = [EncodingCodes::Vbin8 as u8, 4, 1, 2, 3, 4];
         let expected = ByteBuf::from(vec![1u8, 2, 3, 4]);
         assert_eq_from_slice_vs_expected(&buf, expected);
     }
@@ -2047,7 +2047,7 @@ mod tests {
     #[test]
     fn test_deserialize_symbol() {
         use crate::primitives::Symbol;
-        let buf = &[0xa3 as u8, 0x04, 0x61, 0x6d, 0x71, 0x70];
+        let buf = &[0xa3_u8, 0x04, 0x61, 0x6d, 0x71, 0x70];
         let expected = Symbol::from("amqp");
         assert_eq_from_reader_vs_expected(buf, expected);
     }
@@ -2242,7 +2242,7 @@ mod tests {
 
         let buf = vec![
             EncodingCodes::DescribedType as u8,
-            EncodingCodes::SmallULong as u8,
+            EncodingCodes::SmallUlong as u8,
             0x13,
             EncodingCodes::List0 as u8,
         ];
@@ -2252,7 +2252,7 @@ mod tests {
 
         let buf = vec![
             EncodingCodes::DescribedType as u8,
-            EncodingCodes::SmallULong as u8,
+            EncodingCodes::SmallUlong as u8,
             0x13,
             EncodingCodes::List8 as u8,
             2,
@@ -2265,7 +2265,7 @@ mod tests {
 
         let buf = vec![
             EncodingCodes::DescribedType as u8,
-            EncodingCodes::SmallULong as u8,
+            EncodingCodes::SmallUlong as u8,
             0x13,
             EncodingCodes::List8 as u8,
             4,
@@ -2280,7 +2280,7 @@ mod tests {
 
         let buf = vec![
             EncodingCodes::DescribedType as u8,
-            EncodingCodes::SmallULong as u8,
+            EncodingCodes::SmallUlong as u8,
             0x13,
             EncodingCodes::List8 as u8,
             4,
@@ -2306,7 +2306,7 @@ mod tests {
 
         let buf = vec![
             EncodingCodes::DescribedType as u8,
-            EncodingCodes::SmallULong as u8,
+            EncodingCodes::SmallUlong as u8,
             0x13,
             EncodingCodes::List0 as u8,
         ];
@@ -2316,7 +2316,7 @@ mod tests {
 
         let buf = vec![
             EncodingCodes::DescribedType as u8,
-            EncodingCodes::SmallULong as u8,
+            EncodingCodes::SmallUlong as u8,
             0x13,
             EncodingCodes::List8 as u8,
             2,
@@ -2329,7 +2329,7 @@ mod tests {
 
         let buf = vec![
             EncodingCodes::DescribedType as u8,
-            EncodingCodes::SmallULong as u8,
+            EncodingCodes::SmallUlong as u8,
             0x13,
             EncodingCodes::List8 as u8,
             4,
@@ -2344,7 +2344,7 @@ mod tests {
 
         let buf = vec![
             EncodingCodes::DescribedType as u8,
-            EncodingCodes::SmallULong as u8,
+            EncodingCodes::SmallUlong as u8,
             0x13,
             EncodingCodes::List8 as u8,
             4,
@@ -2371,13 +2371,13 @@ mod tests {
         };
         let buf = vec![
             EncodingCodes::DescribedType as u8,
-            EncodingCodes::SmallULong as u8,
+            EncodingCodes::SmallUlong as u8,
             0x13,
             EncodingCodes::List8 as u8,
             4,
             2,
             EncodingCodes::Null as u8,
-            EncodingCodes::SmallUInt as u8,
+            EncodingCodes::SmallUint as u8,
             0x13,
         ];
         let bar2: Bar = from_slice(&buf).unwrap();

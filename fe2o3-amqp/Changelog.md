@@ -1,5 +1,13 @@
 # Change Log
 
+## 0.9.0
+
+1. Unified versioning with other `fe2o3-amqp` crates
+2. Updated `tokio-rustls` to "0.25"
+3. Updated `rustls` to "0.22"
+4. Updated `webpkit-roots` to "0.26"
+5. Added `DesiredFilterNotSupported` error variant to `ReceiverAttachError` (issue #62)
+
 ## 0.8.24
 
 1. Reset default features

@@ -1,7 +1,8 @@
 //! Error types for the management client.
 
 use fe2o3_amqp::link::{
-    DispositionError, ReceiverAttachError, RecvError, SendError, SenderAttachError, DetachThenResumeSenderError, DetachThenResumeReceiverError,
+    DetachThenResumeReceiverError, DetachThenResumeSenderError, DispositionError,
+    ReceiverAttachError, RecvError, SendError, SenderAttachError,
 };
 use fe2o3_amqp_types::messaging::Outcome;
 

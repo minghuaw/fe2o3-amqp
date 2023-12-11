@@ -193,7 +193,7 @@
 //!     pub initial_delivery_count: Option<SequenceNo>,
 //!
 //!     /// <field name="max-message-size" type="ulong"/>
-//!     pub max_message_size: Option<ULong>,
+//!     pub max_message_size: Option<Ulong>,
 //!
 //!     /// <field name="offered-capabilities" type="symbol" multiple="true"/>
 //!     pub offered_capabilities: Option<Array<Symbol>>,

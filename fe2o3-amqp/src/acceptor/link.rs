@@ -10,7 +10,7 @@ use fe2o3_amqp_types::{
     definitions::{Fields, ReceiverSettleMode, Role, SenderSettleMode},
     messaging::{Source, Target},
     performatives::Attach,
-    primitives::{Symbol, ULong},
+    primitives::{Symbol, Ulong},
 };
 
 use crate::{connection::DEFAULT_OUTGOING_BUFFER_SIZE, session::SessionHandle, util::Initialized};
@@ -34,7 +34,7 @@ pub enum LinkEndpoint {
 #[derive(Debug, Clone)]
 pub(crate) struct SharedLinkAcceptorFields {
     /// The maximum message size supported by the link endpoint
-    pub max_message_size: Option<ULong>,
+    pub max_message_size: Option<Ulong>,
 
     /// Link properties
     pub properties: Option<Fields>,
@@ -90,7 +90,7 @@ impl Default for SharedLinkAcceptorFields {
 /// # Accepts incoming link with default configuration
 ///
 /// ```rust,ignore
-/// use crate::acceptor::{ListenerSessionHandle, LinkAcceptor, LinkEndpoint};
+/// use fe2o3_amqp::acceptor::{ListenerSessionHandle, LinkAcceptor, LinkEndpoint};
 ///
 /// let mut session: ListenerSessionHandle = session_acceptor.accept(&mut connection).await.unwrap();
 /// let link_acceptor = LinkAcceptor::new();
@@ -119,7 +119,7 @@ impl Default for SharedLinkAcceptorFields {
 /// modifying the field after the acceptor is built.
 ///
 /// ```rust
-/// use crate::acceptor::{LinkAcceptor, SupportedSenderSettleModes};
+/// use fe2o3_amqp::acceptor::{LinkAcceptor, SupportedSenderSettleModes};
 ///
 /// let link_acceptor = LinkAcceptor::builder()
 ///     .supported_sender_settle_modes(SupportedSenderSettleModes::Settled)

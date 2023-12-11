@@ -1,6 +1,6 @@
 use serde_amqp::{
     macros::{DeserializeComposite, SerializeComposite},
-    primitives::{Array, Boolean, OrderedMap, Symbol, ULong},
+    primitives::{Array, Boolean, OrderedMap, Symbol, Ulong},
 };
 
 use crate::{
@@ -101,7 +101,7 @@ pub struct Attach {
     pub initial_delivery_count: Option<SequenceNo>,
 
     /// <field name="max-message-size" type="ulong"/>
-    pub max_message_size: Option<ULong>,
+    pub max_message_size: Option<Ulong>,
 
     /// <field name="offered-capabilities" type="symbol" multiple="true"/>
     pub offered_capabilities: Option<Array<Symbol>>,
@@ -117,10 +117,7 @@ pub struct Attach {
 mod tests {
     use serde_amqp::{from_slice, to_vec};
 
-    use crate::{
-        definitions::{ReceiverSettleMode, Role, SenderSettleMode},
-        messaging::Source,
-    };
+    use crate::definitions::{ReceiverSettleMode, Role, SenderSettleMode};
 
     use super::Attach;
 
@@ -132,7 +129,7 @@ mod tests {
             role: Role::Sender,
             snd_settle_mode: SenderSettleMode::Unsettled,
             rcv_settle_mode: ReceiverSettleMode::First,
-            source: Some(Box::new(Source::default())),
+            source: Some(Box::default()),
             target: None,
             unsettled: None,
             incomplete_unsettled: false,
@@ -165,7 +162,7 @@ mod tests {
             0x40, 0x40,
         ];
 
-        let result: Result<Attach, _> = from_slice(&buf);
+        let result: Result<Attach, _> = from_slice(buf);
         assert!(result.is_ok());
     }
 
@@ -205,7 +202,7 @@ mod tests {
         let s = std::mem::size_of::<Option<SequenceNo>>();
         println!("initial_delivery_count {:?}", s);
 
-        let s = std::mem::size_of::<Option<ULong>>();
+        let s = std::mem::size_of::<Option<Ulong>>();
         println!("max_message_size {:?}", s);
 
         let s = std::mem::size_of::<Option<Vec<Symbol>>>();

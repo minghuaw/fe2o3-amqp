@@ -8,7 +8,7 @@ use fe2o3_amqp_types::{
         self, DeliveryNumber, DeliveryTag, Fields, Handle, Role, SequenceNo, TransferNumber,
     },
     performatives::{Attach, Begin, Detach, Disposition, End, Flow, Transfer},
-    primitives::{Symbol, UInt},
+    primitives::{Symbol, Uint},
     states::SessionState,
 };
 use slab::Slab;
@@ -50,7 +50,7 @@ pub use builder::*;
 use self::frame::{SessionFrame, SessionFrameBody, SessionOutgoingItem};
 
 /// Default incoming_window and outgoing_window
-pub const DEFAULT_WINDOW: UInt = 2048;
+pub const DEFAULT_WINDOW: Uint = 2048;
 
 /// A handle to the [`Session`] event loop
 ///

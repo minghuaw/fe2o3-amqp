@@ -49,7 +49,7 @@ use fe2o3_amqp_types::messaging::{
 ///
 /// # Attach a new sender with default configurations
 ///
-/// ```rust
+/// ```rust,ignore
 /// let mut sender = Sender::attach(
 ///     &mut session,           // mutable reference to SessionHandle
 ///     "rust-sender-link-1",   // link name
@@ -87,7 +87,7 @@ use fe2o3_amqp_types::messaging::{
 ///
 /// # Customize configuration with [`builder::Builder`]
 ///
-/// ```rust
+/// ```rust,ignore
 /// let mut sender = Sender::builder()
 ///     .name("rust-sender-link-1")
 ///     .target("q1")
@@ -182,7 +182,7 @@ impl Sender {
     ///
     /// # Example
     ///
-    /// ```rust
+    /// ```rust,ignore
     /// let sender = Sender::attach(
     ///     &mut session,           // mutable reference to SessionHandle
     ///     "rust-sender-link-1",   // link name
@@ -300,7 +300,7 @@ impl Sender {
     ///
     /// ### Example
     ///
-    /// ```rust
+    /// ```rust,ignore
     /// #[derive(Serialize)]
     /// struct Foo {
     ///     a: i32
@@ -317,7 +317,7 @@ impl Sender {
     ///
     /// ### Example
     ///
-    /// ```rust
+    /// ```rust,ignore
     /// #[derive(Serialize)]
     /// struct Foo {
     ///     a: i32
@@ -339,7 +339,7 @@ impl Sender {
     /// One could still use the message builder to not only set other non-body fields of
     /// [`Message`] but also choosing the type of body section.
     ///
-    /// ```rust
+    /// ```rust,ignore
     /// #[derive(Serialize)]
     /// struct Foo {
     ///     a: i32
@@ -369,7 +369,7 @@ impl Sender {
     /// `SenderSettleMode` is set to either `SenderSettleMode::Settled` or
     /// `SenderSettleMode::Unsettled`
     ///
-    /// ```rust
+    /// ```rust,ignore
     /// let sendable = Sendable::builder()
     ///     .message("hello AMQP")
     ///     .settled(true)
@@ -429,7 +429,7 @@ impl Sender {
     ///
     /// # Example
     ///
-    /// ```rust
+    /// ```rust,ignore
     /// let fut = sender.send_batchable("HELLO AMQP").await.unwrap();
     /// let result = fut.await;
     /// println!("fut {:?}", result);
@@ -1009,7 +1009,7 @@ impl SenderInner<SenderLink<Target>> {
 ///
 /// Link re-attachment
 ///
-/// ```rust
+/// ```rust,ignore
 /// let detached = sender.detach().await.unwrap();
 /// let sender = detached.resume().await.unwrap():
 /// ```

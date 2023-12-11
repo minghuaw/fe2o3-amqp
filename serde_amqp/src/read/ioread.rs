@@ -124,6 +124,7 @@ impl<'de, R: io::Read + 'de> Read<'de> for IoReader<R> {
     }
 }
 
+#[allow(clippy::all)]
 #[cfg(test)]
 mod tests {
     use crate::read::ioread::IoReader;

@@ -65,9 +65,9 @@
 //!     connection.close().await.unwrap();
 //! }
 //! ```
-//! 
+//!
 //! ## WebAssembly support
-//! 
+//!
 //! Experimental support for `wasm32-unknown-unknown` target has been added since "0.3.0" and uses a
 //! `web_sys::WebSocket` internally. An example of this can be found in
 //! [examples/wasm32-in-browser](https://github.com/minghuaw/fe2o3-amqp/tree/main/examples/wasm32-in-browser).
@@ -79,9 +79,7 @@ use std::{
 
 use futures_util::{ready, Sink, Stream};
 use pin_project_lite::pin_project;
-use tokio::{
-    io::{AsyncRead, AsyncWrite},
-};
+use tokio::io::{AsyncRead, AsyncWrite};
 
 mod error;
 pub use error::Error;

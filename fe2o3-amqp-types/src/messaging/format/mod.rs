@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 use serde_amqp::{
     macros::{DeserializeComposite, SerializeComposite},
-    primitives::{OrderedMap, UByte},
+    primitives::{OrderedMap, Ubyte},
     value::Value,
 };
 use std::ops::{Deref, DerefMut};
@@ -18,7 +18,7 @@ pub use header::Header;
 
 /// relative message priority
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize, Eq, PartialOrd, Ord, Hash)]
-pub struct Priority(pub UByte);
+pub struct Priority(pub Ubyte);
 
 impl Default for Priority {
     fn default() -> Self {
@@ -26,13 +26,13 @@ impl Default for Priority {
     }
 }
 
-impl From<UByte> for Priority {
-    fn from(value: UByte) -> Self {
+impl From<Ubyte> for Priority {
+    fn from(value: Ubyte) -> Self {
         Self(value)
     }
 }
 
-impl From<Priority> for UByte {
+impl From<Priority> for Ubyte {
     fn from(value: Priority) -> Self {
         value.0
     }
@@ -58,8 +58,16 @@ impl From<Priority> for UByte {
 /// If the delivery-annotations section is omitted, it is equivalent to a delivery-annotations
 /// section containing an empty map of annotations.
 #[derive(
-    Debug, Clone, Default, DeserializeComposite, SerializeComposite, PartialEq, Eq, PartialOrd, Ord,
-    Hash
+    Debug,
+    Clone,
+    Default,
+    DeserializeComposite,
+    SerializeComposite,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    Hash,
 )]
 #[amqp_contract(
     name = "amqp:delivery-annotations:map",
@@ -121,8 +129,16 @@ impl From<MapBuilder<OwnedKey, Value, DeliveryAnnotations>> for Option<DeliveryA
 /// If the message-annotations section is omitted, it is equivalent to a message-annotations section
 /// containing an empty map of annotations.
 #[derive(
-    Debug, Clone, Default, SerializeComposite, DeserializeComposite, PartialEq, Eq, PartialOrd, Ord,
-    Hash
+    Debug,
+    Clone,
+    Default,
+    SerializeComposite,
+    DeserializeComposite,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    Hash,
 )]
 #[amqp_contract(
     name = "amqp:message-annotations:map",
@@ -174,8 +190,16 @@ use self::{annotations::OwnedKey, map_builder::MapBuilder};
 ///     <descriptor name="amqp:application-properties:map" code="0x00000000:0x00000074"/>
 /// </type>
 #[derive(
-    Debug, Clone, Default, SerializeComposite, DeserializeComposite, PartialEq, Eq, PartialOrd, Ord,
-    Hash
+    Debug,
+    Clone,
+    Default,
+    SerializeComposite,
+    DeserializeComposite,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    Hash,
 )]
 #[amqp_contract(
     name = "amqp:application-properties:map",
@@ -234,8 +258,16 @@ pub use amqp_value::*;
 ///     <descriptor name="amqp:footer:map" code="0x00000000:0x00000078"/>
 /// </type>
 #[derive(
-    Debug, Clone, Default, SerializeComposite, DeserializeComposite, PartialEq, Eq, PartialOrd, Ord,
-    Hash
+    Debug,
+    Clone,
+    Default,
+    SerializeComposite,
+    DeserializeComposite,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    Hash,
 )]
 #[amqp_contract(
     name = "amqp:footer:map",

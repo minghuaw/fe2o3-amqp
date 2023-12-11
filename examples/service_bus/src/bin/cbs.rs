@@ -8,6 +8,7 @@ use fe2o3_amqp::{
     connection::ConnectionHandle,
     sasl_profile::SaslProfile,
     Connection, Receiver, Sender, Session,
+    types::{messaging::Body, primitives::Value},
 };
 use fe2o3_amqp_cbs::{client::CbsClient, token::CbsToken};
 use hmac::{
@@ -107,7 +108,7 @@ async fn main() {
         .accepted_or("Not accepted")
         .unwrap();
 
-    let delivery = receiver.recv::<String>().await.unwrap();
+    let delivery = receiver.recv::<Body<Value>>().await.unwrap();
     receiver.accept(&delivery).await.unwrap();
 
     println!("{:?}", delivery.body());

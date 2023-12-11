@@ -4,12 +4,14 @@ use super::*;
 
 /// A subset of `Value`
 #[derive(Debug, Clone, Hash, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Default)]
 pub enum SimpleValue {
     /// Indicates an empty value
     ///
     /// encoding code = 0x40,
     /// category = fixed, width = 0,
     /// label = "the null value"
+    #[default]
     Null,
 
     /// Represents a true or false value
@@ -32,7 +34,7 @@ pub enum SimpleValue {
     /// encoding code = 0x50,
     /// category = fixed, width = 1
     /// label = "8-bit unsigned integer"
-    UByte(UByte),
+    Ubyte(Ubyte),
 
     /// Integer in the range 0 to 2^16-1 inclusive
     ///
@@ -40,7 +42,7 @@ pub enum SimpleValue {
     /// category = fixed, width = 2
     /// label = "16-bit unsigned integer in network byte order"
     /// (AKA. Big-Endian, rust uses BigEndian by default)
-    UShort(UShort),
+    Ushort(Ushort),
 
     /// Integer in the range 0 to 2^32-1 inclusive
     ///
@@ -56,7 +58,7 @@ pub enum SimpleValue {
     /// encoding name = "uint0", encoding code = 0x43
     /// category = fixed, width = 0
     /// label = "the uint value 0"
-    UInt(UInt),
+    Uint(Uint),
 
     /// Integer in the range 0 to 2^64-1 inclusive
     ///
@@ -72,7 +74,7 @@ pub enum SimpleValue {
     /// encoding name = "ulong0", encoding code = 0x44
     /// category = fixed, width = 0
     /// label = "the ulong value 0"
-    ULong(ULong),
+    Ulong(Ulong),
 
     /// Integer in the range -(2^7) to 2^7-1 inclusive
     ///
@@ -212,11 +214,7 @@ pub enum SimpleValue {
     Symbol(Symbol),
 }
 
-impl Default for SimpleValue {
-    fn default() -> Self {
-        SimpleValue::Null
-    }
-}
+
 
 impl SimpleValue {
     /// Get the format code of the type
@@ -224,10 +222,10 @@ impl SimpleValue {
         let code = match *self {
             SimpleValue::Null => EncodingCodes::Null,
             SimpleValue::Bool(_) => EncodingCodes::Boolean,
-            SimpleValue::UByte(_) => EncodingCodes::UByte,
-            SimpleValue::UShort(_) => EncodingCodes::UShort,
-            SimpleValue::UInt(_) => EncodingCodes::UInt,
-            SimpleValue::ULong(_) => EncodingCodes::ULong,
+            SimpleValue::Ubyte(_) => EncodingCodes::Ubyte,
+            SimpleValue::Ushort(_) => EncodingCodes::Ushort,
+            SimpleValue::Uint(_) => EncodingCodes::Uint,
+            SimpleValue::Ulong(_) => EncodingCodes::Ulong,
             SimpleValue::Byte(_) => EncodingCodes::Byte,
             SimpleValue::Short(_) => EncodingCodes::Short,
             SimpleValue::Int(_) => EncodingCodes::Int,
@@ -240,7 +238,7 @@ impl SimpleValue {
             SimpleValue::Char(_) => EncodingCodes::Char,
             SimpleValue::Timestamp(_) => EncodingCodes::Timestamp,
             SimpleValue::Uuid(_) => EncodingCodes::Uuid,
-            SimpleValue::Binary(_) => EncodingCodes::VBin32,
+            SimpleValue::Binary(_) => EncodingCodes::Vbin32,
             SimpleValue::String(_) => EncodingCodes::Str32,
             SimpleValue::Symbol(_) => EncodingCodes::Sym32,
         };
@@ -256,10 +254,10 @@ impl ser::Serialize for SimpleValue {
         match self {
             SimpleValue::Null => serializer.serialize_unit(),
             SimpleValue::Bool(v) => serializer.serialize_bool(*v),
-            SimpleValue::UByte(v) => serializer.serialize_u8(*v),
-            SimpleValue::UShort(v) => serializer.serialize_u16(*v),
-            SimpleValue::UInt(v) => serializer.serialize_u32(*v),
-            SimpleValue::ULong(v) => serializer.serialize_u64(*v),
+            SimpleValue::Ubyte(v) => serializer.serialize_u8(*v),
+            SimpleValue::Ushort(v) => serializer.serialize_u16(*v),
+            SimpleValue::Uint(v) => serializer.serialize_u32(*v),
+            SimpleValue::Ulong(v) => serializer.serialize_u64(*v),
             SimpleValue::Byte(v) => serializer.serialize_i8(*v),
             SimpleValue::Short(v) => serializer.serialize_i16(*v),
             SimpleValue::Int(v) => serializer.serialize_i32(*v),
@@ -297,10 +295,10 @@ impl TryFrom<Value> for SimpleValue {
         let val = match value {
             Value::Null => SimpleValue::Null,
             Value::Bool(v) => SimpleValue::Bool(v),
-            Value::UByte(v) => SimpleValue::UByte(v),
-            Value::UShort(v) => SimpleValue::UShort(v),
-            Value::UInt(v) => SimpleValue::UInt(v),
-            Value::ULong(v) => SimpleValue::ULong(v),
+            Value::Ubyte(v) => SimpleValue::Ubyte(v),
+            Value::Ushort(v) => SimpleValue::Ushort(v),
+            Value::Uint(v) => SimpleValue::Uint(v),
+            Value::Ulong(v) => SimpleValue::Ulong(v),
             Value::Byte(v) => SimpleValue::Byte(v),
             Value::Short(v) => SimpleValue::Short(v),
             Value::Int(v) => SimpleValue::Int(v),
@@ -329,10 +327,10 @@ impl From<SimpleValue> for Value {
         match value {
             SimpleValue::Null => Value::Null,
             SimpleValue::Bool(v) => Value::Bool(v),
-            SimpleValue::UByte(v) => Value::UByte(v),
-            SimpleValue::UShort(v) => Value::UShort(v),
-            SimpleValue::UInt(v) => Value::UInt(v),
-            SimpleValue::ULong(v) => Value::ULong(v),
+            SimpleValue::Ubyte(v) => Value::Ubyte(v),
+            SimpleValue::Ushort(v) => Value::Ushort(v),
+            SimpleValue::Uint(v) => Value::Uint(v),
+            SimpleValue::Ulong(v) => Value::Ulong(v),
             SimpleValue::Byte(v) => Value::Byte(v),
             SimpleValue::Short(v) => Value::Short(v),
             SimpleValue::Int(v) => Value::Int(v),
@@ -368,10 +366,10 @@ macro_rules! impl_from_for_simple_value {
 
 impl_from_for_simple_value! {
     Bool, bool,
-    UByte, u8,
-    UShort, u16,
-    UInt, u32,
-    ULong, u64,
+    Ubyte, u8,
+    Ushort, u16,
+    Uint, u32,
+    Ulong, u64,
     Byte, i8,
     Short, i16,
     Int, i32,
@@ -428,10 +426,10 @@ macro_rules! impl_try_from_for_simple_value_variant {
 
 impl_try_from_for_simple_value_variant! {
     Bool, bool,
-    UByte, u8,
-    UShort, u16,
-    UInt, u32,
-    ULong, u64,
+    Ubyte, u8,
+    Ushort, u16,
+    Uint, u32,
+    Ulong, u64,
     Byte, i8,
     Short, i16,
     Int, i32,

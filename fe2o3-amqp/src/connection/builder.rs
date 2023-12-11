@@ -741,22 +741,13 @@ impl<'a> Builder<'a, mode::ConnectorWithId, ()> {
             mpsc::Sender<SessionFrame>,
         ) -> Result<ConnectionHandle<()>, OpenError>,
     {
-        use librustls::{ClientConfig, OwnedTrustAnchor, RootCertStore};
+        use librustls::{ClientConfig, RootCertStore};
         use std::sync::Arc;
         use tokio_rustls::TlsConnector;
 
         let mut root_cert_store = RootCertStore::empty();
-        root_cert_store.add_server_trust_anchors(webpki_roots::TLS_SERVER_ROOTS.0.iter().map(
-            |ta| {
-                OwnedTrustAnchor::from_subject_spki_name_constraints(
-                    ta.subject,
-                    ta.spki,
-                    ta.name_constraints,
-                )
-            },
-        ));
+        root_cert_store.extend(webpki_roots::TLS_SERVER_ROOTS.iter().cloned());
         let config = ClientConfig::builder()
-            .with_safe_defaults()
             .with_root_certificates(root_cert_store)
             .with_no_client_auth();
         let connector = TlsConnector::from(Arc::new(config));
@@ -801,7 +792,7 @@ cfg_not_wasm32! {
         ///
         /// # Raw AMQP connection
         ///
-        /// ```rust
+        /// ```rust,ignore
         /// let connection = Connection::builder()
         ///     .container_id("connection-1")
         ///     .open("amqp://localhost:5672")
@@ -1071,7 +1062,7 @@ cfg_not_wasm32! {
             ///
             /// # Raw AMQP connection
             ///
-            /// ```rust
+            /// ```rust,ignore
             /// let connection = Connection::builder()
             ///     .container_id("connection-1")
             ///     .open("amqp://localhost:5672")
@@ -1199,7 +1190,7 @@ cfg_not_wasm32! {
             ///
             /// # Raw AMQP connection
             ///
-            /// ```rust
+            /// ```rust,ignore
             /// let connection = Connection::builder()
             ///     .container_id("connection-1")
             ///     .open("amqp://localhost:5672")

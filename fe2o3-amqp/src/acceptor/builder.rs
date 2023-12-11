@@ -9,7 +9,7 @@ use fe2o3_amqp_types::{
     },
     messaging::{Source, Target},
     performatives::{ChannelMax, MaxFrameSize, Open},
-    primitives::{Array, Symbol, ULong},
+    primitives::{Array, Symbol, Ulong},
 };
 
 use crate::{
@@ -418,7 +418,7 @@ where
     }
 
     /// The maximum message size supported by the link endpoint
-    pub fn max_message_size(mut self, max_size: impl Into<ULong>) -> Self {
+    pub fn max_message_size(mut self, max_size: impl Into<Ulong>) -> Self {
         self.inner.shared.max_message_size = Some(max_size.into());
         self
     }
@@ -597,7 +597,7 @@ cfg_transaction! {
         }
     
         /// The maximum message size supported by the link endpoint
-        pub fn max_message_size(mut self, max_size: impl Into<ULong>) -> Self {
+        pub fn max_message_size(mut self, max_size: impl Into<Ulong>) -> Self {
             self.inner.shared.max_message_size = Some(max_size.into());
             self
         }

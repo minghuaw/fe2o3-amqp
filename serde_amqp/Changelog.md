@@ -1,5 +1,12 @@
 # Change Log
 
+## 0.9.0
+
+1. Unified versioning with other `fe2o3-amqp` crates
+2. Changed `Value` variants to strictly follow the rust naming convention
+3. Updated `ordered-float` to "4"
+4. Updated `indexmap` to "2"
+
 ## 0.5.9
 
 1. Fixed a bug where `str` and `bytes` of length `u8::MAX` are serialized incorrectly as `str8-utf8`
@@ -91,10 +98,10 @@
 
 1. Breaking Changes
    1. For consistencies, changed:
-      1. `EncodingCodes::Ulong0` to `EncodingCodes::ULong0`
-      2. `EncodingCodes::SmallUlong` to `EncodingCodes::SmallULong`
-      3. `EncodingCodes::Uint0` to `EncodingCodes::UInt0`
-      4. `EncodingCodes::SmallUint` to `EncodingCodes::SmallUInt`
+      1. `EncodingCodes::Ulong0` to `EncodingCodes::Ulong0`
+      2. `EncodingCodes::SmallUlong` to `EncodingCodes::SmallUlong`
+      3. `EncodingCodes::Uint0` to `EncodingCodes::Uint0`
+      4. `EncodingCodes::SmallUint` to `EncodingCodes::SmallUint`
 
 ## 0.2.5
 

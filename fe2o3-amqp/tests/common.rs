@@ -1,9 +1,4 @@
-use testcontainers::{
-    clients::Cli,
-    core::WaitFor,
-    images::{self, generic::GenericImage},
-    Container,
-};
+use testcontainers::{clients::Cli, core::WaitFor, Container, GenericImage};
 use tokio::sync::OnceCell;
 
 static DOCKER: OnceCell<Cli> = OnceCell::const_new();
@@ -15,13 +10,13 @@ pub async fn setup_activemq_artemis(
     let docker = DOCKER.get_or_init(|| async { Cli::default() }).await;
     let image = match (username, password) {
         (Some(username), Some(password)) => {
-            images::generic::GenericImage::new("docker.io/vromero/activemq-artemis", "latest")
+            GenericImage::new("docker.io/vromero/activemq-artemis", "latest")
                 .with_env_var("ARTEMIS_USERNAME", username)
                 .with_env_var("ARTEMIS_PASSWORD", password)
                 .with_exposed_port(5672)
                 .with_wait_for(WaitFor::seconds(5))
         }
-        _ => images::generic::GenericImage::new("docker.io/vromero/activemq-artemis", "latest")
+        _ => GenericImage::new("docker.io/vromero/activemq-artemis", "latest")
             .with_env_var("DISABLE_SECURITY", "true")
             .with_exposed_port(5672)
             .with_wait_for(WaitFor::seconds(5)),
@@ -40,13 +35,13 @@ pub async fn setup_rabbitmq_amqp10(
     let docker = DOCKER.get_or_init(|| async { Cli::default() }).await;
     let image = match (username, password) {
         (Some(username), Some(password)) => {
-            images::generic::GenericImage::new("docker.io/minghuaw/rabbitmq-amqp1.0", "latest")
+            GenericImage::new("docker.io/minghuaw/rabbitmq-amqp1.0", "latest")
                 .with_env_var("RABBITMQ_DEFAULT_USER", username)
                 .with_env_var("RABBITMQ_DEFAULT_PASS", password)
                 .with_exposed_port(5672)
                 .with_wait_for(WaitFor::seconds(10))
         }
-        _ => images::generic::GenericImage::new("docker.io/minghuaw/rabbitmq-amqp1.0", "latest")
+        _ => GenericImage::new("docker.io/minghuaw/rabbitmq-amqp1.0", "latest")
             .with_exposed_port(5672)
             .with_wait_for(WaitFor::seconds(10)),
     };

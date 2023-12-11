@@ -22,6 +22,7 @@ pub(crate) mod ser;
 
 /// Primitive type definitions
 #[derive(Debug, Clone, Hash, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Default)]
 pub enum Value {
     /// Described type
     ///
@@ -33,6 +34,7 @@ pub enum Value {
     /// encoding code = 0x40,
     /// category = fixed, width = 0,
     /// label = "the null value"
+    #[default]
     Null,
 
     /// Represents a true or false value
@@ -55,7 +57,7 @@ pub enum Value {
     /// encoding code = 0x50,
     /// category = fixed, width = 1
     /// label = "8-bit unsigned integer"
-    UByte(u8),
+    Ubyte(u8),
 
     /// Integer in the range 0 to 2^16-1 inclusive
     ///
@@ -63,7 +65,7 @@ pub enum Value {
     /// category = fixed, width = 2
     /// label = "16-bit unsigned integer in network byte order"
     /// (AKA. Big-Endian, rust uses BigEndian by default)
-    UShort(u16),
+    Ushort(u16),
 
     /// Integer in the range 0 to 2^32-1 inclusive
     ///
@@ -79,7 +81,7 @@ pub enum Value {
     /// encoding name = "uint0", encoding code = 0x43
     /// category = fixed, width = 0
     /// label = "the uint value 0"
-    UInt(u32),
+    Uint(u32),
 
     /// Integer in the range 0 to 2^64-1 inclusive
     ///
@@ -95,7 +97,7 @@ pub enum Value {
     /// encoding name = "ulong0", encoding code = 0x44
     /// category = fixed, width = 0
     /// label = "the ulong value 0"
-    ULong(u64),
+    Ulong(u64),
 
     /// Integer in the range -(2^7) to 2^7-1 inclusive
     ///
@@ -274,11 +276,7 @@ pub enum Value {
     Array(Array<Value>),
 }
 
-impl Default for Value {
-    fn default() -> Self {
-        Value::Null
-    }
-}
+
 
 impl Value {
     /// Get the format code of the value type
@@ -287,10 +285,10 @@ impl Value {
             Value::Described(_) => EncodingCodes::DescribedType,
             Value::Null => EncodingCodes::Null,
             Value::Bool(_) => EncodingCodes::Boolean,
-            Value::UByte(_) => EncodingCodes::UByte,
-            Value::UShort(_) => EncodingCodes::UShort,
-            Value::UInt(_) => EncodingCodes::UInt,
-            Value::ULong(_) => EncodingCodes::ULong,
+            Value::Ubyte(_) => EncodingCodes::Ubyte,
+            Value::Ushort(_) => EncodingCodes::Ushort,
+            Value::Uint(_) => EncodingCodes::Uint,
+            Value::Ulong(_) => EncodingCodes::Ulong,
             Value::Byte(_) => EncodingCodes::Byte,
             Value::Short(_) => EncodingCodes::Short,
             Value::Int(_) => EncodingCodes::Int,
@@ -303,7 +301,7 @@ impl Value {
             Value::Char(_) => EncodingCodes::Char,
             Value::Timestamp(_) => EncodingCodes::Timestamp,
             Value::Uuid(_) => EncodingCodes::Uuid,
-            Value::Binary(_) => EncodingCodes::VBin32,
+            Value::Binary(_) => EncodingCodes::Vbin32,
             Value::String(_) => EncodingCodes::Str32,
             Value::Symbol(_) => EncodingCodes::Sym32,
             Value::List(_) => EncodingCodes::List32,
@@ -330,10 +328,10 @@ macro_rules! impl_from_for_value {
 
 impl_from_for_value! {
     Bool, bool,
-    UByte, u8,
-    UShort, u16,
-    UInt, u32,
-    ULong, u64,
+    Ubyte, u8,
+    Ushort, u16,
+    Uint, u32,
+    Ulong, u64,
     Byte, i8,
     Short, i16,
     Int, i32,
@@ -453,10 +451,10 @@ macro_rules! impl_try_from_for_value_variant {
 
 impl_try_from_for_value_variant! {
     Bool, bool,
-    UByte, u8,
-    UShort, u16,
-    UInt, u32,
-    ULong, u64,
+    Ubyte, u8,
+    Ushort, u16,
+    Uint, u32,
+    Ulong, u64,
     Byte, i8,
     Short, i16,
     Int, i32,
@@ -622,7 +620,7 @@ impl From<serde_json::Value> for Value {
                 if n.is_i64() {
                     Value::Long(n.as_i64().expect("serde_json guaranteed this to be i64"))
                 } else if n.is_u64() {
-                    Value::ULong(n.as_u64().expect("serde_json guaranteed this to be u64"))
+                    Value::Ulong(n.as_u64().expect("serde_json guaranteed this to be u64"))
                 } else {
                     Value::Double(OrderedFloat(
                         n.as_f64().expect("serde_json guaranteed this to be f64"),
@@ -690,14 +688,14 @@ mod tests {
 
     #[test]
     fn test_value_ubyte() {
-        let expected = Value::UByte(13);
+        let expected = Value::Ubyte(13);
         let buf = to_vec(&expected).unwrap();
         assert_eq_from_reader_vs_expected(buf, expected);
     }
 
     #[test]
     fn test_value_ushort() {
-        let expected = Value::UShort(1313);
+        let expected = Value::Ushort(1313);
         let buf = to_vec(&expected).unwrap();
         assert_eq_from_reader_vs_expected(buf, expected);
     }
@@ -705,17 +703,17 @@ mod tests {
     #[test]
     fn test_value_uint() {
         // uint0
-        let expected = Value::UInt(0);
+        let expected = Value::Uint(0);
         let buf = to_vec(&expected).unwrap();
         assert_eq_from_reader_vs_expected(buf, expected);
 
         // smalluint
-        let expected = Value::UInt(255);
+        let expected = Value::Uint(255);
         let buf = to_vec(&expected).unwrap();
         assert_eq_from_reader_vs_expected(buf, expected);
 
         // uint
-        let expected = Value::UInt(u32::MAX);
+        let expected = Value::Uint(u32::MAX);
         let buf = to_vec(&expected).unwrap();
         assert_eq_from_reader_vs_expected(buf, expected);
     }
@@ -723,17 +721,17 @@ mod tests {
     #[test]
     fn test_value_ulong() {
         // ulong0
-        let expected = Value::ULong(0);
+        let expected = Value::Ulong(0);
         let buf = to_vec(&expected).unwrap();
         assert_eq_from_reader_vs_expected(buf, expected);
 
         // smallulong
-        let expected = Value::ULong(255);
+        let expected = Value::Ulong(255);
         let buf = to_vec(&expected).unwrap();
         assert_eq_from_reader_vs_expected(buf, expected);
 
         // ulong
-        let expected = Value::ULong(u64::MAX);
+        let expected = Value::Ulong(u64::MAX);
         let buf = to_vec(&expected).unwrap();
         assert_eq_from_reader_vs_expected(buf, expected);
     }
@@ -877,9 +875,9 @@ mod tests {
     #[test]
     fn test_value_list() {
         let expected = Value::List(
-            vec![1u32, 2, 3, 4]
+            [1u32, 2, 3, 4]
                 .iter()
-                .map(|v| Value::UInt(*v))
+                .map(|v| Value::Uint(*v))
                 .collect(),
         );
         let buf = to_vec(&expected).unwrap();
@@ -889,8 +887,8 @@ mod tests {
     #[test]
     fn test_value_map() {
         let mut map = OrderedMap::new();
-        map.insert(Value::UInt(13), Value::Bool(true));
-        map.insert(Value::UInt(45), Value::Bool(false));
+        map.insert(Value::Uint(13), Value::Bool(true));
+        map.insert(Value::Uint(45), Value::Bool(false));
         let expected = Value::Map(map);
         let buf = to_vec(&expected).unwrap();
         assert_eq_from_reader_vs_expected(buf, expected);
@@ -899,7 +897,7 @@ mod tests {
     #[test]
     fn test_value_array() {
         use crate::primitives::Array;
-        let vec: Vec<Value> = vec![1i32, 2, 3, 4]
+        let vec: Vec<Value> = [1i32, 2, 3, 4]
             .iter()
             .map(|val| Value::Int(*val))
             .collect();

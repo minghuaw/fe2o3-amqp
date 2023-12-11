@@ -8,7 +8,7 @@ use std::{
 use fe2o3_amqp_types::{
     definitions::{Fields, ReceiverSettleMode, SenderSettleMode, SequenceNo},
     messaging::{Source, Target, TargetArchetype},
-    primitives::{Symbol, ULong},
+    primitives::{Symbol, Ulong},
 };
 use parking_lot::RwLock;
 use tokio::sync::{mpsc, Notify};
@@ -86,7 +86,7 @@ pub struct Builder<Role, T, NameState, SS, TS> {
     pub initial_delivery_count: SequenceNo,
 
     /// The maximum message size supported by the link endpoint
-    pub max_message_size: Option<ULong>,
+    pub max_message_size: Option<Ulong>,
 
     /// The extension capabilities the sender supports
     pub offered_capabilities: Option<Vec<Symbol>>,
@@ -109,9 +109,7 @@ pub struct Builder<Role, T, NameState, SS, TS> {
     ///
     /// # Default
     ///
-    /// ```rust
-    /// auto_accept = false;
-    /// ```
+    /// `false`
     pub auto_accept: bool,
 
     /// Whether to verify the `source` field of the incoming Attach frame
@@ -366,7 +364,7 @@ impl<Role, T, NameState, SS, TS> Builder<Role, T, NameState, SS, TS> {
     }
 
     /// The maximum message size supported by the link endpoint
-    pub fn max_message_size(mut self, max_size: impl Into<ULong>) -> Self {
+    pub fn max_message_size(mut self, max_size: impl Into<Ulong>) -> Self {
         self.max_message_size = Some(max_size.into());
         self
     }

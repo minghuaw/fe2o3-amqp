@@ -1,5 +1,9 @@
 # Change Log
 
+## 0.9.0 
+
+- Unified versioning with other `fe2o3-amqp` crates
+
 ## 0.2.0
 
 - Updated `fe2o3-amqp` to "0.8.0" and `fe2o3-amqp-management` to "0.2.0" which introduced breaking

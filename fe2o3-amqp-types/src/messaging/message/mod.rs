@@ -258,7 +258,7 @@ impl<'de> de::Visitor<'de> for FieldVisitor {
             0x0000_0000_0000_0072 => Field::MessageAnnotations,
             0x0000_0000_0000_0073 => Field::Properties,
             0x0000_0000_0000_0074 => Field::ApplicationProperties,
-            0x0000_0000_0000_0075 | 0x0000_0000_0000_0076 | 0x0000_0000_0000_0077 => Field::Body,
+            0x0000_0000_0000_0075..=0x0000_0000_0000_0077 => Field::Body,
             0x0000_0000_0000_0078 => Field::Footer,
             _ => return Err(serde_amqp::serde::de::Error::custom("Unknown identifier")),
         };
@@ -663,9 +663,9 @@ mod tests {
 
     #[test]
     fn test_serialize_amqp_value_f32() {
-        let message = Message::from(AmqpValue(3.14f32));
+        let message = Message::from(AmqpValue(1.23f32));
         let buf = to_vec(&Serializable(message)).unwrap();
-        let expected = Message::from(Body::Value(AmqpValue(Value::from(3.14f32))));
+        let expected = Message::from(Body::Value(AmqpValue(Value::from(1.23f32))));
         let expected = to_vec(&Serializable(expected)).unwrap();
         assert_eq!(buf, expected);
     }

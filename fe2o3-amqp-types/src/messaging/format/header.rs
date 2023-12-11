@@ -1,7 +1,7 @@
 //! Implementation of message header
 
 use serde_amqp::{
-    primitives::{Boolean, UInt},
+    primitives::{Boolean, Uint},
     DeserializeComposite, SerializeComposite,
 };
 
@@ -15,7 +15,15 @@ use super::Priority;
 ///     <descriptor name="amqp:header:list" code="0x00000000:0x00000070"/>
 /// </type>
 #[derive(
-    Debug, Clone, Default, DeserializeComposite, SerializeComposite, PartialEq, Eq, PartialOrd, Ord,
+    Debug,
+    Clone,
+    Default,
+    DeserializeComposite,
+    SerializeComposite,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
     Hash,
 )]
 #[amqp_contract(
@@ -42,7 +50,7 @@ pub struct Header {
 
     /// <field name="delivery-count" type="uint" default="0"/>
     #[amqp_contract(default)]
-    pub delivery_count: UInt,
+    pub delivery_count: Uint,
 }
 
 impl Header {
@@ -84,7 +92,7 @@ impl Builder {
     }
 
     /// Set teh `delivery_count` field of [`Header`]
-    pub fn delivery_count(mut self, value: UInt) -> Self {
+    pub fn delivery_count(mut self, value: Uint) -> Self {
         self.inner.delivery_count = value;
         self
     }

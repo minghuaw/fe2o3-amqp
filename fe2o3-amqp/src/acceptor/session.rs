@@ -94,7 +94,7 @@ pub(crate) async fn allocate_incoming_link(
 /// # Accepts incoming session with default configuration
 ///
 /// ```rust,ignore
-/// use crate::acceptor::SessionAcceptor;
+/// use fe2o3_amqp::acceptor::SessionAcceptor;
 ///
 /// let mut connection: ListenerConnectionHandle = connection_acceptor.accept(stream).await.unwrap();
 /// let session_acceptor = SessionAcceptor::new();
@@ -121,7 +121,7 @@ pub(crate) async fn allocate_incoming_link(
 /// directly after the acceptor is built.
 ///
 /// ```rust
-/// use crate::acceptor::SessionAcceptor;
+/// use fe2o3_amqp::acceptor::SessionAcceptor;
 ///
 /// let session_acceptor = SessionAcceptor::builder()
 ///     .handle_max(16)

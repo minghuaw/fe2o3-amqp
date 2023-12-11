@@ -248,7 +248,7 @@ impl Receiver {
     /// receive, [`Body<Value>`] is probably the safest bet. [`Body<T>`] covers all possible body
     /// section types, including an empty body, and `Value` covers all possible AMQP 1.0 types.
     ///
-    /// ```rust
+    /// ```rust,ignore
     /// // `Body<Value>` covers all possibilities
     /// let delivery: Delivery<Body<Value>> = receiver.recv::<Body<Value>>().await.unwrap();
     /// receiver.accept(&delivery).await.unwrap();
@@ -260,7 +260,7 @@ impl Receiver {
     /// [`AmqpValue<Value>`] to cover the most general cases. This also applies to [`AmqpSequence`]
     /// or [`Batch<AmqpSequence>`].
     ///
-    /// ```rust
+    /// ```rust,ignore
     /// // `KnownType` must implement `serde::Deserialize`
     /// let delivery: Delivery<AmqpValue<KnownType>> = receiver.recv::<AmqpValue<KnownType>>().await.unwrap();
     /// receiver.accept(&delivery).await.unwrap();
@@ -268,7 +268,7 @@ impl Receiver {
     ///
     /// Another option to use a custom type is to implement the [`FromBody`] trait on a custom type.
     ///
-    /// ```rust
+    /// ```rust,ignore
     /// #[derive(Deserialize)]
     /// struct Foo {
     ///     a: i32
@@ -1063,7 +1063,7 @@ impl ReceiverInner<ReceiverLink<Target>> {
 ///
 /// Link re-attachment
 ///
-/// ```rust
+/// ```rust,ignore
 /// let detached = receiver.detach().await.unwrap();
 /// let resuming_receiver = detached.resume().await.unwrap();
 /// ```

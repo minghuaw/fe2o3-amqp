@@ -5,18 +5,16 @@ use serde::{de, ser};
 /// <type name="receiver-settle-mode" class="restricted" source="ubyte">
 /// </type>
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Default)]
 pub enum ReceiverSettleMode {
     /// <choice name="first" value="0"/>
+    #[default]
     First,
     /// <choice name="second" value="1"/>
     Second,
 }
 
-impl Default for ReceiverSettleMode {
-    fn default() -> Self {
-        ReceiverSettleMode::First
-    }
-}
+
 
 impl From<ReceiverSettleMode> for u8 {
     fn from(mode: ReceiverSettleMode) -> Self {

@@ -1,17 +1,21 @@
 //! Implements a client for the AMQP 1.0 management working draft.
 
 use fe2o3_amqp::{
-    link::{DetachError, SendError},
+    link::{
+        DetachError, DetachThenResumeReceiverError, ReceiverAttachExchange,
+        ReceiverResumeErrorKind, SendError,
+    },
     session::SessionHandle,
     Delivery, Receiver, Sender,
 };
 use fe2o3_amqp_types::{
     definitions::Fields,
-    messaging::{FromBody, IntoBody, MessageId, Outcome, Properties},
+    messaging::{Body, FromBody, IntoBody, MessageId, Outcome, Properties},
+    primitives::Value,
 };
 
 use crate::{
-    error::{AttachError, Error, DetachThenResumeError},
+    error::{AttachError, DetachThenResumeError, Error},
     request::Request,
     response::Response,
     DEFAULT_CLIENT_NODE_ADDRESS, MANAGEMENT_NODE_ADDRESS,
@@ -46,10 +50,28 @@ impl MgmtClient {
     /// Detach and then resume the management client on a session.
     pub async fn detach_then_resume_on_session<R>(
         &mut self,
-        session: &SessionHandle<R>
+        session: &SessionHandle<R>,
     ) -> Result<(), DetachThenResumeError> {
         self.sender.detach_then_resume_on_session(session).await?;
-        self.receiver.detach_then_resume_on_session(session).await?;
+        while let ReceiverAttachExchange::IncompleteUnsettled =
+            self.receiver.detach_then_resume_on_session(session).await?
+        {
+            match self.receiver.recv::<Body<Value>>().await {
+                Ok(delivery) => {
+                    self.receiver.reject(&delivery, None).await.map_err(|e| {
+                        let err = ReceiverResumeErrorKind::FlowError(e);
+                        let err = DetachThenResumeReceiverError::Resume(err);
+                        DetachThenResumeError::Receiver(err)
+                    })?;
+                }
+                Err(_e) => {
+                    #[cfg(feature = "log")]
+                    log::error!("Error receiving message while resuming receiver {}", _e);
+                    #[cfg(feature = "tracing")]
+                    tracing::error!("Error receiving message while resuming receiver {}", _e);
+                }
+            }
+        }
         Ok(())
     }
 
