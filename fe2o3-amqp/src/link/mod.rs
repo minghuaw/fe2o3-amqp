@@ -288,9 +288,9 @@ where
             unsettled,
             incomplete_unsettled,
 
-            /// This MUST NOT be null if role is sender,
-            /// and it is ignored if the role is receiver.
-            /// See subsection 2.6.7.
+            // This MUST NOT be null if role is sender,
+            // and it is ignored if the role is receiver.
+            // See subsection 2.6.7.
             initial_delivery_count,
 
             max_message_size,
