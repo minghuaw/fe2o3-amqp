@@ -1,5 +1,10 @@
 # Change Log
 
+## 0.7.31
+
+1. Fixed problem with closing/ending of `Connection`/`Session` where the error found during the
+   handshake is not propagated to the user.
+
 ## 0.7.30
 
 1. Reset default features
