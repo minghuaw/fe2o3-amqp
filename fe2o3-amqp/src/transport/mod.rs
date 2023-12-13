@@ -181,7 +181,7 @@ where
         #[cfg(feature = "tracing")]
         tracing::event!(parent: &span, tracing::Level::TRACE, ?proto_header);
         #[cfg(feature = "log")]
-        log::trace!("proto_header = {:?}", proto_header);
+        log::trace!("SEND proto_header = {:?}", proto_header);
         framed_write.send(proto_header).await?;
 
         #[cfg(feature = "tracing")]
@@ -195,7 +195,7 @@ where
         #[cfg(feature = "tracing")]
         tracing::event!(parent: &span, tracing::Level::TRACE, ?incoming_header);
         #[cfg(feature = "log")]
-        log::trace!("incoming_header = {:?}", incoming_header);
+        log::trace!("RECV incoming_header = {:?}", incoming_header);
 
         if !incoming_header.is_sasl()
             || incoming_header.major != MAJOR
@@ -310,7 +310,7 @@ where
     #[cfg(feature = "tracing")]
     tracing::trace!(?proto_header);
     #[cfg(feature = "log")]
-    log::trace!("proto_header = {:?}", proto_header);
+    log::trace!("SEND proto_header = {:?}", proto_header);
     match local_state {
         ConnectionState::Start => {
             framed_write.send(proto_header).await?;
@@ -353,7 +353,7 @@ where
     #[cfg(feature = "tracing")]
     tracing::trace!(?proto_header);
     #[cfg(feature = "log")]
-    log::trace!("proto_header = {:?}", proto_header);
+    log::trace!("RECV proto_header = {:?}", proto_header);
 
     Ok(proto_header)
 }
