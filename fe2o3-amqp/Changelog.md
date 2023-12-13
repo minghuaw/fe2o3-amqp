@@ -1,5 +1,17 @@
 # Change Log
 
+## 0.9.2
+
+1. Ported 0.7.32
+
+## 0.8.26
+
+1. Ported 0.7.32
+
+## 0.7.32
+
+1. Show frame direction in `log::trace`
+
 ## 0.9.1
 
 1. Ported 0.7.31
