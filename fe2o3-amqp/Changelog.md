@@ -1,5 +1,9 @@
 # Change Log
 
+## 0.7.32
+
+1. Show frame direction in `log::trace`
+
 ## 0.7.31
 
 1. Fixed problem with closing/ending of `Connection`/`Session` where the error found during the
