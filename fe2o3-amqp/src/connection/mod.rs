@@ -539,7 +539,7 @@ impl endpoint::Connection for Connection {
         #[cfg(feature = "tracing")]
         tracing::trace!(frame = ?open);
         #[cfg(feature = "log")]
-        log::trace!("frame = {:?}", open);
+        log::trace!("RECV frame = {:?}", open);
 
         match &self.local_state {
             ConnectionState::HeaderExchange => self.local_state = ConnectionState::OpenReceived,
@@ -645,7 +645,7 @@ impl endpoint::Connection for Connection {
         #[cfg(feature = "tracing")]
         tracing::trace!(?frame);
         #[cfg(feature = "log")]
-        log::trace!("frame = {:?}", frame);
+        log::trace!("SEND frame = {:?}", frame);
         writer.send(frame).await.map_err(Into::into)?;
 
         // change local state after successfully sending the frame

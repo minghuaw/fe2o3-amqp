@@ -689,7 +689,7 @@ impl endpoint::Session for Session {
         #[cfg(feature = "tracing")]
         tracing::trace!(frame = ?detach);
         #[cfg(feature = "log")]
-        log::trace!("frame = {:?}", detach);
+        log::trace!("RECV frame = {:?}", detach);
         // Remove the link by input handle
         match self
             .link_by_input_handle
@@ -712,7 +712,7 @@ impl endpoint::Session for Session {
         #[cfg(feature = "tracing")]
         tracing::trace!(end = ?end);
         #[cfg(feature = "log")]
-        log::trace!("end = {:?}", end);
+        log::trace!("RECV end = {:?}", end);
         match self.local_state {
             SessionState::BeginSent | SessionState::BeginReceived | SessionState::Mapped => {
                 self.local_state = SessionState::EndReceived;
