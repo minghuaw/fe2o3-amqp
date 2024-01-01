@@ -420,7 +420,7 @@ where
         #[cfg(feature = "tracing")]
         tracing::trace!(detach = ?detach);
         #[cfg(feature = "log")]
-        log::trace!("detach = {:?}", detach);
+        log::trace!("RECV detach = {:?}", detach);
 
         match detach.closed {
             true => match self.local_state {

@@ -277,7 +277,7 @@ where
         #[cfg(feature = "tracing")]
         tracing::trace!(?frame);
         #[cfg(feature = "log")]
-        log::trace!("frame={:?}", frame);
+        log::trace!("RECV frame={:?}", frame);
 
         let Frame { channel, body } = frame;
         let channel = IncomingChannel(channel);
@@ -444,7 +444,7 @@ where
         #[cfg(feature = "tracing")]
         tracing::trace!(channel = frame.channel, frame = ?frame.body);
         #[cfg(feature = "log")]
-        log::trace!("channel = {}, frame = {:?}", frame.channel, frame.body);
+        log::trace!("SEND channel = {}, frame = {:?}", frame.channel, frame.body);
         self.transport.send(frame).await?;
         Ok(Running::Continue)
     }
