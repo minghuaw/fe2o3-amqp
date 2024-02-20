@@ -27,7 +27,7 @@
 
 ## 0.9.0
 
-1. Unified versioning with other `fe2o3-amqp` crates
+1. Unified minor versioning with other `fe2o3-amqp` crates
 2. Updated `tokio-rustls` to "0.25"
 3. Updated `rustls` to "0.22"
 4. Updated `webpkit-roots` to "0.26"
