@@ -1,6 +1,6 @@
 //! Implements AMQP1.0 Link
 
-use std::{marker::PhantomData, sync::Arc};
+use std::{marker::PhantomData, sync::Arc, future::Future};
 
 use async_trait::async_trait;
 use bytes::{BufMut, BytesMut};
@@ -402,7 +402,6 @@ pub(crate) async fn get_max_frame_size(
         .map_err(|_| SendAttachErrorKind::IllegalSessionState)
 }
 
-#[async_trait]
 impl<R, T, F, M> endpoint::LinkDetach for Link<R, T, F, M>
 where
     R: role::IntoRole + Send + Sync,
@@ -474,47 +473,49 @@ where
     ///
     /// This is cancel safe because it only .await on sending over `tokio::mpsc::Sender`
     #[cfg_attr(feature = "tracing", tracing::instrument(skip_all))]
-    async fn send_detach(
-        &mut self,
-        writer: &mpsc::Sender<LinkFrame>,
+    fn send_detach<'a>(
+        &'a mut self,
+        writer: &'a mpsc::Sender<LinkFrame>,
         closed: bool,
         error: Option<definitions::Error>,
-    ) -> Result<(), Self::DetachError> {
-        // Change the state whether sending the detach frame succeeds or not
-        match (&self.local_state, closed) {
-            (LinkState::Attached, false) => self.local_state = LinkState::DetachSent,
-            (LinkState::DetachReceived, false) => self.local_state = LinkState::Detached,
-            (LinkState::CloseReceived, false) => return Err(DetachError::ClosedByRemote),
-            (LinkState::Attached, true) => self.local_state = LinkState::CloseSent,
-            (LinkState::DetachReceived, true) => return Err(DetachError::DetachedByRemote),
-            (LinkState::CloseReceived, true) => self.local_state = LinkState::Closed,
-            _ => return Err(DetachError::IllegalState),
-        };
-
-        match self.output_handle.clone() {
-            Some(handle) => {
-                let detach = Detach {
-                    handle: handle.into(),
-                    closed,
-                    error,
-                };
-
-                #[cfg(feature = "tracing")]
-                tracing::debug!("Sending detach: {:?}", detach);
-                #[cfg(feature = "log")]
-                log::debug!("Sending detach: {:?}", detach);
-
-                writer
-                    .send(LinkFrame::Detach(detach))
-                    .await // cancel safe
-                    .map_err(|_| DetachError::IllegalSessionState)?;
-
-                self.output_handle.take();
+    ) -> impl Future<Output = Result<(), Self::DetachError>> + Send + 'a {
+        async move {
+            // Change the state whether sending the detach frame succeeds or not
+            match (&self.local_state, closed) {
+                (LinkState::Attached, false) => self.local_state = LinkState::DetachSent,
+                (LinkState::DetachReceived, false) => self.local_state = LinkState::Detached,
+                (LinkState::CloseReceived, false) => return Err(DetachError::ClosedByRemote),
+                (LinkState::Attached, true) => self.local_state = LinkState::CloseSent,
+                (LinkState::DetachReceived, true) => return Err(DetachError::DetachedByRemote),
+                (LinkState::CloseReceived, true) => self.local_state = LinkState::Closed,
+                _ => return Err(DetachError::IllegalState),
+            };
+    
+            match self.output_handle.clone() {
+                Some(handle) => {
+                    let detach = Detach {
+                        handle: handle.into(),
+                        closed,
+                        error,
+                    };
+    
+                    #[cfg(feature = "tracing")]
+                    tracing::debug!("Sending detach: {:?}", detach);
+                    #[cfg(feature = "log")]
+                    log::debug!("Sending detach: {:?}", detach);
+    
+                    writer
+                        .send(LinkFrame::Detach(detach))
+                        .await // cancel safe
+                        .map_err(|_| DetachError::IllegalSessionState)?;
+    
+                    self.output_handle.take();
+                }
+                None => return Err(DetachError::IllegalState),
             }
-            None => return Err(DetachError::IllegalState),
+    
+            Ok(())
         }
-
-        Ok(())
     }
 }
 

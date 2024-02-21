@@ -1,5 +1,7 @@
 //! Defines traits for link implementations
 
+use std::future::Future;
+
 use async_trait::async_trait;
 use fe2o3_amqp_types::{
     definitions::{
@@ -9,7 +11,6 @@ use fe2o3_amqp_types::{
     messaging::{DeliveryState, FromBody},
     performatives::{Attach, Detach, Transfer},
 };
-use futures_util::Future;
 use tokio::sync::mpsc;
 
 use crate::{
@@ -25,21 +26,19 @@ use crate::{
 
 use super::{OutputHandle, Settlement};
 
-#[async_trait]
 pub(crate) trait LinkDetach {
     type DetachError: Send;
 
     fn on_incoming_detach(&mut self, detach: Detach) -> Result<(), Self::DetachError>;
 
-    async fn send_detach(
-        &mut self,
-        writer: &mpsc::Sender<LinkFrame>,
+    fn send_detach<'a>(
+        &'a mut self,
+        writer: &'a mpsc::Sender<LinkFrame>,
         closed: bool,
         error: Option<Error>,
-    ) -> Result<(), Self::DetachError>;
+    ) -> impl Future<Output = Result<(), Self::DetachError>> + Send + 'a;
 }
 
-#[async_trait]
 pub(crate) trait LinkAttach {
     type AttachExchange: Send;
     type AttachError: Send;
@@ -49,19 +48,18 @@ pub(crate) trait LinkAttach {
         attach: Attach,
     ) -> Result<Self::AttachExchange, Self::AttachError>;
 
-    async fn send_attach(
-        &mut self,
-        writer: &mpsc::Sender<LinkFrame>,
-        session: &mpsc::Sender<SessionControl>,
+    fn send_attach<'a>(
+        &'a mut self,
+        writer: &'a mpsc::Sender<LinkFrame>,
+        session: &'a mpsc::Sender<SessionControl>,
         is_reattaching: bool,
-    ) -> Result<(), Self::AttachError>;
+    ) -> impl Future<Output = Result<(), Self::AttachError>> + Send + 'a;
 }
 
 pub(crate) trait Link: LinkAttach + LinkDetach {
     fn role() -> Role;
 }
 
-#[async_trait]
 pub(crate) trait LinkExt: Link {
     type FlowState;
     type Unsettled;
@@ -93,43 +91,42 @@ pub(crate) trait LinkExt: Link {
     where
         F: FnOnce(&mut Option<Fields>) -> O;
 
-    async fn exchange_attach(
-        &mut self,
-        writer: &mpsc::Sender<LinkFrame>,
-        reader: &mut mpsc::Receiver<LinkFrame>,
-        session: &mpsc::Sender<SessionControl>,
+    fn exchange_attach<'a>(
+        &'a mut self,
+        writer: &'a mpsc::Sender<LinkFrame>,
+        reader: &'a mut mpsc::Receiver<LinkFrame>,
+        session: &'a mpsc::Sender<SessionControl>,
         is_reattaching: bool,
-    ) -> Result<Self::AttachExchange, Self::AttachError>;
+    ) -> impl Future<Output = Result<Self::AttachExchange, Self::AttachError>> + Send + 'a;
 
-    async fn handle_attach_error(
-        &mut self,
+    fn handle_attach_error<'a>(
+        &'a mut self,
         attach_error: Self::AttachError,
-        writer: &mpsc::Sender<LinkFrame>,
-        reader: &mut mpsc::Receiver<LinkFrame>,
-        session: &mpsc::Sender<SessionControl>,
-    ) -> Self::AttachError;
+        writer: &'a mpsc::Sender<LinkFrame>,
+        reader: &'a mut mpsc::Receiver<LinkFrame>,
+        session: &'a mpsc::Sender<SessionControl>,
+    ) -> impl Future<Output = Self::AttachError> + Send + 'a;
 }
 
-#[async_trait]
 pub(crate) trait SenderLink: Link + LinkExt {
     type FlowError: Send;
     type TransferError: Send;
     type DispositionError: Send;
 
     /// Set and send flow state
-    async fn send_flow(
-        &self,
-        writer: &mpsc::Sender<LinkFrame>,
+    fn send_flow<'a>(
+        &'a self,
+        writer: &'a mpsc::Sender<LinkFrame>,
         delivery_count: Option<SequenceNo>,
         available: Option<u32>,
         echo: bool,
-    ) -> Result<(), Self::FlowError>;
+    ) -> impl Future<Output = Result<(), Self::FlowError>> + Send + 'a;
 
     /// Send message via transfer frame and return whether the message is already settled
     #[allow(clippy::too_many_arguments)]
-    async fn send_payload<Fut>(
-        &mut self,
-        writer: &mpsc::Sender<LinkFrame>,
+    fn send_payload<'a, Fut>(
+        &'a mut self,
+        writer: &'a mpsc::Sender<LinkFrame>,
         detached: Fut,
         payload: Payload,
         message_format: MessageFormat,
@@ -140,53 +137,52 @@ pub(crate) trait SenderLink: Link + LinkExt {
         // The delivery state should be attached on every transfer if specified
         state: Option<DeliveryState>,
         batchable: bool,
-    ) -> Result<Settlement, Self::TransferError>
+    ) -> impl Future<Output = Result<Settlement, Self::TransferError>> + Send + 'a
     where
-        Fut: Future<Output = Option<LinkFrame>> + Send;
+        Fut: Future<Output = Option<LinkFrame>> + Send + 'a;
 
     /// Send message with delivery tag that is obtained by consuming a link credit
-    async fn send_payload_with_transfer(
-        &mut self,
-        writer: &mpsc::Sender<LinkFrame>,
+    fn send_payload_with_transfer<'a>(
+        &'a mut self,
+        writer: &'a mpsc::Sender<LinkFrame>,
         message_format: MessageFormat,
         transfer: Transfer,
         payload: Payload,
-    ) -> Result<Settlement, Self::TransferError>;
+    ) -> impl Future<Output = Result<Settlement, Self::TransferError>> + Send + 'a;
 
-    async fn dispose(
-        &mut self,
-        writer: &mpsc::Sender<LinkFrame>,
+    fn dispose<'a>(
+        &'a mut self,
+        writer: &'a mpsc::Sender<LinkFrame>,
         delivery_id: DeliveryNumber,
         delivery_tag: DeliveryTag,
         settled: bool,
         state: DeliveryState,
         batchable: bool,
-    ) -> Result<(), Self::DispositionError>;
+    ) -> impl Future<Output = Result<(), Self::DispositionError>> + Send + 'a;
 
-    async fn batch_dispose(
-        &mut self,
-        writer: &mpsc::Sender<LinkFrame>,
+    fn batch_dispose<'a>(
+        &'a mut self,
+        writer: &'a mpsc::Sender<LinkFrame>,
         ids_and_tags: Vec<(DeliveryNumber, DeliveryTag)>,
         settled: bool,
         state: DeliveryState,
         batchable: bool,
-    ) -> Result<(), Self::DispositionError>;
+    ) -> impl Future<Output = Result<(), Self::DispositionError>> + Send + 'a;
 }
 
-#[async_trait]
 pub(crate) trait ReceiverLink: Link + LinkExt {
     type FlowError: Send;
     type TransferError: Send;
     type DispositionError: Send;
 
     /// Set and send flow state
-    async fn send_flow(
-        &self,
-        writer: &mpsc::Sender<LinkFrame>,
+    fn send_flow<'a>(
+        &'a self,
+        writer: &'a mpsc::Sender<LinkFrame>,
         link_credit: Option<u32>,
         drain: Option<bool>,
         echo: bool,
-    ) -> Result<(), Self::FlowError>;
+    ) -> impl Future<Output = Result<(), Self::FlowError>> + Send + 'a;
 
     /// Handles delivery state that is carried in a Transfer
     fn on_transfer_state(
@@ -216,21 +212,21 @@ pub(crate) trait ReceiverLink: Link + LinkExt {
         for<'de> T: FromBody<'de> + Send,
         for<'b> P: IntoReader + AsByteIterator<'b> + Send + 'a;
 
-    async fn dispose(
-        &self,
-        writer: &mpsc::Sender<LinkFrame>,
+    fn dispose<'a>(
+        &'a self,
+        writer: &'a mpsc::Sender<LinkFrame>,
         delivery_info: DeliveryInfo,
         settled: Option<bool>,
         state: DeliveryState,
         batchable: bool,
-    ) -> Result<(), Self::DispositionError>;
+    ) -> impl Future<Output = Result<(), Self::DispositionError>> + Send + 'a;
 
-    async fn dispose_all(
-        &self,
-        writer: &mpsc::Sender<LinkFrame>,
+    fn dispose_all<'a>(
+        &'a self,
+        writer: &'a mpsc::Sender<LinkFrame>,
         delivery_infos: Vec<DeliveryInfo>,
         settled: Option<bool>,
         state: DeliveryState,
         batchable: bool,
-    ) -> Result<(), Self::DispositionError>;
+    ) -> impl Future<Output = Result<(), Self::DispositionError>> + Send + 'a;
 }

@@ -161,7 +161,6 @@ where
     }
 }
 
-#[async_trait]
 impl<T> endpoint::SenderLink for SenderLink<T>
 where
     T: Into<TargetArchetype>
@@ -176,198 +175,209 @@ where
     type DispositionError = DispositionError;
 
     /// Set and send flow state
-    async fn send_flow(
-        &self,
-        writer: &mpsc::Sender<LinkFrame>,
+    fn send_flow<'a>(
+        &'a self,
+        writer: &'a mpsc::Sender<LinkFrame>,
         delivery_count: Option<SequenceNo>,
         available: Option<u32>,
         echo: bool,
-    ) -> Result<(), Self::FlowError> {
-        let handle = self
-            .output_handle
-            .clone()
-            .ok_or(Self::FlowError::IllegalState)?
-            .into();
+    ) -> impl Future<Output = Result<(), Self::FlowError>> + Send + 'a {
+        async move {
+            let handle = self
+                .output_handle
+                .clone()
+                .ok_or(Self::FlowError::IllegalState)?
+                .into();
 
-        let flow = self.get_link_flow(handle, delivery_count, available, echo);
-        writer
-            .send(LinkFrame::Flow(flow))
-            .await
-            .map_err(|_| Self::FlowError::IllegalSessionState)
+            let flow = self.get_link_flow(handle, delivery_count, available, echo);
+            writer
+                .send(LinkFrame::Flow(flow))
+                .await
+                .map_err(|_| Self::FlowError::IllegalSessionState)
+        }
     }
 
-    async fn send_payload<Fut>(
-        &mut self,
-        writer: &mpsc::Sender<LinkFrame>,
+    fn send_payload<'a, Fut>(
+        &'a mut self,
+        writer: &'a mpsc::Sender<LinkFrame>,
         detached: Fut,
         payload: Payload,
         message_format: MessageFormat,
         settled: Option<bool>,
         state: Option<DeliveryState>,
         batchable: bool,
-    ) -> Result<Settlement, Self::TransferError>
+    ) -> impl Future<Output = Result<Settlement, Self::TransferError>> + Send + 'a
     where
-        Fut: Future<Output = Option<LinkFrame>> + Send,
+        Fut: Future<Output = Option<LinkFrame>> + Send + 'a,
     {
-        let tag = self.get_delivery_tag_or_detached(writer, detached).await?;
-        // Delivery count is incremented when consuming credit
-        let delivery_tag = DeliveryTag::from(tag);
+        async move {
+            let tag = self.get_delivery_tag_or_detached(writer, detached).await?;
+            // Delivery count is incremented when consuming credit
+            let delivery_tag = DeliveryTag::from(tag);
 
-        let transfer = self.generate_non_resuming_transfer_performative(
-            delivery_tag,
-            message_format,
-            settled,
-            state,
-            batchable,
-        )?;
+            let transfer = self.generate_non_resuming_transfer_performative(
+                delivery_tag,
+                message_format,
+                settled,
+                state,
+                batchable,
+            )?;
 
-        self.send_payload_with_transfer(writer, message_format, transfer, payload)
-            .await
+            self.send_payload_with_transfer(writer, message_format, transfer, payload)
+                .await
+        }
     }
 
     /// # Cancel safety
     ///
     /// This is cancel safe because all internal `.await` are cancel safe
-    async fn send_payload_with_transfer(
-        &mut self,
-        writer: &mpsc::Sender<LinkFrame>,
+    fn send_payload_with_transfer<'a>(
+        &'a mut self,
+        writer: &'a mpsc::Sender<LinkFrame>,
         message_format: MessageFormat,
         transfer: Transfer,
         payload: Payload,
-    ) -> Result<Settlement, Self::TransferError> {
-        // Keep a copy for unsettled message
-        // Clone should be very cheap on Bytes
-        let payload_copy = payload.clone();
-        let delivery_tag = transfer
-            .delivery_tag
-            .clone()
-            .ok_or(LinkStateError::IllegalState)?;
-        let settled = self
-            .send_transfer_without_modifying_unsettled_map(writer, transfer, payload)
-            .await?;
-        match settled {
-            true => Ok(Settlement::Settled(delivery_tag)),
-            // If not set on the first (or only) transfer for a (multi-transfer)
-            // delivery, then the settled flag MUST be interpreted as being false.
-            false => {
-                let (tx, rx) = oneshot::channel();
-                let unsettled = UnsettledMessage::new(payload_copy, None, message_format, tx);
-                {
-                    let mut guard = self.unsettled.write();
-                    guard
-                        .get_or_insert(OrderedMap::new())
-                        .insert(delivery_tag.clone(), unsettled);
-                }
+    ) -> impl Future<Output = Result<Settlement, Self::TransferError>> + Send + 'a {
+        async move {
+            // Keep a copy for unsettled message
+            // Clone should be very cheap on Bytes
+            let payload_copy = payload.clone();
+            let delivery_tag = transfer
+                .delivery_tag
+                .clone()
+                .ok_or(LinkStateError::IllegalState)?;
+            let settled = self
+                .send_transfer_without_modifying_unsettled_map(writer, transfer, payload)
+                .await?;
+            match settled {
+                true => Ok(Settlement::Settled(delivery_tag)),
+                // If not set on the first (or only) transfer for a (multi-transfer)
+                // delivery, then the settled flag MUST be interpreted as being false.
+                false => {
+                    let (tx, rx) = oneshot::channel();
+                    let unsettled = UnsettledMessage::new(payload_copy, None, message_format, tx);
+                    {
+                        let mut guard = self.unsettled.write();
+                        guard
+                            .get_or_insert(OrderedMap::new())
+                            .insert(delivery_tag.clone(), unsettled);
+                    }
 
-                Ok(Settlement::Unsettled {
-                    delivery_tag,
-                    outcome: rx,
-                })
+                    Ok(Settlement::Unsettled {
+                        delivery_tag,
+                        outcome: rx,
+                    })
+                }
             }
         }
     }
 
-    async fn dispose(
-        &mut self,
-        writer: &mpsc::Sender<LinkFrame>,
+    fn dispose<'a>(
+        &'a mut self,
+        writer: &'a mpsc::Sender<LinkFrame>,
         delivery_id: DeliveryNumber,
         delivery_tag: DeliveryTag,
         settled: bool,
         state: DeliveryState,
         batchable: bool,
-    ) -> Result<(), Self::DispositionError> {
-        if let SenderSettleMode::Settled = self.snd_settle_mode {
-            return Ok(());
-        }
-
-        {
-            let mut lock = self.unsettled.write();
-            if settled {
-                if let Some(msg) = lock.as_mut().and_then(|m| m.remove(&delivery_tag)) {
-                    let _ = msg.settle();
-                }
-            } else if let Some(msg) = lock.as_mut().and_then(|m| m.get_mut(&delivery_tag)) {
-                msg.state = Some(state.clone());
+    ) -> impl Future<Output = Result<(), Self::DispositionError>> + Send + 'a {
+        async move {
+            if let SenderSettleMode::Settled = self.snd_settle_mode {
+                return Ok(());
             }
-        }
 
-        send_disposition(writer, delivery_id, None, settled, Some(state), batchable).await
-    }
-
-    async fn batch_dispose(
-        &mut self,
-        writer: &mpsc::Sender<LinkFrame>,
-        mut ids_and_tags: Vec<(DeliveryNumber, DeliveryTag)>,
-        settled: bool,
-        state: DeliveryState,
-        batchable: bool,
-    ) -> Result<(), Self::DispositionError> {
-        if let SenderSettleMode::Settled = self.snd_settle_mode {
-            return Ok(());
-        }
-
-        let mut first = None;
-        let mut last = None;
-
-        ids_and_tags.sort_by(|left, right| left.0.cmp(&right.0));
-
-        // Find continuous ranges
-        for (delivery_id, delivery_tag) in ids_and_tags {
             {
-                // Make sure there is not .await point during the lifetime of the guard
-                let mut guard = self.unsettled.write();
+                let mut lock = self.unsettled.write();
                 if settled {
-                    if let Some(msg) = guard.as_mut().and_then(|m| m.remove(&delivery_tag)) {
+                    if let Some(msg) = lock.as_mut().and_then(|m| m.remove(&delivery_tag)) {
                         let _ = msg.settle();
                     }
-                } else if let Some(msg) = guard.as_mut().and_then(|m| m.get_mut(&delivery_tag)) {
+                } else if let Some(msg) = lock.as_mut().and_then(|m| m.get_mut(&delivery_tag)) {
                     msg.state = Some(state.clone());
                 }
             }
 
-            match (first, last) {
-                // First pair
-                (None, _) => first = Some(delivery_id),
-                // Second pair
-                (Some(first_id), None) => {
-                    // Find discontinuity
-                    if delivery_id - first_id > 1 {
-                        send_disposition(
-                            writer,
-                            first_id,
-                            None,
-                            settled,
-                            Some(state.clone()),
-                            batchable,
-                        )
-                        .await?;
+            send_disposition(writer, delivery_id, None, settled, Some(state), batchable).await
+        }
+    }
+
+    fn batch_dispose<'a>(
+        &'a mut self,
+        writer: &'a mpsc::Sender<LinkFrame>,
+        mut ids_and_tags: Vec<(DeliveryNumber, DeliveryTag)>,
+        settled: bool,
+        state: DeliveryState,
+        batchable: bool,
+    ) -> impl Future<Output = Result<(), Self::DispositionError>> + Send + 'a {
+        async move {
+            if let SenderSettleMode::Settled = self.snd_settle_mode {
+                return Ok(());
+            }
+
+            let mut first = None;
+            let mut last = None;
+
+            ids_and_tags.sort_by(|left, right| left.0.cmp(&right.0));
+
+            // Find continuous ranges
+            for (delivery_id, delivery_tag) in ids_and_tags {
+                {
+                    // Make sure there is not .await point during the lifetime of the guard
+                    let mut guard = self.unsettled.write();
+                    if settled {
+                        if let Some(msg) = guard.as_mut().and_then(|m| m.remove(&delivery_tag)) {
+                            let _ = msg.settle();
+                        }
+                    } else if let Some(msg) = guard.as_mut().and_then(|m| m.get_mut(&delivery_tag))
+                    {
+                        msg.state = Some(state.clone());
                     }
-                    last = Some(delivery_id);
                 }
-                // Third and more
-                (Some(first_id), Some(last_id)) => {
-                    // Find discontinuity
-                    if delivery_id - last_id > 1 {
-                        send_disposition(
-                            writer,
-                            first_id,
-                            Some(last_id),
-                            settled,
-                            Some(state.clone()),
-                            batchable,
-                        )
-                        .await?;
+
+                match (first, last) {
+                    // First pair
+                    (None, _) => first = Some(delivery_id),
+                    // Second pair
+                    (Some(first_id), None) => {
+                        // Find discontinuity
+                        if delivery_id - first_id > 1 {
+                            send_disposition(
+                                writer,
+                                first_id,
+                                None,
+                                settled,
+                                Some(state.clone()),
+                                batchable,
+                            )
+                            .await?;
+                        }
+                        last = Some(delivery_id);
                     }
-                    last = Some(delivery_id);
+                    // Third and more
+                    (Some(first_id), Some(last_id)) => {
+                        // Find discontinuity
+                        if delivery_id - last_id > 1 {
+                            send_disposition(
+                                writer,
+                                first_id,
+                                Some(last_id),
+                                settled,
+                                Some(state.clone()),
+                                batchable,
+                            )
+                            .await?;
+                        }
+                        last = Some(delivery_id);
+                    }
                 }
             }
-        }
 
-        // if there is only one message to dispose
-        if let (Some(first_id), None) = (first, last) {
-            send_disposition(writer, first_id, None, settled, Some(state), batchable).await?;
+            // if there is only one message to dispose
+            if let (Some(first_id), None) = (first, last) {
+                send_disposition(writer, first_id, None, settled, Some(state), batchable).await?;
+            }
+            Ok(())
         }
-        Ok(())
     }
 }
 
@@ -570,7 +580,6 @@ impl<T> SenderLink<T> {
     }
 }
 
-#[async_trait]
 impl<T> endpoint::LinkAttach for SenderLink<T>
 where
     T: Into<TargetArchetype>
@@ -674,15 +683,17 @@ where
         self.handle_unsettled_in_attach(remote_attach.unsettled)
     }
 
-    async fn send_attach(
-        &mut self,
-        writer: &mpsc::Sender<LinkFrame>,
-        session: &mpsc::Sender<SessionControl>,
+    fn send_attach<'a>(
+        &'a mut self,
+        writer: &'a mpsc::Sender<LinkFrame>,
+        session: &'a mpsc::Sender<SessionControl>,
         is_reattaching: bool,
-    ) -> Result<(), Self::AttachError> {
-        self.send_attach_inner(writer, session, is_reattaching)
-            .await?;
-        Ok(())
+    ) -> impl Future<Output = Result<(), Self::AttachError>> + Send + 'a {
+        async move {
+            self.send_attach_inner(writer, session, is_reattaching)
+                .await?;
+            Ok(())
+        }
     }
 }
 
@@ -700,7 +711,6 @@ where
     }
 }
 
-#[async_trait]
 impl<T> endpoint::LinkExt for SenderLink<T>
 where
     T: Into<TargetArchetype>
@@ -769,81 +779,85 @@ where
         op(&mut guard.properties)
     }
 
-    async fn exchange_attach(
-        &mut self,
-        writer: &mpsc::Sender<LinkFrame>,
-        reader: &mut mpsc::Receiver<LinkFrame>,
-        session: &mpsc::Sender<SessionControl>,
+    fn exchange_attach<'a>(
+        &'a mut self,
+        writer: &'a mpsc::Sender<LinkFrame>,
+        reader: &'a mut mpsc::Receiver<LinkFrame>,
+        session: &'a mpsc::Sender<SessionControl>,
         is_reattaching: bool,
-    ) -> Result<Self::AttachExchange, SenderAttachError> {
-        // Send out local attach
-        self.send_attach(writer, session, is_reattaching).await?;
+    ) -> impl Future<Output = Result<Self::AttachExchange, SenderAttachError>> + Send + 'a {
+        async move {
+            // Send out local attach
+            self.send_attach(writer, session, is_reattaching).await?;
 
-        // Wait for remote attach
-        let remote_attach = match reader
-            .recv()
-            .await
-            .ok_or(SenderAttachError::IllegalSessionState)?
-        {
-            LinkFrame::Attach(attach) => attach,
-            _ => return Err(SenderAttachError::NonAttachFrameReceived),
-        };
+            // Wait for remote attach
+            let remote_attach = match reader
+                .recv()
+                .await
+                .ok_or(SenderAttachError::IllegalSessionState)?
+            {
+                LinkFrame::Attach(attach) => attach,
+                _ => return Err(SenderAttachError::NonAttachFrameReceived),
+            };
 
-        self.on_incoming_attach(remote_attach)
+            self.on_incoming_attach(remote_attach)
+        }
     }
 
     #[cfg_attr(feature = "tracing", tracing::instrument(skip_all))]
-    async fn handle_attach_error(
-        &mut self,
+    fn handle_attach_error<'a>(
+        &'a mut self,
         attach_error: SenderAttachError,
-        writer: &mpsc::Sender<LinkFrame>,
-        reader: &mut mpsc::Receiver<LinkFrame>,
-        session: &mpsc::Sender<SessionControl>,
-    ) -> SenderAttachError {
-        match attach_error {
-            SenderAttachError::IllegalSessionState
-            | SenderAttachError::IllegalState
-            | SenderAttachError::NonAttachFrameReceived
-            | SenderAttachError::ExpectImmediateDetach
-            | SenderAttachError::RemoteClosedWithError(_) => attach_error,
+        writer: &'a mpsc::Sender<LinkFrame>,
+        reader: &'a mut mpsc::Receiver<LinkFrame>,
+        session: &'a mpsc::Sender<SessionControl>,
+    ) -> impl Future<Output = SenderAttachError> + Send + 'a {
+        async move {
+            match attach_error {
+                SenderAttachError::IllegalSessionState
+                | SenderAttachError::IllegalState
+                | SenderAttachError::NonAttachFrameReceived
+                | SenderAttachError::ExpectImmediateDetach
+                | SenderAttachError::RemoteClosedWithError(_) => attach_error,
 
-            SenderAttachError::DuplicatedLinkName => {
-                let error = definitions::Error::new(
-                    SessionError::HandleInUse,
-                    "Link name is in use".to_string(),
-                    None,
-                );
-                session
-                    .send(SessionControl::End(Some(error)))
-                    .await
-                    .map(|_| attach_error)
-                    .unwrap_or(SenderAttachError::IllegalSessionState)
-            }
+                SenderAttachError::DuplicatedLinkName => {
+                    let error = definitions::Error::new(
+                        SessionError::HandleInUse,
+                        "Link name is in use".to_string(),
+                        None,
+                    );
+                    session
+                        .send(SessionControl::End(Some(error)))
+                        .await
+                        .map(|_| attach_error)
+                        .unwrap_or(SenderAttachError::IllegalSessionState)
+                }
 
-            SenderAttachError::SndSettleModeNotSupported
-            | SenderAttachError::RcvSettleModeNotSupported
-            | SenderAttachError::IncomingTargetIsNone => {
-                // Just send detach immediately
-                let err = self
-                    .send_detach(writer, true, None)
-                    .await
-                    .map(|_| attach_error)
-                    .unwrap_or(SenderAttachError::IllegalSessionState);
-                recv_detach(self, reader, err).await
-            }
+                SenderAttachError::SndSettleModeNotSupported
+                | SenderAttachError::RcvSettleModeNotSupported
+                | SenderAttachError::IncomingTargetIsNone => {
+                    // Just send detach immediately
+                    let err = self
+                        .send_detach(writer, true, None)
+                        .await
+                        .map(|_| attach_error)
+                        .unwrap_or(SenderAttachError::IllegalSessionState);
+                    recv_detach(self, reader, err).await
+                }
 
-            SenderAttachError::CoordinatorIsNotImplemented
-            | SenderAttachError::SourceAddressIsSomeWhenDynamicIsTrue
-            | SenderAttachError::TargetAddressIsNoneWhenDynamicIsTrue
-            | SenderAttachError::DynamicNodePropertiesIsSomeWhenDynamicIsFalse => {
-                try_detach_with_error(self, attach_error, writer, reader).await
-            }
-            #[cfg(feature = "transaction")]
-            SenderAttachError::DesireTxnCapabilitiesNotSupported => {
-                try_detach_with_error(self, attach_error, writer, reader).await
-            }
+                SenderAttachError::CoordinatorIsNotImplemented
+                | SenderAttachError::SourceAddressIsSomeWhenDynamicIsTrue
+                | SenderAttachError::TargetAddressIsNoneWhenDynamicIsTrue
+                | SenderAttachError::DynamicNodePropertiesIsSomeWhenDynamicIsFalse => {
+                    try_detach_with_error(self, attach_error, writer, reader).await
+                }
+                #[cfg(feature = "transaction")]
+                SenderAttachError::DesireTxnCapabilitiesNotSupported => {
+                    try_detach_with_error(self, attach_error, writer, reader).await
+                }
 
-            _ => attach_error,
+                _ => attach_error,
+            }
         }
     }
 }

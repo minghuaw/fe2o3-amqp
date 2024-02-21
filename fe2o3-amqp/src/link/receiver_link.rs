@@ -1,3 +1,5 @@
+use std::future::Future;
+
 use fe2o3_amqp_types::{
     definitions::{Fields, Handle},
     messaging::{message::DecodeIntoMessage, FromBody},
@@ -24,7 +26,6 @@ pub(crate) const AMQP_SEQ_CODE: u8 = 0x76;
 pub(crate) const AMQP_VAL_CODE: u8 = 0x77;
 pub(crate) const FOOTER_CODE: u8 = 0x78;
 
-#[async_trait]
 impl<Tar> endpoint::ReceiverLink for ReceiverLink<Tar>
 where
     Tar: Into<TargetArchetype>
@@ -41,24 +42,26 @@ where
     /// Set and send flow state
     ///
     /// This is cancel safe because it only `.await` on sending over a `tokio::mpsc::Sender`
-    async fn send_flow(
-        &self,
-        writer: &mpsc::Sender<LinkFrame>,
+    fn send_flow<'a>(
+        &'a self,
+        writer: &'a mpsc::Sender<LinkFrame>,
         link_credit: Option<u32>,
         drain: Option<bool>,
         echo: bool,
-    ) -> Result<(), Self::FlowError> {
-        let handle = self
-            .output_handle
-            .clone()
-            .ok_or(Self::FlowError::IllegalState)?
-            .into();
-
-        let flow = self.get_link_flow(handle, link_credit, drain, echo);
-        writer
-            .send(LinkFrame::Flow(flow))
-            .await // cancel safe
-            .map_err(|_| Self::FlowError::IllegalSessionState)
+    ) -> impl Future<Output = Result<(), Self::FlowError>> + Send + 'a {
+        async move {
+            let handle = self
+                .output_handle
+                .clone()
+                .ok_or(Self::FlowError::IllegalState)?
+                .into();
+    
+            let flow = self.get_link_flow(handle, link_credit, drain, echo);
+            writer
+                .send(LinkFrame::Flow(flow))
+                .await // cancel safe
+                .map_err(|_| Self::FlowError::IllegalSessionState)
+        }
     }
 
     fn on_transfer_state(
@@ -224,101 +227,105 @@ where
     }
 
     /// This is cancel safe because it only `.await` on sending over `tokio::mpsc::Sender`
-    async fn dispose(
-        &self,
-        writer: &mpsc::Sender<LinkFrame>,
+    fn dispose<'a>(
+        &'a self,
+        writer: &'a mpsc::Sender<LinkFrame>,
         delivery_info: DeliveryInfo,
         settled: Option<bool>,
         state: DeliveryState,
         batchable: bool,
-    ) -> Result<(), Self::DispositionError> {
-        let settled = settled.unwrap_or({
-            match delivery_info
-                .rcv_settle_mode
-                .as_ref()
-                .unwrap_or(&self.rcv_settle_mode)
-            {
-                ReceiverSettleMode::First => {
-                    // If first, this indicates that the receiver MUST settle
-                    // the delivery once it has arrived without waiting
-                    // for the sender to settle first.
-
-                    // The delivery is not inserted into unsettled map if in First mode
-                    true
+    ) -> impl Future<Output = Result<(), Self::DispositionError>> + Send + 'a {
+        async move {
+            let settled = settled.unwrap_or({
+                match delivery_info
+                    .rcv_settle_mode
+                    .as_ref()
+                    .unwrap_or(&self.rcv_settle_mode)
+                {
+                    ReceiverSettleMode::First => {
+                        // If first, this indicates that the receiver MUST settle
+                        // the delivery once it has arrived without waiting
+                        // for the sender to settle first.
+    
+                        // The delivery is not inserted into unsettled map if in First mode
+                        true
+                    }
+                    ReceiverSettleMode::Second => {
+                        // If second, this indicates that the receiver MUST NOT settle until sending
+                        // its disposition to the sender and receiving a settled disposition from
+                        // the sender.
+                        false
+                    }
                 }
-                ReceiverSettleMode::Second => {
-                    // If second, this indicates that the receiver MUST NOT settle until sending
-                    // its disposition to the sender and receiving a settled disposition from
-                    // the sender.
-                    false
-                }
-            }
-        });
-
-        let unsettled_state = if settled {
-            let mut lock = self.unsettled.write();
-            lock.as_mut()
-                .and_then(|map| map.remove(&delivery_info.delivery_tag))
-        } else {
-            let mut lock = self.unsettled.write();
-            // If the key is present in the map, the old value will be returned, which
-            // we don't really need
-            lock.get_or_insert(OrderedMap::new())
-                .insert(delivery_info.delivery_tag.clone(), Some(state.clone()))
-        };
-
-        // Only dispose if message is found in unsettled map
-        if unsettled_state.is_some() {
-            let disposition = Disposition {
-                role: Role::Receiver,
-                first: delivery_info.delivery_id,
-                last: None,
-                settled,
-                state: Some(state),
-                batchable,
+            });
+    
+            let unsettled_state = if settled {
+                let mut lock = self.unsettled.write();
+                lock.as_mut()
+                    .and_then(|map| map.remove(&delivery_info.delivery_tag))
+            } else {
+                let mut lock = self.unsettled.write();
+                // If the key is present in the map, the old value will be returned, which
+                // we don't really need
+                lock.get_or_insert(OrderedMap::new())
+                    .insert(delivery_info.delivery_tag.clone(), Some(state.clone()))
             };
-            let frame = LinkFrame::Disposition(disposition);
-            writer
-                .send(frame)
-                .await // cancel safe
-                .map_err(|_| Self::DispositionError::IllegalSessionState)?;
+    
+            // Only dispose if message is found in unsettled map
+            if unsettled_state.is_some() {
+                let disposition = Disposition {
+                    role: Role::Receiver,
+                    first: delivery_info.delivery_id,
+                    last: None,
+                    settled,
+                    state: Some(state),
+                    batchable,
+                };
+                let frame = LinkFrame::Disposition(disposition);
+                writer
+                    .send(frame)
+                    .await // cancel safe
+                    .map_err(|_| Self::DispositionError::IllegalSessionState)?;
+            }
+    
+            Ok(())
         }
-
-        Ok(())
     }
 
     /// This is cancel safe because all internal `.await` points are cancel safe
-    async fn dispose_all(
-        &self,
-        writer: &mpsc::Sender<LinkFrame>,
+    fn dispose_all<'a>(
+        &'a self,
+        writer: &'a mpsc::Sender<LinkFrame>,
         mut delivery_infos: Vec<DeliveryInfo>,
         settled: Option<bool>,
         state: DeliveryState,
         batchable: bool,
-    ) -> Result<(), Self::DispositionError> {
-        // sorting before filtering may be more cache/branch-prediction friendly?
-        delivery_infos.sort_by(|left, right| left.delivery_id.cmp(&right.delivery_id));
-        {
-            let reader = self.unsettled.read();
-            delivery_infos.retain(|info| {
-                reader
-                    .as_ref()
-                    .map(|m| m.contains_key(&info.delivery_tag))
-                    .unwrap_or(false)
-            });
+    ) -> impl Future<Output = Result<(), Self::DispositionError>> + Send + 'a {
+        async move {
+            // sorting before filtering may be more cache/branch-prediction friendly?
+            delivery_infos.sort_by(|left, right| left.delivery_id.cmp(&right.delivery_id));
+            {
+                let reader = self.unsettled.read();
+                delivery_infos.retain(|info| {
+                    reader
+                        .as_ref()
+                        .map(|m| m.contains_key(&info.delivery_tag))
+                        .unwrap_or(false)
+                });
+            }
+            let chunk_inds = consecutive_chunk_indices(&delivery_infos);
+    
+            let mut prev_ind = 0;
+            for ind in chunk_inds {
+                let slice = &delivery_infos[prev_ind..ind];
+                self.dispose_consecutive(writer, slice, settled, state.clone(), batchable)
+                    .await?; // cancel safe
+                prev_ind = ind;
+            }
+            let final_slice = &delivery_infos[prev_ind..];
+            self.dispose_consecutive(writer, final_slice, settled, state, batchable)
+                .await // cancel safe
         }
-        let chunk_inds = consecutive_chunk_indices(&delivery_infos);
-
-        let mut prev_ind = 0;
-        for ind in chunk_inds {
-            let slice = &delivery_infos[prev_ind..ind];
-            self.dispose_consecutive(writer, slice, settled, state.clone(), batchable)
-                .await?; // cancel safe
-            prev_ind = ind;
-        }
-        let final_slice = &delivery_infos[prev_ind..];
-        self.dispose_consecutive(writer, final_slice, settled, state, batchable)
-            .await // cancel safe
     }
 }
 
@@ -573,7 +580,6 @@ impl<T> ReceiverLink<T> {
     }
 }
 
-#[async_trait]
 impl<T> endpoint::LinkAttach for ReceiverLink<T>
 where
     T: Into<TargetArchetype>
@@ -690,15 +696,17 @@ where
     /// # Cancel safety
     ///
     /// This is cancel safe if oneshot channel is cancel safe
-    async fn send_attach(
-        &mut self,
-        writer: &mpsc::Sender<LinkFrame>,
-        session: &mpsc::Sender<SessionControl>,
+    fn send_attach<'a>(
+        &'a mut self,
+        writer: &'a mpsc::Sender<LinkFrame>,
+        session: &'a mpsc::Sender<SessionControl>,
         is_reattaching: bool,
-    ) -> Result<(), Self::AttachError> {
-        self.send_attach_inner(writer, session, is_reattaching)
-            .await?; // FIXME: cancel safe? if oneshot channel is cancel safe
-        Ok(())
+    ) -> impl Future<Output = Result<(), Self::AttachError>> + Send + 'a {
+        async move {
+            self.send_attach_inner(writer, session, is_reattaching)
+                .await?; // FIXME: cancel safe? if oneshot channel is cancel safe
+            Ok(())
+        }
     }
 }
 
@@ -716,7 +724,6 @@ where
     }
 }
 
-#[async_trait]
 impl<T> endpoint::LinkExt for ReceiverLink<T>
 where
     T: Into<TargetArchetype>
@@ -788,83 +795,87 @@ where
     /// # Cancel safety
     ///
     /// This should be cancel safe if oneshot channel is cancel safe
-    async fn exchange_attach(
-        &mut self,
-        writer: &mpsc::Sender<LinkFrame>,
-        reader: &mut mpsc::Receiver<LinkFrame>,
-        session: &mpsc::Sender<SessionControl>,
+    fn exchange_attach<'a>(
+        &'a mut self,
+        writer: &'a mpsc::Sender<LinkFrame>,
+        reader: &'a mut mpsc::Receiver<LinkFrame>,
+        session: &'a mpsc::Sender<SessionControl>,
         is_reattaching: bool,
-    ) -> Result<Self::AttachExchange, ReceiverAttachError> {
-        // Send out local attach
-        self.send_attach(writer, session, is_reattaching).await?; // FIXME: cancel safe? if oneshot channel is cancel safe
-
-        // Wait for remote attach
-        let remote_attach = match reader
-            .recv()
-            .await // cancel safe
-            .ok_or(ReceiverAttachError::IllegalSessionState)?
-        {
-            LinkFrame::Attach(attach) => attach,
-            _ => return Err(ReceiverAttachError::NonAttachFrameReceived),
-        };
-
-        self.on_incoming_attach(remote_attach)
+    ) -> impl Future<Output = Result<Self::AttachExchange, ReceiverAttachError>> + Send + 'a {
+        async move {
+            // Send out local attach
+            self.send_attach(writer, session, is_reattaching).await?; // FIXME: cancel safe? if oneshot channel is cancel safe
+    
+            // Wait for remote attach
+            let remote_attach = match reader
+                .recv()
+                .await // cancel safe
+                .ok_or(ReceiverAttachError::IllegalSessionState)?
+            {
+                LinkFrame::Attach(attach) => attach,
+                _ => return Err(ReceiverAttachError::NonAttachFrameReceived),
+            };
+    
+            self.on_incoming_attach(remote_attach)
+        }
     }
 
-    async fn handle_attach_error(
-        &mut self,
+    fn handle_attach_error<'a>(
+        &'a mut self,
         attach_error: ReceiverAttachError,
-        writer: &mpsc::Sender<LinkFrame>,
-        reader: &mut mpsc::Receiver<LinkFrame>,
-        session: &mpsc::Sender<SessionControl>,
-    ) -> ReceiverAttachError {
-        match attach_error {
-            // Errors that indicate failed attachment
-            ReceiverAttachError::IllegalSessionState
-            | ReceiverAttachError::IllegalState
-            | ReceiverAttachError::NonAttachFrameReceived
-            | ReceiverAttachError::ExpectImmediateDetach
-            | ReceiverAttachError::RemoteClosedWithError(_) => attach_error,
-
-            ReceiverAttachError::DuplicatedLinkName => {
-                let error = definitions::Error::new(
-                    SessionError::HandleInUse,
-                    "Link name is in use".to_string(),
-                    None,
-                );
-                session
-                    .send(SessionControl::End(Some(error)))
-                    .await
-                    .map(|_| attach_error)
-                    .unwrap_or(ReceiverAttachError::IllegalSessionState)
-            }
-
-            // ReceiverAttachError::SndSettleModeNotSupported
-            ReceiverAttachError::RcvSettleModeNotSupported
-            | ReceiverAttachError::IncomingSourceIsNone => {
-                // Just send detach immediately
-                let err = self
-                    .send_detach(writer, true, None)
-                    .await
-                    .map(|_| attach_error)
-                    .unwrap_or(ReceiverAttachError::IllegalSessionState);
-                recv_detach(self, reader, err).await
-            }
-
-            ReceiverAttachError::CoordinatorIsNotImplemented
-            | ReceiverAttachError::InitialDeliveryCountIsNone
-            | ReceiverAttachError::SourceAddressIsNoneWhenDynamicIsTrue
-            | ReceiverAttachError::TargetAddressIsSomeWhenDynamicIsTrue
-            | ReceiverAttachError::DynamicNodePropertiesIsSomeWhenDynamicIsFalse => {
-                match (&attach_error).try_into() {
-                    Ok(error) => match self.send_detach(writer, true, Some(error)).await {
-                        Ok(_) => recv_detach(self, reader, attach_error).await,
-                        Err(_) => ReceiverAttachError::IllegalSessionState,
-                    },
-                    Err(_) => attach_error,
+        writer: &'a mpsc::Sender<LinkFrame>,
+        reader: &'a mut mpsc::Receiver<LinkFrame>,
+        session: &'a mpsc::Sender<SessionControl>,
+    ) -> impl Future<Output = ReceiverAttachError> + Send + 'a {
+        async move {
+            match attach_error {
+                // Errors that indicate failed attachment
+                ReceiverAttachError::IllegalSessionState
+                | ReceiverAttachError::IllegalState
+                | ReceiverAttachError::NonAttachFrameReceived
+                | ReceiverAttachError::ExpectImmediateDetach
+                | ReceiverAttachError::RemoteClosedWithError(_) => attach_error,
+    
+                ReceiverAttachError::DuplicatedLinkName => {
+                    let error = definitions::Error::new(
+                        SessionError::HandleInUse,
+                        "Link name is in use".to_string(),
+                        None,
+                    );
+                    session
+                        .send(SessionControl::End(Some(error)))
+                        .await
+                        .map(|_| attach_error)
+                        .unwrap_or(ReceiverAttachError::IllegalSessionState)
                 }
+    
+                // ReceiverAttachError::SndSettleModeNotSupported
+                ReceiverAttachError::RcvSettleModeNotSupported
+                | ReceiverAttachError::IncomingSourceIsNone => {
+                    // Just send detach immediately
+                    let err = self
+                        .send_detach(writer, true, None)
+                        .await
+                        .map(|_| attach_error)
+                        .unwrap_or(ReceiverAttachError::IllegalSessionState);
+                    recv_detach(self, reader, err).await
+                }
+    
+                ReceiverAttachError::CoordinatorIsNotImplemented
+                | ReceiverAttachError::InitialDeliveryCountIsNone
+                | ReceiverAttachError::SourceAddressIsNoneWhenDynamicIsTrue
+                | ReceiverAttachError::TargetAddressIsSomeWhenDynamicIsTrue
+                | ReceiverAttachError::DynamicNodePropertiesIsSomeWhenDynamicIsFalse => {
+                    match (&attach_error).try_into() {
+                        Ok(error) => match self.send_detach(writer, true, Some(error)).await {
+                            Ok(_) => recv_detach(self, reader, attach_error).await,
+                            Err(_) => ReceiverAttachError::IllegalSessionState,
+                        },
+                        Err(_) => attach_error,
+                    }
+                }
+                _ => attach_error,
             }
-            _ => attach_error,
         }
     }
 }

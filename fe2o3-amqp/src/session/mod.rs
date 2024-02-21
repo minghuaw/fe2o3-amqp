@@ -1,6 +1,6 @@
 //! Implements AMQP1.0 Session
 
-use std::collections::{HashMap, VecDeque};
+use std::{collections::{HashMap, VecDeque}, future::Future};
 
 use async_trait::async_trait;
 use fe2o3_amqp_types::{
@@ -431,7 +431,6 @@ impl Session {
 
 impl endpoint::SessionExt for Session {}
 
-#[async_trait]
 impl endpoint::Session for Session {
     type AllocError = AllocLinkError;
     type BeginError = SessionStateError;
@@ -521,97 +520,103 @@ impl endpoint::Session for Session {
         Ok(())
     }
 
-    async fn on_incoming_attach(&mut self, attach: Attach) -> Result<(), Self::Error> {
-        match self.link_by_name.get_mut(&attach.name) {
-            Some(link) => match link.take() {
-                Some(mut relay) => {
-                    // Only Sender need to update the receiver settle mode
-                    // because the sender needs to echo a disposition if
-                    // rcv-settle-mode is 1
-                    if let LinkRelay::Sender {
-                        receiver_settle_mode,
-                        ..
-                    } = &mut relay
-                    {
-                        *receiver_settle_mode = attach.rcv_settle_mode.clone();
+    fn on_incoming_attach(&mut self, attach: Attach) -> impl Future<Output = Result<(), Self::Error>> + Send + '_ {
+        async move {
+            match self.link_by_name.get_mut(&attach.name) {
+                Some(link) => match link.take() {
+                    Some(mut relay) => {
+                        // Only Sender need to update the receiver settle mode
+                        // because the sender needs to echo a disposition if
+                        // rcv-settle-mode is 1
+                        if let LinkRelay::Sender {
+                            receiver_settle_mode,
+                            ..
+                        } = &mut relay
+                        {
+                            *receiver_settle_mode = attach.rcv_settle_mode.clone();
+                        }
+    
+                        let input_handle = InputHandle::from(attach.handle.clone()); // handle is just a wrapper around u32
+                        relay
+                            .send(LinkFrame::Attach(attach))
+                            .await
+                            .map_err(|_| SessionInnerError::UnattachedHandle)?;
+                        self.link_by_input_handle.insert(input_handle, relay);
+    
+                        Ok(())
                     }
-
-                    let input_handle = InputHandle::from(attach.handle.clone()); // handle is just a wrapper around u32
-                    relay
-                        .send(LinkFrame::Attach(attach))
-                        .await
-                        .map_err(|_| SessionInnerError::UnattachedHandle)?;
-                    self.link_by_input_handle.insert(input_handle, relay);
-
-                    Ok(())
-                }
-                None => {
-                    // Link name is found but is already in use
-                    Err(SessionInnerError::HandleInUse)
-                }
-            },
-            None => Err(SessionInnerError::RemoteAttachingLinkNameNotFound), // End session with unattached handle?,
+                    None => {
+                        // Link name is found but is already in use
+                        Err(SessionInnerError::HandleInUse)
+                    }
+                },
+                None => Err(SessionInnerError::RemoteAttachingLinkNameNotFound), // End session with unattached handle?,
+            }
         }
     }
 
-    async fn on_incoming_flow(
+    fn on_incoming_flow(
         &mut self,
         flow: Flow,
-    ) -> Result<Option<SessionOutgoingItem>, Self::Error> {
-        let outgoing_link_flow = self.on_incoming_flow_inner(flow).await?;
-        let outgoing_session_flow = outgoing_link_flow
-            .map(|flow| self.on_outgoing_flow(flow))
-            .transpose()?;
-
-        // Process buffered outgoing transfer frames if the updated remote-incoming-window is
-        // greater than 0
-        if self.remote_incoming_window > 0
-            && !self.remote_incoming_window_exhausted_buffer.is_empty()
-        {
-            let mut output_frame_buffer = Vec::with_capacity(
-                self.remote_incoming_window_exhausted_buffer
-                    .len()
-                    .saturating_add(1),
-            );
-            if let Some(outgoing_session_flow) = outgoing_session_flow {
-                output_frame_buffer.push(outgoing_session_flow);
+    ) -> impl Future<Output = Result<Option<SessionOutgoingItem>, Self::Error>> + Send + '_ {
+        async move {
+            let outgoing_link_flow = self.on_incoming_flow_inner(flow).await?;
+            let outgoing_session_flow = outgoing_link_flow
+                .map(|flow| self.on_outgoing_flow(flow))
+                .transpose()?;
+    
+            // Process buffered outgoing transfer frames if the updated remote-incoming-window is
+            // greater than 0
+            if self.remote_incoming_window > 0
+                && !self.remote_incoming_window_exhausted_buffer.is_empty()
+            {
+                let mut output_frame_buffer = Vec::with_capacity(
+                    self.remote_incoming_window_exhausted_buffer
+                        .len()
+                        .saturating_add(1),
+                );
+                if let Some(outgoing_session_flow) = outgoing_session_flow {
+                    output_frame_buffer.push(outgoing_session_flow);
+                }
+                let frames =
+                    self.prepare_session_frames_from_buffered_transfers(output_frame_buffer)?;
+                Ok(Some(SessionOutgoingItem::MultipleFrames(frames)))
+            } else {
+                Ok(outgoing_session_flow.map(SessionOutgoingItem::SingleFrame))
             }
-            let frames =
-                self.prepare_session_frames_from_buffered_transfers(output_frame_buffer)?;
-            Ok(Some(SessionOutgoingItem::MultipleFrames(frames)))
-        } else {
-            Ok(outgoing_session_flow.map(SessionOutgoingItem::SingleFrame))
         }
     }
 
-    async fn on_incoming_transfer(
+    fn on_incoming_transfer(
         &mut self,
         transfer: Transfer,
         payload: Payload,
-    ) -> Result<Option<Disposition>, Self::Error> {
-        // Upon receiving a transfer, the receiving endpoint will increment the next-incoming-id to
-        // match the implicit transfer-id of the incoming transfer plus one, as well as decrementing the
-        // remote-outgoing-window, and MAY (depending on policy) decrement its incoming-window.
-        self.next_incoming_id = self.next_incoming_id.wrapping_add(1);
-        self.remote_outgoing_window = self.remote_outgoing_window.saturating_sub(1);
-
-        // TODO: allow user to define whether the incoming window should be decremented
-
-        let input_handle = InputHandle::from(transfer.handle.clone());
-        match self.link_by_input_handle.get_mut(&input_handle) {
-            Some(link_relay) => {
-                let id_and_tag = link_relay.on_incoming_transfer(transfer, payload).await?;
-
-                // FIXME: If the unsettled map needs this
-                if let Some((delivery_id, delivery_tag)) = id_and_tag {
-                    self.delivery_tag_by_id
-                        .insert((Role::Sender, delivery_id), (input_handle, delivery_tag));
+    ) -> impl Future<Output = Result<Option<Disposition>, Self::Error>> + Send + '_ {
+        async move {
+            // Upon receiving a transfer, the receiving endpoint will increment the next-incoming-id to
+            // match the implicit transfer-id of the incoming transfer plus one, as well as decrementing the
+            // remote-outgoing-window, and MAY (depending on policy) decrement its incoming-window.
+            self.next_incoming_id = self.next_incoming_id.wrapping_add(1);
+            self.remote_outgoing_window = self.remote_outgoing_window.saturating_sub(1);
+    
+            // TODO: allow user to define whether the incoming window should be decremented
+    
+            let input_handle = InputHandle::from(transfer.handle.clone());
+            match self.link_by_input_handle.get_mut(&input_handle) {
+                Some(link_relay) => {
+                    let id_and_tag = link_relay.on_incoming_transfer(transfer, payload).await?;
+    
+                    // FIXME: If the unsettled map needs this
+                    if let Some((delivery_id, delivery_tag)) = id_and_tag {
+                        self.delivery_tag_by_id
+                            .insert((Role::Sender, delivery_id), (input_handle, delivery_tag));
+                    }
                 }
-            }
-            None => return Err(SessionInnerError::UnattachedHandle),
-        };
-
-        Ok(None)
+                None => return Err(SessionInnerError::UnattachedHandle),
+            };
+    
+            Ok(None)
+        }
     }
 
     #[cfg_attr(feature = "tracing", tracing::instrument(skip_all))]
@@ -685,21 +690,23 @@ impl endpoint::Session for Session {
     }
 
     #[cfg_attr(feature = "tracing", tracing::instrument(skip_all))]
-    async fn on_incoming_detach(&mut self, detach: Detach) -> Result<(), Self::Error> {
-        #[cfg(feature = "tracing")]
-        tracing::trace!(frame = ?detach);
-        #[cfg(feature = "log")]
-        log::trace!("RECV frame = {:?}", detach);
-        // Remove the link by input handle
-        match self
-            .link_by_input_handle
-            .remove(&InputHandle::from(detach.handle.clone()))
-        {
-            Some(mut link) => link
-                .on_incoming_detach(detach)
-                .await
-                .map_err(|_| SessionInnerError::UnattachedHandle),
-            None => Err(SessionInnerError::UnattachedHandle),
+    fn on_incoming_detach(&mut self, detach: Detach) -> impl Future<Output = Result<(), Self::Error>> + Send + '_ {
+        async move {
+            #[cfg(feature = "tracing")]
+            tracing::trace!(frame = ?detach);
+            #[cfg(feature = "log")]
+            log::trace!("RECV frame = {:?}", detach);
+            // Remove the link by input handle
+            match self
+                .link_by_input_handle
+                .remove(&InputHandle::from(detach.handle.clone()))
+            {
+                Some(mut link) => link
+                    .on_incoming_detach(detach)
+                    .await
+                    .map_err(|_| SessionInnerError::UnattachedHandle),
+                None => Err(SessionInnerError::UnattachedHandle),
+            }
         }
     }
 
@@ -738,68 +745,72 @@ impl endpoint::Session for Session {
         }
     }
 
-    async fn send_begin(
-        &mut self,
-        writer: &mpsc::Sender<SessionFrame>,
-    ) -> Result<(), Self::BeginError> {
-        let begin = Begin {
-            remote_channel: self.incoming_channel.map(Into::into),
-            next_outgoing_id: self.next_outgoing_id,
-            incoming_window: self.incoming_window,
-            outgoing_window: self.outgoing_window,
-            handle_max: self.handle_max.clone(),
-            offered_capabilities: self.offered_capabilities.clone().map(Into::into),
-            desired_capabilities: self.desired_capabilities.clone().map(Into::into),
-            properties: self.properties.clone(),
-        };
-        let frame = SessionFrame::new(self.outgoing_channel, SessionFrameBody::Begin(begin));
-
-        // check local states
-        match &self.local_state {
-            SessionState::Unmapped => {
-                writer
-                    .send(frame)
-                    .await
-                    // The receiving half must have dropped, and thus the `Connection`
-                    // event loop has stopped. It should be treated as an io error
-                    .map_err(|_| SessionStateError::IllegalConnectionState)?;
-                self.local_state = SessionState::BeginSent;
+    fn send_begin<'a>(
+        &'a mut self,
+        writer: &'a mpsc::Sender<SessionFrame>,
+    ) -> impl Future<Output = Result<(), Self::BeginError>> + Send + 'a {
+        async move {
+            let begin = Begin {
+                remote_channel: self.incoming_channel.map(Into::into),
+                next_outgoing_id: self.next_outgoing_id,
+                incoming_window: self.incoming_window,
+                outgoing_window: self.outgoing_window,
+                handle_max: self.handle_max.clone(),
+                offered_capabilities: self.offered_capabilities.clone().map(Into::into),
+                desired_capabilities: self.desired_capabilities.clone().map(Into::into),
+                properties: self.properties.clone(),
+            };
+            let frame = SessionFrame::new(self.outgoing_channel, SessionFrameBody::Begin(begin));
+    
+            // check local states
+            match &self.local_state {
+                SessionState::Unmapped => {
+                    writer
+                        .send(frame)
+                        .await
+                        // The receiving half must have dropped, and thus the `Connection`
+                        // event loop has stopped. It should be treated as an io error
+                        .map_err(|_| SessionStateError::IllegalConnectionState)?;
+                    self.local_state = SessionState::BeginSent;
+                }
+                SessionState::BeginReceived => {
+                    writer
+                        .send(frame)
+                        .await
+                        .map_err(|_| SessionStateError::IllegalConnectionState)?;
+                    self.local_state = SessionState::Mapped;
+                }
+                _ => return Err(SessionStateError::IllegalState),
             }
-            SessionState::BeginReceived => {
-                writer
-                    .send(frame)
-                    .await
-                    .map_err(|_| SessionStateError::IllegalConnectionState)?;
-                self.local_state = SessionState::Mapped;
-            }
-            _ => return Err(SessionStateError::IllegalState),
+    
+            Ok(())
         }
-
-        Ok(())
     }
 
-    async fn send_end(
-        &mut self,
-        writer: &mpsc::Sender<SessionFrame>,
+    fn send_end<'a>(
+        &'a mut self,
+        writer: &'a mpsc::Sender<SessionFrame>,
         error: Option<definitions::Error>,
-    ) -> Result<(), Self::EndError> {
-        match self.local_state {
-            SessionState::Mapped => match error.is_some() {
-                true => self.local_state = SessionState::Discarding,
-                false => self.local_state = SessionState::EndSent,
-            },
-            SessionState::EndReceived => self.local_state = SessionState::Unmapped,
-            _ => return Err(SessionStateError::IllegalState),
+    ) -> impl Future<Output = Result<(), Self::EndError>> + Send + 'a {
+        async move {
+            match self.local_state {
+                SessionState::Mapped => match error.is_some() {
+                    true => self.local_state = SessionState::Discarding,
+                    false => self.local_state = SessionState::EndSent,
+                },
+                SessionState::EndReceived => self.local_state = SessionState::Unmapped,
+                _ => return Err(SessionStateError::IllegalState),
+            }
+    
+            let frame = SessionFrame::new(self.outgoing_channel, SessionFrameBody::End(End { error }));
+            writer
+                .send(frame)
+                .await
+                // The receiving half must have dropped, and thus the `Connection`
+                // event loop has stopped. It should be treated as an io error
+                .map_err(|_| SessionStateError::IllegalConnectionState)?;
+            Ok(())
         }
-
-        let frame = SessionFrame::new(self.outgoing_channel, SessionFrameBody::End(End { error }));
-        writer
-            .send(frame)
-            .await
-            // The receiving half must have dropped, and thus the `Connection`
-            // event loop has stopped. It should be treated as an io error
-            .map_err(|_| SessionStateError::IllegalConnectionState)?;
-        Ok(())
     }
 
     fn on_outgoing_attach(&mut self, attach: Attach) -> Result<SessionFrame, Self::Error> {
@@ -917,14 +928,15 @@ impl HandleDeclare for Session {
 }
 
 #[cfg(feature = "transaction")]
-#[async_trait]
 impl HandleDischarge for Session {
-    async fn commit_transaction(
+    fn commit_transaction(
         &mut self,
         _txn_id: fe2o3_amqp_types::transaction::TransactionId,
-    ) -> Result<Result<Accepted, TransactionError>, Self::Error> {
-        // FIXME: This should be impossible
-        Ok(Err(TransactionError::UnknownId))
+    ) -> impl Future<Output = Result<Result<Accepted, TransactionError>, Self::Error>> + Send + '_ {
+        async move {
+            // FIXME: This should be impossible
+            Ok(Err(TransactionError::UnknownId))
+        }
     }
 
     fn rollback_transaction(

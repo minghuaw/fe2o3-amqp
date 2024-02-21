@@ -1,6 +1,7 @@
 //! Defines trait for connection implementations
 
-use async_trait::async_trait;
+use std::future::Future;
+
 use fe2o3_amqp_types::{
     definitions::Error,
     performatives::{Begin, Close, End, Open},
@@ -13,7 +14,6 @@ use crate::{frames::amqp::Frame, session::frame::SessionIncomingItem};
 use super::{IncomingChannel, OutgoingChannel, Session};
 
 /// Trait for connection
-#[async_trait]
 pub(crate) trait Connection {
     type AllocError: Send;
     type OpenError: Send;
@@ -46,18 +46,18 @@ pub(crate) trait Connection {
     /// Reacting to remote Begin frame
     ///
     /// Do NOT forward to session here. Forwarding is handled elsewhere.
-    async fn on_incoming_begin(
+    fn on_incoming_begin(
         &mut self,
         channel: IncomingChannel,
         begin: Begin,
-    ) -> Result<(), Self::Error>;
+    ) -> impl Future<Output = Result<(), Self::Error>> + Send + '_;
 
     /// Reacting to remote End frame
-    async fn on_incoming_end(
+    fn on_incoming_end(
         &mut self,
         channel: IncomingChannel,
         end: End,
-    ) -> Result<(), Self::Error>;
+    ) -> impl Future<Output = Result<(), Self::Error>> + Send + '_;
 
     /// Reacting to remote Close frame
     fn on_incoming_close(
@@ -71,16 +71,16 @@ pub(crate) trait Connection {
     /// The write is passed in is because sending an Open frame also changes the local
     /// connection state. If the sending fails outside, coming back
     /// and revert the state changes would be too complicated
-    async fn send_open<W>(&mut self, writer: &mut W) -> Result<(), Self::OpenError>
+    fn send_open<'a, W>(&'a mut self, writer: &'a mut W) -> impl Future<Output = Result<(), Self::OpenError>> + Send + 'a
     where
         W: Sink<Frame> + Send + Unpin,
         Self::OpenError: From<W::Error>; // DO NOT remove this. This is where `Transport` will be used
 
-    async fn send_close<W>(
-        &mut self,
-        writer: &mut W,
+    fn send_close<'a, W>(
+        &'a mut self,
+        writer: &'a mut W,
         error: Option<Error>,
-    ) -> Result<(), Self::CloseError>
+    ) -> impl Future<Output = Result<(), Self::CloseError>> + Send + 'a
     where
         W: Sink<Frame> + Send + Unpin,
         Self::CloseError: From<W::Error>; // DO NOT remove this. This is where `Transport` will be used

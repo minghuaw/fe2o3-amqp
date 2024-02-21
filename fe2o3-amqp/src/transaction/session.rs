@@ -1,5 +1,7 @@
 //! Implements session that can handle transaction
 
+use std::{future::Future, process::Output};
+
 use async_trait::async_trait;
 use fe2o3_amqp_types::{
     definitions::{self},
@@ -89,32 +91,33 @@ impl<S> TxnSession<S> where
 {
 }
 
-#[async_trait]
 impl<S> HandleControlLink for TxnSession<S>
 where
     S: endpoint::Session<Error = session::SessionInnerError> + endpoint::SessionExt + Send + Sync,
 {
     type Error = S::Error;
 
-    async fn on_incoming_control_attach(
+    fn on_incoming_control_attach(
         &mut self,
         remote_attach: Attach,
-    ) -> Result<(), Self::Error> {
-        let acceptor = self.txn_manager.control_link_acceptor.clone();
-        let control = self.control.clone();
-        let outgoing = self.txn_manager.control_link_outgoing.clone();
-
-        tokio::spawn(async move {
-            // Error accepting new control link is handled by acceptor
-            if let Ok(coordinator) = acceptor
-                .accept_incoming_attach(remote_attach, control, outgoing)
-                .await
-            {
-                coordinator.event_loop().await
-            }
-        });
-
-        Ok(())
+    ) -> impl Future<Output = Result<(), Self::Error>> + Send + '_ {
+        async move {
+            let acceptor = self.txn_manager.control_link_acceptor.clone();
+            let control = self.control.clone();
+            let outgoing = self.txn_manager.control_link_outgoing.clone();
+    
+            tokio::spawn(async move {
+                // Error accepting new control link is handled by acceptor
+                if let Ok(coordinator) = acceptor
+                    .accept_incoming_attach(remote_attach, control, outgoing)
+                    .await
+                {
+                    coordinator.event_loop().await
+                }
+            });
+    
+            Ok(())
+        }
     }
 }
 
@@ -136,64 +139,65 @@ where
     }
 }
 
-#[async_trait]
 impl<S> endpoint::HandleDischarge for TxnSession<S>
 where
     S: endpoint::Session<Error = session::SessionInnerError> + endpoint::SessionExt + Send + Sync,
 {
     #[cfg_attr(feature = "tracing", tracing::instrument(skip_all))]
-    async fn commit_transaction(
+    fn commit_transaction(
         &mut self,
         txn_id: TransactionId,
-    ) -> Result<Result<Accepted, TransactionError>, Self::Error> {
-        let txn = match self.txn_manager.txns.remove(&txn_id) {
-            Some(txn) => txn,
-            None => return Ok(Err(TransactionError::UnknownId)),
-        };
-
-        for work_frame in txn.frames {
-            match work_frame {
-                TxnWorkFrame::Post {
-                    mut transfer,
-                    payload,
-                } => {
-                    // FIXME: This informs the controller of the outcome that will be in effect at the point that the
-                    // transaction is successfully discharged
-                    if let Some(DeliveryState::TransactionalState(txn_state)) = transfer.state {
-                        transfer.state = txn_state.outcome.map(Into::into);
-                    };
-
-                    // Committing shuold never need to send an immediate disposition
-                    if let Some(disposition) =
-                        self.session.on_incoming_transfer(transfer, payload).await?
-                    {
-                        self.control
-                            .send(SessionControl::Disposition(disposition))
-                            .await
-                            .map_err(|_| Self::Error::IllegalState)?
-                    }
-                }
-                TxnWorkFrame::Retire(mut disposition) => {
-                    // On a successful discharge, the resource will apply the given outcome and can immediately settle the transfers.
-                    if let Some(DeliveryState::TransactionalState(txn_state)) = disposition.state {
-                        disposition.state = txn_state.outcome.map(Into::into)
-                    }
-                    disposition.settled = true;
-
-                    // TODO: Where should the echoing disposition be sent?
-                    if let Some(dispositions) = self.session.on_incoming_disposition(disposition)? {
-                        for disposition in dispositions {
+    ) -> impl Future<Output = Result<Result<Accepted, TransactionError>, Self::Error>> + Send + '_ {
+        async move {
+            let txn = match self.txn_manager.txns.remove(&txn_id) {
+                Some(txn) => txn,
+                None => return Ok(Err(TransactionError::UnknownId)),
+            };
+    
+            for work_frame in txn.frames {
+                match work_frame {
+                    TxnWorkFrame::Post {
+                        mut transfer,
+                        payload,
+                    } => {
+                        // FIXME: This informs the controller of the outcome that will be in effect at the point that the
+                        // transaction is successfully discharged
+                        if let Some(DeliveryState::TransactionalState(txn_state)) = transfer.state {
+                            transfer.state = txn_state.outcome.map(Into::into);
+                        };
+    
+                        // Committing shuold never need to send an immediate disposition
+                        if let Some(disposition) =
+                            self.session.on_incoming_transfer(transfer, payload).await?
+                        {
                             self.control
                                 .send(SessionControl::Disposition(disposition))
                                 .await
                                 .map_err(|_| Self::Error::IllegalState)?
                         }
                     }
+                    TxnWorkFrame::Retire(mut disposition) => {
+                        // On a successful discharge, the resource will apply the given outcome and can immediately settle the transfers.
+                        if let Some(DeliveryState::TransactionalState(txn_state)) = disposition.state {
+                            disposition.state = txn_state.outcome.map(Into::into)
+                        }
+                        disposition.settled = true;
+    
+                        // TODO: Where should the echoing disposition be sent?
+                        if let Some(dispositions) = self.session.on_incoming_disposition(disposition)? {
+                            for disposition in dispositions {
+                                self.control
+                                    .send(SessionControl::Disposition(disposition))
+                                    .await
+                                    .map_err(|_| Self::Error::IllegalState)?
+                            }
+                        }
+                    }
                 }
             }
+    
+            Ok(Ok(Accepted {}))
         }
-
-        Ok(Ok(Accepted {}))
     }
 
     fn rollback_transaction(
@@ -210,7 +214,6 @@ where
     }
 }
 
-#[async_trait]
 impl<S> endpoint::Session for TxnSession<S>
 where
     S: endpoint::Session<Error = session::SessionInnerError> + endpoint::SessionExt + Send + Sync,
@@ -262,50 +265,56 @@ where
         self.session.on_incoming_begin(channel, begin)
     }
 
-    async fn on_incoming_attach(&mut self, attach: Attach) -> Result<(), Self::Error> {
-        match attach.target.as_ref().map(|t| t.is_coordinator()) {
-            Some(true) => self.on_incoming_control_attach(attach).await,
-            Some(false) | None => self.session.on_incoming_attach(attach).await,
+    fn on_incoming_attach(&mut self, attach: Attach) -> impl Future<Output = Result<(), Self::Error>> + Send + '_ {
+        async move {
+            match attach.target.as_ref().map(|t| t.is_coordinator()) {
+                Some(true) => self.on_incoming_control_attach(attach).await,
+                Some(false) | None => self.session.on_incoming_attach(attach).await,
+            }
         }
     }
 
     #[cfg_attr(feature = "tracing", tracing::instrument(skip_all, flow = ?flow))]
-    async fn on_incoming_flow(
+    fn on_incoming_flow(
         &mut self,
         flow: Flow,
-    ) -> Result<Option<SessionOutgoingItem>, Self::Error> {
-        // TODO: implement transactional acquisition
-        // match flow
-        //     .properties
-        //     .as_ref()
-        //     .map(|fields| fields.contains_key(TXN_ID_KEY))
-        // {
-        //     Some(true) => {
-        //         // self.on_incoming_txn_flow(flow).await
-        //     }
-        //     Some(false) | None => self.session.on_incoming_flow(flow).await,
-        // }
-        self.session.on_incoming_flow(flow).await
+    ) -> impl Future<Output = Result<Option<SessionOutgoingItem>, Self::Error>> + Send + '_ {
+        async move {
+            // TODO: implement transactional acquisition
+            // match flow
+            //     .properties
+            //     .as_ref()
+            //     .map(|fields| fields.contains_key(TXN_ID_KEY))
+            // {
+            //     Some(true) => {
+            //         // self.on_incoming_txn_flow(flow).await
+            //     }
+            //     Some(false) | None => self.session.on_incoming_flow(flow).await,
+            // }
+            self.session.on_incoming_flow(flow).await
+        }
     }
 
-    async fn on_incoming_transfer(
+    fn on_incoming_transfer(
         &mut self,
         transfer: Transfer,
         payload: Payload,
-    ) -> Result<Option<Disposition>, Self::Error> {
-        let (txn, txn_id) = match &transfer.state {
-            Some(DeliveryState::TransactionalState(state)) => {
-                let txn_id = &state.txn_id;
-                self.txn_manager
-                    .txns
-                    .get_mut(txn_id)
-                    .map(|txn| (txn, txn_id.clone()))
-                    .ok_or(S::Error::UnknownTxnId)?
-            }
-            Some(_) | None => return self.session.on_incoming_transfer(transfer, payload).await,
-        };
-
-        Ok(txn.on_incoming_post(txn_id, transfer, payload))
+    ) -> impl Future<Output = Result<Option<Disposition>, Self::Error>> + Send + '_ {
+        async move {
+            let (txn, txn_id) = match &transfer.state {
+                Some(DeliveryState::TransactionalState(state)) => {
+                    let txn_id = &state.txn_id;
+                    self.txn_manager
+                        .txns
+                        .get_mut(txn_id)
+                        .map(|txn| (txn, txn_id.clone()))
+                        .ok_or(S::Error::UnknownTxnId)?
+                }
+                Some(_) | None => return self.session.on_incoming_transfer(transfer, payload).await,
+            };
+    
+            Ok(txn.on_incoming_post(txn_id, transfer, payload))
+        }
     }
 
     fn on_incoming_disposition(
@@ -343,19 +352,23 @@ where
     }
 
     // Handling SessionFrames
-    async fn send_begin(
-        &mut self,
-        writer: &mpsc::Sender<SessionFrame>,
-    ) -> Result<(), Self::BeginError> {
-        self.session.send_begin(writer).await
+    fn send_begin<'a>(
+        &'a mut self,
+        writer: &'a mpsc::Sender<SessionFrame>,
+    ) -> impl Future<Output = Result<(), Self::BeginError>> + Send + 'a {
+        async move {
+            self.session.send_begin(writer).await
+        }
     }
 
-    async fn send_end(
-        &mut self,
-        writer: &mpsc::Sender<SessionFrame>,
+    fn send_end<'a>(
+        &'a mut self,
+        writer: &'a mpsc::Sender<SessionFrame>,
         error: Option<definitions::Error>,
-    ) -> Result<(), Self::EndError> {
-        self.session.send_end(writer, error).await
+    ) -> impl Future<Output = Result<(), Self::EndError>> + Send + 'a {
+        async move {
+            self.session.send_end(writer, error).await
+        }
     }
 
     // Intercepting LinkFrames

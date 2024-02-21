@@ -1,6 +1,6 @@
 //! Connection Listener
 
-use std::{io, marker::PhantomData, time::Duration};
+use std::{io, marker::PhantomData, time::Duration, future::Future};
 
 use async_trait::async_trait;
 use fe2o3_amqp_types::{
@@ -462,7 +462,6 @@ pub struct ListenerConnection {
     pub(crate) session_listener: mpsc::Sender<IncomingSession>,
 }
 
-#[async_trait]
 impl endpoint::Connection for ListenerConnection {
     type AllocError = <connection::Connection as endpoint::Connection>::AllocError;
     type OpenError = <connection::Connection as endpoint::Connection>::OpenError;
@@ -508,42 +507,44 @@ impl endpoint::Connection for ListenerConnection {
     }
 
     #[inline]
-    async fn on_incoming_begin(
+    fn on_incoming_begin(
         &mut self,
         channel: IncomingChannel,
         begin: Begin,
-    ) -> Result<(), Self::Error> {
-        // This should remain mostly the same
-        match self.connection.on_incoming_begin_inner(channel, &begin)? {
-            Some(relay) => {
-                // forward begin to session
-                let sframe = SessionFrame::new(channel, SessionFrameBody::Begin(begin));
-                relay.send(sframe).await?;
+    ) -> impl Future<Output = Result<(), Self::Error>> + Send + '_ {
+        async move {
+            // This should remain mostly the same
+            match self.connection.on_incoming_begin_inner(channel, &begin)? {
+                Some(relay) => {
+                    // forward begin to session
+                    let sframe = SessionFrame::new(channel, SessionFrameBody::Begin(begin));
+                    relay.send(sframe).await?;
+                }
+                None => {
+                    // If a session is locally initiated, the remote-channel MUST NOT be set. When an endpoint responds
+                    // to a remotely initiated session, the remote-channel MUST be set to the channel on which the
+                    // remote session sent the begin.
+    
+                    // Upon receiving the
+                    // begin the partner will check the remote-channel field and find it empty. This indicates that the begin is referring to
+                    // remotely initiated session. The partner will therefore allocate an unused outgoing channel for the remotely initiated
+                    // session and indicate this by sending its own begin setting the remote-channel field to the incoming channel of the
+                    // remotely initiated session
+    
+                    // Here we will send the begin frame out to get processed
+                    let incoming_session = IncomingSession {
+                        channel: channel.0,
+                        begin,
+                    };
+                    self.session_listener
+                        .send(incoming_session)
+                        .await
+                        .map_err(|_| Self::Error::NotImplemented(None))?;
+                }
             }
-            None => {
-                // If a session is locally initiated, the remote-channel MUST NOT be set. When an endpoint responds
-                // to a remotely initiated session, the remote-channel MUST be set to the channel on which the
-                // remote session sent the begin.
-
-                // Upon receiving the
-                // begin the partner will check the remote-channel field and find it empty. This indicates that the begin is referring to
-                // remotely initiated session. The partner will therefore allocate an unused outgoing channel for the remotely initiated
-                // session and indicate this by sending its own begin setting the remote-channel field to the incoming channel of the
-                // remotely initiated session
-
-                // Here we will send the begin frame out to get processed
-                let incoming_session = IncomingSession {
-                    channel: channel.0,
-                    begin,
-                };
-                self.session_listener
-                    .send(incoming_session)
-                    .await
-                    .map_err(|_| Self::Error::NotImplemented(None))?;
-            }
+    
+            Ok(())
         }
-
-        Ok(())
     }
 
     #[inline]
@@ -565,25 +566,29 @@ impl endpoint::Connection for ListenerConnection {
     }
 
     #[inline]
-    async fn send_open<W>(&mut self, writer: &mut W) -> Result<(), Self::OpenError>
+    fn send_open<'a, W>(&'a mut self, writer: &'a mut W) -> impl Future<Output = Result<(), Self::OpenError>> + Send + 'a
     where
         W: Sink<Frame> + Send + Unpin,
         Self::OpenError: From<W::Error>,
     {
-        self.connection.send_open(writer).await
+        async move {
+            self.connection.send_open(writer).await
+        }
     }
 
     #[inline]
-    async fn send_close<W>(
-        &mut self,
-        writer: &mut W,
+    fn send_close<'a, W>(
+        &'a mut self,
+        writer: &'a mut W,
         error: Option<definitions::Error>,
-    ) -> Result<(), Self::CloseError>
+    ) -> impl Future<Output = Result<(), Self::CloseError>> + Send + 'a
     where
         W: Sink<Frame> + Send + Unpin,
         Self::CloseError: From<W::Error>,
     {
-        self.connection.send_close(writer, error).await
+        async move {
+            self.connection.send_close(writer, error).await
+        }
     }
 
     #[inline]

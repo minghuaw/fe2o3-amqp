@@ -1,8 +1,6 @@
 //! Implements AMQP1.0 Connection
 
-use std::{cmp::min, collections::HashMap, convert::TryInto, sync::Arc};
-
-use async_trait::async_trait;
+use std::{cmp::min, collections::HashMap, convert::TryInto, sync::Arc, future::Future};
 
 use fe2o3_amqp_types::{
     definitions::{self},
@@ -474,7 +472,6 @@ impl Connection {
     }
 }
 
-#[async_trait]
 impl endpoint::Connection for Connection {
     type AllocError = AllocSessionError;
     type OpenError = ConnectionStateError;
@@ -556,51 +553,55 @@ impl endpoint::Connection for Connection {
     }
 
     /// Reacting to remote Begin frame
-    async fn on_incoming_begin(
+    fn on_incoming_begin(
         &mut self,
         channel: IncomingChannel,
         begin: Begin,
-    ) -> Result<(), Self::Error> {
-        match self.on_incoming_begin_inner(channel, &begin)? {
-            Some(relay) => {
-                // forward begin to session
-                let sframe = SessionFrame::new(channel.0, SessionFrameBody::Begin(begin));
-                // self.send_to_session(session_id, sframe).await?;
-                relay.send(sframe).await?;
-                Ok(())
-            }
-            None => {
-                // If a session is locally initiated, the remote-channel MUST NOT be set. When an endpoint responds
-                // to a remotely initiated session, the remote-channel MUST be set to the channel on which the
-                // remote session sent the begin.
-                Err(ConnectionInnerError::NotImplemented(Some(
-                    "Remotely initiazted session is not supported yet".to_string(),
-                )))
+    ) -> impl Future<Output = Result<(), Self::Error>> + Send + '_ {
+        async move {
+            match self.on_incoming_begin_inner(channel, &begin)? {
+                Some(relay) => {
+                    // forward begin to session
+                    let sframe = SessionFrame::new(channel.0, SessionFrameBody::Begin(begin));
+                    // self.send_to_session(session_id, sframe).await?;
+                    relay.send(sframe).await?;
+                    Ok(())
+                }
+                None => {
+                    // If a session is locally initiated, the remote-channel MUST NOT be set. When an endpoint responds
+                    // to a remotely initiated session, the remote-channel MUST be set to the channel on which the
+                    // remote session sent the begin.
+                    Err(ConnectionInnerError::NotImplemented(Some(
+                        "Remotely initiazted session is not supported yet".to_string(),
+                    )))
+                }
             }
         }
     }
 
     /// Reacting to remote End frame
-    async fn on_incoming_end(
+    fn on_incoming_end(
         &mut self,
         channel: IncomingChannel,
         end: End,
-    ) -> Result<(), Self::Error> {
-        match &self.local_state {
-            ConnectionState::Opened => {}
-            _ => return Err(ConnectionInnerError::IllegalState),
+    ) -> impl Future<Output = Result<(), Self::Error>> + Send + '_ {
+        async move {
+            match &self.local_state {
+                ConnectionState::Opened => {}
+                _ => return Err(ConnectionInnerError::IllegalState),
+            }
+    
+            // Forward to session
+            let sframe = SessionFrame::new(channel, SessionFrameBody::End(end));
+            // Drop incoming channel
+            let relay = self
+                .session_by_incoming_channel
+                .remove(&channel)
+                .ok_or(ConnectionInnerError::NotFound(None))?;
+            relay.send(sframe).await?;
+    
+            Ok(())
         }
-
-        // Forward to session
-        let sframe = SessionFrame::new(channel, SessionFrameBody::End(end));
-        // Drop incoming channel
-        let relay = self
-            .session_by_incoming_channel
-            .remove(&channel)
-            .ok_or(ConnectionInnerError::NotFound(None))?;
-        relay.send(sframe).await?;
-
-        Ok(())
     }
 
     /// Reacting to remote Close frame
@@ -635,28 +636,30 @@ impl endpoint::Connection for Connection {
     }
 
     #[cfg_attr(feature = "tracing", tracing::instrument(skip_all))]
-    async fn send_open<W>(&mut self, writer: &mut W) -> Result<(), Self::OpenError>
+    fn send_open<'a, W>(&'a mut self, writer: &'a mut W) -> impl Future<Output = Result<(), Self::OpenError>> + Send + 'a
     where
         W: Sink<Frame> + Send + Unpin,
         Self::OpenError: From<W::Error>,
     {
-        let body = FrameBody::Open(self.local_open.clone());
-        let frame = Frame::new(0u16, body);
-        #[cfg(feature = "tracing")]
-        tracing::trace!(?frame);
-        #[cfg(feature = "log")]
-        log::trace!("SEND frame = {:?}", frame);
-        writer.send(frame).await.map_err(Into::into)?;
-
-        // change local state after successfully sending the frame
-        match &self.local_state {
-            ConnectionState::HeaderExchange => self.local_state = ConnectionState::OpenSent,
-            ConnectionState::OpenReceived => self.local_state = ConnectionState::Opened,
-            ConnectionState::HeaderSent => self.local_state = ConnectionState::OpenPipe,
-            _ => return Err(Self::OpenError::IllegalState),
+        async move {
+            let body = FrameBody::Open(self.local_open.clone());
+            let frame = Frame::new(0u16, body);
+            #[cfg(feature = "tracing")]
+            tracing::trace!(?frame);
+            #[cfg(feature = "log")]
+            log::trace!("SEND frame = {:?}", frame);
+            writer.send(frame).await.map_err(Into::into)?;
+    
+            // change local state after successfully sending the frame
+            match &self.local_state {
+                ConnectionState::HeaderExchange => self.local_state = ConnectionState::OpenSent,
+                ConnectionState::OpenReceived => self.local_state = ConnectionState::Opened,
+                ConnectionState::HeaderSent => self.local_state = ConnectionState::OpenPipe,
+                _ => return Err(Self::OpenError::IllegalState),
+            }
+    
+            Ok(())
         }
-
-        Ok(())
     }
 
     fn on_outgoing_begin(
@@ -680,36 +683,38 @@ impl endpoint::Connection for Connection {
     }
 
     // TODO: set a timeout for recving incoming Close
-    async fn send_close<W>(
-        &mut self,
-        writer: &mut W,
+    fn send_close<'a, W>(
+        &'a mut self,
+        writer: &'a mut W,
         error: Option<definitions::Error>,
-    ) -> Result<(), Self::CloseError>
+    ) -> impl Future<Output = Result<(), Self::CloseError>> + Send + 'a
     where
         W: Sink<Frame> + Send + Unpin,
         Self::CloseError: From<W::Error>,
     {
-        let error_is_some = error.is_some();
-        let frame = Frame::new(0u16, FrameBody::Close(Close { error }));
-        writer.send(frame).await.map_err(Into::into)?;
-
-        match &self.local_state {
-            ConnectionState::Opened => match error_is_some {
-                true => self.local_state = ConnectionState::Discarding,
-                false => self.local_state = ConnectionState::CloseSent,
-            },
-            ConnectionState::CloseReceived => self.local_state = ConnectionState::End,
-            ConnectionState::OpenSent => match error_is_some {
-                true => self.local_state = ConnectionState::Discarding,
-                false => self.local_state = ConnectionState::ClosePipe,
-            },
-            ConnectionState::OpenPipe => match error_is_some {
-                true => self.local_state = ConnectionState::Discarding,
-                false => self.local_state = ConnectionState::OpenClosePipe,
-            },
-            _ => return Err(CloseError::IllegalState),
+        async move {
+            let error_is_some = error.is_some();
+            let frame = Frame::new(0u16, FrameBody::Close(Close { error }));
+            writer.send(frame).await.map_err(Into::into)?;
+    
+            match &self.local_state {
+                ConnectionState::Opened => match error_is_some {
+                    true => self.local_state = ConnectionState::Discarding,
+                    false => self.local_state = ConnectionState::CloseSent,
+                },
+                ConnectionState::CloseReceived => self.local_state = ConnectionState::End,
+                ConnectionState::OpenSent => match error_is_some {
+                    true => self.local_state = ConnectionState::Discarding,
+                    false => self.local_state = ConnectionState::ClosePipe,
+                },
+                ConnectionState::OpenPipe => match error_is_some {
+                    true => self.local_state = ConnectionState::Discarding,
+                    false => self.local_state = ConnectionState::OpenClosePipe,
+                },
+                _ => return Err(CloseError::IllegalState),
+            }
+            Ok(())
         }
-        Ok(())
     }
 
     fn session_tx_by_incoming_channel(

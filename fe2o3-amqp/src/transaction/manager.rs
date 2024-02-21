@@ -1,6 +1,6 @@
 //! Manages incoming transaction on the resource side
 
-use std::sync::Arc;
+use std::{sync::Arc, future::Future};
 
 use async_trait::async_trait;
 use fe2o3_amqp_types::{
@@ -16,11 +16,10 @@ use crate::{link::LinkFrame, Payload};
 
 use super::{coordinator::ControlLinkAcceptor, frame::TxnWorkFrame};
 
-#[async_trait]
 pub(crate) trait HandleControlLink {
     type Error: Send;
 
-    async fn on_incoming_control_attach(&mut self, attach: Attach) -> Result<(), Self::Error>;
+    fn on_incoming_control_attach(&mut self, attach: Attach) -> impl Future<Output = Result<(), Self::Error>> + Send + '_;
 }
 
 /// Transaction manager
