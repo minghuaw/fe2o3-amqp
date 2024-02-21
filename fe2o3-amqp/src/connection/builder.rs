@@ -1143,7 +1143,7 @@ mod tests {
     #[test]
     fn test_url_name_resolution() {
         let url: Url = "amqp://example.net/".try_into().unwrap();
-        assert_eq!(url.port(), Some(5672));
+        assert_eq!(url.port(), None);
         let _addrs = url.socket_addrs(|| Some(5672)).unwrap();
     }
 }
