@@ -146,7 +146,7 @@ where
         &mut self,
         txn_id: TransactionId,
     ) -> Result<Result<Accepted, TransactionError>, Self::Error> {
-        let txn = match self.txn_manager.txns.remove(&txn_id) {
+        let txn = match self.txn_manager.txns.swap_remove(&txn_id) {
             Some(txn) => txn,
             None => return Ok(Err(TransactionError::UnknownId)),
         };
@@ -200,7 +200,7 @@ where
         &mut self,
         txn_id: TransactionId,
     ) -> Result<Result<Accepted, TransactionError>, Self::Error> {
-        match self.txn_manager.txns.remove(&txn_id) {
+        match self.txn_manager.txns.swap_remove(&txn_id) {
             Some(_) => {
                 // TODO: Simply drop the frames?
                 Ok(Ok(Accepted {}))

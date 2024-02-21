@@ -282,7 +282,7 @@ where
         {
             let mut lock = self.unsettled.write();
             if settled {
-                if let Some(msg) = lock.as_mut().and_then(|m| m.remove(&delivery_tag)) {
+                if let Some(msg) = lock.as_mut().and_then(|m| m.swap_remove(&delivery_tag)) {
                     let _ = msg.settle();
                 }
             } else if let Some(msg) = lock.as_mut().and_then(|m| m.get_mut(&delivery_tag)) {
@@ -316,7 +316,7 @@ where
                 // Make sure there is not .await point during the lifetime of the guard
                 let mut guard = self.unsettled.write();
                 if settled {
-                    if let Some(msg) = guard.as_mut().and_then(|m| m.remove(&delivery_tag)) {
+                    if let Some(msg) = guard.as_mut().and_then(|m| m.swap_remove(&delivery_tag)) {
                         let _ = msg.settle();
                     }
                 } else if let Some(msg) = guard.as_mut().and_then(|m| m.get_mut(&delivery_tag)) {
@@ -538,7 +538,7 @@ impl<T> SenderLink<T> {
                 let local: Vec<(DeliveryTag, ResumingDelivery)> = local_map
                     .into_iter()
                     .filter_map(|(tag, local)| {
-                        let remote = remote_map.remove(&tag);
+                        let remote = remote_map.swap_remove(&tag);
                         resume_delivery(local, remote).map(|resume| (tag, resume))
                     })
                     .collect();
