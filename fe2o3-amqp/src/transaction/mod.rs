@@ -461,7 +461,7 @@ impl<'t> Transaction<'t> {
             Err(error) => {
                 let mut writer = recver.inner.link.flow_state.lock.write();
                 if let Some(fields) = &mut writer.properties {
-                    fields.remove(TXN_ID_KEY);
+                    fields.swap_remove(TXN_ID_KEY);
                 }
                 Err(error)
             }

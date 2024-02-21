@@ -39,7 +39,7 @@ acceptor = []
 scram = ["sha-1", "sha2", "rand", "base64", "stringprep", "hmac", "pbkdf2"]
 
 [dependencies]
-serde_amqp = { version = "0.9.0", path = "../serde_amqp" }
+serde_amqp = { version = "0.9.1", path = "../serde_amqp" }
 fe2o3-amqp-types = { version = "0.9.0", path = "../fe2o3-amqp-types" }
 
 bytes = "1"

@@ -19,7 +19,7 @@ pub async fn get_event_hub_partitions(
 
     let partition_value = response
         .entity_attributes
-        .remove("partition_ids")
+        .swap_remove("partition_ids")
         .ok_or(anyhow!("partition_ids not found"))?;
     let partitions: Array<String> = partition_value
         .try_into()

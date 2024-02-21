@@ -60,7 +60,7 @@ where
         // clear txn-id
         {
             let mut writer = self.recver.inner.link.flow_state.lock.write();
-            writer.properties.as_mut().map(|map| map.remove(TXN_ID_KEY));
+            writer.properties.as_mut().map(|map| map.swap_remove(TXN_ID_KEY));
         }
 
         // set drain to true
@@ -155,7 +155,7 @@ where
                 writer
                     .properties
                     .as_mut()
-                    .map(|fields| fields.remove(TXN_ID_KEY));
+                    .map(|fields| fields.swap_remove(TXN_ID_KEY));
             }
 
             // Set drain to true

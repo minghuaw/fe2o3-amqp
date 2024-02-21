@@ -692,7 +692,7 @@ impl LinkRelay<OutputHandle> {
                         let mut guard = unsettled.write();
                         guard
                             .as_mut()
-                            .and_then(|m| m.remove(&delivery_tag))
+                            .and_then(|m| m.swap_remove(&delivery_tag))
                             .map(|msg| msg.settle_with_state(state));
                     }
                     false
@@ -709,7 +709,7 @@ impl LinkRelay<OutputHandle> {
                         if is_terminal {
                             let _result = guard
                                 .as_mut()
-                                .and_then(|m| m.remove(&delivery_tag))
+                                .and_then(|m| m.swap_remove(&delivery_tag))
                                 .map(|msg| msg.settle_with_state(state));
                         } else if let Some(msg) =
                             guard.as_mut().and_then(|m| m.get_mut(&delivery_tag))
@@ -742,7 +742,7 @@ impl LinkRelay<OutputHandle> {
                 if settled {
                     let mut guard = unsettled.write();
                     // let _state = remove_from_unsettled(unsettled, &delivery_tag).await;
-                    let _state = guard.as_mut().and_then(|m| m.remove(&delivery_tag));
+                    let _state = guard.as_mut().and_then(|m| m.swap_remove(&delivery_tag));
                 } else {
                     let mut guard = unsettled.write();
                     if let Some(msg_state) = guard.as_mut().and_then(|m| m.get_mut(&delivery_tag)) {

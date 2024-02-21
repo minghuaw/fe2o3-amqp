@@ -75,7 +75,7 @@ where
 
         if matches!(settled, Some(true)) {
             // FIXME: Simply remove from the unsettled map?
-            let _ = map.remove(delivery_tag);
+            let _ = map.swap_remove(delivery_tag);
         } else {
             // If a terminal state is already achieved, cannot send any further
             let value = map.get_mut(delivery_tag);
@@ -258,7 +258,7 @@ where
         let unsettled_state = if settled {
             let mut lock = self.unsettled.write();
             lock.as_mut()
-                .and_then(|map| map.remove(&delivery_info.delivery_tag))
+                .and_then(|map| map.swap_remove(&delivery_info.delivery_tag))
         } else {
             let mut lock = self.unsettled.write();
             // If the key is present in the map, the old value will be returned, which
@@ -465,7 +465,8 @@ impl<T> ReceiverLink<T> {
         if settled {
             let mut lock = self.unsettled.write();
             for info in consecutive_infos {
-                lock.as_mut().and_then(|map| map.remove(&info.delivery_tag));
+                lock.as_mut()
+                    .and_then(|map| map.swap_remove(&info.delivery_tag));
             }
         } else {
             let mut lock = self.unsettled.write();
