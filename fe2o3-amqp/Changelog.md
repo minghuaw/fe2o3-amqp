@@ -1,5 +1,12 @@
 # Change Log
 
+## 0.9.3
+
+1. Updated deps
+   1. `serde_amqp` to "0.9.1"
+   2. `fe2o3-amqp-types` to "0.9.1"
+2. Use `OrderedMap::swap_remove` instead of the deprecated `OrderedMap::remove`
+
 ## 0.9.2
 
 1. Ported 0.7.32
