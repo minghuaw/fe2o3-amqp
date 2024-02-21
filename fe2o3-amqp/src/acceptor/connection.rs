@@ -1,8 +1,8 @@
 //! Connection Listener
 
-use std::{io, marker::PhantomData, time::Duration, future::Future};
+use std::{future::Future, io, marker::PhantomData, time::Duration};
 
-use async_trait::async_trait;
+
 use fe2o3_amqp_types::{
     definitions::{self},
     performatives::{Begin, Close, End, Open},
@@ -524,13 +524,13 @@ impl endpoint::Connection for ListenerConnection {
                     // If a session is locally initiated, the remote-channel MUST NOT be set. When an endpoint responds
                     // to a remotely initiated session, the remote-channel MUST be set to the channel on which the
                     // remote session sent the begin.
-    
+
                     // Upon receiving the
                     // begin the partner will check the remote-channel field and find it empty. This indicates that the begin is referring to
                     // remotely initiated session. The partner will therefore allocate an unused outgoing channel for the remotely initiated
                     // session and indicate this by sending its own begin setting the remote-channel field to the incoming channel of the
                     // remotely initiated session
-    
+
                     // Here we will send the begin frame out to get processed
                     let incoming_session = IncomingSession {
                         channel: channel.0,
@@ -542,7 +542,7 @@ impl endpoint::Connection for ListenerConnection {
                         .map_err(|_| Self::Error::NotImplemented(None))?;
                 }
             }
-    
+
             Ok(())
         }
     }
@@ -566,14 +566,15 @@ impl endpoint::Connection for ListenerConnection {
     }
 
     #[inline]
-    fn send_open<'a, W>(&'a mut self, writer: &'a mut W) -> impl Future<Output = Result<(), Self::OpenError>> + Send + 'a
+    fn send_open<'a, W>(
+        &'a mut self,
+        writer: &'a mut W,
+    ) -> impl Future<Output = Result<(), Self::OpenError>> + Send + 'a
     where
         W: Sink<Frame> + Send + Unpin,
         Self::OpenError: From<W::Error>,
     {
-        async move {
-            self.connection.send_open(writer).await
-        }
+        async move { self.connection.send_open(writer).await }
     }
 
     #[inline]
@@ -586,9 +587,7 @@ impl endpoint::Connection for ListenerConnection {
         W: Sink<Frame> + Send + Unpin,
         Self::CloseError: From<W::Error>,
     {
-        async move {
-            self.connection.send_close(writer, error).await
-        }
+        async move { self.connection.send_close(writer, error).await }
     }
 
     #[inline]

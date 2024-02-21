@@ -2,7 +2,7 @@
 
 use std::{marker::PhantomData, sync::Arc};
 
-use async_trait::async_trait;
+
 use fe2o3_amqp_types::definitions::{Fields, SequenceNo};
 use parking_lot::RwLock;
 
@@ -290,7 +290,6 @@ impl ProducerState for Arc<LinkFlowState<role::SenderMarker>> {
 
 struct InsufficientCredit {}
 
-#[async_trait]
 impl Consume for SenderFlowState {
     type Item = u32;
     type Outcome = [u8; 4];
@@ -368,7 +367,7 @@ mod tests {
 
     macro_rules! assert_pending {
         ($fut:expr) => {
-            let fut = $fut;
+            let fut = Box::pin($fut);
             let poll = poll!(fut);
             assert!(poll.is_pending());
         };
@@ -376,7 +375,7 @@ mod tests {
 
     macro_rules! assert_ready {
         ($fut:expr) => {
-            let fut = $fut;
+            let fut = Box::pin($fut);
             let poll = poll!(fut);
             assert!(poll.is_ready());
         };

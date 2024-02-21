@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use async_trait::async_trait;
+
 use tokio::sync::Notify;
 
 #[derive(Debug)]
@@ -15,7 +15,6 @@ impl<State> Producer<State> {
     }
 }
 
-#[async_trait]
 pub(crate) trait Produce {
     type Item: Send;
     type Outcome: Send;
@@ -30,7 +29,6 @@ pub(crate) trait ProducerState {
     fn update_state(&mut self, item: Self::Item) -> Self::Outcome;
 }
 
-#[async_trait]
 impl<T> Produce for Producer<T>
 where
     T: ProducerState + Send,

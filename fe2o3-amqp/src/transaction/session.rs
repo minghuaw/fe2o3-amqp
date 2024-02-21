@@ -1,8 +1,8 @@
 //! Implements session that can handle transaction
 
-use std::{future::Future, process::Output};
+use std::{future::Future};
 
-use async_trait::async_trait;
+
 use fe2o3_amqp_types::{
     definitions::{self},
     messaging::{Accepted, DeliveryState},
@@ -105,7 +105,7 @@ where
             let acceptor = self.txn_manager.control_link_acceptor.clone();
             let control = self.control.clone();
             let outgoing = self.txn_manager.control_link_outgoing.clone();
-    
+
             tokio::spawn(async move {
                 // Error accepting new control link is handled by acceptor
                 if let Ok(coordinator) = acceptor
@@ -115,7 +115,7 @@ where
                     coordinator.event_loop().await
                 }
             });
-    
+
             Ok(())
         }
     }
@@ -147,13 +147,14 @@ where
     fn commit_transaction(
         &mut self,
         txn_id: TransactionId,
-    ) -> impl Future<Output = Result<Result<Accepted, TransactionError>, Self::Error>> + Send + '_ {
+    ) -> impl Future<Output = Result<Result<Accepted, TransactionError>, Self::Error>> + Send + '_
+    {
         async move {
             let txn = match self.txn_manager.txns.remove(&txn_id) {
                 Some(txn) => txn,
                 None => return Ok(Err(TransactionError::UnknownId)),
             };
-    
+
             for work_frame in txn.frames {
                 match work_frame {
                     TxnWorkFrame::Post {
@@ -165,7 +166,7 @@ where
                         if let Some(DeliveryState::TransactionalState(txn_state)) = transfer.state {
                             transfer.state = txn_state.outcome.map(Into::into);
                         };
-    
+
                         // Committing shuold never need to send an immediate disposition
                         if let Some(disposition) =
                             self.session.on_incoming_transfer(transfer, payload).await?
@@ -178,13 +179,17 @@ where
                     }
                     TxnWorkFrame::Retire(mut disposition) => {
                         // On a successful discharge, the resource will apply the given outcome and can immediately settle the transfers.
-                        if let Some(DeliveryState::TransactionalState(txn_state)) = disposition.state {
+                        if let Some(DeliveryState::TransactionalState(txn_state)) =
+                            disposition.state
+                        {
                             disposition.state = txn_state.outcome.map(Into::into)
                         }
                         disposition.settled = true;
-    
+
                         // TODO: Where should the echoing disposition be sent?
-                        if let Some(dispositions) = self.session.on_incoming_disposition(disposition)? {
+                        if let Some(dispositions) =
+                            self.session.on_incoming_disposition(disposition)?
+                        {
                             for disposition in dispositions {
                                 self.control
                                     .send(SessionControl::Disposition(disposition))
@@ -195,7 +200,7 @@ where
                     }
                 }
             }
-    
+
             Ok(Ok(Accepted {}))
         }
     }
@@ -265,7 +270,10 @@ where
         self.session.on_incoming_begin(channel, begin)
     }
 
-    fn on_incoming_attach(&mut self, attach: Attach) -> impl Future<Output = Result<(), Self::Error>> + Send + '_ {
+    fn on_incoming_attach(
+        &mut self,
+        attach: Attach,
+    ) -> impl Future<Output = Result<(), Self::Error>> + Send + '_ {
         async move {
             match attach.target.as_ref().map(|t| t.is_coordinator()) {
                 Some(true) => self.on_incoming_control_attach(attach).await,
@@ -310,9 +318,11 @@ where
                         .map(|txn| (txn, txn_id.clone()))
                         .ok_or(S::Error::UnknownTxnId)?
                 }
-                Some(_) | None => return self.session.on_incoming_transfer(transfer, payload).await,
+                Some(_) | None => {
+                    return self.session.on_incoming_transfer(transfer, payload).await
+                }
             };
-    
+
             Ok(txn.on_incoming_post(txn_id, transfer, payload))
         }
     }
@@ -356,9 +366,7 @@ where
         &'a mut self,
         writer: &'a mpsc::Sender<SessionFrame>,
     ) -> impl Future<Output = Result<(), Self::BeginError>> + Send + 'a {
-        async move {
-            self.session.send_begin(writer).await
-        }
+        async move { self.session.send_begin(writer).await }
     }
 
     fn send_end<'a>(
@@ -366,9 +374,7 @@ where
         writer: &'a mpsc::Sender<SessionFrame>,
         error: Option<definitions::Error>,
     ) -> impl Future<Output = Result<(), Self::EndError>> + Send + 'a {
-        async move {
-            self.session.send_end(writer, error).await
-        }
+        async move { self.session.send_end(writer, error).await }
     }
 
     // Intercepting LinkFrames

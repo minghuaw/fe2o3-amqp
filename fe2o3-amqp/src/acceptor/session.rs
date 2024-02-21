@@ -2,7 +2,7 @@
 
 use std::future::Future;
 
-use async_trait::async_trait;
+
 use fe2o3_amqp_types::{
     definitions::{self, ConnectionError},
     performatives::{Attach, Begin, Detach, Disposition, End, Flow, Transfer},
@@ -394,7 +394,10 @@ impl endpoint::Session for ListenerSession {
         self.session.on_incoming_begin(channel, begin)
     }
 
-    fn on_incoming_attach(&mut self, attach: Attach) -> impl Future<Output = Result<(), Self::Error>> + Send + '_ {
+    fn on_incoming_attach(
+        &mut self,
+        attach: Attach,
+    ) -> impl Future<Output = Result<(), Self::Error>> + Send + '_ {
         async move {
             match self.session.link_by_name.get_mut(&attach.name) {
                 Some(link) => match link.take() {
@@ -409,7 +412,7 @@ impl endpoint::Session for ListenerSession {
                         {
                             *receiver_settle_mode = attach.rcv_settle_mode.clone();
                         }
-    
+
                         let input_handle = attach.handle.clone().into(); // handle is just a wrapper around u32
                         relay
                             .send(LinkFrame::Attach(attach))
@@ -433,7 +436,7 @@ impl endpoint::Session for ListenerSession {
                     // remote link endpoint. The link endpoint is then mapped
                     // to an unused handle, and an attach frame is issued carrying
                     // the state of the newly created endpoint.
-    
+
                     self.link_listener.send(attach).await.map_err(|_| {
                         // SessionHandle must have been dropped, then treat it as if the acceptor doesn't exist
                         SessionInnerError::UnattachedHandle
@@ -447,9 +450,7 @@ impl endpoint::Session for ListenerSession {
         &mut self,
         flow: Flow,
     ) -> impl Future<Output = Result<Option<SessionOutgoingItem>, Self::Error>> + Send + '_ {
-        async move {
-            self.session.on_incoming_flow(flow).await
-        }
+        async move { self.session.on_incoming_flow(flow).await }
     }
 
     fn on_incoming_transfer(
@@ -457,9 +458,7 @@ impl endpoint::Session for ListenerSession {
         transfer: Transfer,
         payload: Payload,
     ) -> impl Future<Output = Result<Option<Disposition>, Self::Error>> + Send + '_ {
-        async move {
-            self.session.on_incoming_transfer(transfer, payload).await
-        }
+        async move { self.session.on_incoming_transfer(transfer, payload).await }
     }
 
     fn on_incoming_disposition(
@@ -486,9 +485,7 @@ impl endpoint::Session for ListenerSession {
         &'a mut self,
         writer: &'a mpsc::Sender<SessionFrame>,
     ) -> impl Future<Output = Result<(), Self::BeginError>> + Send + 'a {
-        async move {
-            self.session.send_begin(writer).await
-        }
+        async move { self.session.send_begin(writer).await }
     }
 
     fn send_end<'a>(
@@ -496,9 +493,7 @@ impl endpoint::Session for ListenerSession {
         writer: &'a mpsc::Sender<SessionFrame>,
         error: Option<definitions::Error>,
     ) -> impl Future<Output = Result<(), Self::EndError>> + Send + 'a {
-        async move {
-            self.session.send_end(writer, error).await
-        }
+        async move { self.session.send_end(writer, error).await }
     }
 
     // Intercepting LinkFrames
@@ -547,7 +542,8 @@ impl endpoint::HandleDischarge for ListenerSession {
     fn commit_transaction(
         &mut self,
         _txn_id: fe2o3_amqp_types::transaction::TransactionId,
-    ) -> impl Future<Output = Result<Result<Accepted, TransactionError>, Self::Error>> + Send + '_ {
+    ) -> impl Future<Output = Result<Result<Accepted, TransactionError>, Self::Error>> + Send + '_
+    {
         async move {
             // FIXME: This should be impossible
             Ok(Err(TransactionError::UnknownId))

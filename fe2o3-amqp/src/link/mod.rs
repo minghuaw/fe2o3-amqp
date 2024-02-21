@@ -1,8 +1,8 @@
 //! Implements AMQP1.0 Link
 
-use std::{marker::PhantomData, sync::Arc, future::Future};
+use std::{future::Future, marker::PhantomData, sync::Arc};
 
-use async_trait::async_trait;
+
 use bytes::{BufMut, BytesMut};
 use fe2o3_amqp_types::{
     definitions::{
@@ -490,7 +490,7 @@ where
                 (LinkState::CloseReceived, true) => self.local_state = LinkState::Closed,
                 _ => return Err(DetachError::IllegalState),
             };
-    
+
             match self.output_handle.clone() {
                 Some(handle) => {
                     let detach = Detach {
@@ -498,22 +498,22 @@ where
                         closed,
                         error,
                     };
-    
+
                     #[cfg(feature = "tracing")]
                     tracing::debug!("Sending detach: {:?}", detach);
                     #[cfg(feature = "log")]
                     log::debug!("Sending detach: {:?}", detach);
-    
+
                     writer
                         .send(LinkFrame::Detach(detach))
                         .await // cancel safe
                         .map_err(|_| DetachError::IllegalSessionState)?;
-    
+
                     self.output_handle.take();
                 }
                 None => return Err(DetachError::IllegalState),
             }
-    
+
             Ok(())
         }
     }

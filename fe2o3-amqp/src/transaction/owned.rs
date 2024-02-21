@@ -1,12 +1,15 @@
 //! Implements OwnedTransaction
 
-use async_trait::async_trait;
+
+
+
 use fe2o3_amqp_types::{
     definitions::{Fields, SequenceNo},
     messaging::{DeliveryState, Outcome, SerializableBody},
     primitives::Symbol,
     transaction::{Declared, TransactionId, TransactionalState},
 };
+use futures_util::Future;
 use serde_amqp::Value;
 
 use crate::{
@@ -89,7 +92,6 @@ pub struct OwnedTransaction {
     is_discharged: bool,
 }
 
-#[async_trait]
 impl TransactionDischarge for OwnedTransaction {
     type Error = OwnedDischargeError;
 
@@ -97,30 +99,35 @@ impl TransactionDischarge for OwnedTransaction {
         self.is_discharged
     }
 
-    async fn discharge(&mut self, fail: bool) -> Result<(), Self::Error> {
-        if !self.is_discharged {
-            self.controller
-                .discharge(self.declared.txn_id.clone(), fail)
-                .await?;
-            self.is_discharged = true;
+    fn discharge(&mut self, fail: bool) -> impl Future<Output = Result<(), Self::Error>> {
+        async move {
+            if !self.is_discharged {
+                self.controller
+                    .discharge(self.declared.txn_id.clone(), fail)
+                    .await?;
+                self.is_discharged = true;
+            }
+            Ok(())
         }
-        Ok(())
     }
 
-    async fn rollback(mut self) -> Result<(), Self::Error> {
-        self.discharge(true).await?;
-        self.controller.close().await?;
-        Ok(())
+    fn rollback(mut self) -> impl Future<Output = Result<(), Self::Error>> {
+        async move {
+            self.discharge(true).await?;
+            self.controller.close().await?;
+            Ok(())
+        }
     }
 
-    async fn commit(mut self) -> Result<(), Self::Error> {
-        self.discharge(false).await?;
-        self.controller.close().await?;
-        Ok(())
+    fn commit(mut self) -> impl Future<Output = Result<(), Self::Error>> {
+        async move {
+            self.discharge(false).await?;
+            self.controller.close().await?;
+            Ok(())
+        }
     }
 }
 
-#[async_trait]
 impl TransactionalRetirement for OwnedTransaction {
     type RetireError = DispositionError;
 

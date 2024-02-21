@@ -1,4 +1,6 @@
-use async_trait::async_trait;
+use std::future::Future;
+
+
 use fe2o3_amqp_types::{definitions, performatives::Detach};
 use tokio::sync::mpsc;
 
@@ -10,7 +12,6 @@ use crate::{
 
 use super::{state::LinkState, DetachError, LinkFrame, LinkRelay};
 
-#[async_trait]
 pub(crate) trait LinkEndpointInner
 where
     Self: Send + Sync,
@@ -34,40 +35,47 @@ where
 
     fn session_control_mut(&mut self) -> &mut mpsc::Sender<SessionControl>;
 
-    async fn exchange_attach(
+    fn exchange_attach(
         &mut self,
         is_reattaching: bool,
-    ) -> Result<<Self::Link as LinkAttach>::AttachExchange, <Self::Link as LinkAttach>::AttachError>;
+    ) -> impl Future<
+        Output = Result<
+            <Self::Link as LinkAttach>::AttachExchange,
+            <Self::Link as LinkAttach>::AttachError,
+        >,
+    > + Send;
 
-    async fn handle_attach_error(
+    fn handle_attach_error(
         &mut self,
         attach_error: <Self::Link as LinkAttach>::AttachError,
-    ) -> <Self::Link as LinkAttach>::AttachError;
+    ) -> impl Future<Output = <Self::Link as LinkAttach>::AttachError> + Send;
 
     /// This should be cancel safe because the implementation should be a simple sending on `tokio::mpsc::Sender`
-    async fn send_detach(
+    fn send_detach(
         &mut self,
         closed: bool,
         error: Option<definitions::Error>,
-    ) -> Result<(), <Self::Link as LinkDetach>::DetachError>;
+    ) -> impl Future<Output = Result<(), <Self::Link as LinkDetach>::DetachError>> + Send;
 
     /// # Cancel safety
     ///
     /// This should be cancel safe if oneshot channel is cancel safe
-    async fn reallocate_output_handle(
+    fn reallocate_output_handle(
         &mut self,
-    ) -> Result<(), <Self::Link as LinkAttach>::AttachError> {
-        let (tx, incoming) = mpsc::channel(self.buffer_size());
-        let link_relay = self.as_new_link_relay(tx);
-        *self.reader_mut() = incoming;
-        let link_name = self.link().name().to_string();
-        let handle = session::allocate_link(self.session_control(), link_name, link_relay).await?; // FIXME: cancel safe?
-        *self.link_mut().output_handle_mut() = Some(handle);
-        Ok(())
+    ) -> impl Future<Output = Result<(), <Self::Link as LinkAttach>::AttachError>> + Send {
+        async move {
+            let (tx, incoming) = mpsc::channel(self.buffer_size());
+            let link_relay = self.as_new_link_relay(tx);
+            *self.reader_mut() = incoming;
+            let link_name = self.link().name().to_string();
+            let handle =
+                session::allocate_link(self.session_control(), link_name, link_relay).await?; // FIXME: cancel safe?
+            *self.link_mut().output_handle_mut() = Some(handle);
+            Ok(())
+        }
     }
 }
 
-#[async_trait]
 pub(crate) trait LinkEndpointInnerReattach
 where
     Self: LinkEndpointInner + Send + Sync,
@@ -93,7 +101,6 @@ where
     }
 }
 
-#[async_trait]
 pub(crate) trait LinkEndpointInnerDetach
 where
     Self: LinkEndpointInner,
@@ -118,7 +125,6 @@ where
     ) -> Result<(), <Self::Link as LinkDetach>::DetachError>;
 }
 
-#[async_trait]
 impl<T> LinkEndpointInnerDetach for T
 where
     T: LinkEndpointInner + LinkEndpointInnerReattach + Send + Sync,

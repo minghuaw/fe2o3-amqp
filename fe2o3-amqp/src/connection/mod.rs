@@ -1,6 +1,6 @@
 //! Implements AMQP1.0 Connection
 
-use std::{cmp::min, collections::HashMap, convert::TryInto, sync::Arc, future::Future};
+use std::{cmp::min, collections::HashMap, convert::TryInto, future::Future, sync::Arc};
 
 use fe2o3_amqp_types::{
     definitions::{self},
@@ -590,7 +590,7 @@ impl endpoint::Connection for Connection {
                 ConnectionState::Opened => {}
                 _ => return Err(ConnectionInnerError::IllegalState),
             }
-    
+
             // Forward to session
             let sframe = SessionFrame::new(channel, SessionFrameBody::End(end));
             // Drop incoming channel
@@ -599,7 +599,7 @@ impl endpoint::Connection for Connection {
                 .remove(&channel)
                 .ok_or(ConnectionInnerError::NotFound(None))?;
             relay.send(sframe).await?;
-    
+
             Ok(())
         }
     }
@@ -636,7 +636,10 @@ impl endpoint::Connection for Connection {
     }
 
     #[cfg_attr(feature = "tracing", tracing::instrument(skip_all))]
-    fn send_open<'a, W>(&'a mut self, writer: &'a mut W) -> impl Future<Output = Result<(), Self::OpenError>> + Send + 'a
+    fn send_open<'a, W>(
+        &'a mut self,
+        writer: &'a mut W,
+    ) -> impl Future<Output = Result<(), Self::OpenError>> + Send + 'a
     where
         W: Sink<Frame> + Send + Unpin,
         Self::OpenError: From<W::Error>,
@@ -649,7 +652,7 @@ impl endpoint::Connection for Connection {
             #[cfg(feature = "log")]
             log::trace!("SEND frame = {:?}", frame);
             writer.send(frame).await.map_err(Into::into)?;
-    
+
             // change local state after successfully sending the frame
             match &self.local_state {
                 ConnectionState::HeaderExchange => self.local_state = ConnectionState::OpenSent,
@@ -657,7 +660,7 @@ impl endpoint::Connection for Connection {
                 ConnectionState::HeaderSent => self.local_state = ConnectionState::OpenPipe,
                 _ => return Err(Self::OpenError::IllegalState),
             }
-    
+
             Ok(())
         }
     }
@@ -696,7 +699,7 @@ impl endpoint::Connection for Connection {
             let error_is_some = error.is_some();
             let frame = Frame::new(0u16, FrameBody::Close(Close { error }));
             writer.send(frame).await.map_err(Into::into)?;
-    
+
             match &self.local_state {
                 ConnectionState::Opened => match error_is_some {
                     true => self.local_state = ConnectionState::Discarding,

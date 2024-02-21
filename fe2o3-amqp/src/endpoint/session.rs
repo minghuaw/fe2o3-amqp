@@ -2,7 +2,7 @@
 
 use std::future::Future;
 
-use async_trait::async_trait;
+
 use fe2o3_amqp_types::{
     definitions::Error,
     performatives::{Attach, Begin, Detach, Disposition, End, Flow, Transfer},
@@ -53,7 +53,10 @@ pub(crate) trait Session {
         begin: Begin,
     ) -> Result<(), Self::BeginError>;
 
-    fn on_incoming_attach(&mut self, attach: Attach) -> impl Future<Output = Result<(), Self::Error>> + Send + '_;
+    fn on_incoming_attach(
+        &mut self,
+        attach: Attach,
+    ) -> impl Future<Output = Result<(), Self::Error>> + Send + '_;
 
     /// An `Ok(Some(link_flow))` means an immediate echo of the link flow is requested
     fn on_incoming_flow(
@@ -73,7 +76,10 @@ pub(crate) trait Session {
         disposition: Disposition,
     ) -> Result<Option<Vec<Disposition>>, Self::Error>;
 
-    fn on_incoming_detach(&mut self, detach: Detach) -> impl Future<Output = Result<(), Self::Error>> + Send + '_;
+    fn on_incoming_detach(
+        &mut self,
+        detach: Detach,
+    ) -> impl Future<Output = Result<(), Self::Error>> + Send + '_;
 
     fn on_incoming_end(&mut self, channel: IncomingChannel, end: End)
         -> Result<(), Self::EndError>;

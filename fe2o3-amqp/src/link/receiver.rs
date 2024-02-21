@@ -5,7 +5,7 @@ use std::{
     time::Duration,
 };
 
-use async_trait::async_trait;
+
 use fe2o3_amqp_types::{
     definitions::{self, DeliveryTag, Fields, SequenceNo},
     messaging::{
@@ -555,7 +555,6 @@ impl<L: endpoint::ReceiverLink> Drop for ReceiverInner<L> {
     }
 }
 
-#[async_trait]
 impl<L> LinkEndpointInner for ReceiverInner<L>
 where
     L: endpoint::ReceiverLink<AttachError = ReceiverAttachError, DetachError = DetachError>
@@ -645,7 +644,6 @@ where
     }
 }
 
-#[async_trait]
 impl<L> LinkEndpointInnerReattach for ReceiverInner<L>
 where
     L: endpoint::ReceiverLink<AttachError = ReceiverAttachError, DetachError = DetachError>

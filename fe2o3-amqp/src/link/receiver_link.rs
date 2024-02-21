@@ -55,7 +55,7 @@ where
                 .clone()
                 .ok_or(Self::FlowError::IllegalState)?
                 .into();
-    
+
             let flow = self.get_link_flow(handle, link_credit, drain, echo);
             writer
                 .send(LinkFrame::Flow(flow))
@@ -246,7 +246,7 @@ where
                         // If first, this indicates that the receiver MUST settle
                         // the delivery once it has arrived without waiting
                         // for the sender to settle first.
-    
+
                         // The delivery is not inserted into unsettled map if in First mode
                         true
                     }
@@ -258,7 +258,7 @@ where
                     }
                 }
             });
-    
+
             let unsettled_state = if settled {
                 let mut lock = self.unsettled.write();
                 lock.as_mut()
@@ -270,7 +270,7 @@ where
                 lock.get_or_insert(OrderedMap::new())
                     .insert(delivery_info.delivery_tag.clone(), Some(state.clone()))
             };
-    
+
             // Only dispose if message is found in unsettled map
             if unsettled_state.is_some() {
                 let disposition = Disposition {
@@ -287,7 +287,7 @@ where
                     .await // cancel safe
                     .map_err(|_| Self::DispositionError::IllegalSessionState)?;
             }
-    
+
             Ok(())
         }
     }
@@ -314,7 +314,7 @@ where
                 });
             }
             let chunk_inds = consecutive_chunk_indices(&delivery_infos);
-    
+
             let mut prev_ind = 0;
             for ind in chunk_inds {
                 let slice = &delivery_infos[prev_ind..ind];
@@ -805,7 +805,7 @@ where
         async move {
             // Send out local attach
             self.send_attach(writer, session, is_reattaching).await?; // FIXME: cancel safe? if oneshot channel is cancel safe
-    
+
             // Wait for remote attach
             let remote_attach = match reader
                 .recv()
@@ -815,7 +815,7 @@ where
                 LinkFrame::Attach(attach) => attach,
                 _ => return Err(ReceiverAttachError::NonAttachFrameReceived),
             };
-    
+
             self.on_incoming_attach(remote_attach)
         }
     }
@@ -835,7 +835,7 @@ where
                 | ReceiverAttachError::NonAttachFrameReceived
                 | ReceiverAttachError::ExpectImmediateDetach
                 | ReceiverAttachError::RemoteClosedWithError(_) => attach_error,
-    
+
                 ReceiverAttachError::DuplicatedLinkName => {
                     let error = definitions::Error::new(
                         SessionError::HandleInUse,
@@ -848,7 +848,7 @@ where
                         .map(|_| attach_error)
                         .unwrap_or(ReceiverAttachError::IllegalSessionState)
                 }
-    
+
                 // ReceiverAttachError::SndSettleModeNotSupported
                 ReceiverAttachError::RcvSettleModeNotSupported
                 | ReceiverAttachError::IncomingSourceIsNone => {
@@ -860,7 +860,7 @@ where
                         .unwrap_or(ReceiverAttachError::IllegalSessionState);
                     recv_detach(self, reader, err).await
                 }
-    
+
                 ReceiverAttachError::CoordinatorIsNotImplemented
                 | ReceiverAttachError::InitialDeliveryCountIsNone
                 | ReceiverAttachError::SourceAddressIsNoneWhenDynamicIsTrue

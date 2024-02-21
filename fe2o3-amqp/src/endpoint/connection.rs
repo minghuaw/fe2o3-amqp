@@ -71,7 +71,10 @@ pub(crate) trait Connection {
     /// The write is passed in is because sending an Open frame also changes the local
     /// connection state. If the sending fails outside, coming back
     /// and revert the state changes would be too complicated
-    fn send_open<'a, W>(&'a mut self, writer: &'a mut W) -> impl Future<Output = Result<(), Self::OpenError>> + Send + 'a
+    fn send_open<'a, W>(
+        &'a mut self,
+        writer: &'a mut W,
+    ) -> impl Future<Output = Result<(), Self::OpenError>> + Send + 'a
     where
         W: Sink<Frame> + Send + Unpin,
         Self::OpenError: From<W::Error>; // DO NOT remove this. This is where `Transport` will be used

@@ -2,7 +2,7 @@
 
 use std::time::Duration;
 
-use async_trait::async_trait;
+
 use bytes::{Bytes, BytesMut};
 use tokio::{
     sync::{mpsc, oneshot},
@@ -498,7 +498,6 @@ impl<L: endpoint::SenderLink> Drop for SenderInner<L> {
     }
 }
 
-#[async_trait]
 impl<L> LinkEndpointInner for SenderInner<L>
 where
     L: endpoint::SenderLink<AttachError = SenderAttachError, DetachError = DetachError>
@@ -585,7 +584,6 @@ where
     }
 }
 
-#[async_trait]
 impl<L> LinkEndpointInnerReattach for SenderInner<L>
 where
     L: endpoint::SenderLink<AttachError = SenderAttachError, DetachError = DetachError>

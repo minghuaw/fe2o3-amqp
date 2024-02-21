@@ -2,7 +2,7 @@
 
 use std::future::Future;
 
-use async_trait::async_trait;
+
 use fe2o3_amqp_types::{
     definitions::{
         DeliveryNumber, DeliveryTag, Error, Fields, MessageFormat, ReceiverSettleMode, Role,

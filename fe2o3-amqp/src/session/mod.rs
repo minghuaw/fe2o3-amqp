@@ -1,8 +1,11 @@
 //! Implements AMQP1.0 Session
 
-use std::{collections::{HashMap, VecDeque}, future::Future};
+use std::{
+    collections::{HashMap, VecDeque},
+    future::Future,
+};
 
-use async_trait::async_trait;
+
 use fe2o3_amqp_types::{
     definitions::{
         self, DeliveryNumber, DeliveryTag, Fields, Handle, Role, SequenceNo, TransferNumber,
@@ -520,7 +523,10 @@ impl endpoint::Session for Session {
         Ok(())
     }
 
-    fn on_incoming_attach(&mut self, attach: Attach) -> impl Future<Output = Result<(), Self::Error>> + Send + '_ {
+    fn on_incoming_attach(
+        &mut self,
+        attach: Attach,
+    ) -> impl Future<Output = Result<(), Self::Error>> + Send + '_ {
         async move {
             match self.link_by_name.get_mut(&attach.name) {
                 Some(link) => match link.take() {
@@ -535,14 +541,14 @@ impl endpoint::Session for Session {
                         {
                             *receiver_settle_mode = attach.rcv_settle_mode.clone();
                         }
-    
+
                         let input_handle = InputHandle::from(attach.handle.clone()); // handle is just a wrapper around u32
                         relay
                             .send(LinkFrame::Attach(attach))
                             .await
                             .map_err(|_| SessionInnerError::UnattachedHandle)?;
                         self.link_by_input_handle.insert(input_handle, relay);
-    
+
                         Ok(())
                     }
                     None => {
@@ -564,7 +570,7 @@ impl endpoint::Session for Session {
             let outgoing_session_flow = outgoing_link_flow
                 .map(|flow| self.on_outgoing_flow(flow))
                 .transpose()?;
-    
+
             // Process buffered outgoing transfer frames if the updated remote-incoming-window is
             // greater than 0
             if self.remote_incoming_window > 0
@@ -598,14 +604,14 @@ impl endpoint::Session for Session {
             // remote-outgoing-window, and MAY (depending on policy) decrement its incoming-window.
             self.next_incoming_id = self.next_incoming_id.wrapping_add(1);
             self.remote_outgoing_window = self.remote_outgoing_window.saturating_sub(1);
-    
+
             // TODO: allow user to define whether the incoming window should be decremented
-    
+
             let input_handle = InputHandle::from(transfer.handle.clone());
             match self.link_by_input_handle.get_mut(&input_handle) {
                 Some(link_relay) => {
                     let id_and_tag = link_relay.on_incoming_transfer(transfer, payload).await?;
-    
+
                     // FIXME: If the unsettled map needs this
                     if let Some((delivery_id, delivery_tag)) = id_and_tag {
                         self.delivery_tag_by_id
@@ -614,7 +620,7 @@ impl endpoint::Session for Session {
                 }
                 None => return Err(SessionInnerError::UnattachedHandle),
             };
-    
+
             Ok(None)
         }
     }
@@ -690,7 +696,10 @@ impl endpoint::Session for Session {
     }
 
     #[cfg_attr(feature = "tracing", tracing::instrument(skip_all))]
-    fn on_incoming_detach(&mut self, detach: Detach) -> impl Future<Output = Result<(), Self::Error>> + Send + '_ {
+    fn on_incoming_detach(
+        &mut self,
+        detach: Detach,
+    ) -> impl Future<Output = Result<(), Self::Error>> + Send + '_ {
         async move {
             #[cfg(feature = "tracing")]
             tracing::trace!(frame = ?detach);
@@ -761,7 +770,7 @@ impl endpoint::Session for Session {
                 properties: self.properties.clone(),
             };
             let frame = SessionFrame::new(self.outgoing_channel, SessionFrameBody::Begin(begin));
-    
+
             // check local states
             match &self.local_state {
                 SessionState::Unmapped => {
@@ -782,7 +791,7 @@ impl endpoint::Session for Session {
                 }
                 _ => return Err(SessionStateError::IllegalState),
             }
-    
+
             Ok(())
         }
     }
@@ -801,8 +810,9 @@ impl endpoint::Session for Session {
                 SessionState::EndReceived => self.local_state = SessionState::Unmapped,
                 _ => return Err(SessionStateError::IllegalState),
             }
-    
-            let frame = SessionFrame::new(self.outgoing_channel, SessionFrameBody::End(End { error }));
+
+            let frame =
+                SessionFrame::new(self.outgoing_channel, SessionFrameBody::End(End { error }));
             writer
                 .send(frame)
                 .await
@@ -932,7 +942,8 @@ impl HandleDischarge for Session {
     fn commit_transaction(
         &mut self,
         _txn_id: fe2o3_amqp_types::transaction::TransactionId,
-    ) -> impl Future<Output = Result<Result<Accepted, TransactionError>, Self::Error>> + Send + '_ {
+    ) -> impl Future<Output = Result<Result<Accepted, TransactionError>, Self::Error>> + Send + '_
+    {
         async move {
             // FIXME: This should be impossible
             Ok(Err(TransactionError::UnknownId))
