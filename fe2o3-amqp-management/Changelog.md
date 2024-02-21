@@ -3,6 +3,9 @@
 ## 0.9.1
 
 1. Use explicit `swap_remove` instead of deprecated `remove`
+2. Updated deps
+   1. `fe2o3-amqp` to 0.9.3
+   2. `fe2o3-amqp-types` to 0.9.1
 
 ## 0.9.0
 

@@ -13,7 +13,7 @@ readme = "Readme.md"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-fe2o3-amqp = { version = "0.9.0", path = "../fe2o3-amqp" }
+fe2o3-amqp = { version = "0.9.3", path = "../fe2o3-amqp" }
 fe2o3-amqp-types =  { version = "0.9.1", path = "../fe2o3-amqp-types/" }
 serde = "1"
 thiserror = "1"
