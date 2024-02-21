@@ -383,23 +383,23 @@ mod tests {
         let mut annotations = create_annotations();
 
         let key = String::from(STRING_KEY);
-        let val = annotations.remove(&key as &dyn AnnotationKey);
+        let val = annotations.shift_remove(&key as &dyn AnnotationKey);
         assert_eq!(val, Some(string_val()));
 
         let key = STR_KEY;
-        let val = annotations.remove(&key as &dyn AnnotationKey);
+        let val = annotations.shift_remove(&key as &dyn AnnotationKey);
         assert_eq!(val, Some(str_val()));
 
         let key = Symbol::from(SYMBOL_KEY);
-        let val = annotations.remove(&key as &dyn AnnotationKey);
+        let val = annotations.shift_remove(&key as &dyn AnnotationKey);
         assert_eq!(val, Some(symbol_val()));
 
         let key = SymbolRef(SYMBOL_REF_KEY);
-        let val = annotations.remove(&key as &dyn AnnotationKey);
+        let val = annotations.shift_remove(&key as &dyn AnnotationKey);
         assert_eq!(val, Some(symbol_ref_val()));
 
         let key = U64_KEY;
-        let val = annotations.remove(&key as &dyn AnnotationKey);
+        let val = annotations.shift_remove(&key as &dyn AnnotationKey);
         assert_eq!(val, Some(u64_val()));
 
         assert!(annotations.is_empty())
