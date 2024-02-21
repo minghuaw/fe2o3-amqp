@@ -48,8 +48,8 @@ impl<T> AmqpMessageManagementExt for Message<T> {
         self.application_properties
             .as_mut()
             .and_then(|ap| {
-                ap.remove(constants::kebab_case::STATUS_CODE)
-                    .or_else(|| ap.remove(constants::lower_camel_case::STATUS_CODE))
+                ap.swap_remove(constants::kebab_case::STATUS_CODE)
+                    .or_else(|| ap.swap_remove(constants::lower_camel_case::STATUS_CODE))
             })
             .map(StatusCode::try_from)
     }
@@ -82,8 +82,8 @@ impl<T> AmqpMessageManagementExt for Message<T> {
 
     fn remove_status_description(&mut self) -> Option<Result<String, SimpleValue>> {
         self.application_properties.as_mut().and_then(|ap| {
-            ap.remove(constants::kebab_case::STATUS_DESCRIPTION)
-                .or_else(|| ap.remove(constants::lower_camel_case::STATUS_DESCRIPTION))
+            ap.swap_remove(constants::kebab_case::STATUS_DESCRIPTION)
+                .or_else(|| ap.swap_remove(constants::lower_camel_case::STATUS_DESCRIPTION))
                 .map(|value| match value {
                     SimpleValue::String(s) => Ok(s),
                     _ => Err(value),

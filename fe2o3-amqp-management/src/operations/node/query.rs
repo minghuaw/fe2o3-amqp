@@ -163,20 +163,20 @@ impl Response for QueryResponse {
         let count = message
             .application_properties
             .as_mut()
-            .and_then(|ap| ap.remove("count"))
+            .and_then(|ap| ap.swap_remove("count"))
             .map(|v| u32::try_from(v).map_err(|_| Error::DecodeError(None)))
             .ok_or(Error::DecodeError(None))??;
         let mut map = message.body;
 
         let attribute_names = map
-            .remove("attributeNames")
+            .swap_remove("attributeNames")
             .ok_or(Error::DecodeError(None))?;
         let attribute_names = attribute_names
             .into_iter()
             .map(|v| String::try_from(v).map_err(|_| Error::DecodeError(None)))
             .collect::<Result<Vec<String>, Error>>()?;
 
-        let results = map.remove("results").ok_or(Error::DecodeError(None))?;
+        let results = map.swap_remove("results").ok_or(Error::DecodeError(None))?;
         let results: Vec<Vec<Value>> = results
             .into_iter()
             .map(|v| match v {

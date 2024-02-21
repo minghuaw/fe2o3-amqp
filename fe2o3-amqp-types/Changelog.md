@@ -1,5 +1,9 @@
 # Change Log
 
+## 0.9.1
+
+1. Updated `serde_amqp` to "0.9.1"
+
 ## 0.9.0
 
 1. Unified versioning with other `fe2o3-amqp` crates
