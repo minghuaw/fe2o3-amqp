@@ -1,5 +1,11 @@
 # Change Log
 
+## 0.9.1
+
+1. Mark `remove` and `remove_entry` as deprecated in `OrderedMap`
+2. Added `swap_remove` and `swap_remove_entry` in `OrderedMap`
+3. Added `shift_remove` and `shift_remove_entry` in `OrderedMap`
+
 ## 0.9.0
 
 1. Unified versioning with other `fe2o3-amqp` crates
