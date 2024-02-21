@@ -1,5 +1,18 @@
 # Change Log
 
+## 0.9.1
+
+1. Mark `remove` and `remove_entry` as deprecated in `OrderedMap`
+2. Added `swap_remove` and `swap_remove_entry` in `OrderedMap`
+3. Added `shift_remove` and `shift_remove_entry` in `OrderedMap`
+
+## 0.9.0
+
+1. Unified versioning with other `fe2o3-amqp` crates
+2. Changed `Value` variants to strictly follow the rust naming convention
+3. Updated `ordered-float` to "4"
+4. Updated `indexmap` to "2"
+
 ## 0.5.9
 
 1. Fixed a bug where `str` and `bytes` of length `u8::MAX` are serialized incorrectly as `str8-utf8`
