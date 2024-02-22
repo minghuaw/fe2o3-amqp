@@ -548,10 +548,18 @@ impl Receiver {
 }
 
 #[derive(Debug, Clone)]
+/// Terminal delivery states that can be used by the receiver to dispose of a delivery
 pub enum TerminalDeliveryState {
+    /// 3.4.2 Accepted
     Accepted(Accepted),
+
+    /// 3.4.2 Rejected
     Rejected(Rejected),
+
+    /// 3.4.4 Released
     Released(Released),
+
+    /// 3.4.5 Modified
     Modified(Modified),
 }
 
