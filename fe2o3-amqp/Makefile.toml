@@ -196,17 +196,17 @@ args = [
 command = "cargo"
 toolchain = "stable"
 
-# [tasks.check_feature_rustls_wasm32]
-# args = [
-#   "check",
-#   "--no-default-features",
-#   "--features",
-#   "rustls",
-#   "--target",
-#   "wasm32-unknown-unknown",
-# ]
-# command = "cargo"
-# toolchain = "stable"
+[tasks.check_feature_rustls_wasm32]
+args = [
+  "check",
+  "--no-default-features",
+  "--features",
+  "rustls",
+  "--target",
+  "wasm32-unknown-unknown",
+]
+command = "cargo"
+toolchain = "stable"
 
 [tasks.check_feature_nativetls_wasm32]
 args = [
@@ -232,17 +232,17 @@ args = [
 command = "cargo"
 toolchain = "stable"
 
-# [tasks.check_feature_group1_wasm32]
-# args = [
-#   "check",
-#   "--no-default-features",
-#   "--features",
-#   "rustls, transaction",
-#   "--target",
-#   "wasm32-unknown-unknown",
-# ]
-# command = "cargo"
-# toolchain = "stable"
+[tasks.check_feature_group1_wasm32]
+args = [
+  "check",
+  "--no-default-features",
+  "--features",
+  "rustls, transaction",
+  "--target",
+  "wasm32-unknown-unknown",
+]
+command = "cargo"
+toolchain = "stable"
 
 [tasks.check_feature_group2_wasm32]
 args = [
@@ -256,17 +256,17 @@ args = [
 command = "cargo"
 toolchain = "stable"
 
-# [tasks.check_feature_group3_wasm32]
-# args = [
-#   "check",
-#   "--no-default-features",
-#   "--features",
-#   "acceptor, rustls, transaction",
-#   "--target",
-#   "wasm32-unknown-unknown",
-# ]
-# command = "cargo"
-# toolchain = "stable"
+[tasks.check_feature_group3_wasm32]
+args = [
+  "check",
+  "--no-default-features",
+  "--features",
+  "acceptor, rustls, transaction",
+  "--target",
+  "wasm32-unknown-unknown",
+]
+command = "cargo"
+toolchain = "stable"
 
 [tasks.check_feature_group4_wasm32]
 args = [
@@ -304,17 +304,17 @@ args = [
 command = "cargo"
 toolchain = "stable"
 
-# [tasks.check_feature_group7_wasm32]
-# args = [
-#   "check",
-#   "--no-default-features",
-#   "--features",
-#   "rustls, scram",
-#   "--target",
-#   "wasm32-unknown-unknown",
-# ]
-# command = "cargo"
-# toolchain = "stable"
+[tasks.check_feature_group7_wasm32]
+args = [
+  "check",
+  "--no-default-features",
+  "--features",
+  "rustls, scram",
+  "--target",
+  "wasm32-unknown-unknown",
+]
+command = "cargo"
+toolchain = "stable"
 
 [tasks.check_feature_tracing_wasm32]
 args = [
