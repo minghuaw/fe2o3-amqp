@@ -1,5 +1,11 @@
 # Change Log
 
+## 0.9.4
+
+1. Removed `async-trait` dependency and use return position `impl Future` and `async` function in
+   trait feature instead
+2. Set MSRV to "1.75.0"
+
 ## 0.9.3
 
 1. Updated deps
