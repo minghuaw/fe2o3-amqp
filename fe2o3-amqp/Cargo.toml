@@ -1,6 +1,6 @@
 [package]
 name = "fe2o3-amqp"
-version = "0.9.3"
+version = "0.9.4"
 edition = "2021"
 description = "An implementation of AMQP1.0 protocol based on serde and tokio"
 license = "MIT/Apache-2.0"
@@ -9,6 +9,7 @@ homepage = "https://github.com/minghuaw/fe2o3-amqp"
 repository = "https://github.com/minghuaw/fe2o3-amqp"
 keywords = ["amqp", "serde", "tokio"]
 readme = "Readme.md"
+rust-version = "1.75.0"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
@@ -50,7 +51,6 @@ futures-util = { version = "0.3", features = ["sink"] }
 pin-project-lite = "0.2"
 url = "2"
 slab = "0.4"
-async-trait = "0.1"
 serde_bytes = "0.11"
 parking_lot = { version = "0.12", features = ["send_guard"] }
 

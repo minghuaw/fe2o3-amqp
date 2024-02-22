@@ -2,7 +2,6 @@
 
 use std::{marker::PhantomData, sync::Arc};
 
-use async_trait::async_trait;
 use bytes::{BufMut, BytesMut};
 use fe2o3_amqp_types::{
     definitions::{
@@ -404,7 +403,6 @@ pub(crate) async fn get_max_frame_size(
         .map_err(|_| SendAttachErrorKind::IllegalSessionState)
 }
 
-#[async_trait]
 impl<R, T, F, M> endpoint::LinkDetach for Link<R, T, F, M>
 where
     R: role::IntoRole + Send + Sync,

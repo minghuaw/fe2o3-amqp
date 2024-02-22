@@ -24,7 +24,6 @@ pub(crate) const AMQP_SEQ_CODE: u8 = 0x76;
 pub(crate) const AMQP_VAL_CODE: u8 = 0x77;
 pub(crate) const FOOTER_CODE: u8 = 0x78;
 
-#[async_trait]
 impl<Tar> endpoint::ReceiverLink for ReceiverLink<Tar>
 where
     Tar: Into<TargetArchetype>
@@ -575,7 +574,6 @@ impl<T> ReceiverLink<T> {
     }
 }
 
-#[async_trait]
 impl<T> endpoint::LinkAttach for ReceiverLink<T>
 where
     T: Into<TargetArchetype>
@@ -718,7 +716,6 @@ where
     }
 }
 
-#[async_trait]
 impl<T> endpoint::LinkExt for ReceiverLink<T>
 where
     T: Into<TargetArchetype>

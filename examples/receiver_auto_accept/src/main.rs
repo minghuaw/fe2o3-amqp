@@ -17,7 +17,7 @@ async fn main() {
         .unwrap();
 
     // The delivery will be automatically accepted
-    let delivery: Delivery<Value> = receiver.recv().await.unwrap();
+    let _delivery: Delivery<Value> = receiver.recv().await.unwrap();
 
     receiver.close().await.unwrap();
     session.end().await.unwrap();

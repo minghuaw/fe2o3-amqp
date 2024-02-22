@@ -1,5 +1,9 @@
 # Change Log
 
+## 0.5.10
+
+1. Backported `0.9.1`
+
 ## 0.9.1
 
 1. Mark `remove` and `remove_entry` as deprecated in `OrderedMap`

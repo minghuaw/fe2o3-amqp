@@ -1,6 +1,5 @@
 use std::sync::Arc;
 
-use async_trait::async_trait;
 use tokio::sync::Notify;
 
 use super::Producer;
@@ -33,7 +32,6 @@ impl<State: Clone> Consumer<State> {
     }
 }
 
-#[async_trait]
 pub trait Consume {
     type Item: Send;
     type Outcome: Send;

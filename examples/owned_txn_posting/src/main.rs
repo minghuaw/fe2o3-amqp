@@ -14,7 +14,7 @@ async fn main() {
         .unwrap();
 
     // Commit
-    let mut txn1 = OwnedTransaction::declare(&mut session, "controller-1", None)
+    let txn1 = OwnedTransaction::declare(&mut session, "controller-1", None)
         .await
         .unwrap();
     txn1.post(&mut sender, "hello").await.unwrap();
@@ -22,7 +22,7 @@ async fn main() {
     txn1.commit().await.unwrap();
 
     // Rollback
-    let mut txn2 = OwnedTransaction::declare(&mut session, "controller-2", None)
+    let txn2 = OwnedTransaction::declare(&mut session, "controller-2", None)
         .await
         .unwrap();
     txn2.post(&mut sender, "foo").await.unwrap();

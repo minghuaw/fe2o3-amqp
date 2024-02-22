@@ -18,17 +18,19 @@ dependencies = [
   "check_all_features",
 
   "check_feature_acceptor_wasm32",
-  "check_feature_rustls_wasm32",
   "check_feature_nativetls_wasm32",
   "check_feature_transaction_wasm32",
   "check_feature_tracing_wasm32",
   "check_feature_log_wasm32",
-  "check_feature_group1_wasm32",
   "check_feature_group2_wasm32",
-  "check_feature_group3_wasm32",
   "check_feature_group4_wasm32",
   "check_feature_group5_wasm32",
   "check_feature_group6_wasm32",
+
+  # rustls has problem with wasm target
+  "check_feature_rustls_wasm32",
+  "check_feature_group1_wasm32",
+  "check_feature_group3_wasm32",
   "check_feature_group7_wasm32",
   "check_all_features_wasm32",
 ]

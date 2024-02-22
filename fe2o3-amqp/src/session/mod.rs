@@ -2,7 +2,6 @@
 
 use std::collections::{HashMap, VecDeque};
 
-use async_trait::async_trait;
 use fe2o3_amqp_types::{
     definitions::{
         self, DeliveryNumber, DeliveryTag, Fields, Handle, Role, SequenceNo, TransferNumber,
@@ -481,7 +480,6 @@ impl Session {
 
 impl endpoint::SessionExt for Session {}
 
-#[async_trait]
 impl endpoint::Session for Session {
     type AllocError = AllocLinkError;
     type BeginError = SessionStateError;
@@ -966,7 +964,7 @@ cfg_transaction! {
         }
     }
 
-    #[async_trait]
+
     impl HandleDischarge for Session {
         async fn commit_transaction(
             &mut self,

@@ -1,6 +1,6 @@
 //! Session Listener
 
-use async_trait::async_trait;
+
 use fe2o3_amqp_types::{
     definitions::{self, ConnectionError},
     performatives::{Attach, Begin, Detach, Disposition, End, Flow, Transfer},
@@ -347,7 +347,7 @@ pub struct ListenerSession {
 
 impl endpoint::SessionExt for ListenerSession {}
 
-#[async_trait]
+
 impl endpoint::Session for ListenerSession {
     type AllocError = <session::Session as endpoint::Session>::AllocError;
     type BeginError = <session::Session as endpoint::Session>::BeginError;
@@ -536,7 +536,7 @@ cfg_transaction! {
         }
     }
     
-    #[async_trait]
+    
     impl endpoint::HandleDischarge for ListenerSession {
         async fn commit_transaction(
             &mut self,

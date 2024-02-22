@@ -1,6 +1,6 @@
 //! Implements session that can handle transaction
 
-use async_trait::async_trait;
+
 use fe2o3_amqp_types::{
     definitions::{self},
     messaging::{Accepted, DeliveryState},
@@ -89,7 +89,7 @@ impl<S> TxnSession<S> where
 {
 }
 
-#[async_trait]
+
 impl<S> HandleControlLink for TxnSession<S>
 where
     S: endpoint::Session<Error = session::error::SessionInnerError> + endpoint::SessionExt + Send + Sync,
@@ -136,7 +136,7 @@ where
     }
 }
 
-#[async_trait]
+
 impl<S> endpoint::HandleDischarge for TxnSession<S>
 where
     S: endpoint::Session<Error = session::error::SessionInnerError> + endpoint::SessionExt + Send + Sync,
@@ -210,7 +210,7 @@ where
     }
 }
 
-#[async_trait]
+
 impl<S> endpoint::Session for TxnSession<S>
 where
     S: endpoint::Session<Error = session::error::SessionInnerError> + endpoint::SessionExt + Send + Sync,
@@ -269,7 +269,6 @@ where
         }
     }
 
-    #[cfg_attr(feature = "tracing", tracing::instrument(skip_all, flow = ?flow))]
     async fn on_incoming_flow(
         &mut self,
         flow: Flow,

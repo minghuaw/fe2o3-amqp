@@ -170,7 +170,6 @@ where
     }
 }
 
-#[async_trait]
 impl<T> endpoint::SenderLink for SenderLink<T>
 where
     T: Into<TargetArchetype>
@@ -579,7 +578,6 @@ impl<T> SenderLink<T> {
     }
 }
 
-#[async_trait]
 impl<T> endpoint::LinkAttach for SenderLink<T>
 where
     T: Into<TargetArchetype>
@@ -709,7 +707,6 @@ where
     }
 }
 
-#[async_trait]
 impl<T> endpoint::LinkExt for SenderLink<T>
 where
     T: Into<TargetArchetype>
