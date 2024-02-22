@@ -1,5 +1,26 @@
 # Change Log
 
+## 0.8.27
+
+1. Backported 0.9.4
+
+## 0.9.4
+
+1. Removed `async-trait` dependency and use return position `impl Future` and `async` function in
+   trait feature instead
+2. Set MSRV to "1.75.0"
+
+## 0.9.3
+
+1. Updated deps
+   1. `serde_amqp` to "0.9.1"
+   2. `fe2o3-amqp-types` to "0.9.1"
+2. Use `OrderedMap::swap_remove` instead of the deprecated `OrderedMap::remove`
+
+## 0.9.2
+
+1. Ported 0.7.32
+
 ## 0.8.26
 
 1. Ported 0.7.32
@@ -7,6 +28,10 @@
 ## 0.7.32
 
 1. Show frame direction in `log::trace`
+
+## 0.9.1
+
+1. Ported 0.7.31
 
 ## 0.8.25
 
@@ -16,6 +41,14 @@
 
 1. Fixed problem with closing/ending of `Connection`/`Session` where the error found during the
    handshake is not propagated to the user.
+
+## 0.9.0
+
+1. Unified minor versioning with other `fe2o3-amqp` crates
+2. Updated `tokio-rustls` to "0.25"
+3. Updated `rustls` to "0.22"
+4. Updated `webpkit-roots` to "0.26"
+5. Added `DesiredFilterNotSupported` error variant to `ReceiverAttachError` (issue #62)
 
 ## 0.8.24
 

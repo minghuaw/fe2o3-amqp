@@ -1,6 +1,6 @@
 [package]
 name = "fe2o3-amqp"
-version = "0.8.26"
+version = "0.8.27"
 edition = "2021"
 description = "An implementation of AMQP1.0 protocol based on serde and tokio"
 license = "MIT/Apache-2.0"
@@ -40,8 +40,8 @@ acceptor = []
 scram = ["sha-1", "sha2", "rand", "base64", "stringprep", "hmac", "pbkdf2"]
 
 [dependencies]
-serde_amqp = { version = "0.5.2", path = "../serde_amqp" }
-fe2o3-amqp-types = { version = "0.7.0", path = "../fe2o3-amqp-types" }
+serde_amqp = { version = "0.5.10", path = "../serde_amqp" }
+fe2o3-amqp-types = { version = "0.7.2", path = "../fe2o3-amqp-types" }
 
 bytes = "1"
 tokio-util = { version = "0.7", features = ["codec"] } # tokio-rs/tokio#4816
