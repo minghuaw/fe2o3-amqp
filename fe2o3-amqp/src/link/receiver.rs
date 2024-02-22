@@ -534,7 +534,7 @@ impl Receiver {
         self.inner.dispose(delivery_info, None, state).await
     }
 
-    /// Dispose the message by sending one or more disposition(s)  with the provided state
+    /// Dispose the message by sending one or more disposition(s) with the provided state
     ///
     /// Only deliveries that are found in the local unsettled map will be included in the disposition frame(s).
     pub async fn dispose_all(
