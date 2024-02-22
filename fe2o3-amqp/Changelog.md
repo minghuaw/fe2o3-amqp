@@ -1,5 +1,10 @@
 # Change Log
 
+## 0.9.7
+
+1. Fixed a bug with link re-attaching (as opposed to resuming) where the link's `unsettled` map is
+   not cleared when the link is re-attached by checking if the new session is the same as the old.
+
 ## 0.9.6
 
 1. Added public `dispose()` and `dispose_all()` methods to `Receiver` (PR #229)
