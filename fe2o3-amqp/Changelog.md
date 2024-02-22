@@ -1,5 +1,9 @@
 # Change Log
 
+## 0.9.6
+
+1. Added public `dispose()` and `dispose_all()` methods to `Receiver` (PR #229)
+
 ## 0.8.28
 
 1. Backported 0.9.5
