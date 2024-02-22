@@ -1,5 +1,13 @@
 # Change Log
 
+## 0.8.28
+
+1. Backported 0.9.5
+
+## 0.9.5
+
+1. Fixed wrong MSRV in readme.
+
 ## 0.8.27
 
 1. Backported 0.9.3 and 0.9.4

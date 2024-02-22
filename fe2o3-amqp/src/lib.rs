@@ -182,7 +182,7 @@
 //!
 //! # Minimum rust version supported
 //!
-//! 1.56.0 (ie. 2021 edition)
+//! 1.75.0
 
 #[macro_use]
 mod macros;

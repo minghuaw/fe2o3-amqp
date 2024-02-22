@@ -180,6 +180,6 @@ receiving message in a browser tab can be found
 
 ## Minimum rust version supported
 
-1.56.0 (ie. 2021 edition)
+1.75.0
 
 License: MIT/Apache-2.0
