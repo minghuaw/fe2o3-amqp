@@ -2,7 +2,7 @@
 
 ## 0.8.27
 
-1. Backported 0.9.4
+1. Backported 0.9.3 and 0.9.4
 
 ## 0.9.4
 
