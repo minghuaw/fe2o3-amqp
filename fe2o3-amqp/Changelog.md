@@ -1,5 +1,9 @@
 # Change Log
 
+## 0.8.27
+
+1. Backported 0.9.3 and 0.9.4
+
 ## 0.9.4
 
 1. Removed `async-trait` dependency and use return position `impl Future` and `async` function in
