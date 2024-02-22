@@ -17,13 +17,13 @@ async fn main() {
         .unwrap();
 
     // Commit
-    let mut txn1 = Transaction::declare(&mut controller, None).await.unwrap();
+    let txn1 = Transaction::declare(&mut controller, None).await.unwrap();
     txn1.post(&mut sender, "hello").await.unwrap();
     txn1.post(&mut sender, "world").await.unwrap();
     txn1.commit().await.unwrap();
 
     // Rollback
-    let mut txn2 = Transaction::declare(&mut controller, None).await.unwrap();
+    let txn2 = Transaction::declare(&mut controller, None).await.unwrap();
     txn2.post(&mut sender, "foo").await.unwrap();
     txn2.rollback().await.unwrap();
 
