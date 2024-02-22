@@ -529,8 +529,9 @@ impl Receiver {
     pub async fn dispose(
         &self,
         delivery_info: impl Into<DeliveryInfo>,
-        state: TerminalDeliveryState,
+        state: impl Into<TerminalDeliveryState>,
     ) -> Result<(), DispositionError> {
+        let state: TerminalDeliveryState = state.into();
         self.inner.dispose(delivery_info, None, state.into()).await
     }
 
@@ -540,8 +541,9 @@ impl Receiver {
     pub async fn dispose_all(
         &self,
         deliveries: impl IntoIterator<Item = impl Into<DeliveryInfo>>,
-        state: TerminalDeliveryState,
+        state: impl Into<TerminalDeliveryState>,
     ) -> Result<(), DispositionError> {
+        let state: TerminalDeliveryState = state.into();
         let delivery_infos = deliveries.into_iter().map(|d| d.into()).collect();
         self.inner.dispose_all(delivery_infos, None, state.into()).await
     }
@@ -575,7 +577,7 @@ impl From<TerminalDeliveryState> for DeliveryState {
 }
 
 impl TryFrom<DeliveryState> for TerminalDeliveryState {
-    type Error = ();
+    type Error = DeliveryState;
 
     fn try_from(value: DeliveryState) -> Result<Self, Self::Error> {
         match value {
@@ -583,8 +585,32 @@ impl TryFrom<DeliveryState> for TerminalDeliveryState {
             DeliveryState::Rejected(val) => Ok(Self::Rejected(val)),
             DeliveryState::Released(val) => Ok(Self::Released(val)),
             DeliveryState::Modified(val) => Ok(Self::Modified(val)),
-            _ => Err(()),
+            _ => Err(value),
         }
+    }
+}
+
+impl From<Accepted> for TerminalDeliveryState {
+    fn from(value: Accepted) -> Self {
+        Self::Accepted(value)
+    }
+}
+
+impl From<Rejected> for TerminalDeliveryState {
+    fn from(value: Rejected) -> Self {
+        Self::Rejected(value)
+    }
+}
+
+impl From<Released> for TerminalDeliveryState {
+    fn from(value: Released) -> Self {
+        Self::Released(value)
+    }
+}
+
+impl From<Modified> for TerminalDeliveryState {
+    fn from(value: Modified) -> Self {
+        Self::Modified(value)
     }
 }
 
