@@ -253,10 +253,12 @@ impl Sender {
         // Detach the link
         let detach_result = self.inner.detach_with_error(None).await;
 
+        let is_reattaching = self.inner.session.same_channel(&new_session.control);
+
         // Re-attach the link
         self.inner.session = new_session.control.clone();
         self.inner.outgoing = new_session.outgoing.clone();
-        let attach_result = self.inner.resume_incoming_attach(None).await;
+        let attach_result = self.inner.resume_incoming_attach(None, is_reattaching).await;
 
         match (detach_result, attach_result) {
             (_, Ok(())) => Ok(()),
@@ -955,6 +957,7 @@ impl SenderInner<SenderLink<Target>> {
     async fn resume_incoming_attach(
         &mut self,
         mut initial_remote_attach: Option<Attach>,
+        is_reattaching: bool,
     ) -> Result<(), SenderResumeErrorKind> {
         self.reallocate_output_handle().await?;
         let mut resend_buf = Vec::new();
@@ -963,11 +966,11 @@ impl SenderInner<SenderLink<Target>> {
             let attach_exchange = match initial_remote_attach.take() {
                 Some(remote_attach) => {
                     self.link
-                        .send_attach(&self.outgoing, &self.session, false)
+                        .send_attach(&self.outgoing, &self.session, is_reattaching)
                         .await?;
                     self.link.on_incoming_attach(remote_attach)?
                 }
-                None => self.exchange_attach(false).await?,
+                None => self.exchange_attach(is_reattaching).await?,
             };
 
             match attach_exchange {
@@ -1057,7 +1060,7 @@ impl DetachedSender {
     /// Resume the sender link on the original session
     #[cfg_attr(feature = "tracing", tracing::instrument(skip(self)))]
     pub async fn resume(mut self) -> Result<Sender, SenderResumeError> {
-        try_as_sender!(self, self.inner.resume_incoming_attach(None).await);
+        try_as_sender!(self, self.inner.resume_incoming_attach(None, false).await);
         Ok(Sender { inner: self.inner })
     }
 
@@ -1068,7 +1071,7 @@ impl DetachedSender {
     ) -> Result<Sender, SenderResumeError> {
         try_as_sender!(
             self,
-            self.inner.resume_incoming_attach(Some(remote_attach)).await
+            self.inner.resume_incoming_attach(Some(remote_attach), false).await
         );
         Ok(Sender { inner: self.inner })
     }
@@ -1080,7 +1083,7 @@ impl DetachedSender {
             mut self,
             duration: Duration,
         ) -> Result<Sender, SenderResumeError> {
-            let fut = self.inner.resume_incoming_attach(None);
+            let fut = self.inner.resume_incoming_attach(None, false);
 
             match tokio::time::timeout(duration, fut).await {
                 Ok(Ok(_)) => Ok(Sender { inner: self.inner }),
@@ -1104,7 +1107,7 @@ impl DetachedSender {
             remote_attach: Attach,
             duration: Duration,
         ) -> Result<Sender, SenderResumeError> {
-            let fut = self.inner.resume_incoming_attach(Some(remote_attach));
+            let fut = self.inner.resume_incoming_attach(Some(remote_attach), false);
 
             match tokio::time::timeout(duration, fut).await {
                 Ok(Ok(_)) => Ok(Sender { inner: self.inner }),
@@ -1128,8 +1131,10 @@ impl DetachedSender {
         mut self,
         session: &SessionHandle<R>,
     ) -> Result<Sender, SenderResumeError> {
+        let is_reattaching = self.inner.session.same_channel(&session.control);
         *self.inner.session_control_mut() = session.control.clone();
-        self.resume().await
+        try_as_sender!(self, self.inner.resume_incoming_attach(None, is_reattaching).await);
+        Ok(Sender { inner: self.inner })
     }
 
     /// Resume the sender on a specific session
@@ -1138,9 +1143,15 @@ impl DetachedSender {
         remote_attach: Attach,
         session: &SessionHandle<R>,
     ) -> Result<Sender, SenderResumeError> {
+        let is_reattaching = self.inner.session.same_channel(&session.control);
         self.inner.session = session.control.clone();
         self.inner.outgoing = session.outgoing.clone();
-        self.resume_incoming_attach(remote_attach).await
+
+        try_as_sender!(
+            self,
+            self.inner.resume_incoming_attach(Some(remote_attach), is_reattaching).await
+        );
+        Ok(Sender { inner: self.inner })
     }
 
     cfg_not_wasm32! {
@@ -1150,8 +1161,25 @@ impl DetachedSender {
             session: &SessionHandle<R>,
             duration: Duration,
         ) -> Result<Sender, SenderResumeError> {
+            let is_reattaching = self.inner.session.same_channel(&session.control);
             *self.inner.session_control_mut() = session.control.clone();
-            self.resume_with_timeout(duration).await
+
+            let fut = self.inner.resume_incoming_attach(None, is_reattaching);
+
+            match tokio::time::timeout(duration, fut).await {
+                Ok(Ok(_)) => Ok(Sender { inner: self.inner }),
+                Ok(Err(kind)) => Err(SenderResumeError {
+                    detached_sender: self,
+                    kind,
+                }),
+                Err(_) => {
+                    try_as_sender!(self, self.inner.detach_with_error(None).await);
+                    Err(SenderResumeError {
+                        detached_sender: self,
+                        kind: SenderResumeErrorKind::Timeout,
+                    })
+                }
+            }
         }
 
         /// Resume the sender on a specific session with timeout
@@ -1161,9 +1189,25 @@ impl DetachedSender {
             session: &SessionHandle<R>,
             duration: Duration,
         ) -> Result<Sender, SenderResumeError> {
+            let is_reattaching = self.inner.session.same_channel(&session.control);
             *self.inner.session_control_mut() = session.control.clone();
-            self.resume_incoming_attach_with_timeout(remote_attach, duration)
-                .await
+
+            let fut = self.inner.resume_incoming_attach(Some(remote_attach), is_reattaching);
+
+            match tokio::time::timeout(duration, fut).await {
+                Ok(Ok(_)) => Ok(Sender { inner: self.inner }),
+                Ok(Err(kind)) => Err(SenderResumeError {
+                    detached_sender: self,
+                    kind,
+                }),
+                Err(_) => {
+                    try_as_sender!(self, self.inner.detach_with_error(None).await);
+                    Err(SenderResumeError {
+                        detached_sender: self,
+                        kind: SenderResumeErrorKind::Timeout,
+                    })
+                }
+            }
         }
     }
 }

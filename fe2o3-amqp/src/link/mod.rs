@@ -345,7 +345,15 @@ where
             None => return Err(SendAttachErrorKind::IllegalState),
         };
 
-        let unsettled_map_len = {
+        let unsettled_map_len = if is_reattaching {
+            // If reattaching, the unsettled map MUST be null
+            // 
+            // It is ok to clear the map here because link will always try to send attach
+            // before it handles the remote attach.
+            let mut guard = self.unsettled.write();
+            *guard = None;
+            None
+        } else {
             let guard = self.unsettled.read();
             guard.as_ref().map(|m| m.len())
         };
