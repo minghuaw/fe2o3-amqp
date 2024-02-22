@@ -1,6 +1,6 @@
 //! Implements OwnedTransaction
 
-use async_trait::async_trait;
+
 use fe2o3_amqp_types::{
     definitions::{Fields, SequenceNo},
     messaging::{DeliveryState, Outcome, SerializableBody},
@@ -89,7 +89,7 @@ pub struct OwnedTransaction {
     is_discharged: bool,
 }
 
-#[async_trait]
+
 impl TransactionDischarge for OwnedTransaction {
     type Error = OwnedDischargeError;
 
@@ -120,7 +120,7 @@ impl TransactionDischarge for OwnedTransaction {
     }
 }
 
-#[async_trait]
+
 impl TransactionalRetirement for OwnedTransaction {
     type RetireError = DispositionError;
 

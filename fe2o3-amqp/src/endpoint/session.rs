@@ -1,6 +1,7 @@
 //! Defines traits for session implementations
 
-use async_trait::async_trait;
+use std::future::Future;
+
 use fe2o3_amqp_types::{
     definitions::Error,
     performatives::{Attach, Begin, Detach, Disposition, End, Flow, Transfer},
@@ -16,7 +17,6 @@ use crate::{
 
 use super::{IncomingChannel, InputHandle, LinkFlow, OutgoingChannel, OutputHandle};
 
-#[async_trait]
 pub(crate) trait Session {
     type AllocError: SendBound;
     type BeginError: SendBound;
@@ -52,19 +52,22 @@ pub(crate) trait Session {
         begin: Begin,
     ) -> Result<(), Self::BeginError>;
 
-    async fn on_incoming_attach(&mut self, attach: Attach) -> Result<(), Self::Error>;
+    fn on_incoming_attach(
+        &mut self,
+        attach: Attach,
+    ) -> impl Future<Output = Result<(), Self::Error>> + Send;
 
     /// An `Ok(Some(link_flow))` means an immediate echo of the link flow is requested
-    async fn on_incoming_flow(
+    fn on_incoming_flow(
         &mut self,
         flow: Flow,
-    ) -> Result<Option<SessionOutgoingItem>, Self::Error>;
+    ) -> impl Future<Output = Result<Option<SessionOutgoingItem>, Self::Error>> + Send;
 
-    async fn on_incoming_transfer(
+    fn on_incoming_transfer(
         &mut self,
         transfer: Transfer,
         payload: Payload,
-    ) -> Result<Option<Disposition>, Self::Error>;
+    ) -> impl Future<Output = Result<Option<Disposition>, Self::Error>> + Send;
 
     /// An `Ok(Some(Disposition))` means an immediate disposition should be sent back
     fn on_incoming_disposition(
@@ -72,7 +75,10 @@ pub(crate) trait Session {
         disposition: Disposition,
     ) -> Result<Option<Vec<Disposition>>, Self::Error>;
 
-    async fn on_incoming_detach(&mut self, detach: Detach) -> Result<(), Self::Error>;
+    fn on_incoming_detach(
+        &mut self,
+        detach: Detach,
+    ) -> impl Future<Output = Result<(), Self::Error>> + Send;
 
     fn on_incoming_end(&mut self, channel: IncomingChannel, end: End)
         -> Result<(), Self::EndError>;
@@ -83,11 +89,11 @@ pub(crate) trait Session {
         writer: &mpsc::Sender<SessionFrame>,
     ) -> Result<(), Self::BeginError>;
 
-    async fn send_end(
+    fn send_end(
         &mut self,
         writer: &mpsc::Sender<SessionFrame>,
         error: Option<Error>,
-    ) -> Result<(), Self::EndError>;
+    ) -> impl Future<Output = Result<(), Self::EndError>> + Send;
 
     // Intercepting LinkFrames
     fn on_outgoing_attach(&mut self, attach: Attach) -> Result<SessionFrame, Self::Error>;

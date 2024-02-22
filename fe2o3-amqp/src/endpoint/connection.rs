@@ -1,6 +1,7 @@
 //! Defines trait for connection implementations
 
-use async_trait::async_trait;
+use std::future::Future;
+
 use fe2o3_amqp_types::{
     definitions::Error,
     performatives::{Begin, Close, End, Open},
@@ -13,8 +14,6 @@ use crate::{frames::amqp::Frame, session::frame::SessionIncomingItem, SendBound}
 use super::{IncomingChannel, OutgoingChannel, Session};
 
 /// Trait for connection
-#[cfg_attr(not(target_arch = "wasm32"), async_trait)]
-#[cfg_attr(target_arch="wasm32", async_trait(?Send))]
 pub(crate) trait Connection {
     type AllocError: SendBound;
     type OpenError: SendBound;
@@ -47,18 +46,18 @@ pub(crate) trait Connection {
     /// Reacting to remote Begin frame
     ///
     /// Do NOT forward to session here. Forwarding is handled elsewhere.
-    async fn on_incoming_begin(
+    fn on_incoming_begin(
         &mut self,
         channel: IncomingChannel,
         begin: Begin,
-    ) -> Result<(), Self::Error>;
+    ) -> impl Future<Output = Result<(), Self::Error>> + Send;
 
     /// Reacting to remote End frame
-    async fn on_incoming_end(
+    fn on_incoming_end(
         &mut self,
         channel: IncomingChannel,
         end: End,
-    ) -> Result<(), Self::Error>;
+    ) -> impl Future<Output = Result<(), Self::Error>> + Send;
 
     /// Reacting to remote Close frame
     fn on_incoming_close(
@@ -77,11 +76,11 @@ pub(crate) trait Connection {
         W: Sink<Frame> + SendBound + Unpin,
         Self::OpenError: From<W::Error>; // DO NOT remove this. This is where `Transport` will be used
 
-    async fn send_close<W>(
+    fn send_close<W>(
         &mut self,
         writer: &mut W,
         error: Option<Error>,
-    ) -> Result<(), Self::CloseError>
+    ) -> impl Future<Output = Result<(), Self::CloseError>> + SendBound
     where
         W: Sink<Frame> + SendBound + Unpin,
         Self::CloseError: From<W::Error>; // DO NOT remove this. This is where `Transport` will be used

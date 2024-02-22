@@ -1,6 +1,5 @@
 //! Defines traits for link implementations
 
-use async_trait::async_trait;
 use fe2o3_amqp_types::{
     definitions::{
         DeliveryNumber, DeliveryTag, Error, Fields, MessageFormat, ReceiverSettleMode, Role,
@@ -25,7 +24,6 @@ use crate::{
 
 use super::{OutputHandle, Settlement};
 
-#[async_trait]
 pub(crate) trait LinkDetach {
     type DetachError: Send;
 
@@ -39,7 +37,6 @@ pub(crate) trait LinkDetach {
     ) -> Result<(), Self::DetachError>;
 }
 
-#[async_trait]
 pub(crate) trait LinkAttach {
     type AttachExchange: Send;
     type AttachError: Send;
@@ -61,7 +58,6 @@ pub(crate) trait Link: LinkAttach + LinkDetach {
     fn role() -> Role;
 }
 
-#[async_trait]
 pub(crate) trait LinkExt: Link {
     type FlowState;
     type Unsettled;
@@ -110,7 +106,6 @@ pub(crate) trait LinkExt: Link {
     ) -> Self::AttachError;
 }
 
-#[async_trait]
 pub(crate) trait SenderLink: Link + LinkExt {
     type FlowError: Send;
     type TransferError: Send;
@@ -173,7 +168,6 @@ pub(crate) trait SenderLink: Link + LinkExt {
     ) -> Result<(), Self::DispositionError>;
 }
 
-#[async_trait]
 pub(crate) trait ReceiverLink: Link + LinkExt {
     type FlowError: Send;
     type TransferError: Send;
