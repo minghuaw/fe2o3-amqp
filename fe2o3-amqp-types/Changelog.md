@@ -1,5 +1,18 @@
 # Change Log
 
+## 0.7.2
+
+1. (Backporting 0.9.1) Updated `serde_amqp` to "0.5.10"
+
+## 0.9.1
+
+1. Updated `serde_amqp` to "0.9.1"
+
+## 0.9.0
+
+1. Unified versioning with other `fe2o3-amqp` crates
+2. Updated `ordered-float` to "4"
+
 ## 0.7.1
 
 1. Derive `Hash` for `Message` and related types
