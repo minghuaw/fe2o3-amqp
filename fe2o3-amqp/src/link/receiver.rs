@@ -545,7 +545,9 @@ impl Receiver {
     ) -> Result<(), DispositionError> {
         let state: TerminalDeliveryState = state.into();
         let delivery_infos = deliveries.into_iter().map(|d| d.into()).collect();
-        self.inner.dispose_all(delivery_infos, None, state.into()).await
+        self.inner
+            .dispose_all(delivery_infos, None, state.into())
+            .await
     }
 }
 
