@@ -43,7 +43,6 @@ cfg_transaction! {
 
 #[cfg(docsrs)]
 use fe2o3_amqp_types::messaging::{AmqpSequence, AmqpValue, Batch, Body};
-use fe2o3_amqp_types::messaging::Outcome;
 
 /// Credit mode for the link
 #[derive(Debug, Clone)]
@@ -418,8 +417,8 @@ impl Receiver {
         &self,
         delivery_info: impl Into<DeliveryInfo>,
     ) -> Result<(), DispositionError> {
-        let outcome = Outcome::Accepted(Accepted {});
-        self.dispose(delivery_info, outcome).await
+        let state = TerminalDeliveryState::Accepted(Accepted {});
+        self.dispose(delivery_info, state).await
     }
 
     /// Accept the message by sending one or more disposition(s) with the `delivery_state` field set
@@ -440,8 +439,8 @@ impl Receiver {
         &self,
         deliveries: impl IntoIterator<Item = impl Into<DeliveryInfo>>,
     ) -> Result<(), DispositionError> {
-        let outcome = Outcome::Accepted(Accepted {});
-        self.dispose_all(deliveries, outcome).await
+        let state = TerminalDeliveryState::Accepted(Accepted {});
+        self.dispose_all(deliveries, state).await
     }
 
     /// Reject the message by sending a disposition with the `delivery_state` field set
@@ -453,10 +452,10 @@ impl Receiver {
         delivery_info: impl Into<DeliveryInfo>,
         error: impl Into<Option<definitions::Error>>,
     ) -> Result<(), DispositionError> {
-        let outcome = Outcome::Rejected(Rejected {
+        let state = TerminalDeliveryState::Rejected(Rejected {
             error: error.into(),
         });
-        self.dispose(delivery_info, outcome).await
+        self.dispose(delivery_info, state).await
     }
 
     /// Reject the message by sending one or more disposition(s) with the `delivery_state` field set
@@ -468,10 +467,10 @@ impl Receiver {
         deliveries: impl IntoIterator<Item = impl Into<DeliveryInfo>>,
         error: impl Into<Option<definitions::Error>>,
     ) -> Result<(), DispositionError> {
-        let outcome = Outcome::Rejected(Rejected {
+        let state = TerminalDeliveryState::Rejected(Rejected {
             error: error.into(),
         });
-        self.dispose_all(deliveries, outcome).await
+        self.dispose_all(deliveries, state).await
     }
 
     /// Release the message by sending a disposition with the `delivery_state` field set
@@ -482,8 +481,8 @@ impl Receiver {
         &self,
         delivery_info: impl Into<DeliveryInfo>,
     ) -> Result<(), DispositionError> {
-        let outcome = Outcome::Released(Released {});
-        self.dispose(delivery_info, outcome).await
+        let state = TerminalDeliveryState::Released(Released {});
+        self.dispose(delivery_info, state).await
     }
 
     /// Release the message by sending one or more disposition(s) with the `delivery_state` field set
@@ -494,8 +493,8 @@ impl Receiver {
         &self,
         deliveries: impl IntoIterator<Item = impl Into<DeliveryInfo>>,
     ) -> Result<(), DispositionError> {
-        let outcome = Outcome::Released(Released {});
-        self.dispose_all(deliveries, outcome).await
+        let state = TerminalDeliveryState::Released(Released {});
+        self.dispose_all(deliveries, state).await
     }
 
     /// Modify the message by sending a disposition with the `delivery_state` field set
@@ -507,8 +506,8 @@ impl Receiver {
         delivery_info: impl Into<DeliveryInfo>,
         modified: Modified,
     ) -> Result<(), DispositionError> {
-        let outcome = Outcome::Modified(modified);
-        self.dispose(delivery_info, outcome).await
+        let state = TerminalDeliveryState::Modified(modified);
+        self.dispose(delivery_info, state).await
     }
 
     /// Modify the message by sending one or more disposition(s) with the `delivery_state` field set
@@ -520,8 +519,8 @@ impl Receiver {
         deliveries: impl IntoIterator<Item = impl Into<DeliveryInfo>>,
         modified: Modified,
     ) -> Result<(), DispositionError> {
-        let outcome = Outcome::Modified(modified);
-        self.dispose_all(deliveries, outcome).await
+        let state = TerminalDeliveryState::Modified(modified);
+        self.dispose_all(deliveries, state).await
     }
 
     /// Dispose the message by sending a disposition with the provided state
@@ -530,9 +529,9 @@ impl Receiver {
     pub async fn dispose(
         &self,
         delivery_info: impl Into<DeliveryInfo>,
-        outcome: Outcome,
+        state: TerminalDeliveryState,
     ) -> Result<(), DispositionError> {
-        self.inner.dispose(delivery_info, None, outcome.into()).await
+        self.inner.dispose(delivery_info, None, state.into()).await
     }
 
     /// Dispose the message by sending one or more disposition(s) with the provided state
@@ -541,10 +540,43 @@ impl Receiver {
     pub async fn dispose_all(
         &self,
         deliveries: impl IntoIterator<Item = impl Into<DeliveryInfo>>,
-        outcome: Outcome,
+        state: TerminalDeliveryState,
     ) -> Result<(), DispositionError> {
         let delivery_infos = deliveries.into_iter().map(|d| d.into()).collect();
-        self.inner.dispose_all(delivery_infos, None, outcome.into()).await
+        self.inner.dispose_all(delivery_infos, None, state.into()).await
+    }
+}
+
+#[derive(Debug, Clone)]
+pub enum TerminalDeliveryState {
+    Accepted(Accepted),
+    Rejected(Rejected),
+    Released(Released),
+    Modified(Modified),
+}
+
+impl From<TerminalDeliveryState> for DeliveryState {
+    fn from(value: TerminalDeliveryState) -> Self {
+        match value {
+            TerminalDeliveryState::Accepted(val) => Self::Accepted(val),
+            TerminalDeliveryState::Rejected(val) => Self::Rejected(val),
+            TerminalDeliveryState::Released(val) => Self::Released(val),
+            TerminalDeliveryState::Modified(val) => Self::Modified(val),
+        }
+    }
+}
+
+impl TryFrom<DeliveryState> for TerminalDeliveryState {
+    type Error = ();
+
+    fn try_from(value: DeliveryState) -> Result<Self, Self::Error> {
+        match value {
+            DeliveryState::Accepted(val) => Ok(Self::Accepted(val)),
+            DeliveryState::Rejected(val) => Ok(Self::Rejected(val)),
+            DeliveryState::Released(val) => Ok(Self::Released(val)),
+            DeliveryState::Modified(val) => Ok(Self::Modified(val)),
+            _ => Err(()),
+        }
     }
 }
 
