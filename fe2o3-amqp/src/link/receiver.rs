@@ -365,12 +365,14 @@ impl Receiver {
             .await
             .map_err(DetachThenResumeReceiverError::from);
 
+        let is_reattaching = self.inner.session.same_channel(&new_session.control);
+
         // re-attach the link
         self.inner.session = new_session.control.clone();
         self.inner.outgoing = new_session.outgoing.clone();
         let exchange_result = self
             .inner
-            .resume_incoming_attach(None)
+            .resume_incoming_attach(None, is_reattaching)
             .await
             .map_err(DetachThenResumeReceiverError::from);
 
@@ -1118,17 +1120,18 @@ impl ReceiverInner<ReceiverLink<Target>> {
     pub(crate) async fn resume_incoming_attach(
         &mut self,
         mut initial_remote_attach: Option<Attach>,
+        is_reattaching: bool,
     ) -> Result<ReceiverAttachExchange, ReceiverResumeErrorKind> {
         self.reallocate_output_handle().await?;
 
         let exchange = match initial_remote_attach.take() {
             Some(remote_attach) => {
                 self.link
-                    .send_attach(&self.outgoing, &self.session, false)
+                    .send_attach(&self.outgoing, &self.session, is_reattaching)
                     .await?;
                 self.link.on_incoming_attach(remote_attach)?
             }
-            None => self.exchange_attach(false).await?,
+            None => self.exchange_attach(is_reattaching).await?,
         };
         #[cfg(feature = "tracing")]
         tracing::debug!(?exchange);
@@ -1285,7 +1288,7 @@ impl DetachedReceiver {
     /// times if there are unsettled deliveries.
     #[cfg_attr(feature = "tracing", tracing::instrument(skip(self)))]
     pub async fn resume(mut self) -> Result<ResumingReceiver, ReceiverResumeError> {
-        let exchange = try_as_recver!(self, self.inner.resume_incoming_attach(None).await);
+        let exchange = try_as_recver!(self, self.inner.resume_incoming_attach(None, false).await);
         let receiver = Receiver { inner: self.inner };
         let resuming_receiver = match exchange {
             ReceiverAttachExchange::Complete => ResumingReceiver::Complete(receiver),
@@ -1309,7 +1312,7 @@ impl DetachedReceiver {
             mut self,
             duration: Duration,
         ) -> Result<ResumingReceiver, ReceiverResumeError> {
-            let fut = self.inner.resume_incoming_attach(None);
+            let fut = self.inner.resume_incoming_attach(None, false);
 
             match tokio::time::timeout(duration, fut).await {
                 Ok(Ok(exchange)) => {
@@ -1361,7 +1364,7 @@ impl DetachedReceiver {
     ) -> Result<ResumingReceiver, ReceiverResumeError> {
         let exchange = try_as_recver!(
             self,
-            self.inner.resume_incoming_attach(Some(remote_attach)).await
+            self.inner.resume_incoming_attach(Some(remote_attach), false).await
         );
         let receiver = Receiver { inner: self.inner };
         let resuming_receiver = match exchange {
@@ -1383,9 +1386,24 @@ impl DetachedReceiver {
         remote_attach: Attach,
         session: &SessionHandle<R>,
     ) -> Result<ResumingReceiver, ReceiverResumeError> {
+        let is_reattaching = self.inner.session.same_channel(&session.control);
+
         self.inner.session = session.control.clone();
         self.inner.outgoing = session.outgoing.clone();
-        self.resume_incoming_attach(remote_attach).await
+
+        let exchange = try_as_recver!(
+            self,
+            self.inner.resume_incoming_attach(Some(remote_attach), is_reattaching).await
+        );
+        let receiver = Receiver { inner: self.inner };
+        let resuming_receiver = match exchange {
+            ReceiverAttachExchange::Complete => ResumingReceiver::Complete(receiver),
+            ReceiverAttachExchange::IncompleteUnsettled => {
+                ResumingReceiver::IncompleteUnsettled(receiver)
+            }
+            ReceiverAttachExchange::Resume => ResumingReceiver::Resume(receiver),
+        };
+        Ok(resuming_receiver)
     }
 
     cfg_not_wasm32! {
@@ -1412,7 +1430,7 @@ impl DetachedReceiver {
             remote_attach: Attach,
             duration: Duration,
         ) -> Result<ResumingReceiver, ReceiverResumeError> {
-            let fut = self.inner.resume_incoming_attach(Some(remote_attach));
+            let fut = self.inner.resume_incoming_attach(Some(remote_attach), false);
 
             match tokio::time::timeout(duration, fut).await {
                 Ok(Ok(exchange)) => {
@@ -1450,10 +1468,37 @@ impl DetachedReceiver {
             session: &SessionHandle<R>,
             duration: Duration,
         ) -> Result<ResumingReceiver, ReceiverResumeError> {
+            let is_reattaching = self.inner.session.same_channel(&session.control);
+
             self.inner.session = session.control.clone();
             self.inner.outgoing = session.outgoing.clone();
-            self.resume_incoming_attach_with_timeout(remote_attach, duration)
-                .await
+
+            let fut = self.inner.resume_incoming_attach(Some(remote_attach), is_reattaching);
+
+            match tokio::time::timeout(duration, fut).await {
+                Ok(Ok(exchange)) => {
+                    let receiver = Receiver { inner: self.inner };
+                    let resuming_receiver = match exchange {
+                        ReceiverAttachExchange::Complete => ResumingReceiver::Complete(receiver),
+                        ReceiverAttachExchange::IncompleteUnsettled => {
+                            ResumingReceiver::IncompleteUnsettled(receiver)
+                        }
+                        ReceiverAttachExchange::Resume => ResumingReceiver::Resume(receiver),
+                    };
+                    Ok(resuming_receiver)
+                }
+                Ok(Err(kind)) => Err(ReceiverResumeError {
+                    detached_recver: self,
+                    kind,
+                }),
+                Err(_) => {
+                    try_as_recver!(self, self.inner.detach_with_error(None).await);
+                    Err(ReceiverResumeError {
+                        detached_recver: self,
+                        kind: ReceiverResumeErrorKind::Timeout,
+                    })
+                }
+            }
         }
     }
 }
