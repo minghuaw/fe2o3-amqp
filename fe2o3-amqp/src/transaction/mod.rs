@@ -27,6 +27,8 @@
 //! ```
 //!
 
+use std::future::Future;
+
 use crate::{
     endpoint::ReceiverLink,
     link::{
@@ -85,7 +87,7 @@ pub trait TransactionDischarge: Sized {
     fn is_discharged(&self) -> bool;
 
     /// Discharge the transaction
-    async fn discharge(&mut self, fail: bool) -> Result<(), Self::Error>;
+    fn discharge(&mut self, fail: bool) -> impl Future<Output = Result<(), Self::Error>> + Send;
 
     /// Rollback the transaction
     ///
@@ -93,8 +95,11 @@ pub trait TransactionDischarge: Sized {
     ///
     /// If the coordinator is unable to complete the discharge, the coordinator MUST convey the
     /// error to the controller as a transaction-error
-    async fn rollback(mut self) -> Result<(), Self::Error> {
-        self.discharge(true).await
+    fn rollback(mut self) -> impl Future<Output = Result<(), Self::Error>> + Send 
+    where
+        Self: Send,
+    {
+        async move { self.discharge(true).await }
     }
 
     /// Commit the transaction
@@ -103,8 +108,11 @@ pub trait TransactionDischarge: Sized {
     ///
     /// If the coordinator is unable to complete the discharge, the coordinator MUST convey the
     /// error to the controller as a transaction-error
-    async fn commit(mut self) -> Result<(), Self::Error> {
-        self.discharge(false).await
+    fn commit(mut self) -> impl Future<Output = Result<(), Self::Error>> + Send 
+    where
+        Self: Send,
+    {
+        async move { self.discharge(false).await }
     }
 }
 
@@ -120,67 +128,79 @@ pub trait TransactionalRetirement {
     /// indeed with any transaction at all. However, the delivery MUST NOT be associated with a
     /// different non-discharged transaction than the outcome. If this happens then the control link
     /// MUST be terminated with a transaction-rollback error.
-    async fn retire<T>(
+    fn retire<T>(
         &self,
         recver: &mut Receiver,
         delivery: T,
         outcome: Outcome,
-    ) -> Result<(), Self::RetireError>
+    ) -> impl Future<Output = Result<(), Self::RetireError>> + Send
     where
         T: Into<DeliveryInfo> + Send;
 
     /// Associate an Accepted outcome with a transaction
-    async fn accept<T>(
+    fn accept<T>(
         &self,
         recver: &mut Receiver,
         delivery: T,
-    ) -> Result<(), Self::RetireError>
+    ) -> impl Future<Output = Result<(), Self::RetireError>> + Send
     where
         T: Into<DeliveryInfo> + Send,
+        Self: Sync,
     {
-        let outcome = Outcome::Accepted(Accepted {});
-        self.retire(recver, delivery, outcome).await
+        async move {
+            let outcome = Outcome::Accepted(Accepted {});
+            self.retire(recver, delivery, outcome).await
+        }
     }
 
     /// Associate a Rejected outcome with a transaction
-    async fn reject<T>(
+    fn reject<T>(
         &self,
         recver: &mut Receiver,
         delivery: T,
         error: Option<definitions::Error>,
-    ) -> Result<(), Self::RetireError>
+    ) -> impl Future<Output = Result<(), Self::RetireError>> + Send
     where
         T: Into<DeliveryInfo> + Send,
+        Self: Sync,
     {
-        let outcome = Outcome::Rejected(Rejected { error });
-        self.retire(recver, delivery, outcome).await
+        async move {
+            let outcome = Outcome::Rejected(Rejected { error });
+            self.retire(recver, delivery, outcome).await
+        }
     }
 
     /// Associate a Released outcome with a transaction
-    async fn release<T>(
+    fn release<T>(
         &self,
         recver: &mut Receiver,
         delivery: T,
-    ) -> Result<(), Self::RetireError>
+    ) -> impl Future<Output = Result<(), Self::RetireError>> + Send
     where
         T: Into<DeliveryInfo> + Send,
+        Self: Sync,
     {
-        let outcome = Outcome::Released(Released {});
-        self.retire(recver, delivery, outcome).await
+        async move {
+            let outcome = Outcome::Released(Released {});
+            self.retire(recver, delivery, outcome).await
+        }
     }
 
     /// Associate a Modified outcome with a transaction
-    async fn modify<T>(
+    fn modify<T>(
         &self,
         recver: &mut Receiver,
         delivery: T,
         modified: Modified,
-    ) -> Result<(), Self::RetireError>
+    ) -> impl Future<Output = Result<(), Self::RetireError>> + Send
     where
         T: Into<DeliveryInfo> + Send,
+        Self: Sync,
     {
-        let outcome = Outcome::Modified(modified);
-        self.retire(recver, delivery, outcome).await
+        async move {
+            let outcome = Outcome::Modified(modified);
+            self.retire(recver, delivery, outcome).await
+        }
     }
 }
 
