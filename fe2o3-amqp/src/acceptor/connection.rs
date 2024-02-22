@@ -2,7 +2,7 @@
 
 use std::{io, marker::PhantomData, time::Duration};
 
-use async_trait::async_trait;
+
 use fe2o3_amqp_types::{
     definitions::{self},
     performatives::{Begin, Close, End, Open},
@@ -465,7 +465,7 @@ pub struct ListenerConnection {
     pub(crate) session_listener: mpsc::Sender<IncomingSession>,
 }
 
-#[async_trait]
+
 impl endpoint::Connection for ListenerConnection {
     type AllocError = <connection::Connection as endpoint::Connection>::AllocError;
     type OpenError = <connection::Connection as endpoint::Connection>::OpenError;

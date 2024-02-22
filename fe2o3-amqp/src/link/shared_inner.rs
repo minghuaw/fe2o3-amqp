@@ -1,4 +1,3 @@
-use async_trait::async_trait;
 use fe2o3_amqp_types::{definitions, performatives::Detach};
 use tokio::sync::mpsc;
 
@@ -10,7 +9,6 @@ use crate::{
 
 use super::{state::LinkState, DetachError, LinkFrame, LinkRelay};
 
-#[async_trait]
 pub(crate) trait LinkEndpointInner
 where
     Self: Send + Sync,
@@ -67,7 +65,6 @@ where
     }
 }
 
-#[async_trait]
 pub(crate) trait LinkEndpointInnerReattach
 where
     Self: LinkEndpointInner + Send + Sync,
@@ -93,7 +90,6 @@ where
     }
 }
 
-#[async_trait]
 pub(crate) trait LinkEndpointInnerDetach
 where
     Self: LinkEndpointInner,
@@ -118,7 +114,6 @@ where
     ) -> Result<(), <Self::Link as LinkDetach>::DetachError>;
 }
 
-#[async_trait]
 impl<T> LinkEndpointInnerDetach for T
 where
     T: LinkEndpointInner + LinkEndpointInnerReattach + Send + Sync,

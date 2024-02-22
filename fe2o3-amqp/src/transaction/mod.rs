@@ -36,7 +36,7 @@ use crate::{
     util::TryConsume,
     Receiver, Sendable, Sender,
 };
-use async_trait::async_trait;
+
 use bytes::{BufMut, BytesMut};
 use fe2o3_amqp_types::{
     definitions::{self, AmqpError, DeliveryTag, Fields, SequenceNo},
@@ -76,7 +76,7 @@ cfg_acceptor! {
 }
 
 /// Trait for generics for TxnAcquisition
-#[async_trait]
+
 pub trait TransactionDischarge: Sized {
     /// Errors with discharging
     type Error: Send;
@@ -109,7 +109,7 @@ pub trait TransactionDischarge: Sized {
 }
 
 /// Retiring a transaction
-#[async_trait]
+
 pub trait TransactionalRetirement {
     /// Error with retirement
     type RetireError: Send;
@@ -271,7 +271,7 @@ pub struct Transaction<'t> {
     is_discharged: bool,
 }
 
-#[async_trait]
+
 impl<'t> TransactionDischarge for Transaction<'t> {
     type Error = ControllerSendError;
 
@@ -290,7 +290,7 @@ impl<'t> TransactionDischarge for Transaction<'t> {
     }
 }
 
-#[async_trait]
+
 impl<'t> TransactionalRetirement for Transaction<'t> {
     type RetireError = DispositionError;
 

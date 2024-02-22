@@ -50,7 +50,6 @@ futures-util = { version = "0.3", features = ["sink"] }
 pin-project-lite = "0.2"
 url = "2"
 slab = "0.4"
-async-trait = "0.1"
 serde_bytes = "0.11"
 parking_lot = { version = "0.12", features = ["send_guard"] }
 

@@ -2,8 +2,6 @@
 
 use std::{cmp::min, collections::HashMap, sync::Arc};
 
-use async_trait::async_trait;
-
 use fe2o3_amqp_types::{
     definitions::{self},
     performatives::{Begin, Close, End, Open},
@@ -528,8 +526,6 @@ impl Connection {
     }
 }
 
-#[cfg_attr(not(target_arch = "wasm32"), async_trait)]
-#[cfg_attr(target_arch="wasm32", async_trait(?Send))]
 impl endpoint::Connection for Connection {
     type AllocError = AllocSessionError;
     type OpenError = ConnectionStateError;

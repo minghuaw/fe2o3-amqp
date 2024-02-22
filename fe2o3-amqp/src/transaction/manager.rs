@@ -2,7 +2,7 @@
 
 use std::sync::Arc;
 
-use async_trait::async_trait;
+
 use fe2o3_amqp_types::{
     definitions::Role,
     messaging::{Accepted, DeliveryState, Outcome},
@@ -16,7 +16,7 @@ use crate::{link::LinkFrame, Payload};
 
 use super::{coordinator::ControlLinkAcceptor, frame::TxnWorkFrame};
 
-#[async_trait]
+
 pub(crate) trait HandleControlLink {
     type Error: Send;
 
