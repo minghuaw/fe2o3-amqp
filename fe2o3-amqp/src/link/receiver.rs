@@ -418,7 +418,7 @@ impl Receiver {
         delivery_info: impl Into<DeliveryInfo>,
     ) -> Result<(), DispositionError> {
         let state = DeliveryState::Accepted(Accepted {});
-        self.inner.dispose(delivery_info, None, state).await
+        self.dispose(delivery_info, state).await
     }
 
     /// Accept the message by sending one or more disposition(s) with the `delivery_state` field set
@@ -440,8 +440,7 @@ impl Receiver {
         deliveries: impl IntoIterator<Item = impl Into<DeliveryInfo>>,
     ) -> Result<(), DispositionError> {
         let state = DeliveryState::Accepted(Accepted {});
-        let delivery_infos = deliveries.into_iter().map(|d| d.into()).collect();
-        self.inner.dispose_all(delivery_infos, None, state).await
+        self.dispose_all(deliveries, state).await
     }
 
     /// Reject the message by sending a disposition with the `delivery_state` field set
@@ -456,7 +455,7 @@ impl Receiver {
         let state = DeliveryState::Rejected(Rejected {
             error: error.into(),
         });
-        self.inner.dispose(delivery_info, None, state).await
+        self.dispose(delivery_info, state).await
     }
 
     /// Reject the message by sending one or more disposition(s) with the `delivery_state` field set
@@ -471,8 +470,7 @@ impl Receiver {
         let state = DeliveryState::Rejected(Rejected {
             error: error.into(),
         });
-        let delivery_infos = deliveries.into_iter().map(|d| d.into()).collect();
-        self.inner.dispose_all(delivery_infos, None, state).await
+        self.dispose_all(deliveries, state).await
     }
 
     /// Release the message by sending a disposition with the `delivery_state` field set
@@ -484,7 +482,7 @@ impl Receiver {
         delivery_info: impl Into<DeliveryInfo>,
     ) -> Result<(), DispositionError> {
         let state = DeliveryState::Released(Released {});
-        self.inner.dispose(delivery_info, None, state).await
+        self.dispose(delivery_info, state).await
     }
 
     /// Release the message by sending one or more disposition(s) with the `delivery_state` field set
@@ -496,8 +494,7 @@ impl Receiver {
         deliveries: impl IntoIterator<Item = impl Into<DeliveryInfo>>,
     ) -> Result<(), DispositionError> {
         let state = DeliveryState::Released(Released {});
-        let delivery_infos = deliveries.into_iter().map(|d| d.into()).collect();
-        self.inner.dispose_all(delivery_infos, None, state).await
+        self.dispose_all(deliveries, state).await
     }
 
     /// Modify the message by sending a disposition with the `delivery_state` field set
@@ -510,7 +507,7 @@ impl Receiver {
         modified: Modified,
     ) -> Result<(), DispositionError> {
         let state = DeliveryState::Modified(modified);
-        self.inner.dispose(delivery_info, None, state).await
+        self.dispose(delivery_info, state).await
     }
 
     /// Modify the message by sending one or more disposition(s) with the `delivery_state` field set
@@ -523,6 +520,28 @@ impl Receiver {
         modified: Modified,
     ) -> Result<(), DispositionError> {
         let state = DeliveryState::Modified(modified);
+        self.dispose_all(deliveries, state).await
+    }
+
+    /// Dispose the message by sending a disposition with the provided state
+    ///
+    /// This will not send disposition if the delivery is not found in the local unsettled map.
+    pub async fn dispose(
+        &self,
+        delivery_info: impl Into<DeliveryInfo>,
+        state: DeliveryState,
+    ) -> Result<(), DispositionError> {
+        self.inner.dispose(delivery_info, None, state).await
+    }
+
+    /// Dispose the message by sending one or more disposition(s)  with the provided state
+    ///
+    /// Only deliveries that are found in the local unsettled map will be included in the disposition frame(s).
+    pub async fn dispose_all(
+        &self,
+        deliveries: impl IntoIterator<Item = impl Into<DeliveryInfo>>,
+        state: DeliveryState,
+    ) -> Result<(), DispositionError> {
         let delivery_infos = deliveries.into_iter().map(|d| d.into()).collect();
         self.inner.dispose_all(delivery_infos, None, state).await
     }
