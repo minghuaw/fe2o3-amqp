@@ -43,6 +43,7 @@ cfg_transaction! {
 
 #[cfg(docsrs)]
 use fe2o3_amqp_types::messaging::{AmqpSequence, AmqpValue, Batch, Body};
+use fe2o3_amqp_types::messaging::Outcome;
 
 /// Credit mode for the link
 #[derive(Debug, Clone)]
@@ -417,8 +418,8 @@ impl Receiver {
         &self,
         delivery_info: impl Into<DeliveryInfo>,
     ) -> Result<(), DispositionError> {
-        let state = DeliveryState::Accepted(Accepted {});
-        self.dispose(delivery_info, state).await
+        let outcome = Outcome::Accepted(Accepted {});
+        self.dispose(delivery_info, outcome).await
     }
 
     /// Accept the message by sending one or more disposition(s) with the `delivery_state` field set
@@ -439,8 +440,8 @@ impl Receiver {
         &self,
         deliveries: impl IntoIterator<Item = impl Into<DeliveryInfo>>,
     ) -> Result<(), DispositionError> {
-        let state = DeliveryState::Accepted(Accepted {});
-        self.dispose_all(deliveries, state).await
+        let outcome = Outcome::Accepted(Accepted {});
+        self.dispose_all(deliveries, outcome).await
     }
 
     /// Reject the message by sending a disposition with the `delivery_state` field set
@@ -452,10 +453,10 @@ impl Receiver {
         delivery_info: impl Into<DeliveryInfo>,
         error: impl Into<Option<definitions::Error>>,
     ) -> Result<(), DispositionError> {
-        let state = DeliveryState::Rejected(Rejected {
+        let outcome = Outcome::Rejected(Rejected {
             error: error.into(),
         });
-        self.dispose(delivery_info, state).await
+        self.dispose(delivery_info, outcome).await
     }
 
     /// Reject the message by sending one or more disposition(s) with the `delivery_state` field set
@@ -467,10 +468,10 @@ impl Receiver {
         deliveries: impl IntoIterator<Item = impl Into<DeliveryInfo>>,
         error: impl Into<Option<definitions::Error>>,
     ) -> Result<(), DispositionError> {
-        let state = DeliveryState::Rejected(Rejected {
+        let outcome = Outcome::Rejected(Rejected {
             error: error.into(),
         });
-        self.dispose_all(deliveries, state).await
+        self.dispose_all(deliveries, outcome).await
     }
 
     /// Release the message by sending a disposition with the `delivery_state` field set
@@ -481,8 +482,8 @@ impl Receiver {
         &self,
         delivery_info: impl Into<DeliveryInfo>,
     ) -> Result<(), DispositionError> {
-        let state = DeliveryState::Released(Released {});
-        self.dispose(delivery_info, state).await
+        let outcome = Outcome::Released(Released {});
+        self.dispose(delivery_info, outcome).await
     }
 
     /// Release the message by sending one or more disposition(s) with the `delivery_state` field set
@@ -493,8 +494,8 @@ impl Receiver {
         &self,
         deliveries: impl IntoIterator<Item = impl Into<DeliveryInfo>>,
     ) -> Result<(), DispositionError> {
-        let state = DeliveryState::Released(Released {});
-        self.dispose_all(deliveries, state).await
+        let outcome = Outcome::Released(Released {});
+        self.dispose_all(deliveries, outcome).await
     }
 
     /// Modify the message by sending a disposition with the `delivery_state` field set
@@ -506,8 +507,8 @@ impl Receiver {
         delivery_info: impl Into<DeliveryInfo>,
         modified: Modified,
     ) -> Result<(), DispositionError> {
-        let state = DeliveryState::Modified(modified);
-        self.dispose(delivery_info, state).await
+        let outcome = Outcome::Modified(modified);
+        self.dispose(delivery_info, outcome).await
     }
 
     /// Modify the message by sending one or more disposition(s) with the `delivery_state` field set
@@ -519,8 +520,8 @@ impl Receiver {
         deliveries: impl IntoIterator<Item = impl Into<DeliveryInfo>>,
         modified: Modified,
     ) -> Result<(), DispositionError> {
-        let state = DeliveryState::Modified(modified);
-        self.dispose_all(deliveries, state).await
+        let outcome = Outcome::Modified(modified);
+        self.dispose_all(deliveries, outcome).await
     }
 
     /// Dispose the message by sending a disposition with the provided state
@@ -529,9 +530,9 @@ impl Receiver {
     pub async fn dispose(
         &self,
         delivery_info: impl Into<DeliveryInfo>,
-        state: DeliveryState,
+        outcome: Outcome,
     ) -> Result<(), DispositionError> {
-        self.inner.dispose(delivery_info, None, state).await
+        self.inner.dispose(delivery_info, None, outcome.into()).await
     }
 
     /// Dispose the message by sending one or more disposition(s) with the provided state
@@ -540,10 +541,10 @@ impl Receiver {
     pub async fn dispose_all(
         &self,
         deliveries: impl IntoIterator<Item = impl Into<DeliveryInfo>>,
-        state: DeliveryState,
+        outcome: Outcome,
     ) -> Result<(), DispositionError> {
         let delivery_infos = deliveries.into_iter().map(|d| d.into()).collect();
-        self.inner.dispose_all(delivery_infos, None, state).await
+        self.inner.dispose_all(delivery_infos, None, outcome.into()).await
     }
 }
 
