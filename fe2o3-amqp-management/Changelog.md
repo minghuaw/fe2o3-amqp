@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.2.3
+
+1. Backported 0.9.1
+
 ## 0.9.1
 
 1. Use explicit `swap_remove` instead of deprecated `remove`
