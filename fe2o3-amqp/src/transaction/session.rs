@@ -269,7 +269,6 @@ where
         }
     }
 
-    #[cfg_attr(feature = "tracing", tracing::instrument(skip_all, flow = ?flow))]
     async fn on_incoming_flow(
         &mut self,
         flow: Flow,
