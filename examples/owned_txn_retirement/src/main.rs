@@ -17,7 +17,7 @@ async fn main() {
     let delivery: Delivery<Value> = receiver.recv().await.unwrap();
 
     // Transactionally retiring
-    let mut txn = OwnedTransaction::declare(&mut session, "controller", None).await.unwrap();
+    let txn = OwnedTransaction::declare(&mut session, "controller", None).await.unwrap();
     txn.accept(&mut receiver, &delivery).await.unwrap();
     txn.commit().await.unwrap();
 
