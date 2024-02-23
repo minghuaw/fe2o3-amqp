@@ -640,7 +640,6 @@ mod tests {
 
         let mut header = [0u8; 4];
         header.copy_from_slice(&writer[..4]);
-        println!("length header {:?}", u32::from_be_bytes(header));
 
         // test read
         let reader = &writer[..];
@@ -650,8 +649,7 @@ mod tests {
             .max_frame_length(512 + 4)
             .length_adjustment(-4)
             .new_read(reader);
-        let outcome = framed.next().await.unwrap().unwrap();
-        println!("{:?}", outcome.len())
+        let _outcome = framed.next().await.unwrap().unwrap();
     }
 
     #[tokio::test]
