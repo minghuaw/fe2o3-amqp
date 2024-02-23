@@ -253,7 +253,6 @@ mod tests {
             username: String::from("user"),
             password: String::from("example"),
         };
-        let response = profile.initial_response();
-        println!("{:?}", response);
+        let _response = profile.initial_response();
     }
 }

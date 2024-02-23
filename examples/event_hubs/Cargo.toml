@@ -13,3 +13,5 @@ fe2o3-amqp = { path = "../../fe2o3-amqp", features = ["rustls"] }
 fe2o3-amqp-ext = { path = "../../fe2o3-amqp-ext" }
 fe2o3-amqp-management = { path = "../../fe2o3-amqp-management" }
 anyhow = "1"
+log = "0.4"
+env_logger = "0.11"

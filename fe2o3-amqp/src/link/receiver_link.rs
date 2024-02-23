@@ -927,8 +927,7 @@ mod tests {
         // let mut serializer = serde_amqp::ser::Serializer::new(&mut buf);
         // message.serialize(&mut serializer).unwrap();
         let buf = to_vec(&Serializable(message)).unwrap();
-        let (nums, offset) = count_number_of_sections_and_offset(&buf);
-        println!("{:?}, {:?}", nums, offset);
+        let (_nums, _offset) = count_number_of_sections_and_offset(&buf);
     }
 
     #[test]
