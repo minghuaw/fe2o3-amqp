@@ -1,6 +1,14 @@
 # Change Log
 
-## 0.9.7
+## 0.8.29
+
+1. Backported 0.9.8
+
+## 0.9.8
+
+1. Fixed bug with reattaching session with sender.
+
+## ~~0.9.7~~ (Yanked)
 
 1. Fixed a bug with link re-attaching (as opposed to resuming) where the link's `unsettled` map is
    not cleared when the link is re-attached by checking if the new session is the same as the old.
