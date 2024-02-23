@@ -348,14 +348,12 @@ mod tests {
         let mut encoder = FrameEncoder::new(512);
         let mut dst = BytesMut::new();
         encoder.encode(empty, &mut dst).unwrap();
-        println!("{:x?}", dst);
     }
 
     #[test]
     fn test_decode_empty_frame() {
         let mut decoder = FrameDecoder {};
         let mut src = BytesMut::from(&[0x02, 0x00, 0x00, 0x00][..]);
-        let frame = decoder.decode(&mut src).unwrap();
-        println!("{:?}", frame);
+        let _frame = decoder.decode(&mut src).unwrap();
     }
 }

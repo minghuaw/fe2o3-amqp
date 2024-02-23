@@ -228,8 +228,6 @@ mod tests {
             sasl_server_mechanisms: vec![Symbol::from("PLAIN")].into(),
         };
         let buf = to_vec(&mechanism).unwrap();
-        println!("{:#x?}", buf);
-        let deserialized: super::Frame = from_slice(&buf).unwrap();
-        println!("{:?}", deserialized);
+        let _deserialized: super::Frame = from_slice(&buf).unwrap();
     }
 }
