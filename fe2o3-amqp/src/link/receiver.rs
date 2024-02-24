@@ -1,6 +1,6 @@
 //! Implementation of AMQP1.0 receiver
 
-use std::sync::atomic::{AtomicU32, Ordering};
+use std::sync::{atomic::{AtomicU32, Ordering}, Arc};
 
 use fe2o3_amqp_types::{
     definitions::{self, DeliveryTag, Fields, SequenceNo},
@@ -43,6 +43,21 @@ cfg_transaction! {
 
 #[cfg(docsrs)]
 use fe2o3_amqp_types::messaging::{AmqpSequence, AmqpValue, Batch, Body};
+
+/// Trait for handling message decode error
+pub trait HandleMessageDecodeError: Send + Sync {
+    /// Handle message decode error
+    fn op(&self, delivery_info: &DeliveryInfo, decode_error: &serde_amqp::Error) -> Option<TerminalDeliveryState>;
+}
+
+impl<F> HandleMessageDecodeError for F
+where
+    F: Fn(&DeliveryInfo, &serde_amqp::Error) -> Option<TerminalDeliveryState> + Send + Sync,
+{
+    fn op(&self, delivery_info: &DeliveryInfo, decode_error: &serde_amqp::Error) -> Option<TerminalDeliveryState> {
+        (self)(delivery_info, decode_error)
+    }
+}
 
 /// Credit mode for the link
 #[derive(Debug, Clone)]
@@ -108,9 +123,15 @@ impl Default for CreditMode {
 ///     .await
 ///     .unwrap();
 /// ```
-#[derive(Debug)]
 pub struct Receiver {
     pub(crate) inner: ReceiverInner<ReceiverLink<Target>>,
+}
+
+impl std::fmt::Debug for Receiver {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Receiver")
+            .field("link", &self.inner.link).finish()
+    }
 }
 
 impl Receiver {
@@ -618,7 +639,6 @@ impl From<Modified> for TerminalDeliveryState {
     }
 }
 
-#[derive(Debug)]
 pub(crate) struct ReceiverInner<L: endpoint::ReceiverLink> {
     pub(crate) link: L,
     pub(crate) buffer_size: usize,
@@ -635,6 +655,8 @@ pub(crate) struct ReceiverInner<L: endpoint::ReceiverLink> {
 
     // Wrap in a box to avoid clippy warning large_enum_variant on link acceptor's output
     pub(crate) incomplete_transfer: Option<Box<IncompleteTransfer>>,
+
+    pub(crate) on_decode_error: Option<Arc<dyn HandleMessageDecodeError>>,
 }
 
 impl<L: endpoint::ReceiverLink> Drop for ReceiverInner<L> {
@@ -817,7 +839,20 @@ where
                 input_handle: _,
                 performative,
                 payload,
-            } => self.on_incoming_transfer(performative, payload).await, // cancel safe
+            } => match self.on_incoming_transfer(performative, payload).await {
+                Ok(opt) => Ok(opt),
+                Err(error) => match RecvError::try_from(error) {
+                    Ok(err) => Err(err),
+                    Err((info, decode_error, err)) => {
+                        if let Some(f) = &self.on_decode_error {
+                            if let Some(state) = f.op(&info, &decode_error) {
+                                self.dispose(info, None, state.into()).await?;
+                            }
+                        }
+                        Err(err)
+                    },
+                },
+            }, // cancel safe
             LinkFrame::Attach(_) => Err(LinkStateError::IllegalState.into()),
             LinkFrame::Flow(_) | LinkFrame::Disposition(_) => {
                 // Flow and Disposition are handled by LinkRelay which runs
@@ -842,7 +877,7 @@ where
         delivery_tag: &Option<DeliveryTag>,
         settled: Option<bool>,
         state: DeliveryState,
-    ) -> Result<(), RecvError> {
+    ) -> Result<(), ReceiverTransferError> {
         match &mut self.incomplete_transfer {
             Some(incomplete) if *delivery_tag == incomplete.performative.delivery_tag => {
                 if let DeliveryState::Received(received) = &state {
@@ -857,14 +892,13 @@ where
 
         self.link
             .on_transfer_state(delivery_tag, settled, state)
-            .map_err(Into::into)
     }
 
     fn on_incomplete_transfer(
         &mut self,
         transfer: Transfer,
         payload: Payload,
-    ) -> Result<(), RecvError> {
+    ) -> Result<(), ReceiverTransferError> {
         // Partial transfer of the delivery
         match &mut self.incomplete_transfer {
             Some(incomplete) => {
@@ -904,7 +938,7 @@ where
         &mut self,
         transfer: Transfer,
         payload: Payload,
-    ) -> Result<Option<Delivery<T>>, RecvError>
+    ) -> Result<Option<Delivery<T>>, ReceiverTransferError>
     where
         for<'de> T: FromBody<'de> + Send,
     {
@@ -953,7 +987,7 @@ where
         &mut self,
         transfer: Transfer,
         payload: Payload,
-    ) -> Result<Option<Delivery<T>>, RecvError>
+    ) -> Result<Option<Delivery<T>>, ReceiverTransferError>
     where
         for<'de> T: FromBody<'de> + Send,
     {
@@ -993,7 +1027,7 @@ where
         &mut self,
         transfer: Transfer,
         payload: Payload,
-    ) -> Result<Option<Delivery<T>>, RecvError>
+    ) -> Result<Option<Delivery<T>>, ReceiverTransferError>
     where
         for<'de> T: FromBody<'de> + Send,
     {
@@ -1155,9 +1189,16 @@ impl ReceiverInner<ReceiverLink<Target>> {
 /// let detached = receiver.detach().await.unwrap();
 /// let resuming_receiver = detached.resume().await.unwrap();
 /// ```
-#[derive(Debug)]
 pub struct DetachedReceiver {
     inner: ReceiverInner<ReceiverLink<Target>>,
+}
+
+impl std::fmt::Debug for DetachedReceiver {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("DetachedReceiver")
+            .field("link", &self.inner.link)
+            .finish()
+    }
 }
 
 macro_rules! try_as_recver {

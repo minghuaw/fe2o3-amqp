@@ -7,7 +7,7 @@ use crate::session::error::AllocLinkError;
 #[cfg(docsrs)]
 use fe2o3_amqp_types::transaction::Coordinator;
 
-use super::{receiver::DetachedReceiver, sender::DetachedSender};
+use super::{delivery::DeliveryInfo, receiver::DetachedReceiver, sender::DetachedSender};
 
 /// Error associated with detaching
 #[derive(Debug, thiserror::Error)]
@@ -466,7 +466,7 @@ impl From<DetachError> for LinkStateError {
 pub(crate) enum ReceiverTransferError {
     /// ILlegal link state
     #[error("Illegal local state")]
-    IllegalState,
+    LinkStateError(#[from] IllegalLinkStateError),
 
     /// The peer sent more message transfers than currently allowed on the link.
     #[error("The peer sent more message transfers than currently allowed on the link")]
@@ -482,7 +482,10 @@ pub(crate) enum ReceiverTransferError {
 
     /// Decoding Message failed
     #[error("Decoding Message failed")]
-    MessageDecodeError,
+    MessageDecodeError {
+        info: DeliveryInfo,
+        error: serde_amqp::Error,
+    },
 
     /// If the negotiated link value is first, then it is illegal to set this
     /// field to second.
@@ -531,21 +534,43 @@ pub enum RecvError {
     TransactionalAcquisitionIsNotImeplemented,
 }
 
-impl From<ReceiverTransferError> for RecvError {
-    fn from(value: ReceiverTransferError) -> Self {
+// impl From<ReceiverTransferError> for RecvError {
+//     fn from(value: ReceiverTransferError) -> Self {
+//         match value {
+//             ReceiverTransferError::TransferLimitExceeded => RecvError::TransferLimitExceeded,
+//             ReceiverTransferError::DeliveryIdIsNone => RecvError::DeliveryIdIsNone,
+//             ReceiverTransferError::DeliveryTagIsNone => RecvError::DeliveryTagIsNone,
+//             ReceiverTransferError::MessageDecodeError => RecvError::MessageDecodeError,
+//             ReceiverTransferError::IllegalRcvSettleModeInTransfer => {
+//                 RecvError::IllegalRcvSettleModeInTransfer
+//             }
+//             ReceiverTransferError::InconsistentFieldInMultiFrameDelivery => {
+//                 RecvError::InconsistentFieldInMultiFrameDelivery
+//             }
+//             ReceiverTransferError::IllegalState => {
+//                 RecvError::LinkStateError(LinkStateError::IllegalState)
+//             }
+//         }
+//     }
+// }
+
+impl TryFrom<ReceiverTransferError> for RecvError {
+    type Error = (DeliveryInfo, serde_amqp::Error, RecvError);
+
+    fn try_from(value: ReceiverTransferError) -> Result<Self, Self::Error> {
         match value {
-            ReceiverTransferError::TransferLimitExceeded => RecvError::TransferLimitExceeded,
-            ReceiverTransferError::DeliveryIdIsNone => RecvError::DeliveryIdIsNone,
-            ReceiverTransferError::DeliveryTagIsNone => RecvError::DeliveryTagIsNone,
-            ReceiverTransferError::MessageDecodeError => RecvError::MessageDecodeError,
+            ReceiverTransferError::TransferLimitExceeded => Ok(RecvError::TransferLimitExceeded),
+            ReceiverTransferError::DeliveryIdIsNone => Ok(RecvError::DeliveryIdIsNone),
+            ReceiverTransferError::DeliveryTagIsNone => Ok(RecvError::DeliveryTagIsNone),
+            ReceiverTransferError::MessageDecodeError{info, error} => Err((info, error, RecvError::MessageDecodeError)),
             ReceiverTransferError::IllegalRcvSettleModeInTransfer => {
-                RecvError::IllegalRcvSettleModeInTransfer
+                Ok(RecvError::IllegalRcvSettleModeInTransfer)
             }
             ReceiverTransferError::InconsistentFieldInMultiFrameDelivery => {
-                RecvError::InconsistentFieldInMultiFrameDelivery
+                Ok(RecvError::InconsistentFieldInMultiFrameDelivery)
             }
-            ReceiverTransferError::IllegalState => {
-                RecvError::LinkStateError(LinkStateError::IllegalState)
+            ReceiverTransferError::LinkStateError(error) => {
+                Ok(error.into())
             }
         }
     }

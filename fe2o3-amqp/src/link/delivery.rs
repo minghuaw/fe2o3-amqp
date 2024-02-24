@@ -30,7 +30,7 @@ pub struct DeliveryInfo {
     /// Receiver settle mode that is carried by the transfer frame
     pub(crate) rcv_settle_mode: Option<ReceiverSettleMode>,
 
-    _sealed: Sealed,
+    pub(crate) _sealed: Sealed,
 }
 
 impl DeliveryInfo {

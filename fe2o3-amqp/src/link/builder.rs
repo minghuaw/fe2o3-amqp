@@ -22,7 +22,7 @@ use crate::{
 };
 
 use super::{
-    receiver::{CreditMode, ReceiverInner},
+    receiver::{CreditMode, HandleMessageDecodeError, ReceiverInner},
     role,
     sender::SenderInner,
     state::{LinkFlowState, LinkFlowStateInner, LinkState},
@@ -63,7 +63,7 @@ pub struct WithoutSource;
 pub struct WithSource;
 
 /// Builder for a Link
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct Builder<Role, T, NameState, SS, TS> {
     /// The name of the link
     pub name: String,
@@ -112,6 +112,9 @@ pub struct Builder<Role, T, NameState, SS, TS> {
     /// `false`
     pub auto_accept: bool,
 
+    /// Callback for handling message decode errors
+    pub on_decode_error: Option<Arc<dyn HandleMessageDecodeError>>,
+
     /// Whether to verify the `source` field of the incoming Attach frame
     ///
     /// Default to true
@@ -127,6 +130,28 @@ pub struct Builder<Role, T, NameState, SS, TS> {
     name_state: PhantomData<NameState>,
     source_state: PhantomData<SS>,
     target_state: PhantomData<TS>,
+}
+
+impl std::fmt::Debug for Builder<role::SenderMarker, Target, WithName, WithSource, WithTarget> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Builder")
+            .field("name", &self.name)
+            .field("snd_settle_mode", &self.snd_settle_mode)
+            .field("rcv_settle_mode", &self.rcv_settle_mode)
+            .field("source", &self.source)
+            .field("target", &self.target)
+            .field("initial_delivery_count", &self.initial_delivery_count)
+            .field("max_message_size", &self.max_message_size)
+            .field("offered_capabilities", &self.offered_capabilities)
+            .field("desired_capabilities", &self.desired_capabilities)
+            .field("properties", &self.properties)
+            .field("buffer_size", &self.buffer_size)
+            .field("credit_mode", &self.credit_mode)
+            .field("auto_accept", &self.auto_accept)
+            .field("verify_incoming_source", &self.verify_incoming_source)
+            .field("verify_incoming_target", &self.verify_incoming_target)
+            .finish()
+    }
 }
 
 impl<Role, T> Default for Builder<Role, T, WithoutName, WithoutSource, WithoutTarget> {
@@ -151,6 +176,7 @@ impl<Role, T> Default for Builder<Role, T, WithoutName, WithoutSource, WithoutTa
             target_state: PhantomData,
 
             auto_accept: false,
+            on_decode_error: None,
             verify_incoming_source: true,
             verify_incoming_target: true,
         }
@@ -203,6 +229,7 @@ impl<Role, T, NameState, SS, TS> Builder<Role, T, NameState, SS, TS> {
             target_state: self.target_state,
 
             auto_accept: self.auto_accept,
+            on_decode_error: self.on_decode_error,
             verify_incoming_source: self.verify_incoming_source,
             verify_incoming_target: self.verify_incoming_target,
         }
@@ -230,6 +257,7 @@ impl<Role, T, NameState, SS, TS> Builder<Role, T, NameState, SS, TS> {
             target_state: self.target_state,
 
             auto_accept: self.auto_accept,
+            on_decode_error: self.on_decode_error,
             verify_incoming_source: self.verify_incoming_source,
             verify_incoming_target: self.verify_incoming_target,
         }
@@ -257,6 +285,7 @@ impl<Role, T, NameState, SS, TS> Builder<Role, T, NameState, SS, TS> {
             target_state: self.target_state,
 
             auto_accept: self.auto_accept,
+            on_decode_error: self.on_decode_error,
             verify_incoming_source: self.verify_incoming_source,
             verify_incoming_target: self.verify_incoming_target,
         }
@@ -296,6 +325,7 @@ impl<Role, T, NameState, SS, TS> Builder<Role, T, NameState, SS, TS> {
             target_state: self.target_state,
 
             auto_accept: self.auto_accept,
+            on_decode_error: self.on_decode_error,
             verify_incoming_source: self.verify_incoming_source,
             verify_incoming_target: self.verify_incoming_target,
         }
@@ -326,6 +356,7 @@ impl<Role, T, NameState, SS, TS> Builder<Role, T, NameState, SS, TS> {
             target_state: PhantomData,
 
             auto_accept: self.auto_accept,
+            on_decode_error: self.on_decode_error,
             verify_incoming_source: self.verify_incoming_source,
             verify_incoming_target: self.verify_incoming_target,
         }
@@ -643,6 +674,7 @@ where
         let (relay_flow_state, flow_state) = self.create_flow_state_containers();
         let unsettled = Arc::new(RwLock::new(None));
         let auto_accept = self.auto_accept;
+        let on_decode_error = self.on_decode_error.clone();
 
         let link_relay = LinkRelay::new_receiver(
             incoming_tx,
@@ -684,6 +716,7 @@ where
             outgoing,
             incoming: incoming_rx,
             incomplete_transfer: None,
+            on_decode_error,
         };
 
         if let CreditMode::Auto(credit) = inner.credit_mode {

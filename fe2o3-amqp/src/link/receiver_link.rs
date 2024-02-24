@@ -6,7 +6,7 @@ use serde_amqp::format_code::EncodingCodes;
 
 use crate::{
     endpoint::LinkExt,
-    util::{is_consecutive, AsByteIterator, IntoReader},
+    util::{is_consecutive, AsByteIterator, IntoReader, Sealed},
 };
 
 use super::{delivery::DeliveryInfo, *};
@@ -136,7 +136,11 @@ where
     {
         match self.local_state {
             LinkState::Attached | LinkState::IncompleteAttachExchanged => {}
-            _ => return Err(ReceiverTransferError::IllegalState),
+            _ => {
+                return Err(ReceiverTransferError::LinkStateError(
+                    IllegalLinkStateError::IllegalState,
+                ))
+            }
         }
 
         // ReceiverFlowState will not wait until link credit is available.
@@ -154,12 +158,11 @@ where
             .ok_or(Self::TransferError::DeliveryTagIsNone)?;
         let message_format = transfer.message_format;
 
-        let (message, mode) = if settled_by_sender {
+        let (result, mode) = if settled_by_sender {
             // If the message is pre-settled, there is no need to
             // add to the unsettled map and no need to reply to the Sender
-            let message = T::decode_into_message(payload.into_reader())
-                .map_err(|_| Self::TransferError::MessageDecodeError)?;
-            (message, None)
+            let result = T::decode_into_message(payload.into_reader());
+            (result, None)
         } else {
             // If the message is being sent settled by the sender, the value of this
             // field is ignored.
@@ -177,8 +180,7 @@ where
                 None => None,
             };
 
-            let message = T::decode_into_message(payload.into_reader())
-                .map_err(|_| Self::TransferError::MessageDecodeError)?;
+            let result = T::decode_into_message(payload.into_reader());
 
             let state = DeliveryState::Received(Received {
                 section_number, // What is section number?
@@ -201,13 +203,27 @@ where
                     .get_or_insert(OrderedMap::new())
                     .insert(delivery_tag.clone(), Some(state));
             }
-            (message, mode)
+            (result, mode)
         };
+
+        let message = result.map_err(|error| {
+            let info = DeliveryInfo {
+                delivery_id,
+                delivery_tag: delivery_tag.clone(),
+                rcv_settle_mode: mode.clone(),
+                _sealed: Sealed {},
+            };
+            ReceiverTransferError::MessageDecodeError {
+                info, error
+            }
+        })?;
 
         let link_output_handle = self
             .output_handle
             .clone()
-            .ok_or(ReceiverTransferError::IllegalState)?
+            .ok_or(ReceiverTransferError::LinkStateError(
+                IllegalLinkStateError::IllegalState,
+            ))?
             .into();
 
         let delivery = Delivery {
@@ -927,7 +943,8 @@ mod tests {
         // let mut serializer = serde_amqp::ser::Serializer::new(&mut buf);
         // message.serialize(&mut serializer).unwrap();
         let buf = to_vec(&Serializable(message)).unwrap();
-        let (_nums, _offset) = count_number_of_sections_and_offset(&buf);
+        let (nums, offset) = count_number_of_sections_and_offset(&buf);
+        println!("{:?}, {:?}", nums, offset);
     }
 
     #[test]
