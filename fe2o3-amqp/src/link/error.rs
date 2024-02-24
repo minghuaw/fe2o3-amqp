@@ -7,7 +7,7 @@ use crate::session::error::AllocLinkError;
 #[cfg(docsrs)]
 use fe2o3_amqp_types::transaction::Coordinator;
 
-use super::{receiver::DetachedReceiver, sender::DetachedSender};
+use super::{delivery::DeliveryInfo, receiver::DetachedReceiver, sender::DetachedSender};
 
 /// Error associated with detaching
 #[derive(Debug, thiserror::Error)]
@@ -482,7 +482,10 @@ pub(crate) enum ReceiverTransferError {
 
     /// Decoding Message failed
     #[error("Decoding Message failed")]
-    MessageDecodeError,
+    MessageDecodeError {
+        info: DeliveryInfo,
+        source: serde_amqp::Error,
+    },
 
     /// If the negotiated link value is first, then it is illegal to set this
     /// field to second.
@@ -515,7 +518,13 @@ pub enum RecvError {
 
     /// Decoding Message failed
     #[error("Decoding Message failed")]
-    MessageDecodeError,
+    MessageDecodeError {
+        /// Delivery info
+        info: DeliveryInfo,
+
+        /// Source error
+        source: serde_amqp::Error,
+    },
 
     /// If the negotiated link value is first, then it is illegal to set this
     /// field to second.
@@ -537,7 +546,7 @@ impl From<ReceiverTransferError> for RecvError {
             ReceiverTransferError::TransferLimitExceeded => RecvError::TransferLimitExceeded,
             ReceiverTransferError::DeliveryIdIsNone => RecvError::DeliveryIdIsNone,
             ReceiverTransferError::DeliveryTagIsNone => RecvError::DeliveryTagIsNone,
-            ReceiverTransferError::MessageDecodeError => RecvError::MessageDecodeError,
+            ReceiverTransferError::MessageDecodeError {info, source} => RecvError::MessageDecodeError {info, source},
             ReceiverTransferError::IllegalRcvSettleModeInTransfer => {
                 RecvError::IllegalRcvSettleModeInTransfer
             }

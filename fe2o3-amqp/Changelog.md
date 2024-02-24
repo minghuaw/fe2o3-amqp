@@ -1,5 +1,10 @@
 # Change Log
 
+## 0.10.0
+
+1. Changed `RecvError::MessageDecodeError` to `RecvError::MessageDecodeError {info: DeliveryInfo,
+   source: serde_amqp::Error}`. This would allow user to dispose the delivery.
+
 ## 0.9.8
 
 1. Fixed bug with reattaching session with sender.
