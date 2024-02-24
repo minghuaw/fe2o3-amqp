@@ -2,8 +2,9 @@
 
 ## 0.10.0
 
-1. Changed `RecvError::MessageDecodeError` to `RecvError::MessageDecodeError {info: DeliveryInfo,
-   source: serde_amqp::Error}`. This would allow user to dispose the delivery.
+1. Changed `RecvError::MessageDecodeError` to `RecvError::MessageDecode(MessageDecodeError)`.
+2. Added `MessageDecodeError` which carries the source `serde_amqp::Error` when deserializing the
+   message body fails and the delivery info that can be used to dispose the message.
 
 ## 0.9.8
 
