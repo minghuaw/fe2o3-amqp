@@ -1,5 +1,6 @@
 use fe2o3_amqp::{
     connection::Connection, link::Receiver, session::Session, types::primitives::Value, Delivery,
+    link::RecvError,
 };
 
 #[tokio::main]
@@ -12,7 +13,16 @@ async fn main() {
         .await
         .unwrap();
 
-    let delivery: Delivery<Value> = receiver.recv().await.unwrap();
+    let delivery: Delivery<Value> = match receiver.recv().await {
+        Ok(delivery) => delivery,
+        Err(e) => match e {
+            RecvError::MessageDecode(e) => {
+                receiver.reject(e.info, None).await.unwrap();
+                panic!("Message decode error: {:?}", e.source)
+            },
+            _ => panic!("Unexpected error: {:?}", e),
+        }
+    };
     receiver.accept(&delivery).await.unwrap();
 
     receiver.close().await.unwrap();

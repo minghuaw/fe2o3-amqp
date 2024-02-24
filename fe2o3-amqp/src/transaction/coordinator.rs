@@ -223,7 +223,7 @@ impl TxnCoordinator {
             }
             RecvError::DeliveryIdIsNone
             | RecvError::DeliveryTagIsNone
-            | RecvError::MessageDecodeError
+            | RecvError::MessageDecode(_)
             | RecvError::IllegalRcvSettleModeInTransfer
             | RecvError::InconsistentFieldInMultiFrameDelivery
             | RecvError::TransactionalAcquisitionIsNotImeplemented => {

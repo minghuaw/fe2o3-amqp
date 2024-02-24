@@ -1,6 +1,11 @@
 # Change Log
 
-## 0.9.0 
+## 0.10.0
+
+- Updated `fe2o3-amqp` to "0.10.0"
+- Replace GAT with async fn in trait for `AsyncCbsTokenProvider` trait
+
+## 0.9.0
 
 - Unified versioning with other `fe2o3-amqp` crates
 

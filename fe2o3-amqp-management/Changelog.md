@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.10.0
+
+1. Unified versioning with other `fe2o3-amqp` crates
+
 ## 0.2.3
 
 1. Backported 0.9.1

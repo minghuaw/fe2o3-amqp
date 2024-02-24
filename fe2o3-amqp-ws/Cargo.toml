@@ -1,6 +1,6 @@
 [package]
 name = "fe2o3-amqp-ws"
-version = "0.9.0"
+version = "0.10.0"
 edition = "2021"
 description = "WebSocket binding stream for AMQP1.0"
 license = "MIT/Apache-2.0"

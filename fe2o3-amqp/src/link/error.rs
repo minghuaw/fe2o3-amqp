@@ -7,7 +7,7 @@ use crate::session::error::AllocLinkError;
 #[cfg(docsrs)]
 use fe2o3_amqp_types::transaction::Coordinator;
 
-use super::{receiver::DetachedReceiver, sender::DetachedSender};
+use super::{delivery::DeliveryInfo, receiver::DetachedReceiver, sender::DetachedSender};
 
 /// Error associated with detaching
 #[derive(Debug, thiserror::Error)]
@@ -482,7 +482,7 @@ pub(crate) enum ReceiverTransferError {
 
     /// Decoding Message failed
     #[error("Decoding Message failed")]
-    MessageDecodeError,
+    MessageDecode(#[from] MessageDecodeError),
 
     /// If the negotiated link value is first, then it is illegal to set this
     /// field to second.
@@ -493,6 +493,24 @@ pub(crate) enum ReceiverTransferError {
     #[error("Field is inconsisten in multi-frame delivery")]
     InconsistentFieldInMultiFrameDelivery,
 }
+
+/// Error decoding message
+#[derive(Debug)]
+pub struct MessageDecodeError {
+    /// Delivery info
+    pub info: DeliveryInfo,
+
+    /// Source error
+    pub source: serde_amqp::Error,
+}
+
+impl std::fmt::Display for MessageDecodeError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{:?}: {}", self.info, self.source)
+    }
+}
+
+impl std::error::Error for MessageDecodeError {}
 
 /// Errors associated with receiving
 #[derive(Debug, thiserror::Error)]
@@ -515,7 +533,7 @@ pub enum RecvError {
 
     /// Decoding Message failed
     #[error("Decoding Message failed")]
-    MessageDecodeError,
+    MessageDecode(#[from] MessageDecodeError),
 
     /// If the negotiated link value is first, then it is illegal to set this
     /// field to second.
@@ -537,7 +555,7 @@ impl From<ReceiverTransferError> for RecvError {
             ReceiverTransferError::TransferLimitExceeded => RecvError::TransferLimitExceeded,
             ReceiverTransferError::DeliveryIdIsNone => RecvError::DeliveryIdIsNone,
             ReceiverTransferError::DeliveryTagIsNone => RecvError::DeliveryTagIsNone,
-            ReceiverTransferError::MessageDecodeError => RecvError::MessageDecodeError,
+            ReceiverTransferError::MessageDecode(err) => RecvError::MessageDecode(err),
             ReceiverTransferError::IllegalRcvSettleModeInTransfer => {
                 RecvError::IllegalRcvSettleModeInTransfer
             }
