@@ -211,7 +211,10 @@ where
                     rcv_settle_mode: mode,
                     _sealed: Sealed {},
                 };
-                return Err(ReceiverTransferError::MessageDecodeError{info, source});
+                return Err(MessageDecodeError {
+                    source,
+                    info,
+                }.into());
             }
         };
 
