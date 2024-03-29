@@ -60,6 +60,9 @@ included in the installation.
 cargo install cargo-make
 ```
 
+Docker is required for running integration tests in `fe2o3-amqp`. Please follow the instruction on
+the [Docker website](https://docs.docker.com/get-docker/) to install Docker.
+
 ### Building the project
 
 The project is divided into multiple crates. Each crate should be built separately. The main crate
@@ -73,7 +76,8 @@ cargo build
 ### Testing the project
 
 `cargo make` is used for testing combination of different features in some crates. For crates that
-do not have `Makefile.toml`, `cargo make test` is an alias to `cargo test`.
+do not have `Makefile.toml`, `cargo make test` is an alias to `cargo test`. Additionally, Docker
+is required for `fe2o3-amqp` to run integration tests.
 
 Test each crate with:
 
