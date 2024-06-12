@@ -75,7 +75,6 @@ cargo build
 
 ### Testing the project
 
-
 `cargo make` is used for testing combination of different features in some crates. For crates that
 do not have `Makefile.toml`, `cargo make test` is an alias to `cargo test`. Additionally, Docker
 is required for `fe2o3-amqp` to run integration tests.
