@@ -36,8 +36,6 @@ Thank you for your interest in contributing to the FE2O3 (Iron Oxide) library.
 
 ## Developer Guide
 
-<<<<<<< HEAD
-=======
 ### AMQP 1.0 Protocol
 
 - Core [standard](http://docs.oasis-open.org/amqp/core/v1.0/os/amqp-core-overview-v1.0-os.html).
@@ -47,7 +45,6 @@ Thank you for your interest in contributing to the FE2O3 (Iron Oxide) library.
 - Claims based security [working draft](https://groups.oasis-open.org/higherlogic/ws/public/document?document_id=62097)
 - [Extensions](https://www.amqp.org/specification/1.0)
 
->>>>>>> 7a860db391652d8a7b71215641a3a1ca6c28c921
 ### Full Local Setup
 
 #### Pre-requisites
@@ -78,32 +75,6 @@ cargo build
 
 ### Testing the project
 
-=======
-`rust` stable toolchain newer than 1.75.0 is required to build the project, and the nightly
-toolchain is required for building the documentation locally. Please follow the instruction on the
-[Rust website](https://www.rust-lang.org/tools/install) to install the toolchain. `cargo` is
-included in the installation.
-
-`cargo make` is used in some crates to test with different features. Install it with:
-
-```bash
-cargo install cargo-make
-```
-
-Docker is required for running integration tests in `fe2o3-amqp`. Please follow the instruction on
-the [Docker website](https://docs.docker.com/get-docker/) to install Docker.
-
-### Building the project
-
-The project is divided into multiple crates. Each crate should be built separately. The main crate
-is `fe2o3_amqp`. Build each crate with:
-
-```bash
-cd <crate-name>
-cargo build
-```
-
-### Testing the project
 
 `cargo make` is used for testing combination of different features in some crates. For crates that
 do not have `Makefile.toml`, `cargo make test` is an alias to `cargo test`. Additionally, Docker
