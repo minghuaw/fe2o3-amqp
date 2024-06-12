@@ -1,5 +1,11 @@
 # Change Log
 
+## 0.??.?? (Unreleased)
+
+### Breaking changes
+
+1. Corrected typo in the name of `SessionBuilder::outgoing_widnow` and `SessionAcceptor::outgoing_widnow`, they are now `SessionBuilder::outgoing_window` and `SessionAcceptor::outgoing_window`. 
+
 ## 0.10.0
 
 1. Changed `RecvError::MessageDecodeError` to `RecvError::MessageDecode(MessageDecodeError)`.
