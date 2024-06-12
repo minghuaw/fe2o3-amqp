@@ -52,8 +52,29 @@ Thank you for your interest in contributing to the FE2O3 (Iron Oxide) library.
 
 #### Pre-requisites
 
-<<<<<<< HEAD
+`rust` stable toolchain newer than 1.75.0 is required to build the project, and the nightly
+toolchain is required for building the documentation locally. Please follow the instruction on the
+[Rust website](https://www.rust-lang.org/tools/install) to install the toolchain. `cargo` is
+included in the installation.
+
+`cargo make` is used in some crates to test with different features. Install it with:
+
+```bash
+cargo install cargo-make
+```
+
+Docker is required for running integration tests in `fe2o3-amqp`. Please follow the instruction on
+the [Docker website](https://docs.docker.com/get-docker/) to install Docker.
+
 ### Building the project
+
+The project is divided into multiple crates. Each crate should be built separately. The main crate
+is `fe2o3_amqp`. Build each crate with:
+
+```bash
+cd <crate-name>
+cargo build
+```
 
 ### Testing the project
 
@@ -116,4 +137,3 @@ requires the nightly toolchain.
 cd <crate-name>
 cargo make docsrs
 ```
->>>>>>> 7a860db391652d8a7b71215641a3a1ca6c28c921
