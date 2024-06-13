@@ -1,13 +1,9 @@
-use testcontainers::{clients::Cli, core::WaitFor, Container, GenericImage};
-use tokio::sync::OnceCell;
-
-static DOCKER: OnceCell<Cli> = OnceCell::const_new();
+use testcontainers::{core::WaitFor, runners::AsyncRunner, ContainerAsync, GenericImage};
 
 pub async fn setup_activemq_artemis(
     username: Option<&str>,
     password: Option<&str>,
-) -> (Container<'static, GenericImage>, u16) {
-    let docker = DOCKER.get_or_init(|| async { Cli::default() }).await;
+) -> (ContainerAsync<GenericImage>, u16) {
     let image = match (username, password) {
         (Some(username), Some(password)) => {
             GenericImage::new("docker.io/vromero/activemq-artemis", "latest")
@@ -21,18 +17,17 @@ pub async fn setup_activemq_artemis(
             .with_exposed_port(5672)
             .with_wait_for(WaitFor::seconds(5)),
     };
-    let node = docker.run(image);
 
-    let port = node.get_host_port_ipv4(5672);
-    (node, port)
+    let runner = image.start().await.unwrap();
+    let port = runner.get_host_port_ipv4(5672).await.unwrap();
+    (runner, port)
 }
 
 // TODO: disable default user and add a new user
 pub async fn setup_rabbitmq_amqp10(
     username: Option<&str>,
     password: Option<&str>,
-) -> (Container<'static, GenericImage>, u16) {
-    let docker = DOCKER.get_or_init(|| async { Cli::default() }).await;
+) -> (ContainerAsync<GenericImage>, u16) {
     let image = match (username, password) {
         (Some(username), Some(password)) => {
             GenericImage::new("docker.io/minghuaw/rabbitmq-amqp1.0", "latest")
@@ -45,7 +40,8 @@ pub async fn setup_rabbitmq_amqp10(
             .with_exposed_port(5672)
             .with_wait_for(WaitFor::seconds(10)),
     };
-    let node = docker.run(image);
-    let port = node.get_host_port_ipv4(5672);
-    (node, port)
+
+    let runner = image.start().await.unwrap();
+    let port = runner.get_host_port_ipv4(5672).await.unwrap();
+    (runner, port)
 }

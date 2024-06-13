@@ -75,12 +75,12 @@ librustls = { package = "rustls", version = "0.23", default-features = false, op
 tokio = { workspace = true, features = ["sync", "io-util", "net", "rt", "macros", "time"] }
 libnative-tls = { package = "native-tls", version = "0.2", optional = true }
 tokio-native-tls = { version = "0.3", optional = true }
-ring = { version = "0.17", optional = true }
+ring = { version = "0.17", default-features = false, optional = true }
 tokio-stream = { version = "0.1", features = ["time"] }
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 tokio = { workspace = true, features = ["sync", "io-util", "rt", "macros"] } # "net" feature doesn't support wasm32
-ring = { version = "0.17", features = ["wasm32_unknown_unknown_js"], optional = true }
+ring = { version = "0.17", default-features = false, features = ["wasm32_unknown_unknown_js"], optional = true }
 getrandom = { workspace = true }
 fluvio-wasm-timer = "0.2"
 
