@@ -86,7 +86,7 @@ fluvio-wasm-timer = "0.2"
 
 [dev-dependencies]
 tokio-test = { version = "0.4" }
-testcontainers = "0.17.0"
+testcontainers = "0.15.0"
 fe2o3-amqp-ext = { workspace = true }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
