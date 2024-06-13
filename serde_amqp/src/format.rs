@@ -28,26 +28,26 @@ pub const OFFSET_ARRAY8: usize = 2;
 pub const OFFSET_ARRAY32: usize = 5;
 
 pub enum Category {
-    Fixed(FixedWidth),
-    Encoded(EncodedWidth),
+    Fixed,
+    Encoded,
 }
 
-#[repr(u8)]
-pub enum FixedWidth {
-    Zero = 0,
-    One = 1,
-    Two = 2,
-    Four = 4,
-    Eight = 8,
-    Sixteen = 16,
-}
+// #[repr(u8)]
+// pub enum FixedWidth {
+//     Zero = 0,
+//     One = 1,
+//     Two = 2,
+//     Four = 4,
+//     Eight = 8,
+//     Sixteen = 16,
+// }
 
-#[repr(u8)]
-pub enum EncodedWidth {
-    Zero = 0,
-    One = 1,
-    Four = 4,
-}
+// #[repr(u8)]
+// pub enum EncodedWidth {
+//     Zero = 0,
+//     One = 1,
+//     Four = 4,
+// }
 
 // #[repr(u8)]
 // pub enum VariableWidth {
@@ -75,76 +75,76 @@ impl TryFrom<EncodingCodes> for Category {
         let value = match value {
             EncodingCodes::DescribedType => return Err(Error::IsDescribedType),
 
-            EncodingCodes::Null => Category::Fixed(FixedWidth::Zero),
+            EncodingCodes::Null => Category::Fixed,
 
-            EncodingCodes::Boolean => Category::Fixed(FixedWidth::One),
-            EncodingCodes::BooleanTrue => Category::Fixed(FixedWidth::Zero),
-            EncodingCodes::BooleanFalse => Category::Fixed(FixedWidth::Zero),
+            EncodingCodes::Boolean => Category::Fixed,
+            EncodingCodes::BooleanTrue => Category::Fixed,
+            EncodingCodes::BooleanFalse => Category::Fixed,
 
             // u8
-            EncodingCodes::Ubyte => Category::Fixed(FixedWidth::One),
+            EncodingCodes::Ubyte => Category::Fixed,
 
             // u16
-            EncodingCodes::Ushort => Category::Fixed(FixedWidth::Two),
+            EncodingCodes::Ushort => Category::Fixed,
 
             // u32
-            EncodingCodes::Uint => Category::Fixed(FixedWidth::Four),
-            EncodingCodes::SmallUint => Category::Fixed(FixedWidth::One),
-            EncodingCodes::Uint0 => Category::Fixed(FixedWidth::Zero),
+            EncodingCodes::Uint => Category::Fixed,
+            EncodingCodes::SmallUint => Category::Fixed,
+            EncodingCodes::Uint0 => Category::Fixed,
 
             // u64
-            EncodingCodes::Ulong => Category::Fixed(FixedWidth::Eight),
-            EncodingCodes::SmallUlong => Category::Fixed(FixedWidth::One),
-            EncodingCodes::Ulong0 => Category::Fixed(FixedWidth::Zero),
+            EncodingCodes::Ulong => Category::Fixed,
+            EncodingCodes::SmallUlong => Category::Fixed,
+            EncodingCodes::Ulong0 => Category::Fixed,
 
             // i8
-            EncodingCodes::Byte => Category::Fixed(FixedWidth::One),
+            EncodingCodes::Byte => Category::Fixed,
 
             // i16
-            EncodingCodes::Short => Category::Fixed(FixedWidth::Two),
+            EncodingCodes::Short => Category::Fixed,
 
             // i32
-            EncodingCodes::Int => Category::Fixed(FixedWidth::Four),
-            EncodingCodes::SmallInt => Category::Fixed(FixedWidth::One),
+            EncodingCodes::Int => Category::Fixed,
+            EncodingCodes::SmallInt => Category::Fixed,
 
             // i64
-            EncodingCodes::Long => Category::Fixed(FixedWidth::Eight),
-            EncodingCodes::SmallLong => Category::Fixed(FixedWidth::One),
+            EncodingCodes::Long => Category::Fixed,
+            EncodingCodes::SmallLong => Category::Fixed,
 
             // f32
-            EncodingCodes::Float => Category::Fixed(FixedWidth::Four),
+            EncodingCodes::Float => Category::Fixed,
 
             // f64
-            EncodingCodes::Double => Category::Fixed(FixedWidth::Eight),
+            EncodingCodes::Double => Category::Fixed,
 
-            EncodingCodes::Decimal32 => Category::Fixed(FixedWidth::Four),
-            EncodingCodes::Decimal64 => Category::Fixed(FixedWidth::Eight),
-            EncodingCodes::Decimal128 => Category::Fixed(FixedWidth::Sixteen),
+            EncodingCodes::Decimal32 => Category::Fixed,
+            EncodingCodes::Decimal64 => Category::Fixed,
+            EncodingCodes::Decimal128 => Category::Fixed,
 
-            EncodingCodes::Char => Category::Fixed(FixedWidth::Four),
+            EncodingCodes::Char => Category::Fixed,
 
-            EncodingCodes::Timestamp => Category::Fixed(FixedWidth::Eight),
+            EncodingCodes::Timestamp => Category::Fixed,
 
-            EncodingCodes::Uuid => Category::Fixed(FixedWidth::Sixteen),
+            EncodingCodes::Uuid => Category::Fixed,
 
-            EncodingCodes::Vbin8 => Category::Encoded(EncodedWidth::One),
-            EncodingCodes::Vbin32 => Category::Encoded(EncodedWidth::Four),
+            EncodingCodes::Vbin8 => Category::Encoded,
+            EncodingCodes::Vbin32 => Category::Encoded,
 
-            EncodingCodes::Str8 => Category::Encoded(EncodedWidth::One),
-            EncodingCodes::Str32 => Category::Encoded(EncodedWidth::Four),
+            EncodingCodes::Str8 => Category::Encoded,
+            EncodingCodes::Str32 => Category::Encoded,
 
-            EncodingCodes::Sym8 => Category::Encoded(EncodedWidth::One),
-            EncodingCodes::Sym32 => Category::Encoded(EncodedWidth::Four),
+            EncodingCodes::Sym8 => Category::Encoded,
+            EncodingCodes::Sym32 => Category::Encoded,
 
-            EncodingCodes::List0 => Category::Encoded(EncodedWidth::Zero),
-            EncodingCodes::List8 => Category::Encoded(EncodedWidth::One),
-            EncodingCodes::List32 => Category::Encoded(EncodedWidth::Four),
+            EncodingCodes::List0 => Category::Encoded,
+            EncodingCodes::List8 => Category::Encoded,
+            EncodingCodes::List32 => Category::Encoded,
 
-            EncodingCodes::Map8 => Category::Encoded(EncodedWidth::One),
-            EncodingCodes::Map32 => Category::Encoded(EncodedWidth::Four),
+            EncodingCodes::Map8 => Category::Encoded,
+            EncodingCodes::Map32 => Category::Encoded,
 
-            EncodingCodes::Array8 => Category::Encoded(EncodedWidth::One),
-            EncodingCodes::Array32 => Category::Encoded(EncodedWidth::Four),
+            EncodingCodes::Array8 => Category::Encoded,
+            EncodingCodes::Array32 => Category::Encoded,
         };
 
         Ok(value)

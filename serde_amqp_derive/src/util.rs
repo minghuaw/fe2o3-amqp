@@ -26,8 +26,8 @@ pub(crate) fn parse_described_struct_attr(input: &syn::DeriveInput) -> Described
 #[derive(Debug)]
 pub enum ParseDescriptorCodeError {
     IncorrectDescriptorFormat,
-    DomainIdParseError(ParseIntError),
-    DescriptorIdParseError(ParseIntError),
+    DomainIdParseError,
+    DescriptorIdParseError,
 }
 
 fn parse_descriptor_code(s: String) -> Result<u64, ParseDescriptorCodeError> {
@@ -42,11 +42,11 @@ fn parse_descriptor_code(s: String) -> Result<u64, ParseDescriptorCodeError> {
                 .ok_or(ParseDescriptorCodeError::IncorrectDescriptorFormat)?
                 .replace('_', "");
             let domain_id = parse_code_based_on_prefix(&domain_id_str)
-                .map_err(ParseDescriptorCodeError::DomainIdParseError)?;
+                .map_err(|_| ParseDescriptorCodeError::DomainIdParseError)?;
 
             let descriptor_id_str = descriptor_id_str.replace('_', "");
             let descriptor_id = parse_code_based_on_prefix(&descriptor_id_str)
-                .map_err(ParseDescriptorCodeError::DescriptorIdParseError)?;
+                .map_err(|_| ParseDescriptorCodeError::DescriptorIdParseError)?;
             // numeric descriptors
             // (domain-id << 32) | descriptor-id
             Ok((domain_id << 32) | descriptor_id)
@@ -56,7 +56,7 @@ fn parse_descriptor_code(s: String) -> Result<u64, ParseDescriptorCodeError> {
                 .ok_or(ParseDescriptorCodeError::IncorrectDescriptorFormat)?
                 .replace('_', "");
             let descriptor_id = parse_code_based_on_prefix(&descriptor_id_str)
-                .map_err(ParseDescriptorCodeError::DescriptorIdParseError)?;
+                .map_err(|_| ParseDescriptorCodeError::DescriptorIdParseError)?;
             Ok(descriptor_id)
         }
     }

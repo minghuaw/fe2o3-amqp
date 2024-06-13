@@ -89,11 +89,11 @@
 //! implemented as follows:
 //!
 //! - `NewTypeVariant` is encoded/decoded as a map of one key-value pair with the variant index
-//! being the key and the single wrapped field being the value.
+//!   being the key and the single wrapped field being the value.
 //! - `TupleVariant` is encoded/decoded as a map of one key-value pair with the varant index being
-//! the key and a list of the fields being the value.
+//!   the key and a list of the fields being the value.
 //! - `StructVariant` is encoded/decoded as a map of one key-value pair with the variant index being
-//! the key and a list of the fields being the value.
+//!   the key and a list of the fields being the value.
 //!
 //! # Feature flag
 //!

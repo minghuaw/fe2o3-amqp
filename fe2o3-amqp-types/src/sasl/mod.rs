@@ -18,7 +18,7 @@ mod mechanisms;
 ///
 /// NOTE: Serialize and Deserialize are manually implemented because
 /// > A field which is defined as both multiple and mandatory MUST contain at least one value
-/// (i.e. for such a field both null and an array with no entries are invalid).
+/// > (i.e. for such a field both null and an array with no entries are invalid).
 #[derive(Debug, Clone)]
 pub struct SaslMechanisms {
     /// sasl-server-mechanisms supported sasl mechanisms

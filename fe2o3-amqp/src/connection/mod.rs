@@ -381,7 +381,7 @@ pub(crate) async fn deallocate_session(
 ///     ```
 ///
 /// 2. Start SASL negotiation with the builder. Please note that tf the url contains `username` and `password`,
-/// the profile supplied to the builder will be overriden.
+///    the profile supplied to the builder will be overriden.
 ///
 ///     ```rust,ignore
 ///     // This is equivalent to the line above
