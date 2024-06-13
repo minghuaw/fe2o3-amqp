@@ -55,7 +55,7 @@ cfg_acceptor! {
         #[cfg(feature = "acceptor")]
         InvalidSessionState,
     
-        ///
+        /// The allocation of transaction ID is not implemented
         AllocTxnIdNotImplemented,
     
         /// If the coordinator is unable to complete the discharge, the coordinator MUST convey the error to the controller
