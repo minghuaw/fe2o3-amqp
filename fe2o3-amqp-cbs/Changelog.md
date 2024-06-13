@@ -1,5 +1,9 @@
 # Change Log
 
+## 0.11.0
+
+1. Updated deps
+
 ## 0.10.0
 
 - Updated `fe2o3-amqp` to "0.10.0"

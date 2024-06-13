@@ -1,5 +1,10 @@
 # fe2o3-amqp-ws
 
+## 0.11.0
+
+1. Updated deps.
+2. Fixed bug in doc example
+
 ## 0.10.0
 
 1. Unified versioning with other `fe2o3-amqp` crates
