@@ -1,10 +1,18 @@
 # Change Log
 
-## 0.??.?? (Unreleased)
+## 0.11.0
 
 ### Breaking changes
 
-1. Corrected typo in the name of `SessionBuilder::outgoing_widnow` and `SessionAcceptor::outgoing_widnow`, they are now `SessionBuilder::outgoing_window` and `SessionAcceptor::outgoing_window`. 
+1. Corrected typo in the name of `SessionBuilder::outgoing_widnow` and `SessionAcceptor::outgoing_widnow`, they are now `SessionBuilder::outgoing_window` and `SessionAcceptor::outgoing_window`.
+2. Updated dependencies
+   1. base64
+   2. rustls, tokio-rustls
+3. Removed deprecated functions
+
+### Minor changes
+
+1. Fixed typo in documentation
 
 ## 0.10.0
 
