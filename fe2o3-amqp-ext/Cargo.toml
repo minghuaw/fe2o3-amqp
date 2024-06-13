@@ -12,5 +12,5 @@ readme = "Readme.md"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-serde_amqp = { version = "0.10.0", path = "../serde_amqp", features = ["derive"] }
-fe2o3-amqp-types = { version = "0.10.0", path = "../fe2o3-amqp-types" }
+serde_amqp = { workspace = true, features = ["derive"] }
+fe2o3-amqp-types = { workspace = true }

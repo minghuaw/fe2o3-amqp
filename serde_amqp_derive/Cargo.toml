@@ -17,7 +17,7 @@ readme = "Readme.md"
 proc-macro = true
 
 [dev-dependencies]
-serde = { version = "1", features = ["derive"] }
+serde = { workspace = true, features = ["derive"] }
 
 [dependencies]
 convert_case = "0.6.0"
