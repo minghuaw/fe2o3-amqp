@@ -132,7 +132,7 @@ enum EncodingType {
 
 #[derive(Debug, Clone, FromDeriveInput)]
 #[darling(attributes(amqp_contract))]
-#[allow(dead_code)]
+#[allow(dead_code, clippy::manual_unwrap_or_default)]
 struct DescribedAttr {
     #[darling(default)]
     pub name: Option<String>,
