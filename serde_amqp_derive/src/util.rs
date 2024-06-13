@@ -114,9 +114,9 @@ pub(crate) fn parse_named_field_attrs<'a>(
 ) -> Vec<FieldAttr> {
     fields
         .map(|f| {
-            f.attrs.iter().find_map(|a| {
-                FieldAttr::from_meta(&a.meta).ok()
-            })
+            f.attrs
+                .iter()
+                .find_map(|a| FieldAttr::from_meta(&a.meta).ok())
         })
         .map(|o| o.unwrap_or(FieldAttr { default: false }))
         .collect()
