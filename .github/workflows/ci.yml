@@ -1,0 +1,65 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request: {}
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  rustfmt:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          override: true
+      - uses: actions-rs/cargo@v1
+        with:
+          command: fmt
+          args: --all -- --check
+  
+  clippy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          override: true
+      - uses: actions-rs/cargo@v1
+        with:
+          command: clippy
+          args: --all -- --deny warnings
+
+  # run tests in each crate with cargo-make
+  feature_check_and_test:
+    runs-on: ubuntu-latest
+    steps:
+      # install cargo-make
+      - uses: davidB/rust-cargo-make@v1
+      - uses: actions/checkout@v2
+      # feature check fe2o3-amqp
+      - name: feature_check
+        run: (cd fe2o3-amqp && cargo make feature_check)
+      # test all crates
+      - name: test serde_amqp
+        run: (cd serde_amqp && cargo make test)
+      - name: test fe2o3-amqp-types
+        run: (cd fe2o3-amqp-types && cargo make test)
+      - name: test fe2o3-amqp
+        run: (cd fe2o3-amqp && cargo make test)
+      - name: test fe2o3-amqp-cbs
+        run: (cd fe2o3-amqp-cbs && cargo make test)
+      - name: test fe2o3-amqp-ext
+        run: (cd fe2o3-amqp-ext && cargo make test)
+      - name: test fe2o3-amqp-management
+        run: (cd fe2o3-amqp-management && cargo make test)
+      - name: test fe2o3-amqp-ws
+        run: (cd fe2o3-amqp-ws && cargo make test)
+      
