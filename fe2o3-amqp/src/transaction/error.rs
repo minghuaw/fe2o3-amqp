@@ -1,7 +1,4 @@
-use fe2o3_amqp_types::{
-    messaging::{Accepted, DeliveryState, Outcome, Rejected},
-    transaction::TransactionError,
-};
+use fe2o3_amqp_types::messaging::{Accepted, DeliveryState, Outcome, Rejected};
 
 use crate::link::{
     delivery::{FromDeliveryState, FromOneshotRecvError, FromPreSettled},
@@ -22,66 +19,70 @@ pub(crate) enum AllocTxnIdError {
     InvalidSessionState,
 }
 
-/// Errors with discharging a transaction at the transaction manager
-#[derive(Debug)]
-pub(crate) enum DischargeError {
-    /// Session must have dropped
-    #[cfg(not(target_arch = "wasm32"))]
-    #[cfg(feature = "acceptor")]
-    InvalidSessionState,
+cfg_acceptor! {
+    use fe2o3_amqp_types::transaction::TransactionError;
 
-    /// If the coordinator is unable to complete the discharge, the coordinator MUST convey the error to the controller
-    /// as a transaction-error. If the source for the link to the coordinator supports the rejected outcome, then the
-    /// message MUST be rejected with this outcome carrying the transaction-error.
-    TransactionError(TransactionError),
-}
+    /// Errors with discharging a transaction at the transaction manager
+    #[derive(Debug)]
+    pub(crate) enum DischargeError {
+        /// Session must have dropped
+        #[cfg(not(target_arch = "wasm32"))]
+        #[cfg(feature = "acceptor")]
+        InvalidSessionState,
 
-impl From<TransactionError> for DischargeError {
-    fn from(value: TransactionError) -> Self {
-        Self::TransactionError(value)
+        /// If the coordinator is unable to complete the discharge, the coordinator MUST convey the error to the controller
+        /// as a transaction-error. If the source for the link to the coordinator supports the rejected outcome, then the
+        /// message MUST be rejected with this outcome carrying the transaction-error.
+        TransactionError(TransactionError),
     }
-}
 
-/// Errors on the transacitonal resource side
-#[derive(Debug)]
-pub(crate) enum CoordinatorError {
-    /// The global transaction ID is not implemented yet
-    #[cfg(not(target_arch = "wasm32"))]
-    #[cfg(feature = "acceptor")]
-    GlobalIdNotImplemented,
-
-    /// Session must have dropped
-    #[cfg(not(target_arch = "wasm32"))]
-    #[cfg(feature = "acceptor")]
-    InvalidSessionState,
-
-    ///
-    AllocTxnIdNotImplemented,
-
-    /// If the coordinator is unable to complete the discharge, the coordinator MUST convey the error to the controller
-    /// as a transaction-error. If the source for the link to the coordinator supports the rejected outcome, then the
-    /// message MUST be rejected with this outcome carrying the transaction-error.
-    TransactionError(TransactionError),
-}
-
-impl From<AllocTxnIdError> for CoordinatorError {
-    fn from(value: AllocTxnIdError) -> Self {
-        match value {
-            AllocTxnIdError::NotImplemented => Self::AllocTxnIdNotImplemented,
-            #[cfg(not(target_arch = "wasm32"))]
-            #[cfg(feature = "acceptor")]
-            AllocTxnIdError::InvalidSessionState => Self::InvalidSessionState,
+    impl From<TransactionError> for DischargeError {
+        fn from(value: TransactionError) -> Self {
+            Self::TransactionError(value)
         }
     }
-}
 
-impl From<DischargeError> for CoordinatorError {
-    fn from(value: DischargeError) -> Self {
-        match value {
-            #[cfg(not(target_arch = "wasm32"))]
-            #[cfg(feature = "acceptor")]
-            DischargeError::InvalidSessionState => Self::InvalidSessionState,
-            DischargeError::TransactionError(error) => Self::TransactionError(error),
+    /// Errors on the transacitonal resource side
+    #[derive(Debug)]
+    pub(crate) enum CoordinatorError {
+        /// The global transaction ID is not implemented yet
+        #[cfg(not(target_arch = "wasm32"))]
+        #[cfg(feature = "acceptor")]
+        GlobalIdNotImplemented,
+    
+        /// Session must have dropped
+        #[cfg(not(target_arch = "wasm32"))]
+        #[cfg(feature = "acceptor")]
+        InvalidSessionState,
+    
+        /// The allocation of transaction ID is not implemented
+        AllocTxnIdNotImplemented,
+    
+        /// If the coordinator is unable to complete the discharge, the coordinator MUST convey the error to the controller
+        /// as a transaction-error. If the source for the link to the coordinator supports the rejected outcome, then the
+        /// message MUST be rejected with this outcome carrying the transaction-error.
+        TransactionError(TransactionError),
+    }
+    
+    impl From<AllocTxnIdError> for CoordinatorError {
+        fn from(value: AllocTxnIdError) -> Self {
+            match value {
+                AllocTxnIdError::NotImplemented => Self::AllocTxnIdNotImplemented,
+                #[cfg(not(target_arch = "wasm32"))]
+                #[cfg(feature = "acceptor")]
+                AllocTxnIdError::InvalidSessionState => Self::InvalidSessionState,
+            }
+        }
+    }
+    
+    impl From<DischargeError> for CoordinatorError {
+        fn from(value: DischargeError) -> Self {
+            match value {
+                #[cfg(not(target_arch = "wasm32"))]
+                #[cfg(feature = "acceptor")]
+                DischargeError::InvalidSessionState => Self::InvalidSessionState,
+                DischargeError::TransactionError(error) => Self::TransactionError(error),
+            }
         }
     }
 }
