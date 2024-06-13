@@ -30,7 +30,7 @@ default = [
 transaction = ["fe2o3-amqp-types/transaction", "uuid"]
 
 # TLS related features
-rustls = ["tokio-rustls", "librustls", "webpki-roots"]
+rustls = ["tokio-rustls", "librustls", "webpki-roots", "ring"]
 native-tls = ["tokio-native-tls", "libnative-tls"]
 
 # Listener implementation
@@ -68,18 +68,20 @@ stringprep = { version = "0.1", optional = true }
 hmac = { version = "0.12", optional = true }
 pbkdf2 = { version = "0.12", default-features = false, optional = true }
 webpki-roots = { version = "0.26", optional = true }
-tokio-rustls = { version = "0.26", optional = true }
-librustls = { package = "rustls", version = "0.23", optional = true }
+tokio-rustls = { version = "0.26", default-features = false, features = ["logging", "tls12", "ring"], optional = true }
+librustls = { package = "rustls", version = "0.23", default-features = false, optional = true }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 tokio = { workspace = true, features = ["sync", "io-util", "net", "rt", "macros", "time"] }
 libnative-tls = { package = "native-tls", version = "0.2", optional = true }
 tokio-native-tls = { version = "0.3", optional = true }
+ring = { version = "0.17", optional = true }
 tokio-stream = { version = "0.1", features = ["time"] }
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 tokio = { workspace = true, features = ["sync", "io-util", "rt", "macros"] } # "net" feature doesn't support wasm32
-ring = { version = "0.17", features = ["wasm32_unknown_unknown_js"] }
+ring = { version = "0.17", features = ["wasm32_unknown_unknown_js"], optional = true }
+getrandom = { workspace = true }
 fluvio-wasm-timer = "0.2"
 
 [dev-dependencies]
