@@ -3,8 +3,7 @@
 use super::*;
 
 /// A subset of `Value`
-#[derive(Debug, Clone, Hash, PartialEq, Eq, PartialOrd, Ord)]
-#[derive(Default)]
+#[derive(Debug, Clone, Hash, PartialEq, Eq, PartialOrd, Ord, Default)]
 pub enum SimpleValue {
     /// Indicates an empty value
     ///
@@ -213,8 +212,6 @@ pub enum SimpleValue {
     /// to cache all the distinct values. Symbols are encoded as ASCII characters ASCII.
     Symbol(Symbol),
 }
-
-
 
 impl SimpleValue {
     /// Get the format code of the type

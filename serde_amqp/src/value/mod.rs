@@ -21,8 +21,7 @@ pub(crate) mod de;
 pub(crate) mod ser;
 
 /// Primitive type definitions
-#[derive(Debug, Clone, Hash, PartialEq, Eq, PartialOrd, Ord)]
-#[derive(Default)]
+#[derive(Debug, Clone, Hash, PartialEq, Eq, PartialOrd, Ord, Default)]
 pub enum Value {
     /// Described type
     ///
@@ -275,8 +274,6 @@ pub enum Value {
     /// label="up to 2^32 - 1 array elements with total size less than 2^32 octets"
     Array(Array<Value>),
 }
-
-
 
 impl Value {
     /// Get the format code of the value type
@@ -874,12 +871,7 @@ mod tests {
 
     #[test]
     fn test_value_list() {
-        let expected = Value::List(
-            [1u32, 2, 3, 4]
-                .iter()
-                .map(|v| Value::Uint(*v))
-                .collect(),
-        );
+        let expected = Value::List([1u32, 2, 3, 4].iter().map(|v| Value::Uint(*v)).collect());
         let buf = to_vec(&expected).unwrap();
         assert_eq_from_reader_vs_expected(buf, expected);
     }
@@ -897,10 +889,7 @@ mod tests {
     #[test]
     fn test_value_array() {
         use crate::primitives::Array;
-        let vec: Vec<Value> = [1i32, 2, 3, 4]
-            .iter()
-            .map(|val| Value::Int(*val))
-            .collect();
+        let vec: Vec<Value> = [1i32, 2, 3, 4].iter().map(|val| Value::Int(*val)).collect();
         let arr = Array::from(vec);
         let buf = to_vec(&arr).unwrap();
 

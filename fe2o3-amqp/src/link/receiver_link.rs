@@ -211,10 +211,7 @@ where
                     rcv_settle_mode: mode,
                     _sealed: Sealed {},
                 };
-                return Err(MessageDecodeError {
-                    source,
-                    info,
-                }.into());
+                return Err(MessageDecodeError { source, info }.into());
             }
         };
 
