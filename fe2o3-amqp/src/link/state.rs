@@ -7,10 +7,10 @@ use parking_lot::RwLock;
 
 use crate::{
     endpoint::{LinkFlow, OutputHandle},
-    util::{Consume, ProducerState, TryConsume},
+    util::{Consume, ProducerState},
 };
 
-use super::{role, ReceiverTransferError, SenderFlowState, SenderTryConsumeError};
+use super::{role, ReceiverTransferError, SenderFlowState};
 
 /// Link state.
 ///
@@ -311,22 +311,24 @@ impl Consume for SenderFlowState {
     }
 }
 
-impl TryConsume for SenderFlowState {
-    type Error = SenderTryConsumeError;
-
-    fn try_consume(&mut self, item: Self::Item) -> Result<Self::Outcome, Self::Error> {
-        let mut state = self
-            .state()
-            .lock
-            .try_write()
-            .ok_or(SenderTryConsumeError::TryLockError)?;
-        if state.link_credit < item {
-            Err(Self::Error::InsufficientCredit)
-        } else {
-            let tag = state.delivery_count.to_be_bytes();
-            state.delivery_count = state.delivery_count.wrapping_add(item);
-            state.link_credit = state.link_credit.saturating_sub(item);
-            Ok(tag)
+cfg_transaction! {
+    impl crate::util::TryConsume for SenderFlowState {
+        type Error = super::error::SenderTryConsumeError;
+    
+        fn try_consume(&mut self, item: Self::Item) -> Result<Self::Outcome, Self::Error> {
+            let mut state = self
+                .state()
+                .lock
+                .try_write()
+                .ok_or(super::error::SenderTryConsumeError::TryLockError)?;
+            if state.link_credit < item {
+                Err(Self::Error::InsufficientCredit)
+            } else {
+                let tag = state.delivery_count.to_be_bytes();
+                state.delivery_count = state.delivery_count.wrapping_add(item);
+                state.link_credit = state.link_credit.saturating_sub(item);
+                Ok(tag)
+            }
         }
     }
 }

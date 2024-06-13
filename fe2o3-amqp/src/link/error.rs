@@ -1,6 +1,5 @@
 use fe2o3_amqp_types::definitions::{self, AmqpError, ErrorCondition, SessionError};
 use serde_amqp::primitives::Symbol;
-use tokio::sync::TryLockError;
 
 use crate::session::error::AllocLinkError;
 
@@ -149,25 +148,28 @@ impl From<DetachError> for SendError {
     }
 }
 
-/// Error with the sender trying consume link credit
-///
-/// This is only used in
-#[derive(Debug, thiserror::Error)]
-pub(crate) enum SenderTryConsumeError {
-    /// The sender is unable to acquire lock to inner state
-    #[error("Try lock error")]
-    TryLockError,
+cfg_transaction! {
+    /// Error with the sender trying consume link credit
+    ///
+    /// This is only used in
+    #[derive(Debug, thiserror::Error)]
+    pub(crate) enum SenderTryConsumeError {
+        /// The sender is unable to acquire lock to inner state
+        #[error("Try lock error")]
+        TryLockError,
+    
+        /// There is not enough link credit
+        #[error("Insufficient link credit")]
+        InsufficientCredit,
+    }
 
-    /// There is not enough link credit
-    #[error("Insufficient link credit")]
-    InsufficientCredit,
-}
-
-impl From<TryLockError> for SenderTryConsumeError {
-    fn from(_: TryLockError) -> Self {
-        Self::TryLockError
+    impl From<tokio::sync::TryLockError> for SenderTryConsumeError {
+        fn from(_: tokio::sync::TryLockError) -> Self {
+            Self::TryLockError
+        }
     }
 }
+
 
 /// The desired filter(s) on the receiver is not supported by the remote peer
 #[derive(Debug)]

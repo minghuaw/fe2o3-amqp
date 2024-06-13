@@ -482,8 +482,6 @@ impl Session {
     }
 }
 
-impl endpoint::SessionExt for Session {}
-
 impl endpoint::Session for Session {
     type AllocError = AllocLinkError;
     type BeginError = SessionStateError;

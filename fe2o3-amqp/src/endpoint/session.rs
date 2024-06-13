@@ -112,7 +112,3 @@ pub(crate) trait Session {
 
     fn on_outgoing_detach(&mut self, detach: Detach) -> SessionFrame;
 }
-
-pub(crate) trait SessionExt: Session {
-    // fn control(&self) -> &mpsc::Sender<SessionControl>;
-}

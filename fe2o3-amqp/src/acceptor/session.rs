@@ -345,9 +345,6 @@ pub struct ListenerSession {
     pub(crate) link_listener: mpsc::Sender<Attach>,
 }
 
-impl endpoint::SessionExt for ListenerSession {}
-
-
 impl endpoint::Session for ListenerSession {
     type AllocError = <session::Session as endpoint::Session>::AllocError;
     type BeginError = <session::Session as endpoint::Session>::BeginError;

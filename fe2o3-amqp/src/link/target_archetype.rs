@@ -59,6 +59,7 @@ impl TargetArchetypeCapabilities for Target {
 }
 
 pub trait VariantOfTargetArchetype {
+    #[allow(dead_code)]
     fn is_coordinator(&self) -> bool;
 }
 
