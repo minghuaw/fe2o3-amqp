@@ -1,16 +1,16 @@
 //! Implements verification for Target or Coordinator
 
-use fe2o3_amqp_types::{
-    messaging::{Target, TargetArchetype},
-    primitives::{Array, Symbol},
-};
+use fe2o3_amqp_types::messaging::{Target, TargetArchetype};
 
 use super::{ReceiverAttachError, SenderAttachError};
 
 /// Performs verification on whether the incoming `Target` field complies with the specification
 /// or meets the requirement.
 pub trait VerifyTargetArchetype {
+    /// Verify the `Target` field as a sender
     fn verify_as_sender(&self, other: &Self) -> Result<(), SenderAttachError>;
+
+    /// Verify the `Target` field as a receiver
     fn verify_as_receiver(&self, other: &Self) -> Result<(), ReceiverAttachError>;
 }
 
@@ -44,50 +44,18 @@ impl VerifyTargetArchetype for Target {
     }
 }
 
-pub trait TargetArchetypeCapabilities {
-    type Capability;
-
-    fn capabilities(&self) -> &Option<Array<Self::Capability>>;
-
-    fn capabilities_mut(&mut self) -> &mut Option<Array<Self::Capability>>;
-}
-
-impl TargetArchetypeCapabilities for Target {
-    type Capability = Symbol;
-
-    fn capabilities(&self) -> &Option<Array<Symbol>> {
-        &self.capabilities
-    }
-
-    fn capabilities_mut(&mut self) -> &mut Option<Array<Symbol>> {
-        &mut self.capabilities
-    }
-}
-
-pub trait VariantOfTargetArchetype {
-    fn is_target(&self) -> bool;
+pub(crate) trait VariantOfTargetArchetype {
+    #[allow(dead_code)]
     fn is_coordinator(&self) -> bool;
 }
 
 impl VariantOfTargetArchetype for Target {
-    fn is_target(&self) -> bool {
-        true
-    }
-
     fn is_coordinator(&self) -> bool {
         false
     }
 }
 
 impl VariantOfTargetArchetype for TargetArchetype {
-    fn is_target(&self) -> bool {
-        match self {
-            TargetArchetype::Target(_) => true,
-            #[cfg(feature = "transaction")]
-            TargetArchetype::Coordinator(_) => false,
-        }
-    }
-
     fn is_coordinator(&self) -> bool {
         match self {
             TargetArchetype::Target(_) => false,
@@ -97,42 +65,61 @@ impl VariantOfTargetArchetype for TargetArchetype {
     }
 }
 
-pub trait DynamicTarget {
-    fn is_dynamic(&self) -> Option<bool>;
-}
+cfg_acceptor! {
+    use fe2o3_amqp_types::primitives::{Array, Symbol};
 
-impl DynamicTarget for Target {
-    fn is_dynamic(&self) -> Option<bool> {
-        Some(self.dynamic)
+    pub(crate) trait DynamicTarget {
+        fn is_dynamic(&self) -> Option<bool>;
     }
-}
 
-impl DynamicTarget for TargetArchetype {
-    fn is_dynamic(&self) -> Option<bool> {
-        match self {
-            TargetArchetype::Target(t) => t.is_dynamic(),
-            #[cfg(feature = "transaction")]
-            TargetArchetype::Coordinator(t) => t.is_dynamic(),
+    impl DynamicTarget for Target {
+        fn is_dynamic(&self) -> Option<bool> {
+            Some(self.dynamic)
         }
     }
-}
 
-/// Extension trait for TargetArchetypes
-pub trait TargetArchetypeExt:
-    VerifyTargetArchetype + TargetArchetypeCapabilities + VariantOfTargetArchetype + DynamicTarget
-{
-}
+    impl DynamicTarget for TargetArchetype {
+        fn is_dynamic(&self) -> Option<bool> {
+            match self {
+                TargetArchetype::Target(t) => t.is_dynamic(),
+                #[cfg(feature = "transaction")]
+                TargetArchetype::Coordinator(t) => t.is_dynamic(),
+            }
+        }
+    }
 
-impl<T> TargetArchetypeExt for T where
-    T: VerifyTargetArchetype
-        + TargetArchetypeCapabilities
-        + VariantOfTargetArchetype
-        + DynamicTarget
-{
+    pub(crate) trait TargetArchetypeCapabilities {
+        type Capability;
+
+        fn capabilities_mut(&mut self) -> &mut Option<Array<Self::Capability>>;
+    }
+
+    impl TargetArchetypeCapabilities for Target {
+        type Capability = Symbol;
+
+        fn capabilities_mut(&mut self) -> &mut Option<Array<Symbol>> {
+            &mut self.capabilities
+        }
+    }
+
+
+    /// Extension trait for TargetArchetypes
+    pub(crate) trait TargetArchetypeExt:
+        VerifyTargetArchetype + TargetArchetypeCapabilities + VariantOfTargetArchetype + DynamicTarget
+    {
+    }
+
+    impl<T> TargetArchetypeExt for T where
+        T: VerifyTargetArchetype
+            + TargetArchetypeCapabilities
+            + VariantOfTargetArchetype
+            + DynamicTarget
+    {
+    }
 }
 
 cfg_transaction! {
-    use fe2o3_amqp_types::transaction::{Coordinator, TxnCapability};
+    use fe2o3_amqp_types::transaction::Coordinator;
 
     impl VerifyTargetArchetype for Coordinator {
         fn verify_as_sender(&self, other: &Self) -> Result<(), SenderAttachError> {
@@ -165,31 +152,27 @@ cfg_transaction! {
         }
     }
 
-    impl TargetArchetypeCapabilities for Coordinator {
-        type Capability = TxnCapability;
-
-        fn capabilities(&self) -> &Option<Array<TxnCapability>> {
-            &self.capabilities
-        }
-
-        fn capabilities_mut(&mut self) -> &mut Option<Array<TxnCapability>> {
-            &mut self.capabilities
-        }
-    }
-
     impl VariantOfTargetArchetype for Coordinator {
-        fn is_target(&self) -> bool {
-            false
-        }
-
         fn is_coordinator(&self) -> bool {
             true
         }
     }
 
-    impl DynamicTarget for Coordinator {
-        fn is_dynamic(&self) -> Option<bool> {
-            None
+    cfg_acceptor! {
+        use fe2o3_amqp_types::transaction::TxnCapability;
+
+        impl TargetArchetypeCapabilities for Coordinator {
+            type Capability = TxnCapability;
+
+            fn capabilities_mut(&mut self) -> &mut Option<Array<TxnCapability>> {
+                &mut self.capabilities
+            }
+        }
+
+        impl DynamicTarget for Coordinator {
+            fn is_dynamic(&self) -> Option<bool> {
+                None
+            }
         }
     }
 }

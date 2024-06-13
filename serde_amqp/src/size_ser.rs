@@ -15,7 +15,7 @@ use crate::{
 /// Obtain the serialized size without allocating `Vec<u8>`
 pub fn serialized_size<T>(value: &T) -> Result<usize, Error>
 where
-    T: ?Sized + ser::Serialize,
+    T: ser::Serialize + ?Sized,
 {
     let mut serializer = SizeSerializer::new();
     value.serialize(&mut serializer)
@@ -278,9 +278,9 @@ impl<'a> ser::Serializer for &'a mut SizeSerializer {
         Ok(1)
     }
 
-    fn serialize_some<T: ?Sized>(self, value: &T) -> Result<Self::Ok, Self::Error>
+    fn serialize_some<T>(self, value: &T) -> Result<Self::Ok, Self::Error>
     where
-        T: serde::Serialize,
+        T: serde::Serialize + ?Sized,
     {
         value.serialize(self)
     }
@@ -302,13 +302,13 @@ impl<'a> ser::Serializer for &'a mut SizeSerializer {
         self.serialize_u32(variant_index)
     }
 
-    fn serialize_newtype_struct<T: ?Sized>(
+    fn serialize_newtype_struct<T>(
         self,
         name: &'static str,
         value: &T,
     ) -> Result<Self::Ok, Self::Error>
     where
-        T: serde::Serialize,
+        T: serde::Serialize + ?Sized,
     {
         if name == SYMBOL {
             self.new_type = NewType::Symbol;
@@ -332,7 +332,7 @@ impl<'a> ser::Serializer for &'a mut SizeSerializer {
         value.serialize(self)
     }
 
-    fn serialize_newtype_variant<T: ?Sized>(
+    fn serialize_newtype_variant<T>(
         self,
         name: &'static str,
         variant_index: u32,
@@ -340,7 +340,7 @@ impl<'a> ser::Serializer for &'a mut SizeSerializer {
         value: &T,
     ) -> Result<Self::Ok, Self::Error>
     where
-        T: serde::Serialize,
+        T: serde::Serialize + ?Sized,
     {
         if name == DESCRIPTOR {
             value.serialize(self).map(|len| len + 1)
@@ -446,9 +446,9 @@ impl<'a> ser::SerializeSeq for SeqSerializer<'a> {
     type Ok = usize;
     type Error = Error;
 
-    fn serialize_element<T: ?Sized>(&mut self, value: &T) -> Result<(), Error>
+    fn serialize_element<T>(&mut self, value: &T) -> Result<(), Error>
     where
-        T: ser::Serialize,
+        T: ser::Serialize + ?Sized,
     {
         match self.se.new_type {
             NewType::None => {
@@ -558,9 +558,9 @@ impl<'a> ser::SerializeTuple for TupleSerializer<'a> {
     type Ok = usize;
     type Error = Error;
 
-    fn serialize_element<T: ?Sized>(&mut self, value: &T) -> Result<(), Error>
+    fn serialize_element<T>(&mut self, value: &T) -> Result<(), Error>
     where
-        T: ser::Serialize,
+        T: ser::Serialize + ?Sized,
     {
         let mut serializer = SizeSerializer::new();
         self.cumulated_size += value.serialize(&mut serializer)?;
@@ -592,14 +592,10 @@ impl<'a> ser::SerializeMap for MapSerializer<'a> {
     type Ok = usize;
     type Error = Error;
 
-    fn serialize_entry<K: ?Sized, V: ?Sized>(
-        &mut self,
-        key: &K,
-        value: &V,
-    ) -> Result<(), Self::Error>
+    fn serialize_entry<K, V>(&mut self, key: &K, value: &V) -> Result<(), Self::Error>
     where
-        K: serde::Serialize,
-        V: serde::Serialize,
+        K: serde::Serialize + ?Sized,
+        V: serde::Serialize + ?Sized,
     {
         let mut serializer = SizeSerializer::new();
         self.cumulated_size += key.serialize(&mut serializer)?;
@@ -608,18 +604,18 @@ impl<'a> ser::SerializeMap for MapSerializer<'a> {
         Ok(())
     }
 
-    fn serialize_key<T: ?Sized>(&mut self, key: &T) -> Result<(), Error>
+    fn serialize_key<T>(&mut self, key: &T) -> Result<(), Error>
     where
-        T: ser::Serialize,
+        T: ser::Serialize + ?Sized,
     {
         let mut serializer = SizeSerializer::new();
         self.cumulated_size += key.serialize(&mut serializer)?;
         Ok(())
     }
 
-    fn serialize_value<T: ?Sized>(&mut self, value: &T) -> Result<(), Error>
+    fn serialize_value<T>(&mut self, value: &T) -> Result<(), Error>
     where
-        T: ser::Serialize,
+        T: ser::Serialize + ?Sized,
     {
         let mut serializer = SizeSerializer::new();
         self.cumulated_size += value.serialize(&mut serializer)?;
@@ -677,9 +673,9 @@ impl<'a> ser::SerializeTupleStruct for TupleStructSerializer<'a> {
     type Ok = usize;
     type Error = Error;
 
-    fn serialize_field<T: ?Sized>(&mut self, value: &T) -> Result<(), Error>
+    fn serialize_field<T>(&mut self, value: &T) -> Result<(), Error>
     where
-        T: ser::Serialize,
+        T: ser::Serialize + ?Sized,
     {
         match self.field_role {
             FieldRole::Descriptor => {
@@ -749,9 +745,9 @@ impl<'a> ser::SerializeStruct for StructSerializer<'a> {
     type Ok = usize;
     type Error = Error;
 
-    fn serialize_field<T: ?Sized>(&mut self, key: &'static str, value: &T) -> Result<(), Error>
+    fn serialize_field<T>(&mut self, key: &'static str, value: &T) -> Result<(), Error>
     where
-        T: ser::Serialize,
+        T: ser::Serialize + ?Sized,
     {
         use ser::Serialize;
 
@@ -829,9 +825,9 @@ impl<'a> ser::SerializeTupleVariant for VariantSerializer<'a> {
     type Ok = usize;
     type Error = Error;
 
-    fn serialize_field<T: ?Sized>(&mut self, value: &T) -> Result<(), Error>
+    fn serialize_field<T>(&mut self, value: &T) -> Result<(), Error>
     where
-        T: ser::Serialize,
+        T: ser::Serialize + ?Sized,
     {
         self.cumulated_size += value.serialize(&mut *self.se)?;
         Ok(())
@@ -851,9 +847,9 @@ impl<'a> ser::SerializeStructVariant for VariantSerializer<'a> {
     type Ok = usize;
     type Error = Error;
 
-    fn serialize_field<T: ?Sized>(&mut self, _key: &'static str, value: &T) -> Result<(), Error>
+    fn serialize_field<T>(&mut self, _key: &'static str, value: &T) -> Result<(), Error>
     where
-        T: ser::Serialize,
+        T: ser::Serialize + ?Sized,
     {
         <Self as ser::SerializeTupleVariant>::serialize_field(self, value)
     }

@@ -1,6 +1,6 @@
 [package]
 name = "fe2o3-amqp-ws"
-version = "0.10.0"
+version = "0.11.0"
 edition = "2021"
 description = "WebSocket binding stream for AMQP1.0"
 license = "MIT/Apache-2.0"
@@ -25,28 +25,28 @@ rustls-tls-native-roots = ["tokio-tungstenite/rustls-tls-native-roots"]
 rustls-tls-webpki-roots = ["tokio-tungstenite/rustls-tls-webpki-roots"]
 
 [dependencies]
-futures-util = { version = "0.3", features = ["sink"] }
+futures-util = { workspace = true, features = ["sink"] }
 http = "1"
-pin-project-lite = "0.2"
-thiserror = "1"
-tungstenite = "0.21"
+pin-project-lite = { workspace = true }
+thiserror = { workspace = true }
+tungstenite = "0.23"
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
-tokio = {version = "1", default-features = false, features = ["net"]}
-tokio-tungstenite = "0.21"
+tokio = { workspace = true, features = ["net"] }
+tokio-tungstenite = "0.23"
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
-tokio = {version = "1", default-features = false, features = ["sync", "macros"]}
-getrandom = {version = "0.2", features = ["js"]}
+tokio = { workspace = true, features = ["sync", "macros"] }
+getrandom = { workspace = true }
 js-sys = "0.3"
 wasm-bindgen = "0.2"
-web-sys = {version = "0.3", features = [
+web-sys = { version = "0.3", features = [
   "WebSocket",
   "MessageEvent",
   "CloseEvent",
   "ErrorEvent",
   "BinaryType",
-]}
+] }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
-tokio = { version = "1", features = ["net"] }
+tokio = { workspace = true, features = ["net"] }

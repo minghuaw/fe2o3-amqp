@@ -173,7 +173,7 @@ impl Builder {
     }
 
     /// The initial outgoing-window of the sender
-    pub fn outgoing_widnow(mut self, value: TransferNumber) -> Self {
+    pub fn outgoing_window(mut self, value: TransferNumber) -> Self {
         self.outgoing_window = value;
         self
     }

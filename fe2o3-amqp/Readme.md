@@ -10,7 +10,6 @@ A rust implementation of AMQP 1.0 protocol based on serde and tokio.
 - [Documentation](https://docs.rs/fe2o3-amqp)
 - [Changelog](https://github.com/minghuaw/fe2o3-amqp/blob/main/fe2o3-amqp/Changelog.md)
 - [Examples](https://github.com/minghuaw/fe2o3-amqp/tree/main/examples)
-- [0.7 migration guide](https://github.com/minghuaw/fe2o3-amqp/issues/120)
 
 ## Feature flags
 

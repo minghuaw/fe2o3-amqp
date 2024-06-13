@@ -332,10 +332,6 @@ impl AsDeliveryState for UnsettledMessage {
     fn as_delivery_state(&self) -> &Option<DeliveryState> {
         &self.state
     }
-
-    fn as_delivery_state_mut(&mut self) -> &mut Option<DeliveryState> {
-        &mut self.state
-    }
 }
 
 pin_project! {
@@ -504,9 +500,9 @@ mod tests {
 
     #[test]
     fn test_from_body_into_sendable() {
-        let body = Body::Value(AmqpValue(3.1415926_f64));
+        let body = Body::Value(AmqpValue(1.23456_f64));
         let sendable = Sendable::from(body);
-        assert_eq!(sendable.message.body, Body::Value(AmqpValue(3.1415926_f64)));
+        assert_eq!(sendable.message.body, Body::Value(AmqpValue(1.23456_f64)));
     }
 
     #[test]

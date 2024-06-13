@@ -1,10 +1,7 @@
 //! Defines traits for link implementations
 
 use fe2o3_amqp_types::{
-    definitions::{
-        DeliveryNumber, DeliveryTag, Error, Fields, MessageFormat, ReceiverSettleMode, Role,
-        SequenceNo,
-    },
+    definitions::{DeliveryNumber, DeliveryTag, Error, Fields, MessageFormat, ReceiverSettleMode},
     messaging::{DeliveryState, FromBody},
     performatives::{Attach, Detach, Transfer},
 };
@@ -54,9 +51,7 @@ pub(crate) trait LinkAttach {
     ) -> Result<(), Self::AttachError>;
 }
 
-pub(crate) trait Link: LinkAttach + LinkDetach {
-    fn role() -> Role;
-}
+pub(crate) trait Link: LinkAttach + LinkDetach {}
 
 pub(crate) trait LinkExt: Link {
     type FlowState;
@@ -67,8 +62,6 @@ pub(crate) trait LinkExt: Link {
 
     fn name(&self) -> &str;
 
-    fn output_handle(&self) -> &Option<OutputHandle>;
-
     fn output_handle_mut(&mut self) -> &mut Option<OutputHandle>;
 
     fn flow_state(&self) -> &Self::FlowState;
@@ -76,8 +69,6 @@ pub(crate) trait LinkExt: Link {
     fn unsettled(&self) -> &Self::Unsettled;
 
     fn rcv_settle_mode(&self) -> &ReceiverSettleMode;
-
-    fn target(&self) -> &Option<Self::Target>;
 
     fn max_message_size(&self) -> Option<u64>;
 
@@ -111,15 +102,6 @@ pub(crate) trait SenderLink: Link + LinkExt {
     type TransferError: Send;
     type DispositionError: Send;
 
-    /// Set and send flow state
-    async fn send_flow(
-        &self,
-        writer: &mpsc::Sender<LinkFrame>,
-        delivery_count: Option<SequenceNo>,
-        available: Option<u32>,
-        echo: bool,
-    ) -> Result<(), Self::FlowError>;
-
     /// Send message via transfer frame and return whether the message is already settled
     #[allow(clippy::too_many_arguments)]
     async fn send_payload<Fut>(
@@ -148,6 +130,12 @@ pub(crate) trait SenderLink: Link + LinkExt {
         payload: Payload,
     ) -> Result<Settlement, Self::TransferError>;
 
+    /// Note that it is possible for a disposition sent from sender to receiver
+    /// to refer to a delivery which has not yet completed (i.e., a delivery
+    /// which is spread over multiple frames and not all frames have yet been
+    /// sent). The use of such interleaving is discouraged in favor of carrying
+    /// the modified state on the next transfer performative for the delivery.
+    #[allow(dead_code)]
     async fn dispose(
         &mut self,
         writer: &mpsc::Sender<LinkFrame>,
@@ -158,6 +146,12 @@ pub(crate) trait SenderLink: Link + LinkExt {
         batchable: bool,
     ) -> Result<(), Self::DispositionError>;
 
+    /// Note that it is possible for a disposition sent from sender to receiver
+    /// to refer to a delivery which has not yet completed (i.e., a delivery
+    /// which is spread over multiple frames and not all frames have yet been
+    /// sent). The use of such interleaving is discouraged in favor of carrying
+    /// the modified state on the next transfer performative for the delivery.
+    #[allow(dead_code)]
     async fn batch_dispose(
         &mut self,
         writer: &mpsc::Sender<LinkFrame>,

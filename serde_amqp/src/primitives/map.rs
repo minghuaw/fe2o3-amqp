@@ -130,83 +130,59 @@ where
     }
 
     /// Calls [`IndexMap::get`] internally
-    pub fn get<Q: ?Sized>(&self, key: &Q) -> Option<&V>
+    pub fn get<Q>(&self, key: &Q) -> Option<&V>
     where
-        Q: Hash + Equivalent<K>,
+        Q: Hash + Equivalent<K> + ?Sized,
     {
         self.0.get(key)
     }
 
     /// Calls [`IndexMap::get_mut`] internally
-    pub fn get_mut<Q: ?Sized>(&mut self, key: &Q) -> Option<&mut V>
+    pub fn get_mut<Q>(&mut self, key: &Q) -> Option<&mut V>
     where
-        Q: Hash + Equivalent<K>,
+        Q: Hash + Equivalent<K> + ?Sized,
     {
         self.0.get_mut(key)
     }
 
     /// Calls [`IndexMap::swap_remove`] internally
-    pub fn swap_remove<Q: ?Sized>(&mut self, key: &Q) -> Option<V>
+    pub fn swap_remove<Q>(&mut self, key: &Q) -> Option<V>
     where
-        Q: Hash + Equivalent<K>,
+        Q: Hash + Equivalent<K> + ?Sized,
     {
         self.0.swap_remove(key)
     }
 
     /// Calls [`IndexMap::shift_remove`] internally
-    pub fn shift_remove<Q: ?Sized>(&mut self, key: &Q) -> Option<V>
+    pub fn shift_remove<Q>(&mut self, key: &Q) -> Option<V>
     where
-        Q: Hash + Equivalent<K>,
+        Q: Hash + Equivalent<K> + ?Sized,
     {
         self.0.shift_remove(key)
     }
 
-    /// Remove the key-value pair equivalent to key and return its value.
-    ///
-    /// Calls [`IndexMap::remove`] internally
-    #[deprecated(note = "Use `swap_remove` or `shift_remove` instead.")]
-    pub fn remove<Q: ?Sized>(&mut self, key: &Q) -> Option<V>
-    where
-        Q: Hash + Equivalent<K>,
-    {
-        #[allow(deprecated)]
-        self.0.remove(key)
-    }
-
     /// Calls [`IndexMap::swap_remove_entry`] internally
-    pub fn swap_remove_entry<Q: ?Sized>(&mut self, key: &Q) -> Option<(K, V)>
+    pub fn swap_remove_entry<Q>(&mut self, key: &Q) -> Option<(K, V)>
     where
-        Q: Hash + Equivalent<K>,
+        Q: Hash + Equivalent<K> + ?Sized,
     {
         self.0.swap_remove_entry(key)
     }
 
     /// Calls [`IndexMap::shift_remove_entry`] internally
-    pub fn shift_remove_entry<Q: ?Sized>(&mut self, key: &Q) -> Option<(K, V)>
+    pub fn shift_remove_entry<Q>(&mut self, key: &Q) -> Option<(K, V)>
     where
-        Q: Hash + Equivalent<K>,
+        Q: Hash + Equivalent<K> + ?Sized,
     {
         self.0.shift_remove_entry(key)
-    }
-
-    /// Remove and return the key-value pair equivalent to key.
-    ///
-    /// Calls [`IndexMap::remove_entry`] internally
-    #[deprecated(note = "Use `swap_remove_entry` or `shift_remove_entry` instead.")]
-    pub fn remove_entry<Q: ?Sized>(&mut self, key: &Q) -> Option<(K, V)>
-    where
-        Q: Hash + Equivalent<K>,
-    {
-        #[allow(deprecated)]
-        self.0.remove_entry(key)
     }
 
     /// Return true if an equivalent to key exists in the map.
     ///
     /// Calls [`IndexMap::contains_key`] internally
-    pub fn contains_key<Q: ?Sized>(&self, key: &Q) -> bool
+    pub fn contains_key<Q>(&self, key: &Q) -> bool
     where
-        Q: Hash + Equivalent<K>,
+        Q: Hash + Equivalent<K> + ?Sized,
     {
         self.0.contains_key(key)
     }

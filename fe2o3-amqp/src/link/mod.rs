@@ -55,7 +55,7 @@ mod sender_link;
 pub(crate) mod shared_inner;
 mod source;
 pub(crate) mod state;
-pub(crate) mod target_archetype;
+pub mod target_archetype;
 
 /// Default amount of link credit
 pub const DEFAULT_CREDIT: SequenceNo = 200;
@@ -613,13 +613,6 @@ impl LinkRelay<()> {
 }
 
 impl LinkRelay<OutputHandle> {
-    // pub(crate) fn output_handle(&self) -> &OutputHandle {
-    //     match self {
-    //         Self::Sender { output_handle, .. } => output_handle,
-    //         Self::Receiver { output_handle, .. } => output_handle,
-    //     }
-    // }
-
     pub(crate) async fn send(
         &mut self,
         frame: LinkFrame,

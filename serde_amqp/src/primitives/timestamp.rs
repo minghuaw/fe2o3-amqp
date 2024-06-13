@@ -132,29 +132,8 @@ impl From<chrono::DateTime<chrono::Utc>> for Timestamp {
     }
 }
 
-#[cfg_attr(
-    docsrs,
-    doc(cfg(all(feature = "chrono", not(feature = "chrono-preview"))))
-)]
-#[cfg(all(feature = "chrono", not(feature = "chrono-preview")))]
-impl From<Timestamp> for chrono::DateTime<chrono::Utc> {
-    #[deprecated(
-        since = "0.5.3",
-        note = r#"Deprecated due to chrono's deprecation of from_timestamp(), use try_from with "chrono-preview" feature"#
-    )]
-    fn from(value: Timestamp) -> Self {
-        chrono::DateTime::<chrono::Utc>::from_utc(
-            chrono::NaiveDateTime::from_timestamp(
-                value.0 / 1000,
-                (value.0 % 1000) as u32 * 1_000_000,
-            ),
-            chrono::Utc,
-        )
-    }
-}
-
-#[cfg_attr(docsrs, doc(cfg(feature = "chrono-preview")))]
-#[cfg(feature = "chrono-preview")]
+#[cfg_attr(docsrs, doc(cfg(feature = "chrono")))]
+#[cfg(feature = "chrono")]
 impl TryFrom<Timestamp> for chrono::DateTime<chrono::Utc> {
     type Error = Timestamp;
 
@@ -178,8 +157,8 @@ impl TryFrom<Timestamp> for chrono::DateTime<chrono::Utc> {
     }
 }
 
-#[cfg_attr(docsrs, doc(cfg(feature = "chrono-preview")))]
-#[cfg(feature = "chrono-preview")]
+#[cfg_attr(docsrs, doc(cfg(feature = "chrono")))]
+#[cfg(feature = "chrono")]
 impl From<Timestamp> for Option<chrono::DateTime<chrono::Utc>> {
     /// Conversion from [`Timestamp`] to [`chrono::DateTime<chrono::Utc>`] is fallible. A `None`
     /// will be returned if the timestamp is out of range of `chrono::DateTime<chrono::Utc>`

@@ -4,8 +4,7 @@ use serde::{de, ser};
 /// Settlement policy for a receiver.
 /// <type name="receiver-settle-mode" class="restricted" source="ubyte">
 /// </type>
-#[derive(Debug, Clone, PartialEq, Eq)]
-#[derive(Default)]
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub enum ReceiverSettleMode {
     /// <choice name="first" value="0"/>
     #[default]
@@ -13,8 +12,6 @@ pub enum ReceiverSettleMode {
     /// <choice name="second" value="1"/>
     Second,
 }
-
-
 
 impl From<ReceiverSettleMode> for u8 {
     fn from(mode: ReceiverSettleMode) -> Self {

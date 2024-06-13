@@ -266,10 +266,10 @@ impl<'a> Eq for (dyn AnnotationKey + 'a) {}
 
 impl<'a> PartialOrd for (dyn AnnotationKey + 'a) {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        // self.key().partial_cmp(&other.key()) 
-        
+        // self.key().partial_cmp(&other.key())
+
         // clippy::non_canonical_partial_ord_impl
-        // 
+        //
         // If both PartialOrd and Ord are implemented, they must agree. This is commonly done by
         // wrapping the result of cmp in Some for partial_cmp. Not doing this may silently introduce
         // an error upon refactoring.

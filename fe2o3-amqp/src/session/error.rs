@@ -1,7 +1,6 @@
 //! Error types for session operations
 
 use fe2o3_amqp_types::definitions::{self};
-use tokio::task::JoinError;
 
 use crate::link::LinkRelayError;
 
@@ -156,11 +155,6 @@ pub enum Error {
     /// Remote session ended with error
     #[error("Remote ended with error")]
     RemoteEndedWithError(definitions::Error),
-
-    /// Event loop exitted with error
-    #[error(transparent)]
-    #[deprecated]
-    JoinError(#[from] JoinError),
 
     /// Unknown transaction ID
     #[cfg(all(feature = "transaction", feature = "acceptor"))]

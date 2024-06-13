@@ -1,7 +1,4 @@
-use fe2o3_amqp_types::{
-    definitions::{Fields, Handle, SequenceNo},
-    messaging::MESSAGE_FORMAT,
-};
+use fe2o3_amqp_types::{definitions::Fields, messaging::MESSAGE_FORMAT};
 use futures_util::Future;
 
 use crate::endpoint::LinkExt;
@@ -182,27 +179,6 @@ where
     type FlowError = FlowError;
     type TransferError = LinkStateError;
     type DispositionError = DispositionError;
-
-    /// Set and send flow state
-    async fn send_flow(
-        &self,
-        writer: &mpsc::Sender<LinkFrame>,
-        delivery_count: Option<SequenceNo>,
-        available: Option<u32>,
-        echo: bool,
-    ) -> Result<(), Self::FlowError> {
-        let handle = self
-            .output_handle
-            .clone()
-            .ok_or(Self::FlowError::IllegalState)?
-            .into();
-
-        let flow = self.get_link_flow(handle, delivery_count, available, echo);
-        writer
-            .send(LinkFrame::Flow(flow))
-            .await
-            .map_err(|_| Self::FlowError::IllegalSessionState)
-    }
 
     async fn send_payload<Fut>(
         &mut self,
@@ -425,81 +401,6 @@ async fn send_disposition(
 }
 
 impl<T> SenderLink<T> {
-    fn get_link_flow(
-        &self,
-        handle: Handle,
-        delivery_count: Option<SequenceNo>,
-        available: Option<u32>,
-        echo: bool,
-    ) -> LinkFlow {
-        match (delivery_count, available) {
-            (Some(delivery_count), Some(available)) => {
-                let mut writer = self.flow_state.as_ref().lock.write();
-                writer.delivery_count = delivery_count;
-                writer.available = available;
-                LinkFlow {
-                    handle,
-                    delivery_count: Some(delivery_count),
-                    // The sender endpoint sets this to the last known value seen from the receiver.
-                    link_credit: Some(writer.link_credit),
-                    available: Some(available),
-                    // When flow state is sent from the sender to the receiver, this field
-                    // contains the actual drain mode of the sender
-                    drain: writer.drain,
-                    echo,
-                    properties: writer.properties.clone(),
-                }
-            }
-            (Some(delivery_count), None) => {
-                let mut writer = self.flow_state.as_ref().lock.write();
-                writer.delivery_count = delivery_count;
-                LinkFlow {
-                    handle,
-                    delivery_count: Some(delivery_count),
-                    // The sender endpoint sets this to the last known value seen from the receiver.
-                    link_credit: Some(writer.link_credit),
-                    available: Some(writer.available),
-                    // When flow state is sent from the sender to the receiver, this field
-                    // contains the actual drain mode of the sender
-                    drain: writer.drain,
-                    echo,
-                    properties: writer.properties.clone(),
-                }
-            }
-            (None, Some(available)) => {
-                let mut writer = self.flow_state.as_ref().lock.write();
-                writer.available = available;
-                LinkFlow {
-                    handle,
-                    delivery_count: Some(writer.delivery_count),
-                    // The sender endpoint sets this to the last known value seen from the receiver.
-                    link_credit: Some(writer.link_credit),
-                    available: Some(available),
-                    // When flow state is sent from the sender to the receiver, this field
-                    // contains the actual drain mode of the sender
-                    drain: writer.drain,
-                    echo,
-                    properties: writer.properties.clone(),
-                }
-            }
-            (None, None) => {
-                let reader = self.flow_state.as_ref().lock.read();
-                LinkFlow {
-                    handle,
-                    delivery_count: Some(reader.delivery_count),
-                    // The sender endpoint sets this to the last known value seen from the receiver.
-                    link_credit: Some(reader.link_credit),
-                    available: Some(reader.available),
-                    // When flow state is sent from the sender to the receiver, this field
-                    // contains the actual drain mode of the sender
-                    drain: reader.drain,
-                    echo,
-                    properties: reader.properties.clone(),
-                }
-            }
-        }
-    }
-
     #[allow(clippy::needless_collect)]
     fn handle_unsettled_in_attach(
         &mut self,
@@ -693,18 +594,14 @@ where
     }
 }
 
-impl<T> endpoint::Link for SenderLink<T>
-where
+impl<T> endpoint::Link for SenderLink<T> where
     T: Into<TargetArchetype>
         + TryFrom<TargetArchetype>
         + VerifyTargetArchetype
         + Clone
         + Send
-        + Sync,
+        + Sync
 {
-    fn role() -> Role {
-        Role::Sender
-    }
 }
 
 impl<T> endpoint::LinkExt for SenderLink<T>
@@ -728,10 +625,6 @@ where
         &self.name
     }
 
-    fn output_handle(&self) -> &Option<OutputHandle> {
-        &self.output_handle
-    }
-
     fn output_handle_mut(&mut self) -> &mut Option<OutputHandle> {
         &mut self.output_handle
     }
@@ -746,10 +639,6 @@ where
 
     fn rcv_settle_mode(&self) -> &ReceiverSettleMode {
         &self.rcv_settle_mode
-    }
-
-    fn target(&self) -> &Option<Self::Target> {
-        &self.target
     }
 
     fn max_message_size(&self) -> Option<u64> {
@@ -848,8 +737,6 @@ where
             SenderAttachError::DesireTxnCapabilitiesNotSupported => {
                 try_detach_with_error(self, attach_error, writer, reader).await
             }
-
-            _ => attach_error,
         }
     }
 }

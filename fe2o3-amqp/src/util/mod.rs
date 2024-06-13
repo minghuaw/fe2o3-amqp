@@ -140,9 +140,11 @@ impl<T> Deref for Constant<T> {
 #[derive(Debug)]
 pub struct Uninitialized {}
 
-/// Shared type state for builders
-#[derive(Debug)]
-pub struct Initialized {}
+cfg_acceptor! {
+    /// Shared type state for builders
+    #[derive(Debug)]
+    pub struct Initialized {}
+}
 
 pub(crate) trait AsByteIterator<'a> {
     type IterImpl: Iterator<Item = &'a u8> + ExactSizeIterator + DoubleEndedIterator;
@@ -260,16 +262,10 @@ impl<'a> DoubleEndedIterator for ByteReaderIter<'a> {
 
 pub(crate) trait AsDeliveryState {
     fn as_delivery_state(&self) -> &Option<DeliveryState>;
-
-    fn as_delivery_state_mut(&mut self) -> &mut Option<DeliveryState>;
 }
 
 impl AsDeliveryState for Option<DeliveryState> {
     fn as_delivery_state(&self) -> &Option<DeliveryState> {
-        self
-    }
-
-    fn as_delivery_state_mut(&mut self) -> &mut Option<DeliveryState> {
         self
     }
 }
@@ -277,6 +273,11 @@ impl AsDeliveryState for Option<DeliveryState> {
 /// A private zero-sized type that makes struct not constructable by users
 #[derive(Debug, Clone)]
 pub(crate) struct Sealed {}
+
+pub(crate) fn is_consecutive(left: &DeliveryNumber, right: &DeliveryNumber) -> bool {
+    // Assume ascending order
+    right - left == 1
+}
 
 #[cfg(test)]
 mod tests {
@@ -336,16 +337,11 @@ mod tests {
         let iter = v.as_byte_iterator();
         assert_eq!(iter.len(), 9);
 
-        let forward: Vec<u8> = iter.map(|e| *e).collect();
+        let forward: Vec<u8> = iter.copied().collect();
         assert_eq!(forward, vec![1, 2, 3, 4, 5, 6, 7, 8, 9]);
 
         let iter = v.as_byte_iterator();
-        let reverse: Vec<u8> = iter.rev().map(|e| *e).collect();
+        let reverse: Vec<u8> = iter.rev().copied().collect();
         assert_eq!(reverse, vec![9, 8, 7, 6, 5, 4, 3, 2, 1]);
     }
-}
-
-pub(crate) fn is_consecutive(left: &DeliveryNumber, right: &DeliveryNumber) -> bool {
-    // Assume ascending order
-    right - left == 1
 }
