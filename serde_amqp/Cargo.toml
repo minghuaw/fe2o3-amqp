@@ -29,7 +29,7 @@ json = ["serde_json"]
 
 # A temporary feature flag that removes use of deprecated API from `chorono` until next breaking
 # release
-chrono-preview = ["chrono"]
+chrono = ["dep:chrono"]
 
 [dev-dependencies]
 criterion = "0.5"

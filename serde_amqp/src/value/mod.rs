@@ -13,7 +13,6 @@ use crate::{
     described::Described,
     format_code::EncodingCodes,
     primitives::{Array, Dec128, Dec32, Dec64, OrderedMap, Symbol, Timestamp, Uuid},
-    util::TryFromSerializable,
     Error,
 };
 
@@ -307,6 +306,12 @@ impl Value {
         };
         code as u8
     }
+
+    /// Try to convert a serializable value to a Value
+    pub fn try_from_serializable<T: Serialize>(value: T) -> Result<Self, Error> {
+        use crate::value::ser::Serializer;
+        value.serialize(&mut Serializer::new())
+    }
 }
 
 macro_rules! impl_from_for_value {
@@ -415,15 +420,6 @@ where
     fn from(map: OrderedMap<K, V>) -> Self {
         let map = map.into_iter().map(|(k, v)| (k.into(), v.into())).collect();
         Value::Map(map)
-    }
-}
-
-impl<T: Serialize> TryFromSerializable<T> for Value {
-    type Error = Error;
-
-    fn try_from(value: T) -> Result<Self, Self::Error> {
-        use crate::value::ser::Serializer;
-        value.serialize(&mut Serializer::new())
     }
 }
 

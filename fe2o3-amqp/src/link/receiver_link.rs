@@ -713,18 +713,14 @@ where
     }
 }
 
-impl<T> endpoint::Link for ReceiverLink<T>
-where
+impl<T> endpoint::Link for ReceiverLink<T> where
     T: Into<TargetArchetype>
         + TryFrom<TargetArchetype>
         + VerifyTargetArchetype
         + Clone
         + Send
-        + Sync,
+        + Sync
 {
-    fn role() -> Role {
-        Role::Receiver
-    }
 }
 
 impl<T> endpoint::LinkExt for ReceiverLink<T>
@@ -748,10 +744,6 @@ where
         &self.name
     }
 
-    fn output_handle(&self) -> &Option<OutputHandle> {
-        &self.output_handle
-    }
-
     fn output_handle_mut(&mut self) -> &mut Option<OutputHandle> {
         &mut self.output_handle
     }
@@ -766,10 +758,6 @@ where
 
     fn rcv_settle_mode(&self) -> &ReceiverSettleMode {
         &self.rcv_settle_mode
-    }
-
-    fn target(&self) -> &Option<Self::Target> {
-        &self.target
     }
 
     fn max_message_size(&self) -> Option<u64> {
@@ -943,8 +931,8 @@ mod tests {
 
     #[test]
     fn test_consecutive_chunks() {
-        let expected = vec![vec![0u32, 1, 2, 3], vec![5, 6], vec![8, 9], vec![11]];
-        let vals: Vec<u32> = expected.iter().flatten().map(|el| *el).collect();
+        let expected = [vec![0u32, 1, 2, 3], vec![5, 6], vec![8, 9], vec![11]];
+        let vals: Vec<u32> = expected.iter().flatten().copied().collect();
         assert_eq!(vals.len() - 1, vals.windows(2).len());
 
         let inds: Vec<usize> = vals

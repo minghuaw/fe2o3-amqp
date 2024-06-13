@@ -1,6 +1,5 @@
 use fe2o3_amqp_types::definitions::{self, AmqpError, ErrorCondition, SessionError};
 use serde_amqp::primitives::Symbol;
-use tokio::sync::TryLockError;
 
 use crate::session::error::AllocLinkError;
 
@@ -64,12 +63,6 @@ pub enum SenderAttachError {
     /// an incoming Detach frame
     #[error("Expecting the remote peer to immediately detach")]
     ExpectImmediateDetach,
-
-    // Errors that should reject Attach
-    /// Incoming Attach frame's Source field is None
-    #[deprecated = "Since 0.7.1, `source` from a receiver link is not checked at the sender anymore"]
-    #[error("Source field is None")]
-    IncomingSourceIsNone,
 
     /// Incoming Attach frame's Target field is None
     #[error("Target field is None")]
@@ -155,23 +148,25 @@ impl From<DetachError> for SendError {
     }
 }
 
-/// Error with the sender trying consume link credit
-///
-/// This is only used in
-#[derive(Debug, thiserror::Error)]
-pub(crate) enum SenderTryConsumeError {
-    /// The sender is unable to acquire lock to inner state
-    #[error("Try lock error")]
-    TryLockError,
+cfg_transaction! {
+    /// Error with the sender trying consume link credit
+    ///
+    /// This is only used in
+    #[derive(Debug, thiserror::Error)]
+    pub(crate) enum SenderTryConsumeError {
+        /// The sender is unable to acquire lock to inner state
+        #[error("Try lock error")]
+        TryLockError,
 
-    /// There is not enough link credit
-    #[error("Insufficient link credit")]
-    InsufficientCredit,
-}
+        /// There is not enough link credit
+        #[error("Insufficient link credit")]
+        InsufficientCredit,
+    }
 
-impl From<TryLockError> for SenderTryConsumeError {
-    fn from(_: TryLockError) -> Self {
-        Self::TryLockError
+    impl From<tokio::sync::TryLockError> for SenderTryConsumeError {
+        fn from(_: tokio::sync::TryLockError) -> Self {
+            Self::TryLockError
+        }
     }
 }
 
@@ -223,11 +218,6 @@ pub enum ReceiverAttachError {
     /// Incoming Attach frame's Source field is None
     #[error("Source field is None")]
     IncomingSourceIsNone,
-
-    /// Incoming Attach frame's Target field is None
-    #[deprecated = "Since 0.7.1 `target` from a sender link is not checked at the receiver anymore"]
-    #[error("Target field is None")]
-    IncomingTargetIsNone,
 
     /// The remote Attach contains a [`Coordinator`] in the Target
     #[error("Control link is not implemented without enabling the `transaction` feature")]

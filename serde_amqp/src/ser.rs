@@ -586,9 +586,9 @@ impl<'a, W: Write + 'a> ser::Serializer for &'a mut Serializer<W> {
     }
 
     #[inline]
-    fn serialize_some<T: ?Sized>(self, value: &T) -> Result<Self::Ok, Self::Error>
+    fn serialize_some<T>(self, value: &T) -> Result<Self::Ok, Self::Error>
     where
-        T: Serialize,
+        T: Serialize + ?Sized,
     {
         // Some(T) is serialized simply as if it is T in BSON
         value.serialize(self)
@@ -624,13 +624,13 @@ impl<'a, W: Write + 'a> ser::Serializer for &'a mut Serializer<W> {
     // - The serializer will determine whether name == SYMBOL_MAGIC
     // - If a Symbol is to be serialized, it will write a Symbol constructor and modify it's internal state to Symbol
     #[inline]
-    fn serialize_newtype_struct<T: ?Sized>(
+    fn serialize_newtype_struct<T>(
         self,
         name: &'static str,
         value: &T,
     ) -> Result<Self::Ok, Self::Error>
     where
-        T: Serialize,
+        T: Serialize + ?Sized,
     {
         if name == SYMBOL {
             self.new_type = NewType::Symbol;
@@ -656,7 +656,7 @@ impl<'a, W: Write + 'a> ser::Serializer for &'a mut Serializer<W> {
 
     // Treat new_type variant as insignificant wrappers around the data they contain
     #[inline]
-    fn serialize_newtype_variant<T: ?Sized>(
+    fn serialize_newtype_variant<T>(
         self,
         name: &'static str,
         variant_index: u32,
@@ -664,7 +664,7 @@ impl<'a, W: Write + 'a> ser::Serializer for &'a mut Serializer<W> {
         value: &T,
     ) -> Result<Self::Ok, Self::Error>
     where
-        T: Serialize,
+        T: Serialize + ?Sized,
     {
         // use ser::SerializeSeq;
         if name == DESCRIPTOR
@@ -830,9 +830,9 @@ impl<'a, W: Write + 'a> ser::SerializeSeq for SeqSerializer<'a, W> {
     type Error = Error;
 
     #[inline]
-    fn serialize_element<T: ?Sized>(&mut self, value: &T) -> Result<(), Self::Error>
+    fn serialize_element<T>(&mut self, value: &T) -> Result<(), Self::Error>
     where
-        T: Serialize,
+        T: Serialize + ?Sized,
     {
         match self.se.new_type {
             NewType::None => {
@@ -960,9 +960,9 @@ impl<'a, W: Write + 'a> ser::SerializeTuple for TupleSerializer<'a, W> {
     type Error = Error;
 
     #[inline]
-    fn serialize_element<T: ?Sized>(&mut self, value: &T) -> Result<(), Self::Error>
+    fn serialize_element<T>(&mut self, value: &T) -> Result<(), Self::Error>
     where
-        T: Serialize,
+        T: Serialize + ?Sized,
     {
         let mut serializer = Serializer::new(&mut self.buf);
         value.serialize(&mut serializer)
@@ -1044,14 +1044,10 @@ impl<'a, W: Write + 'a> ser::SerializeMap for MapSerializer<'a, W> {
     type Error = Error;
 
     #[inline]
-    fn serialize_entry<K: ?Sized, V: ?Sized>(
-        &mut self,
-        key: &K,
-        value: &V,
-    ) -> Result<(), Self::Error>
+    fn serialize_entry<K, V>(&mut self, key: &K, value: &V) -> Result<(), Self::Error>
     where
-        K: Serialize,
-        V: Serialize,
+        K: Serialize + ?Sized,
+        V: Serialize + ?Sized,
     {
         let mut serializer = Serializer::new(&mut self.buf);
         key.serialize(&mut serializer)?;
@@ -1061,9 +1057,9 @@ impl<'a, W: Write + 'a> ser::SerializeMap for MapSerializer<'a, W> {
     }
 
     #[inline]
-    fn serialize_key<T: ?Sized>(&mut self, key: &T) -> Result<(), Self::Error>
+    fn serialize_key<T>(&mut self, key: &T) -> Result<(), Self::Error>
     where
-        T: Serialize,
+        T: Serialize + ?Sized,
     {
         let mut serializer = Serializer::new(&mut self.buf);
         key.serialize(&mut serializer)?;
@@ -1072,9 +1068,9 @@ impl<'a, W: Write + 'a> ser::SerializeMap for MapSerializer<'a, W> {
     }
 
     #[inline]
-    fn serialize_value<T: ?Sized>(&mut self, value: &T) -> Result<(), Self::Error>
+    fn serialize_value<T>(&mut self, value: &T) -> Result<(), Self::Error>
     where
-        T: Serialize,
+        T: Serialize + ?Sized,
     {
         let mut serializer = Serializer::new(&mut self.buf);
         value.serialize(&mut serializer)?;
@@ -1167,9 +1163,9 @@ impl<'a, W: Write + 'a> ser::SerializeTupleStruct for TupleStructSerializer<'a, 
     type Ok = ();
     type Error = Error;
 
-    fn serialize_field<T: ?Sized>(&mut self, value: &T) -> Result<(), Self::Error>
+    fn serialize_field<T>(&mut self, value: &T) -> Result<(), Self::Error>
     where
-        T: Serialize,
+        T: Serialize + ?Sized,
     {
         match self.field_role {
             FieldRole::Descriptor => {
@@ -1266,13 +1262,9 @@ impl<'a, W: Write + 'a> ser::SerializeStruct for StructSerializer<'a, W> {
     type Error = Error;
 
     #[inline]
-    fn serialize_field<T: ?Sized>(
-        &mut self,
-        key: &'static str,
-        value: &T,
-    ) -> Result<(), Self::Error>
+    fn serialize_field<T>(&mut self, key: &'static str, value: &T) -> Result<(), Self::Error>
     where
-        T: Serialize,
+        T: Serialize + ?Sized,
     {
         if key == DESCRIPTOR {
             value.serialize(self.as_mut())
@@ -1370,9 +1362,9 @@ impl<'a, W: Write + 'a> ser::SerializeTupleVariant for VariantSerializer<'a, W> 
     type Ok = ();
     type Error = Error;
 
-    fn serialize_field<T: ?Sized>(&mut self, value: &T) -> Result<(), Self::Error>
+    fn serialize_field<T>(&mut self, value: &T) -> Result<(), Self::Error>
     where
-        T: Serialize,
+        T: Serialize + ?Sized,
     {
         let mut se = Serializer::new(&mut self.buf);
         value.serialize(&mut se)
@@ -1401,13 +1393,9 @@ impl<'a, W: Write + 'a> ser::SerializeStructVariant for VariantSerializer<'a, W>
     type Ok = ();
     type Error = Error;
 
-    fn serialize_field<T: ?Sized>(
-        &mut self,
-        _key: &'static str,
-        value: &T,
-    ) -> Result<(), Self::Error>
+    fn serialize_field<T>(&mut self, _key: &'static str, value: &T) -> Result<(), Self::Error>
     where
-        T: Serialize,
+        T: Serialize + ?Sized,
     {
         <Self as ser::SerializeTupleVariant>::serialize_field(self, value)
     }

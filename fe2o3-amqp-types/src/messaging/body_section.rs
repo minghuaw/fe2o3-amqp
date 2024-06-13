@@ -213,10 +213,10 @@ pub trait AsBodyRef<'a, T>: SerializableBody + BodySection
 where
     T: IntoBody<Body = Self>,
 {
-    ///
+    /// Body reference
     type BodyRef: SerializableBody + 'a;
 
-    ///
+    /// Convert to a body reference
     fn as_body_ref(src: &'a T) -> Self::BodyRef;
 }
 

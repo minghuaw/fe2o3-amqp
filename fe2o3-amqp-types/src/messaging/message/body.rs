@@ -53,13 +53,7 @@ impl<T> Body<T> {
         matches!(self, Body::Value(_))
     }
 
-    /// Whether the body section is `Nothing`
-    #[deprecated(since = "0.5.2", note = "Please use is_empty() instead")]
-    pub fn is_nothing(&self) -> bool {
-        matches!(self, Body::Empty)
-    }
-
-    /// Whether the body section is `Nothing`
+    /// Whether the body section is [`Body::Empty`]
     pub fn is_empty(&self) -> bool {
         matches!(self, Body::Empty)
     }
