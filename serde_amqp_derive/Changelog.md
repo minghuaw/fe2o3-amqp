@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.3.0
+
+1. Updated deps
+
 ## 0.2.1
 
 1. Allow using raw u64 as the descriptor code (ie. `0x0000_0000_0000_0000`)

@@ -1,5 +1,9 @@
 # Change Log
 
+## 0.11.0
+
+1. Removed deprecated `remove` and `remove_entry` in `OrderedMap`
+
 ## 0.10.0
 
 1. Unified versioning with other `fe2o3-amqp` crates

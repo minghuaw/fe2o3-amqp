@@ -1,5 +1,11 @@
 # Change Log
 
+## 0.11.0
+
+1. Updated deps
+2. Fixed typo in docs
+3. Removed deprecated functions
+
 ## 0.10.0
 
 1. Unified versioning with other `fe2o3-amqp` crates

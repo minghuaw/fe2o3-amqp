@@ -55,7 +55,7 @@ fe2o3-amqp-ext = { path = "fe2o3-amqp-ext", version = "0.11" }
 fe2o3-amqp-management = { path = "fe2o3-amqp-management", version = "0.11" }
 fe2o3-amqp-types = { path = "fe2o3-amqp-types", version = "0.11" }
 fe2o3-amqp-ws = { path = "fe2o3-amqp-ws", version = "0.11" }
-serde_amqp_derive = { path = "serde_amqp_derive", version = "0.2.1" }
+serde_amqp_derive = { path = "serde_amqp_derive", version = "0.3.0" }
 serde_amqp = { path = "serde_amqp", version = "0.11" }
 
 # External deps
