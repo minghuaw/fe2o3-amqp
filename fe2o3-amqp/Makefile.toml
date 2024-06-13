@@ -27,12 +27,12 @@ dependencies = [
   "check_feature_group5_wasm32",
   "check_feature_group6_wasm32",
 
-  # rustls has problem with wasm target
-  "check_feature_rustls_wasm32",
-  "check_feature_group1_wasm32",
-  "check_feature_group3_wasm32",
-  "check_feature_group7_wasm32",
-  "check_all_features_wasm32",
+  # # rustls has problem with wasm target
+  # "check_feature_rustls_wasm32",
+  # "check_feature_group1_wasm32",
+  # "check_feature_group3_wasm32",
+  # "check_feature_group7_wasm32",
+  # "check_all_features_wasm32",
 ]
 
 [tasks.check_all_features]

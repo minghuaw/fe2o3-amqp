@@ -43,25 +43,25 @@ pub struct CreateRequest<'a> {
     /// attribute value is not string, conversion into the correct type MUST be performed according
     /// to the following rules:
     ///
-    /// • A string that consists solely of characters from the ASCII character-set, will be
+    /// - A string that consists solely of characters from the ASCII character-set, will be
     /// converted into a symbol if so required.
     ///
-    /// • A string that can be parsed as a number according to [RFC7159] will be converted to a
+    /// - A string that can be parsed as a number according to [RFC7159] will be converted to a
     /// ubyte, ushort, uint, ulong, byte, short, int, or long if so required and the number lies
     /// within the domain of the given AMQP type and represents an integral number
     ///
-    /// • A string which can be parsed as a number according to [RFC7159] will be converted to an
+    /// - A string which can be parsed as a number according to [RFC7159] will be converted to an
     /// float, double, decimal32, decimal64 or decimal128 if so required and the number lies within
     /// the domain of the given AMQP type.
     ///
-    /// • A string which can be parsed as true or false according to [RFC7159] will be converted to
+    /// - A string which can be parsed as true or false according to [RFC7159] will be converted to
     /// a boolean value if so required.
     ///
-    /// • A string which can be parsed as an array according to [RFC7159] will be converted into a
+    /// - A string which can be parsed as an array according to [RFC7159] will be converted into a
     /// list (with the values type-converted into elements as necessary according to the same rules)
     /// if so required.
     ///
-    /// • A string which can be parsed as an object according to [RFC7159] will be converted into a
+    /// - A string which can be parsed as an object according to [RFC7159] will be converted into a
     /// map (with the values type-converted into map values as necessary according to the same
     /// rules) if so required.
     pub body: OrderedMap<String, Value>,
@@ -108,9 +108,9 @@ impl<'a> Request for CreateRequest<'a> {
 /// message MUST consist of an amqp-value section that contains a map containing the actual
 /// attributes of the entity created. These MAY differ from those requested in two ways:
 ///
-///     • Default values may be returned for values not specified
-///     • Specific/concrete values may be returned for generic/base values specified
-///     • The value associated with an attribute may have been converted into the correct amqp type
+/// - Default values may be returned for values not specified
+/// - Specific/concrete values may be returned for generic/base values specified
+/// - The value associated with an attribute may have been converted into the correct amqp type
 ///
 /// (e.g. the string “2” into the integer value 2) A map containing attributes that are not
 /// applicable for the entity being created, or invalid values for a given attribute, MUST result in

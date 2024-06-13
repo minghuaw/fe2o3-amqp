@@ -48,5 +48,9 @@ web-sys = { version = "0.3", features = [
   "BinaryType",
 ] }
 
+[dev-dependencies]
+fe2o3-amqp = { workspace = true }
+
 [target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
-tokio = { workspace = true, features = ["net"] }
+tokio = { workspace = true, features = ["net", "rt-multi-thread"] }
+

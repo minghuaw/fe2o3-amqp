@@ -15,6 +15,13 @@ cfg_not_wasm32! {
     mod common;
 
     #[tokio::test]
+    async fn test_connection_compat() {
+        activemq_artemis_connection().await;
+        activemq_artemis_sasl_plain_connection().await;
+        rabbitmq_amqp10_connection().await;
+        rabbitmq_amqp10_sasl_plain_connection().await;
+    }
+
     async fn activemq_artemis_connection() {
         let (_node, port) = common::setup_activemq_artemis(None, None).await;
         let url = format!("amqp://localhost:{}", port);
@@ -22,7 +29,6 @@ cfg_not_wasm32! {
         connection.close().await.unwrap();
     }
 
-    #[tokio::test]
     async fn activemq_artemis_sasl_plain_connection() {
         let (_node, port) = common::setup_activemq_artemis(Some("guest"), Some("guest")).await;
         let url = format!("amqp://guest:guest@localhost:{}", port);
@@ -30,7 +36,6 @@ cfg_not_wasm32! {
         connection.close().await.unwrap();
     }
 
-    #[tokio::test]
     async fn rabbitmq_amqp10_connection() {
         let (_node, port) = common::setup_rabbitmq_amqp10(None, None).await;
         let url = format!("amqp://localhost:{}", port);
@@ -38,7 +43,6 @@ cfg_not_wasm32! {
         connection.close().await.unwrap();
     }
 
-    #[tokio::test]
     async fn rabbitmq_amqp10_sasl_plain_connection() {
         let (_node, port) = common::setup_rabbitmq_amqp10(Some("guest"), Some("guest")).await;
         let url = format!("amqp://guest:guest@localhost:{}", port);

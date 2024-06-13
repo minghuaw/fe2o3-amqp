@@ -1,5 +1,7 @@
 //! Tests sending and receiving small messages with active mq artemis
 
+// TODO: interop testing with other AMQP 1.0 brokers
+
 macro_rules! cfg_not_wasm32 {
     ($($item:item)*) => {
         $(
@@ -16,6 +18,13 @@ cfg_not_wasm32! {
     mod common;
 
     #[tokio::test]
+    async fn test_send_receive_compat() {
+        activemq_artemis_send_receive().await;
+        activemq_artemis_send_receive_large_content().await;
+        rabbitmq_amqp10_send_receive().await;
+        rabbitmq_amqp10_send_receive_large_content().await;
+    }
+
     async fn activemq_artemis_send_receive() {
         let (_node, port) = common::setup_activemq_artemis(None, None).await;
 
@@ -43,7 +52,6 @@ cfg_not_wasm32! {
         connection.close().await.unwrap();
     }
 
-    #[tokio::test]
     async fn activemq_artemis_send_receive_large_content() {
         let (_node, port) = common::setup_activemq_artemis(None, None).await;
 
@@ -71,7 +79,6 @@ cfg_not_wasm32! {
         connection.close().await.unwrap();
     }
 
-    #[tokio::test]
     async fn rabbitmq_amqp10_send_receive() {
         let (_node, port) = common::setup_rabbitmq_amqp10(None, None).await;
 
@@ -100,7 +107,6 @@ cfg_not_wasm32! {
         connection.close().await.unwrap();
     }
 
-    #[tokio::test]
     async fn rabbitmq_amqp10_send_receive_large_content() {
         let (_node, port) = common::setup_rabbitmq_amqp10(None, None).await;
 

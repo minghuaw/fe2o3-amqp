@@ -41,7 +41,7 @@ use serde_amqp::{
 /// let mut annotations = Annotations::new();
 /// annotations.insert(OwnedKey::from(key), val.clone());
 ///
-/// let removed = annotations.remove(&key as &dyn AnnotationKey);
+/// let removed = annotations.swap_remove(&key as &dyn AnnotationKey);
 /// assert_eq!(removed, Some(val));
 /// ```
 pub type Annotations = OrderedMap<OwnedKey, Value>;
