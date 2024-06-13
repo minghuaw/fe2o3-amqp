@@ -10,8 +10,7 @@ use serde_amqp::primitives::Symbol;
 /// <type name="terminus-expiry-policy" class="restricted" source="symbol">
 /// </type>
 ///
-#[derive(Debug, Clone, PartialEq, Eq)]
-#[derive(Default)]
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub enum TerminusExpiryPolicy {
     /// <choice name="link-detach" value="link-detach"/>
     LinkDetach,
@@ -26,8 +25,6 @@ pub enum TerminusExpiryPolicy {
     /// <choice name="never" value="never"/>
     Never,
 }
-
-
 
 impl From<&TerminusExpiryPolicy> for Symbol {
     fn from(value: &TerminusExpiryPolicy) -> Self {

@@ -613,13 +613,6 @@ impl LinkRelay<()> {
 }
 
 impl LinkRelay<OutputHandle> {
-    // pub(crate) fn output_handle(&self) -> &OutputHandle {
-    //     match self {
-    //         Self::Sender { output_handle, .. } => output_handle,
-    //         Self::Receiver { output_handle, .. } => output_handle,
-    //     }
-    // }
-
     pub(crate) async fn send(
         &mut self,
         frame: LinkFrame,

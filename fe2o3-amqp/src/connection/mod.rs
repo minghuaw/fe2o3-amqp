@@ -538,10 +538,6 @@ impl endpoint::Connection for Connection {
         &self.local_state
     }
 
-    fn local_state_mut(&mut self) -> &mut Self::State {
-        &mut self.local_state
-    }
-
     fn local_open(&self) -> &Open {
         &self.local_open
     }
@@ -769,15 +765,6 @@ impl endpoint::Connection for Connection {
     ) -> Option<&Sender<SessionIncomingItem>> {
         self.session_by_incoming_channel
             .get(&incoming_channel)
-            .map(AsRef::as_ref)
-    }
-
-    fn session_tx_by_outgoing_channel(
-        &mut self,
-        outgoing_channel: OutgoingChannel,
-    ) -> Option<&Sender<SessionIncomingItem>> {
-        self.session_by_outgoing_channel
-            .get(outgoing_channel.0 as usize)
             .map(AsRef::as_ref)
     }
 }

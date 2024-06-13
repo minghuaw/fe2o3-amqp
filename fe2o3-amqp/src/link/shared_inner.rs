@@ -20,8 +20,6 @@ where
 
     fn link_mut(&mut self) -> &mut Self::Link;
 
-    fn writer(&self) -> &mpsc::Sender<LinkFrame>;
-
     fn reader_mut(&mut self) -> &mut mpsc::Receiver<LinkFrame>;
 
     fn buffer_size(&self) -> usize;
@@ -29,8 +27,6 @@ where
     fn as_new_link_relay(&self, tx: mpsc::Sender<LinkFrame>) -> LinkRelay<()>;
 
     fn session_control(&self) -> &mpsc::Sender<SessionControl>;
-
-    fn session_control_mut(&mut self) -> &mut mpsc::Sender<SessionControl>;
 
     async fn exchange_attach(
         &mut self,

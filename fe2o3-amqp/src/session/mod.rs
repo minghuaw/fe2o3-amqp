@@ -369,10 +369,11 @@ impl Session {
 
         self.next_outgoing_id = self.next_outgoing_id.wrapping_add(1);
 
-        // The remote-incoming-window reflects the maximum number of outgoing transfers that can
-        // be sent without exceeding the remote endpoint’s incoming-window. This value MUST be
-        // decremented after every transfer frame is sent, and recomputed when informed of the
-        // remote session endpoint state.
+        // The remote-incoming-window reflects the maximum number of outgoing
+        // transfers that can be sent without exceeding the remote endpoint’s
+        // incoming-window. This value MUST be decremented after every transfer
+        // frame is sent, and recomputed when informed of the remote session
+        // endpoint state.
         self.remote_incoming_window = self.remote_incoming_window.saturating_sub(1);
 
         let body = SessionFrameBody::Transfer {
@@ -389,9 +390,10 @@ impl Session {
     ) -> Result<Option<LinkFlow>, SessionInnerError> {
         // Handle session flow control
         //
-        // When the endpoint receives a flow frame from its peer, it MUST update the next-incoming-id
-        // directly from the next-outgoing-id of the frame, and it MUST update the remote-outgoing-
-        // window directly from the outgoing-window of the frame.
+        // When the endpoint receives a flow frame from its peer, it MUST update
+        // the next-incoming-id directly from the next-outgoing-id of the frame,
+        // and it MUST update the remote-outgoing- window directly from the
+        // outgoing-window of the frame.
         self.next_incoming_id = flow.next_outgoing_id;
         self.remote_outgoing_window = flow.outgoing_window;
 
@@ -404,8 +406,10 @@ impl Session {
                     .saturating_sub(self.next_outgoing_id);
             }
             None => {
-                // If the next-incoming-id field of the flow frame is not set, then remote-incoming-window is computed as follows:
-                // initial-outgoing-id_endpoint + incoming-window_flow - next-outgoing-id_endpoint
+                // If the next-incoming-id field of the flow frame is not set,
+                // then remote-incoming-window is computed as follows:
+                // initial-outgoing-id_endpoint + incoming-window_flow -
+                // next-outgoing-id_endpoint
                 self.remote_incoming_window = self
                     .initial_outgoing_id
                     .value()
@@ -489,10 +493,6 @@ impl endpoint::Session for Session {
 
     fn local_state(&self) -> &Self::State {
         &self.local_state
-    }
-
-    fn local_state_mut(&mut self) -> &mut Self::State {
-        &mut self.local_state
     }
 
     fn outgoing_channel(&self) -> OutgoingChannel {

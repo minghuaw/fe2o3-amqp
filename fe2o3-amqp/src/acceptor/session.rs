@@ -360,10 +360,6 @@ impl endpoint::Session for ListenerSession {
         self.session.local_state()
     }
 
-    fn local_state_mut(&mut self) -> &mut Self::State {
-        self.session.local_state_mut()
-    }
-
     fn outgoing_channel(&self) -> OutgoingChannel {
         self.session.outgoing_channel()
     }

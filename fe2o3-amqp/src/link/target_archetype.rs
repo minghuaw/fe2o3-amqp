@@ -47,17 +47,11 @@ impl VerifyTargetArchetype for Target {
 pub trait TargetArchetypeCapabilities {
     type Capability;
 
-    fn capabilities(&self) -> &Option<Array<Self::Capability>>;
-
     fn capabilities_mut(&mut self) -> &mut Option<Array<Self::Capability>>;
 }
 
 impl TargetArchetypeCapabilities for Target {
     type Capability = Symbol;
-
-    fn capabilities(&self) -> &Option<Array<Symbol>> {
-        &self.capabilities
-    }
 
     fn capabilities_mut(&mut self) -> &mut Option<Array<Symbol>> {
         &mut self.capabilities
@@ -65,29 +59,16 @@ impl TargetArchetypeCapabilities for Target {
 }
 
 pub trait VariantOfTargetArchetype {
-    fn is_target(&self) -> bool;
     fn is_coordinator(&self) -> bool;
 }
 
 impl VariantOfTargetArchetype for Target {
-    fn is_target(&self) -> bool {
-        true
-    }
-
     fn is_coordinator(&self) -> bool {
         false
     }
 }
 
 impl VariantOfTargetArchetype for TargetArchetype {
-    fn is_target(&self) -> bool {
-        match self {
-            TargetArchetype::Target(_) => true,
-            #[cfg(feature = "transaction")]
-            TargetArchetype::Coordinator(_) => false,
-        }
-    }
-
     fn is_coordinator(&self) -> bool {
         match self {
             TargetArchetype::Target(_) => false,
@@ -168,20 +149,12 @@ cfg_transaction! {
     impl TargetArchetypeCapabilities for Coordinator {
         type Capability = TxnCapability;
 
-        fn capabilities(&self) -> &Option<Array<TxnCapability>> {
-            &self.capabilities
-        }
-
         fn capabilities_mut(&mut self) -> &mut Option<Array<TxnCapability>> {
             &mut self.capabilities
         }
     }
 
     impl VariantOfTargetArchetype for Coordinator {
-        fn is_target(&self) -> bool {
-            false
-        }
-
         fn is_coordinator(&self) -> bool {
             true
         }

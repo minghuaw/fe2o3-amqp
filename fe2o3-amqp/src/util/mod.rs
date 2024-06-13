@@ -260,16 +260,10 @@ impl<'a> DoubleEndedIterator for ByteReaderIter<'a> {
 
 pub(crate) trait AsDeliveryState {
     fn as_delivery_state(&self) -> &Option<DeliveryState>;
-
-    fn as_delivery_state_mut(&mut self) -> &mut Option<DeliveryState>;
 }
 
 impl AsDeliveryState for Option<DeliveryState> {
     fn as_delivery_state(&self) -> &Option<DeliveryState> {
-        self
-    }
-
-    fn as_delivery_state_mut(&mut self) -> &mut Option<DeliveryState> {
         self
     }
 }

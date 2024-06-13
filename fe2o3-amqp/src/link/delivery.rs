@@ -332,10 +332,6 @@ impl AsDeliveryState for UnsettledMessage {
     fn as_delivery_state(&self) -> &Option<DeliveryState> {
         &self.state
     }
-
-    fn as_delivery_state_mut(&mut self) -> &mut Option<DeliveryState> {
-        &mut self.state
-    }
 }
 
 pin_project! {

@@ -13,7 +13,6 @@ use crate::{
     described::Described,
     format_code::EncodingCodes,
     primitives::{Array, Dec128, Dec32, Dec64, OrderedMap, Symbol, Timestamp, Uuid},
-    util::TryFromSerializable,
     Error,
 };
 
@@ -21,8 +20,7 @@ pub(crate) mod de;
 pub(crate) mod ser;
 
 /// Primitive type definitions
-#[derive(Debug, Clone, Hash, PartialEq, Eq, PartialOrd, Ord)]
-#[derive(Default)]
+#[derive(Debug, Clone, Hash, PartialEq, Eq, PartialOrd, Ord, Default)]
 pub enum Value {
     /// Described type
     ///
@@ -276,8 +274,6 @@ pub enum Value {
     Array(Array<Value>),
 }
 
-
-
 impl Value {
     /// Get the format code of the value type
     pub fn format_code(&self) -> u8 {
@@ -309,6 +305,12 @@ impl Value {
             Value::Array(_) => EncodingCodes::Array32,
         };
         code as u8
+    }
+
+    /// Try to convert a serializable value to a Value
+    pub fn try_from_serializable<T: Serialize>(value: T) -> Result<Self, Error> {
+        use crate::value::ser::Serializer;
+        value.serialize(&mut Serializer::new())
     }
 }
 
@@ -418,15 +420,6 @@ where
     fn from(map: OrderedMap<K, V>) -> Self {
         let map = map.into_iter().map(|(k, v)| (k.into(), v.into())).collect();
         Value::Map(map)
-    }
-}
-
-impl<T: Serialize> TryFromSerializable<T> for Value {
-    type Error = Error;
-
-    fn try_from(value: T) -> Result<Self, Self::Error> {
-        use crate::value::ser::Serializer;
-        value.serialize(&mut Serializer::new())
     }
 }
 
@@ -874,12 +867,7 @@ mod tests {
 
     #[test]
     fn test_value_list() {
-        let expected = Value::List(
-            [1u32, 2, 3, 4]
-                .iter()
-                .map(|v| Value::Uint(*v))
-                .collect(),
-        );
+        let expected = Value::List([1u32, 2, 3, 4].iter().map(|v| Value::Uint(*v)).collect());
         let buf = to_vec(&expected).unwrap();
         assert_eq_from_reader_vs_expected(buf, expected);
     }
@@ -897,10 +885,7 @@ mod tests {
     #[test]
     fn test_value_array() {
         use crate::primitives::Array;
-        let vec: Vec<Value> = [1i32, 2, 3, 4]
-            .iter()
-            .map(|val| Value::Int(*val))
-            .collect();
+        let vec: Vec<Value> = [1i32, 2, 3, 4].iter().map(|val| Value::Int(*val)).collect();
         let arr = Array::from(vec);
         let buf = to_vec(&arr).unwrap();
 

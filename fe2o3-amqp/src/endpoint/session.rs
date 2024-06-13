@@ -26,8 +26,6 @@ pub(crate) trait Session {
 
     fn local_state(&self) -> &Self::State;
 
-    fn local_state_mut(&mut self) -> &mut Self::State;
-
     fn outgoing_channel(&self) -> OutgoingChannel;
 
     // Allocate new local handle for new Link
