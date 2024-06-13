@@ -148,10 +148,10 @@ impl TryFrom<Timestamp> for chrono::DateTime<chrono::Utc> {
     /// removed in favour of the one provided with the "chrono-preview" feature in the next major
     /// version.
     fn try_from(value: Timestamp) -> Result<Self, Self::Error> {
-        let native_time =
-            chrono::NaiveDateTime::from_timestamp_millis(value.milliseconds()).ok_or(value)?;
-        Ok(chrono::DateTime::<chrono::Utc>::from_utc(
-            native_time,
+        let datetime =
+            chrono::DateTime::from_timestamp_millis(value.milliseconds()).ok_or(value)?;
+        Ok(chrono::DateTime::<chrono::Utc>::from_naive_utc_and_offset(
+            datetime.naive_utc(),
             chrono::Utc,
         ))
     }
@@ -171,9 +171,11 @@ impl From<Timestamp> for Option<chrono::DateTime<chrono::Utc>> {
     /// removed in favour of the one provided with the "chrono-preview" feature in the next major
     /// version.
     fn from(value: Timestamp) -> Self {
-        let native_time = chrono::NaiveDateTime::from_timestamp_millis(value.milliseconds())?;
-        Some(chrono::DateTime::<chrono::Utc>::from_utc(
-            native_time,
+        let datetime = chrono::DateTime::from_timestamp_millis(value.milliseconds())
+            .ok_or(value)
+            .ok()?;
+        Some(chrono::DateTime::<chrono::Utc>::from_naive_utc_and_offset(
+            datetime.naive_utc(),
             chrono::Utc,
         ))
     }
