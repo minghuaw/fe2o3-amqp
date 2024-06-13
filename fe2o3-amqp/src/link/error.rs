@@ -65,12 +65,6 @@ pub enum SenderAttachError {
     #[error("Expecting the remote peer to immediately detach")]
     ExpectImmediateDetach,
 
-    // Errors that should reject Attach
-    /// Incoming Attach frame's Source field is None
-    #[deprecated = "Since 0.7.1, `source` from a receiver link is not checked at the sender anymore"]
-    #[error("Source field is None")]
-    IncomingSourceIsNone,
-
     /// Incoming Attach frame's Target field is None
     #[error("Target field is None")]
     IncomingTargetIsNone,
@@ -223,11 +217,6 @@ pub enum ReceiverAttachError {
     /// Incoming Attach frame's Source field is None
     #[error("Source field is None")]
     IncomingSourceIsNone,
-
-    /// Incoming Attach frame's Target field is None
-    #[deprecated = "Since 0.7.1 `target` from a sender link is not checked at the receiver anymore"]
-    #[error("Target field is None")]
-    IncomingTargetIsNone,
 
     /// The remote Attach contains a [`Coordinator`] in the Target
     #[error("Control link is not implemented without enabling the `transaction` feature")]
