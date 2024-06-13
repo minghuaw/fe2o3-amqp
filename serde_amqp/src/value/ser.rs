@@ -226,13 +226,13 @@ impl<'a> ser::Serializer for &'a mut Serializer {
     }
 
     #[inline]
-    fn serialize_newtype_struct<T: ?Sized>(
+    fn serialize_newtype_struct<T>(
         self,
         name: &'static str,
         value: &T,
     ) -> Result<Self::Ok, Self::Error>
     where
-        T: serde::Serialize,
+        T: serde::Serialize + ?Sized,
     {
         if name == SYMBOL {
             self.new_type = NewType::Symbol;
@@ -255,7 +255,7 @@ impl<'a> ser::Serializer for &'a mut Serializer {
     }
 
     #[inline]
-    fn serialize_newtype_variant<T: ?Sized>(
+    fn serialize_newtype_variant<T>(
         self,
         name: &'static str,
         variant_index: u32,
@@ -263,7 +263,7 @@ impl<'a> ser::Serializer for &'a mut Serializer {
         value: &T,
     ) -> Result<Self::Ok, Self::Error>
     where
-        T: serde::Serialize,
+        T: serde::Serialize + ?Sized,
     {
         use crate::__constants::VALUE;
 
@@ -287,9 +287,9 @@ impl<'a> ser::Serializer for &'a mut Serializer {
     }
 
     #[inline]
-    fn serialize_some<T: ?Sized>(self, value: &T) -> Result<Self::Ok, Self::Error>
+    fn serialize_some<T>(self, value: &T) -> Result<Self::Ok, Self::Error>
     where
-        T: serde::Serialize,
+        T: serde::Serialize + ?Sized,
     {
         value.serialize(self)
     }
@@ -405,9 +405,9 @@ impl<'a> ser::SerializeSeq for SeqSerializer<'a> {
     type Ok = Value;
     type Error = Error;
 
-    fn serialize_element<T: ?Sized>(&mut self, value: &T) -> Result<(), Self::Error>
+    fn serialize_element<T>(&mut self, value: &T) -> Result<(), Self::Error>
     where
-        T: serde::Serialize,
+        T: serde::Serialize + ?Sized,
     {
         let val: Value = value.serialize(self.as_mut())?;
         self.vec.push(val);
@@ -427,9 +427,9 @@ impl<'a> ser::SerializeTuple for SeqSerializer<'a> {
     type Ok = Value;
     type Error = Error;
 
-    fn serialize_element<T: ?Sized>(&mut self, value: &T) -> Result<(), Self::Error>
+    fn serialize_element<T>(&mut self, value: &T) -> Result<(), Self::Error>
     where
-        T: serde::Serialize,
+        T: serde::Serialize + ?Sized,
     {
         let val = value.serialize(self.as_mut())?;
         self.vec.push(val);
@@ -440,22 +440,6 @@ impl<'a> ser::SerializeTuple for SeqSerializer<'a> {
         Ok(Value::List(self.vec))
     }
 }
-
-// impl<'a> ser::SerializeTupleStruct for SeqSerializer<'a> {
-//     type Ok = Value;
-//     type Error = Error;
-
-//     fn serialize_field<T: ?Sized>(&mut self, value: &T) -> Result<(), Self::Error>
-//     where
-//         T: serde::Serialize,
-//     {
-//         <Self as ser::SerializeTuple>::serialize_element(self, value)
-//     }
-
-//     fn end(self) -> Result<Self::Ok, Self::Error> {
-//         <Self as ser::SerializeTuple>::end(self)
-//     }
-// }
 
 /// Serializer for tuple struct fields
 #[derive(Debug)]
@@ -524,9 +508,9 @@ impl<'a> ser::SerializeTupleStruct for TupleStructSerializer<'a> {
 
     type Error = Error;
 
-    fn serialize_field<T: ?Sized>(&mut self, value: &T) -> Result<(), Self::Error>
+    fn serialize_field<T>(&mut self, value: &T) -> Result<(), Self::Error>
     where
-        T: serde::Serialize,
+        T: serde::Serialize + ?Sized,
     {
         use ser::SerializeSeq;
 
@@ -639,13 +623,9 @@ impl<'a> ser::SerializeStruct for StructSerializer<'a> {
 
     type Error = Error;
 
-    fn serialize_field<T: ?Sized>(
-        &mut self,
-        key: &'static str,
-        value: &T,
-    ) -> Result<(), Self::Error>
+    fn serialize_field<T>(&mut self, key: &'static str, value: &T) -> Result<(), Self::Error>
     where
-        T: serde::Serialize,
+        T: serde::Serialize + ?Sized,
     {
         use serde::ser::{SerializeMap, SerializeSeq};
 
@@ -715,14 +695,10 @@ impl<'a> ser::SerializeMap for MapSerializer<'a> {
     type Ok = Value;
     type Error = Error;
 
-    fn serialize_entry<K: ?Sized, V: ?Sized>(
-        &mut self,
-        key: &K,
-        value: &V,
-    ) -> Result<(), Self::Error>
+    fn serialize_entry<K, V>(&mut self, key: &K, value: &V) -> Result<(), Self::Error>
     where
-        K: serde::Serialize,
-        V: serde::Serialize,
+        K: serde::Serialize + ?Sized,
+        V: serde::Serialize + ?Sized,
     {
         let key = key.serialize(self.as_mut())?;
         let value = value.serialize(self.as_mut())?;
@@ -730,16 +706,16 @@ impl<'a> ser::SerializeMap for MapSerializer<'a> {
         Ok(())
     }
 
-    fn serialize_key<T: ?Sized>(&mut self, _key: &T) -> Result<(), Self::Error>
+    fn serialize_key<T>(&mut self, _key: &T) -> Result<(), Self::Error>
     where
-        T: serde::Serialize,
+        T: serde::Serialize + ?Sized,
     {
         unreachable!()
     }
 
-    fn serialize_value<T: ?Sized>(&mut self, _value: &T) -> Result<(), Self::Error>
+    fn serialize_value<T>(&mut self, _value: &T) -> Result<(), Self::Error>
     where
-        T: serde::Serialize,
+        T: serde::Serialize + ?Sized,
     {
         unreachable!()
     }
@@ -789,9 +765,9 @@ impl<'a> ser::SerializeTupleVariant for VariantSerializer<'a> {
     type Ok = Value;
     type Error = Error;
 
-    fn serialize_field<T: ?Sized>(&mut self, value: &T) -> Result<(), Self::Error>
+    fn serialize_field<T>(&mut self, value: &T) -> Result<(), Self::Error>
     where
-        T: serde::Serialize,
+        T: serde::Serialize + ?Sized,
     {
         let value = value.serialize(self.as_mut())?;
         self.buf.push(value);
@@ -809,13 +785,9 @@ impl<'a> ser::SerializeStructVariant for VariantSerializer<'a> {
     type Ok = Value;
     type Error = Error;
 
-    fn serialize_field<T: ?Sized>(
-        &mut self,
-        _key: &'static str,
-        value: &T,
-    ) -> Result<(), Self::Error>
+    fn serialize_field<T>(&mut self, _key: &'static str, value: &T) -> Result<(), Self::Error>
     where
-        T: serde::Serialize,
+        T: serde::Serialize + ?Sized,
     {
         <Self as ser::SerializeTupleVariant>::serialize_field(self, value)
     }

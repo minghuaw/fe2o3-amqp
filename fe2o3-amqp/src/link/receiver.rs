@@ -668,10 +668,6 @@ where
         &mut self.link
     }
 
-    fn writer(&self) -> &mpsc::Sender<LinkFrame> {
-        &self.outgoing
-    }
-
     fn reader_mut(&mut self) -> &mut mpsc::Receiver<LinkFrame> {
         &mut self.incoming
     }
@@ -695,10 +691,6 @@ where
 
     fn session_control(&self) -> &mpsc::Sender<SessionControl> {
         &self.session
-    }
-
-    fn session_control_mut(&mut self) -> &mut mpsc::Sender<SessionControl> {
-        &mut self.session
     }
 
     async fn exchange_attach(

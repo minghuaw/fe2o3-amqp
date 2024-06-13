@@ -23,7 +23,6 @@ pub(crate) trait Connection {
     type Session: Session + SendBound;
 
     fn local_state(&self) -> &Self::State;
-    fn local_state_mut(&mut self) -> &mut Self::State;
     fn local_open(&self) -> &Open;
 
     // Allocate outgoing channel id and session id to a new session
@@ -98,10 +97,5 @@ pub(crate) trait Connection {
     fn session_tx_by_incoming_channel(
         &mut self,
         incoming_channel: IncomingChannel,
-    ) -> Option<&mpsc::Sender<SessionIncomingItem>>;
-
-    fn session_tx_by_outgoing_channel(
-        &mut self,
-        outgoing_channel: OutgoingChannel,
     ) -> Option<&mpsc::Sender<SessionIncomingItem>>;
 }

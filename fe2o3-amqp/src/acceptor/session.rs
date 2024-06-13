@@ -345,9 +345,6 @@ pub struct ListenerSession {
     pub(crate) link_listener: mpsc::Sender<Attach>,
 }
 
-impl endpoint::SessionExt for ListenerSession {}
-
-
 impl endpoint::Session for ListenerSession {
     type AllocError = <session::Session as endpoint::Session>::AllocError;
     type BeginError = <session::Session as endpoint::Session>::BeginError;
@@ -358,10 +355,6 @@ impl endpoint::Session for ListenerSession {
 
     fn local_state(&self) -> &Self::State {
         self.session.local_state()
-    }
-
-    fn local_state_mut(&mut self) -> &mut Self::State {
-        self.session.local_state_mut()
     }
 
     fn outgoing_channel(&self) -> OutgoingChannel {

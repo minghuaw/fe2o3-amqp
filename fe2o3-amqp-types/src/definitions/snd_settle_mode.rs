@@ -6,8 +6,7 @@ use serde::{de, ser};
 /// Settlement policy for a sender.
 /// <type name="sender-settle-mode" class="restricted" source="ubyte">
 /// </type>
-#[derive(Debug, Clone, PartialEq, Eq)]
-#[derive(Default)]
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub enum SenderSettleMode {
     /// <choice name="unsettled" value="0"/>
     Unsettled,
@@ -17,8 +16,6 @@ pub enum SenderSettleMode {
     #[default]
     Mixed,
 }
-
-
 
 impl From<SenderSettleMode> for u8 {
     fn from(mode: SenderSettleMode) -> Self {

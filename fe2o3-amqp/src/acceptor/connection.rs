@@ -478,10 +478,6 @@ impl endpoint::Connection for ListenerConnection {
     fn local_state(&self) -> &Self::State {
         self.connection.local_state()
     }
-    #[inline]
-    fn local_state_mut(&mut self) -> &mut Self::State {
-        self.connection.local_state_mut()
-    }
 
     #[inline]
     fn local_open(&self) -> &fe2o3_amqp_types::performatives::Open {
@@ -627,13 +623,5 @@ impl endpoint::Connection for ListenerConnection {
         channel: IncomingChannel,
     ) -> Option<&mpsc::Sender<crate::session::frame::SessionIncomingItem>> {
         self.connection.session_tx_by_incoming_channel(channel)
-    }
-
-    #[inline]
-    fn session_tx_by_outgoing_channel(
-        &mut self,
-        channel: OutgoingChannel,
-    ) -> Option<&mpsc::Sender<crate::session::frame::SessionIncomingItem>> {
-        self.connection.session_tx_by_outgoing_channel(channel)
     }
 }

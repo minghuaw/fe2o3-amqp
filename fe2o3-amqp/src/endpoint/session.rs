@@ -26,8 +26,6 @@ pub(crate) trait Session {
 
     fn local_state(&self) -> &Self::State;
 
-    fn local_state_mut(&mut self) -> &mut Self::State;
-
     fn outgoing_channel(&self) -> OutgoingChannel;
 
     // Allocate new local handle for new Link
@@ -113,8 +111,4 @@ pub(crate) trait Session {
     ) -> Result<SessionFrame, Self::Error>;
 
     fn on_outgoing_detach(&mut self, detach: Detach) -> SessionFrame;
-}
-
-pub(crate) trait SessionExt: Session {
-    // fn control(&self) -> &mpsc::Sender<SessionControl>;
 }
