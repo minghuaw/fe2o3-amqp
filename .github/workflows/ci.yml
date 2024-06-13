@@ -41,13 +41,12 @@ jobs:
   feature_check_and_test:
     runs-on: ubuntu-latest
     steps:
-      # install cargo-make
       - uses: davidB/rust-cargo-make@v1
       - uses: actions/checkout@v2
-      # feature check fe2o3-amqp
+      - name: Install wasm32-unknown-unknown target
+        run: rustup target add wasm32-unknown-unknown
       - name: feature_check
         run: (cd fe2o3-amqp && cargo make feature_check)
-      # test all crates
       - name: test serde_amqp
         run: (cd serde_amqp && cargo make test)
       - name: test fe2o3-amqp-types
