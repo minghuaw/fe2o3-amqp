@@ -115,8 +115,7 @@ pub(crate) fn parse_named_field_attrs<'a>(
     fields
         .map(|f| {
             f.attrs.iter().find_map(|a| {
-                let item = a.parse_meta().unwrap();
-                FieldAttr::from_meta(&item).ok()
+                FieldAttr::from_meta(&a.meta).ok()
             })
         })
         .map(|o| o.unwrap_or(FieldAttr { default: false }))
@@ -126,7 +125,7 @@ pub(crate) fn parse_named_field_attrs<'a>(
 pub(crate) fn get_span_of(ident_str: &str, ctx: &DeriveInput) -> Option<Span> {
     ctx.attrs
         .iter()
-        .find_map(|attr| match attr.path.get_ident() {
+        .find_map(|attr| match attr.path().get_ident() {
             Some(i) => {
                 if *i == ident_str {
                     Some(i.span())
