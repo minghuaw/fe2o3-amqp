@@ -129,7 +129,7 @@ pin_project! {
     ///
     /// #[tokio::main]
     /// async fn main() {
-    ///     let (ws_stream, _response) = WebSocketStream::connect("ws://localhost:5673")
+    ///     let ws_stream = WebSocketStream::connect("ws://localhost:5673")
     ///         .await
     ///         .unwrap();
     ///     let mut connection = Connection::builder()
