@@ -280,7 +280,7 @@ impl Builder<SessionAcceptor, Initialized> {
     }
 
     /// The initial outgoing-window of the sender
-    pub fn outgoing_widnow(mut self, value: TransferNumber) -> Self {
+    pub fn outgoing_window(mut self, value: TransferNumber) -> Self {
         self.inner.0.outgoing_window = value;
         self
     }
