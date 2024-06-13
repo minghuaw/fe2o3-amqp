@@ -53,7 +53,7 @@ impl<T> Body<T> {
         matches!(self, Body::Value(_))
     }
 
-    /// Whether the body section is `Nothing`
+    /// Whether the body section is [`Body::Empty`]
     pub fn is_empty(&self) -> bool {
         matches!(self, Body::Empty)
     }
