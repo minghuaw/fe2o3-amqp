@@ -931,8 +931,8 @@ mod tests {
 
     #[test]
     fn test_consecutive_chunks() {
-        let expected = vec![vec![0u32, 1, 2, 3], vec![5, 6], vec![8, 9], vec![11]];
-        let vals: Vec<u32> = expected.iter().flatten().map(|el| *el).collect();
+        let expected = [vec![0u32, 1, 2, 3], vec![5, 6], vec![8, 9], vec![11]];
+        let vals: Vec<u32> = expected.iter().flatten().copied().collect();
         assert_eq!(vals.len() - 1, vals.windows(2).len());
 
         let inds: Vec<usize> = vals

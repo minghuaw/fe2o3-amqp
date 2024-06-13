@@ -314,7 +314,7 @@ impl Consume for SenderFlowState {
 cfg_transaction! {
     impl crate::util::TryConsume for SenderFlowState {
         type Error = super::error::SenderTryConsumeError;
-    
+
         fn try_consume(&mut self, item: Self::Item) -> Result<Self::Outcome, Self::Error> {
             let mut state = self
                 .state()

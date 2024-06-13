@@ -157,7 +157,7 @@ cfg_transaction! {
         /// The sender is unable to acquire lock to inner state
         #[error("Try lock error")]
         TryLockError,
-    
+
         /// There is not enough link credit
         #[error("Insufficient link credit")]
         InsufficientCredit,
@@ -169,7 +169,6 @@ cfg_transaction! {
         }
     }
 }
-
 
 /// The desired filter(s) on the receiver is not supported by the remote peer
 #[derive(Debug)]

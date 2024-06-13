@@ -42,7 +42,7 @@ pub trait Consume {
 cfg_transaction! {
     pub trait TryConsume: Consume {
         type Error;
-    
+
         fn try_consume(&mut self, item: Self::Item) -> Result<Self::Outcome, Self::Error>;
     }
 }
