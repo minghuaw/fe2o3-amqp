@@ -559,7 +559,7 @@ pub enum TerminalDeliveryState {
     /// 3.4.2 Accepted
     Accepted(Accepted),
 
-    /// 3.4.2 Rejected
+    /// 3.4.3 Rejected
     Rejected(Rejected),
 
     /// 3.4.4 Released
