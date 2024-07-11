@@ -1,5 +1,9 @@
 # Change Log
 
+## 0.11.1
+
+1. Fixed typo in documentation
+
 ## 0.11.0
 
 ### Breaking changes

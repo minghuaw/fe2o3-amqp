@@ -70,6 +70,7 @@ mod tests {
         assert_eq!(buf, expected);
     }
 
+    #[allow(dead_code)]
     #[derive(Debug, Clone)]
     pub struct Disposition {
         /// <field name="role" type="role" mandatory="true"/>
