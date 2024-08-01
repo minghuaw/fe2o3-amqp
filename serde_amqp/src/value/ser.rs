@@ -1053,7 +1053,7 @@ mod tests {
             pub address: Option<String>,
             pub capabilities: Option<Array<Symbol>>,
         }
-        
+
         #[derive(Debug, Clone, Default, DeserializeComposite, SerializeComposite)]
         #[amqp_contract(
             name = "amqp:target:list",
@@ -1065,7 +1065,7 @@ mod tests {
             pub address: Option<String>,
             pub capabilities: Option<Array<Symbol>>,
         }
-        
+
         #[derive(Debug, Clone, DeserializeComposite, SerializeComposite)]
         #[amqp_contract(
             name = "amqp:attach:list",
@@ -1087,7 +1087,7 @@ mod tests {
             capabilities: Some(Array(vec![Symbol::from("x-azure-relay")])),
             ..Default::default()
         };
-    
+
         let frame = Attach {
             source: Some(source),
             target: Some(target),
