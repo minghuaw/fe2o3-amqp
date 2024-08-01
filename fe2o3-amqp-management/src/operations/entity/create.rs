@@ -44,26 +44,26 @@ pub struct CreateRequest<'a> {
     /// to the following rules:
     ///
     /// - A string that consists solely of characters from the ASCII character-set, will be
-    /// converted into a symbol if so required.
+    ///   converted into a symbol if so required.
     ///
     /// - A string that can be parsed as a number according to [RFC7159] will be converted to a
-    /// ubyte, ushort, uint, ulong, byte, short, int, or long if so required and the number lies
-    /// within the domain of the given AMQP type and represents an integral number
+    ///   ubyte, ushort, uint, ulong, byte, short, int, or long if so required and the number lies
+    ///   within the domain of the given AMQP type and represents an integral number
     ///
     /// - A string which can be parsed as a number according to [RFC7159] will be converted to an
-    /// float, double, decimal32, decimal64 or decimal128 if so required and the number lies within
-    /// the domain of the given AMQP type.
+    ///   float, double, decimal32, decimal64 or decimal128 if so required and the number lies within
+    ///   the domain of the given AMQP type.
     ///
     /// - A string which can be parsed as true or false according to [RFC7159] will be converted to
-    /// a boolean value if so required.
+    ///   a boolean value if so required.
     ///
     /// - A string which can be parsed as an array according to [RFC7159] will be converted into a
-    /// list (with the values type-converted into elements as necessary according to the same rules)
-    /// if so required.
+    ///   list (with the values type-converted into elements as necessary according to the same rules)
+    ///   if so required.
     ///
     /// - A string which can be parsed as an object according to [RFC7159] will be converted into a
-    /// map (with the values type-converted into map values as necessary according to the same
-    /// rules) if so required.
+    ///   map (with the values type-converted into map values as necessary according to the same
+    ///   rules) if so required.
     pub body: OrderedMap<String, Value>,
 }
 

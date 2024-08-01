@@ -409,7 +409,8 @@ impl<'a> ser::SerializeSeq for SeqSerializer<'a> {
     where
         T: serde::Serialize + ?Sized,
     {
-        let val: Value = value.serialize(self.as_mut())?;
+        let mut se = Serializer::new();
+        let val: Value = value.serialize(&mut se)?;
         self.vec.push(val);
         Ok(())
     }
@@ -431,7 +432,8 @@ impl<'a> ser::SerializeTuple for SeqSerializer<'a> {
     where
         T: serde::Serialize + ?Sized,
     {
-        let val = value.serialize(self.as_mut())?;
+        let mut se = Serializer::new();
+        let val = value.serialize(&mut se)?;
         self.vec.push(val);
         Ok(())
     }
@@ -700,8 +702,9 @@ impl<'a> ser::SerializeMap for MapSerializer<'a> {
         K: serde::Serialize + ?Sized,
         V: serde::Serialize + ?Sized,
     {
-        let key = key.serialize(self.as_mut())?;
-        let value = value.serialize(self.as_mut())?;
+        let mut se = Serializer::new();
+        let key = key.serialize(&mut se)?;
+        let value = value.serialize(&mut se)?;
         self.map.insert(key, value);
         Ok(())
     }
@@ -769,7 +772,8 @@ impl<'a> ser::SerializeTupleVariant for VariantSerializer<'a> {
     where
         T: serde::Serialize + ?Sized,
     {
-        let value = value.serialize(self.as_mut())?;
+        let mut se = Serializer::new();
+        let value = value.serialize(&mut se)?;
         self.buf.push(value);
         Ok(())
     }
@@ -1032,5 +1036,61 @@ mod tests {
                 value: Value::List(vec![])
             }))
         )
+    }
+
+    #[cfg(feature = "derive")]
+    #[test]
+    fn test_serialize_nested_composite_some() {
+        use crate::primitives::Symbol;
+        #[derive(Debug, Clone, Default, DeserializeComposite, SerializeComposite)]
+        #[amqp_contract(
+            name = "amqp:source:list",
+            code = "0x0000_0000:0x0000_0028",
+            encoding = "list",
+            rename_all = "kebab-case"
+        )]
+        pub struct Source {
+            pub address: Option<String>,
+            pub capabilities: Option<Array<Symbol>>,
+        }
+
+        #[derive(Debug, Clone, Default, DeserializeComposite, SerializeComposite)]
+        #[amqp_contract(
+            name = "amqp:target:list",
+            code = "0x0000_0000:0x0000_0029",
+            encoding = "list",
+            rename_all = "kebab-case"
+        )]
+        pub struct Target {
+            pub address: Option<String>,
+            pub capabilities: Option<Array<Symbol>>,
+        }
+
+        #[derive(Debug, Clone, DeserializeComposite, SerializeComposite)]
+        #[amqp_contract(
+            name = "amqp:attach:list",
+            code = "0x0000_0000:0x0000_0012",
+            encoding = "list",
+            rename_all = "kebab-case"
+        )]
+        pub struct Attach {
+            pub source: Option<Source>,
+            pub target: Option<Target>,
+        }
+
+        let source = Source {
+            capabilities: Some(Array(Vec::new())),
+            ..Default::default()
+        };
+        let target = Target {
+            address: Some(String::from("some random address")),
+            capabilities: Some(Array(vec![Symbol::from("x-azure-relay")])),
+        };
+
+        let frame = Attach {
+            source: Some(source),
+            target: Some(target),
+        };
+        assert!(to_value(&frame).is_ok());
     }
 }
