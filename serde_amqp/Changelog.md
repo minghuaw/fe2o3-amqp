@@ -1,5 +1,9 @@
 # Change Log
 
+## 0.11.1
+
+1. Fixed a bug with value serializer that doesn't handle nested composite type properly
+
 ## 0.11.0
 
 1. Removed deprecated `remove` and `remove_entry` in `OrderedMap`
