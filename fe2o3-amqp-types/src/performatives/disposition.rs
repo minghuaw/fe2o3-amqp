@@ -44,6 +44,7 @@ pub struct Disposition {
 }
 
 #[cfg(test)]
+#[allow(clippy::all)]
 mod tests {
     use serde_amqp::{from_slice, primitives::Boolean, to_vec};
 

@@ -1085,7 +1085,6 @@ mod tests {
         let target = Target {
             address: Some(String::from("some random address")),
             capabilities: Some(Array(vec![Symbol::from("x-azure-relay")])),
-            ..Default::default()
         };
 
         let frame = Attach {
