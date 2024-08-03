@@ -26,7 +26,7 @@ cfg_scram! {
     pub(crate) const SCRAM_SHA_512: &str = "SCRAM-SHA-512";
 }
 
-// pub const EXTERN: Symbol = Symbol::from("EXTERNAL");
+pub(crate) const EXTERNAL: &str = "EXTERNAL";
 pub(crate) const ANONYMOUS: &str = "ANONYMOUS";
 pub(crate) const PLAIN: &str = "PLAIN";
 
@@ -42,6 +42,9 @@ pub(crate) enum Negotiation {
 pub enum SaslProfile {
     /// SASL profile for ANONYMOUS mechanism
     Anonymous,
+
+    /// SASL profile for EXTERNAL mechanism
+    External,
 
     /// SASL profile for PLAIN mechanism
     Plain {
@@ -106,6 +109,7 @@ impl SaslProfile {
     pub(crate) fn mechanism(&self) -> Symbol {
         let value = match self {
             SaslProfile::Anonymous => ANONYMOUS,
+            SaslProfile::External => EXTERNAL,            
             SaslProfile::Plain {
                 username: _,
                 password: _,
@@ -123,6 +127,7 @@ impl SaslProfile {
     pub(crate) fn initial_response(&mut self) -> Option<Binary> {
         match self {
             SaslProfile::Anonymous => None,
+            SaslProfile::External => None,            
             SaslProfile::Plain { username, password } => {
                 let username = username.as_bytes();
                 let password = password.as_bytes();
@@ -175,7 +180,7 @@ impl SaslProfile {
                 }
             }
             Frame::Challenge(challenge) => match self {
-                SaslProfile::Anonymous | SaslProfile::Plain { .. } => Err(Error::NotImplemented(
+                SaslProfile::Anonymous | SaslProfile::External | SaslProfile::Plain { .. } => Err(Error::NotImplemented(
                     Some("SASL Challenge is not implemented for ANONYMOUS or PLAIN.".to_string()),
                 )),
                 #[cfg(feature = "scram")]
@@ -194,7 +199,7 @@ impl SaslProfile {
             },
             Frame::Outcome(outcome) => {
                 match self {
-                    SaslProfile::Anonymous | SaslProfile::Plain { .. } => {}
+                    SaslProfile::Anonymous | SaslProfile::External | SaslProfile::Plain { .. } => {}
                     #[cfg(feature = "scram")]
                     SaslProfile::ScramSha1(SaslScramSha1 { client })
                     | SaslProfile::ScramSha256(SaslScramSha256 { client })
