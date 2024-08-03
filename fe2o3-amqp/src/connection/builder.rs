@@ -1260,11 +1260,15 @@ cfg_not_wasm32! {
                 // Url info will override the builder fields
                 // only override if value exists
                 self.scheme = url.scheme();
-                if let Some(hostname) = url.host_str() {
-                    self.hostname = Some(hostname);
+                if self.hostname.is_none() {
+                    if let Some(hostname) = url.host_str() {
+                        self.hostname = Some(hostname);
+                    }
                 }
-                if let Some(domain) = url.domain() {
-                    self.domain = Some(domain);
+                if self.domain.is_none() {
+                    if let Some(domain) = url.domain() {
+                        self.domain = Some(domain);
+                    }
                 }
                 if let Ok(profile) = SaslProfile::try_from(&url) {
                     self.sasl_profile = Some(profile);
