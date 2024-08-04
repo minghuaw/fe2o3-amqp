@@ -227,7 +227,7 @@ impl Receiver {
     ) -> Result<Receiver, ReceiverAttachError> {
         Self::builder()
             .name(name)
-            .source(addr)
+            .source(Some(addr))
             .attach(session)
             .await
     }

@@ -159,14 +159,13 @@ impl<Role, T> Default for Builder<Role, T, WithoutName, WithoutSource, WithoutTa
 
 impl<T> Builder<role::SenderMarker, T, WithoutName, WithSource, WithoutTarget> {
     pub(crate) fn new() -> Self {
-        Builder::<role::SenderMarker, T, _, _, _>::default().source(Source::builder().build())
+        Builder::<role::SenderMarker, T, _, _, _>::default().source(Option::<Source>::None)
     }
 }
 
 impl Builder<role::ReceiverMarker, Target, WithoutName, WithoutSource, WithTarget> {
     pub(crate) fn new() -> Self {
-        Builder::<role::ReceiverMarker, Target, _, _, _>::default()
-            .target(Target::builder().build())
+        Builder::<role::ReceiverMarker, Target, _, _, _>::default().target(Option::<Target>::None)
     }
 }
 
@@ -275,12 +274,17 @@ impl<Role, T, NameState, SS, TS> Builder<Role, T, NameState, SS, TS> {
     }
 
     /// The source for messages
-    pub fn source(self, source: impl Into<Source>) -> Builder<Role, T, NameState, WithSource, TS> {
+    pub fn source(
+        self,
+        source: Option<impl Into<Source>>,
+    ) -> Builder<Role, T, NameState, WithSource, TS> {
+        let source = source.map(|s| s.into());
+
         Builder {
             name: self.name,
             snd_settle_mode: self.snd_settle_mode,
             rcv_settle_mode: self.rcv_settle_mode,
-            source: Some(source.into()),
+            source,
             target: self.target,
             initial_delivery_count: self.initial_delivery_count,
             max_message_size: self.max_message_size,
@@ -304,14 +308,16 @@ impl<Role, T, NameState, SS, TS> Builder<Role, T, NameState, SS, TS> {
     /// The target for messages
     pub fn target(
         self,
-        target: impl Into<Target>,
+        target: Option<impl Into<Target>>,
     ) -> Builder<Role, Target, NameState, SS, WithTarget> {
+        let target = target.map(|t| t.into());
+
         Builder {
             name: self.name,
             snd_settle_mode: self.snd_settle_mode,
             rcv_settle_mode: self.rcv_settle_mode,
             source: self.source,
-            target: Some(target.into()), // setting target
+            target, // setting target
             initial_delivery_count: self.initial_delivery_count,
             max_message_size: self.max_message_size,
             offered_capabilities: self.offered_capabilities,

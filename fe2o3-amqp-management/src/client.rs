@@ -181,7 +181,7 @@ impl MgmtClientBuilder {
     ) -> Result<MgmtClient, AttachError> {
         let mut sender_builder = Sender::builder()
             .name(format!("{}-mgmt-sender", self.client_node_addr))
-            .target(&self.mgmt_node_addr);
+            .target(Some(&self.mgmt_node_addr));
         if let Some(properties) = self.sender_properties {
             sender_builder = sender_builder.properties(properties);
         }
@@ -189,8 +189,8 @@ impl MgmtClientBuilder {
 
         let mut receiver_builder = Receiver::builder()
             .name(format!("{}-mgmt-receiver", self.client_node_addr))
-            .source(self.mgmt_node_addr)
-            .target(&self.client_node_addr);
+            .source(Some(self.mgmt_node_addr))
+            .target(Some(&self.client_node_addr));
         if let Some(properties) = self.receiver_properties {
             receiver_builder = receiver_builder.properties(properties);
         }

@@ -196,7 +196,7 @@ impl Sender {
     ) -> Result<Sender, SenderAttachError> {
         Self::builder()
             .name(name)
-            .target(addr)
+            .target(Some(addr))
             .attach(session)
             .await
     }
