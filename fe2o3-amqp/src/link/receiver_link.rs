@@ -525,7 +525,7 @@ impl<T> ReceiverLink<T> {
                     available: None,
                     drain,
                     echo,
-                    properties: guard.properties.clone(),
+                    properties: None
                 }
             }
             (Some(link_credit), None) => {
@@ -543,7 +543,7 @@ impl<T> ReceiverLink<T> {
                     available: None,
                     drain: guard.drain,
                     echo,
-                    properties: guard.properties.clone(),
+                    properties: None
                 }
             }
             (None, Some(drain)) => {
@@ -561,7 +561,7 @@ impl<T> ReceiverLink<T> {
                     available: None,
                     drain,
                     echo,
-                    properties: guard.properties.clone(),
+                    properties: None
                 }
             }
             (None, None) => {
@@ -578,7 +578,7 @@ impl<T> ReceiverLink<T> {
                     available: None,
                     drain: guard.drain,
                     echo,
-                    properties: guard.properties.clone(),
+                    properties: None
                 }
             }
         }
