@@ -203,22 +203,12 @@ mod tests {
                                 ))
                             }
                         };
-                        let last: Option<DeliveryNumber> = match __seq.next_element()? {
-                            Some(val) => val,
-                            None => None,
-                        };
-                        let settled: Boolean = match __seq.next_element()? {
-                            Some(val) => val,
-                            None => Default::default(),
-                        };
-                        let state: Option<DeliveryState> = match __seq.next_element()? {
-                            Some(val) => val,
-                            None => None,
-                        };
-                        let batchable: Boolean = match __seq.next_element()? {
-                            Some(val) => val,
-                            None => Default::default(),
-                        };
+                        let last: Option<DeliveryNumber> =
+                            (__seq.next_element()?).unwrap_or_default();
+                        let settled: Boolean = (__seq.next_element()?).unwrap_or_default();
+                        let state: Option<DeliveryState> =
+                            (__seq.next_element()?).unwrap_or_default();
+                        let batchable: Boolean = (__seq.next_element()?).unwrap_or_default();
                         Ok(Disposition {
                             role,
                             first,
@@ -331,22 +321,10 @@ mod tests {
                                 ))
                             }
                         };
-                        let last: Option<DeliveryNumber> = match last {
-                            Some(val) => val,
-                            None => None,
-                        };
-                        let settled: Boolean = match settled {
-                            Some(val) => val,
-                            None => Default::default(),
-                        };
-                        let state: Option<DeliveryState> = match state {
-                            Some(val) => val,
-                            None => None,
-                        };
-                        let batchable: Boolean = match batchable {
-                            Some(val) => val,
-                            None => Default::default(),
-                        };
+                        let last: Option<DeliveryNumber> = last.unwrap_or_default();
+                        let settled: Boolean = settled.unwrap_or_default();
+                        let state: Option<DeliveryState> = state.unwrap_or_default();
+                        let batchable: Boolean = batchable.unwrap_or_default();
                         Ok(Disposition {
                             role,
                             first,
