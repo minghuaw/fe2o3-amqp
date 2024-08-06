@@ -7,6 +7,7 @@
 1. The `properties` field in the `Flow` performative is no longer included by default.
    A new function `Receiver::send_properties` is added to allow user to explicitly send
    the properties.
+2. Changed returns types of `TransactionAcquistion` methods
 
 ### Minor
 
