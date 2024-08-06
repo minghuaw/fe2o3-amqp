@@ -1,20 +1,34 @@
 # Change Log
 
+## 0.12.0
+
+### Breaking
+
+1. The `properties` field in the `Flow` performative is no longer included by default.
+   A new function `Receiver::send_properties` is added to allow user to explicitly send
+   the properties.
+
+### Minor
+
+1. Fixed typo in the docs
+
 ## 0.11.1
 
 1. Fixed typo in documentation
 
 ## 0.11.0
 
-### Breaking changes
+### Breaking
 
-1. Corrected typo in the name of `SessionBuilder::outgoing_widnow` and `SessionAcceptor::outgoing_widnow`, they are now `SessionBuilder::outgoing_window` and `SessionAcceptor::outgoing_window`.
+1. Corrected typo in the name of `SessionBuilder::outgoing_widnow` and
+   `SessionAcceptor::outgoing_widnow`, they are now `SessionBuilder::outgoing_window`
+   and `SessionAcceptor::outgoing_window`.
 2. Updated dependencies
    1. base64
    2. rustls, tokio-rustls
 3. Removed deprecated functions
 
-### Minor changes
+### Minor
 
 1. Fixed typo in documentation
 
