@@ -24,7 +24,17 @@ use crate::{
 };
 
 use super::{
-    builder::{self, WithTarget, WithoutName, WithoutSource}, delivery::{Delivery, DeliveryInfo}, error::DetachError, incomplete_transfer::IncompleteTransfer, receiver_link::count_number_of_sections_and_offset, role, shared_inner::{LinkEndpointInner, LinkEndpointInnerDetach, LinkEndpointInnerReattach}, ArcReceiverUnsettledMap, DetachThenResumeReceiverError, DispositionError, FlowError, IllegalLinkStateError, LinkFrame, LinkRelay, LinkStateError, ReceiverAttachError, ReceiverAttachExchange, ReceiverFlowState, ReceiverLink, ReceiverResumeError, ReceiverResumeErrorKind, ReceiverTransferError, RecvError, DEFAULT_CREDIT
+    builder::{self, WithTarget, WithoutName, WithoutSource},
+    delivery::{Delivery, DeliveryInfo},
+    error::DetachError,
+    incomplete_transfer::IncompleteTransfer,
+    receiver_link::count_number_of_sections_and_offset,
+    role,
+    shared_inner::{LinkEndpointInner, LinkEndpointInnerDetach, LinkEndpointInnerReattach},
+    ArcReceiverUnsettledMap, DetachThenResumeReceiverError, DispositionError, FlowError,
+    IllegalLinkStateError, LinkFrame, LinkRelay, LinkStateError, ReceiverAttachError,
+    ReceiverAttachExchange, ReceiverFlowState, ReceiverLink, ReceiverResumeError,
+    ReceiverResumeErrorKind, ReceiverTransferError, RecvError, DEFAULT_CREDIT,
 };
 
 cfg_transaction! {
@@ -1105,7 +1115,9 @@ where
     /// Send the properties of the link via a Flow frame
     #[inline]
     pub async fn send_properties(&self) -> Result<(), FlowError> {
-        self.link.send_flow(&self.outgoing, None, None, false, true).await
+        self.link
+            .send_flow(&self.outgoing, None, None, false, true)
+            .await
     }
 }
 

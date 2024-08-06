@@ -68,7 +68,12 @@ pub(crate) struct LinkFlowStateInner {
 }
 
 impl LinkFlowStateInner {
-    pub fn as_link_flow(&self, output_handle: OutputHandle, echo: bool, include_properties: bool) -> LinkFlow {
+    pub fn as_link_flow(
+        &self,
+        output_handle: OutputHandle,
+        echo: bool,
+        include_properties: bool,
+    ) -> LinkFlow {
         let properties = if include_properties {
             self.properties.clone()
         } else {
