@@ -1,6 +1,4 @@
-use fe2o3_amqp::{
-    connection::Connection, link::Sender, session::Session, types::primitives::Value, Delivery, sasl_profile::SaslProfile,
-};
+use fe2o3_amqp::{connection::Connection, link::Sender, session::Session};
 use fe2o3_amqp_ws::WebSocketStream;
 use tracing::Level;
 use tracing_subscriber::FmtSubscriber;
@@ -13,11 +11,9 @@ async fn main() {
 
     tracing::subscriber::set_global_default(subscriber).expect("setting default subscriber failed");
 
-    let (ws_stream, response) = WebSocketStream::connect("ws://localhost:5673")
+    let ws_stream = WebSocketStream::connect("ws://localhost:5673")
         .await
         .unwrap();
-
-    println!("{:?}", response);
 
     let mut connection = Connection::builder()
         .container_id("connection-1")

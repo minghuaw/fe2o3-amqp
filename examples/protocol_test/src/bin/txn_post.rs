@@ -1,5 +1,7 @@
 use fe2o3_amqp::{
-    sasl_profile::SaslProfile, transaction::{Transaction, Controller, TransactionDischarge}, Connection, Sender, Session, types::transaction::Coordinator,
+    sasl_profile::SaslProfile,
+    transaction::{Controller, Transaction, TransactionDischarge},
+    Connection, Sender, Session,
 };
 use tokio::net::TcpStream;
 use tracing::Level;
@@ -43,24 +45,21 @@ async fn main() {
     let mut sender = Sender::attach(&mut session, "rust-sender-link-1", "q1")
         .await
         .unwrap();
-    let mut controller = Controller::attach(&mut session, "controller-1").await.unwrap();
-        
-
-    // Commit
-    let mut txn1 = Transaction::declare(&mut controller, None)
+    let mut controller = Controller::attach(&mut session, "controller-1")
         .await
         .unwrap();
+
+    // Commit
+    let txn1 = Transaction::declare(&mut controller, None).await.unwrap();
     txn1.post(&mut sender, "hello").await.unwrap();
     txn1.post(&mut sender, "world").await.unwrap();
     txn1.commit().await.unwrap();
 
     // Rollback
-    let mut txn2 = Transaction::declare(&mut controller, None)
-    .await
-    .unwrap();
+    let txn2 = Transaction::declare(&mut controller, None).await.unwrap();
     txn2.post(&mut sender, "foo").await.unwrap();
     txn2.rollback().await.unwrap();
-    
+
     controller.close().await.unwrap();
     sender.close().await.unwrap();
     session.close().await.unwrap();

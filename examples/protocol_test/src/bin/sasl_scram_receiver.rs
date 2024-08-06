@@ -1,4 +1,4 @@
-use fe2o3_amqp::{Connection, sasl_profile::{SaslProfile, scram::{SaslScramSha1, SaslScramSha256}}, Session, Receiver};
+use fe2o3_amqp::{sasl_profile::scram::SaslScramSha256, Connection, Receiver, Session};
 
 #[tokio::main]
 async fn main() {
@@ -13,7 +13,7 @@ async fn main() {
         .await
         .unwrap();
     let mut session = Session::begin(&mut connection).await.unwrap();
-    let mut receiver = Receiver::attach(&mut session, "rust-recver-1", "q1")
+    let receiver = Receiver::attach(&mut session, "rust-recver-1", "q1")
         .await
         .unwrap();
 

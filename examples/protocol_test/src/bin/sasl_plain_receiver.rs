@@ -1,5 +1,8 @@
 use fe2o3_amqp::{
-    connection::Connection, link::Receiver, session::Session, types::primitives::Value,
+    connection::Connection,
+    link::Receiver,
+    session::Session,
+    types::{messaging::Body, primitives::Value},
 };
 use tracing::Level;
 use tracing_subscriber::FmtSubscriber;
@@ -31,7 +34,7 @@ async fn main() {
     receiver.accept(&delivery).await.unwrap();
     println!("{:?}", delivery);
 
-    let delivery = receiver.recv::<Value>().await.unwrap();
+    let delivery = receiver.recv::<Body<Value>>().await.unwrap();
     receiver.accept(&delivery).await.unwrap();
     println!("{:?}", delivery.body());
     println!("{:?}", delivery.body().is_data());

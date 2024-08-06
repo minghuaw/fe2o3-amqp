@@ -1,6 +1,8 @@
 use fe2o3_amqp::{
-    sasl_profile::SaslProfile, transaction::{Transaction, Controller}, types::primitives::Value, Connection,
-    Delivery, Receiver, Session,
+    sasl_profile::SaslProfile,
+    transaction::{Controller, Transaction},
+    types::{messaging::Body, primitives::Value},
+    Connection, Delivery, Receiver, Session,
 };
 use tokio::net::TcpStream;
 use tracing::Level;
@@ -44,15 +46,15 @@ async fn main() {
     let mut receiver = Receiver::attach(&mut session, "rust-recver-1", "q1")
         .await
         .unwrap();
-    let mut controller = Controller::attach(&mut session, "controller-1").await.unwrap();
-
-    // Transactionally retiring
-    let txn = Transaction::declare(&mut controller, None)
+    let mut controller = Controller::attach(&mut session, "controller-1")
         .await
         .unwrap();
+
+    // Transactionally retiring
+    let txn = Transaction::declare(&mut controller, None).await.unwrap();
     let mut txn_acq = txn.acquire(&mut receiver, 2).await.unwrap();
-    let delivery1: Delivery<Value> = txn_acq.recv().await.unwrap();
-    let delivery2: Delivery<Value> = txn_acq.recv().await.unwrap();
+    let delivery1: Delivery<Body<Value>> = txn_acq.recv().await.unwrap();
+    let delivery2: Delivery<Body<Value>> = txn_acq.recv().await.unwrap();
     txn_acq.accept(&delivery1).await.unwrap();
     txn_acq.accept(&delivery2).await.unwrap();
     txn_acq.commit().await.unwrap();

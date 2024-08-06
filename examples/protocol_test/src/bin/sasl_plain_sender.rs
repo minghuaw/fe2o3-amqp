@@ -1,6 +1,6 @@
+use fe2o3_amqp::types::messaging::Data;
 use fe2o3_amqp::types::messaging::Message;
 use fe2o3_amqp::types::primitives::Binary;
-use fe2o3_amqp::types::primitives::Value;
 use fe2o3_amqp::Connection;
 use fe2o3_amqp::Sender;
 use fe2o3_amqp::Session;
@@ -32,7 +32,7 @@ async fn main() {
 
     struct Foo {}
 
-    impl From<Foo> for Message<Value> {
+    impl From<Foo> for Message<Data> {
         fn from(_: Foo) -> Self {
             Message::builder().data(Binary::from("Foo")).build()
         }

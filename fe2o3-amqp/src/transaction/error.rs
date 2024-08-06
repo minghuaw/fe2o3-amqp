@@ -128,6 +128,17 @@ impl From<SendError> for ControllerSendError {
     }
 }
 
+impl From<IllegalLinkStateError> for ControllerSendError {
+    fn from(value: IllegalLinkStateError) -> Self {
+        match value {
+            IllegalLinkStateError::IllegalState => LinkStateError::IllegalState.into(),
+            IllegalLinkStateError::IllegalSessionState => {
+                LinkStateError::IllegalSessionState.into()
+            }
+        }
+    }
+}
+
 /// Errors with declaring an OwnedTransaction
 #[derive(Debug, thiserror::Error)]
 pub enum OwnedDeclareError {

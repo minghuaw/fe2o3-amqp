@@ -2,9 +2,13 @@ use fe2o3_amqp::{
     acceptor::{
         link::{LinkAcceptor, LinkEndpoint},
         session::{ListenerSessionHandle, SessionAcceptor},
-        ConnectionAcceptor, ListenerConnectionHandle, SupportedReceiverSettleModes, SupportedSenderSettleModes,
+        ConnectionAcceptor, ListenerConnectionHandle, SupportedReceiverSettleModes,
+        SupportedSenderSettleModes,
     },
-    types::{primitives::Value, definitions::{ReceiverSettleMode, SenderSettleMode}},
+    types::{
+        definitions::{ReceiverSettleMode, SenderSettleMode},
+        primitives::Value,
+    },
 };
 use tokio::net::TcpListener;
 use tracing::{error, info, instrument, Level};
@@ -28,8 +32,7 @@ async fn session_main(mut session: ListenerSessionHandle) {
             Some(source)
         })
         .build();
-        
-        
+
     let mut handles = Vec::new();
 
     while let Ok(link) = link_acceptor.accept(&mut session).await {

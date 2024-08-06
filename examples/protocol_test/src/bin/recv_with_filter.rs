@@ -1,5 +1,7 @@
-
-use fe2o3_amqp::{Connection, Session, types::{messaging::Source, primitives::Value}, Receiver};
+use fe2o3_amqp::{
+    types::{messaging::Source, primitives::Value},
+    Connection, Receiver, Session,
+};
 use fe2o3_amqp_ext::filters::SelectorFilter;
 use tracing::Level;
 use tracing_subscriber::FmtSubscriber;

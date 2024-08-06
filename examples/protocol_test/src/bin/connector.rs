@@ -3,6 +3,7 @@ use std::time::Duration;
 use fe2o3_amqp::{
     types::{
         definitions::{ReceiverSettleMode, SenderSettleMode},
+        messaging::Body,
         primitives::Value,
     },
     Connection, Delivery, Receiver, Sender, Session,
@@ -39,7 +40,7 @@ async fn client_main() {
     let mut receiver = Receiver::attach(&mut session, "receiver-1", "q1")
         .await
         .unwrap();
-    let delivery: Delivery<Value> = receiver.recv().await.unwrap();
+    let delivery: Delivery<Body<Value>> = receiver.recv().await.unwrap();
     tracing::info!(message = ?delivery.message());
     receiver.accept(&delivery).await.unwrap();
 
