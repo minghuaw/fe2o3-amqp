@@ -79,7 +79,7 @@ pub enum Error {
     StatusCodeNotFound,
 
     /// Error with decoding from message
-    #[error("Error decoding from message")]
+    #[error("Decode error: {:?}", .0)]
     DecodeError(Option<InvalidType>),
 
     /// Status code is different from expected
