@@ -474,7 +474,7 @@ impl<'t> Transaction<'t> {
         match recver
             .inner
             .link
-            .send_flow(&recver.inner.outgoing, Some(credit), None, false)
+            .send_flow(&recver.inner.outgoing, Some(credit), None, false, false)
             .await
         {
             Ok(_) => Ok(TxnAcquisition { txn: self, recver }),

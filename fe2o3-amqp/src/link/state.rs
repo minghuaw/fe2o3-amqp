@@ -68,7 +68,18 @@ pub(crate) struct LinkFlowStateInner {
 }
 
 impl LinkFlowStateInner {
-    pub fn as_link_flow(&self, output_handle: OutputHandle, echo: bool) -> LinkFlow {
+    pub fn as_link_flow(
+        &self,
+        output_handle: OutputHandle,
+        echo: bool,
+        include_properties: bool,
+    ) -> LinkFlow {
+        let properties = if include_properties {
+            self.properties.clone()
+        } else {
+            None
+        };
+
         LinkFlow {
             handle: output_handle.into(),
             delivery_count: Some(self.delivery_count),
@@ -76,7 +87,7 @@ impl LinkFlowStateInner {
             available: Some(self.available),
             drain: self.drain,
             echo,
-            properties: self.properties.clone(),
+            properties,
         }
     }
 }
@@ -167,12 +178,12 @@ impl LinkFlowState<role::SenderMarker> {
             state.delivery_count = state.delivery_count.wrapping_add(state.link_credit);
             state.link_credit = 0;
 
-            return Some(state.as_link_flow(output_handle, false));
+            return Some(state.as_link_flow(output_handle, false, false));
         }
 
         match flow.echo {
             // Should avoid constant ping-pong
-            true => Some(state.as_link_flow(output_handle, false)),
+            true => Some(state.as_link_flow(output_handle, false, false)),
             false => None,
         }
     }
@@ -224,7 +235,7 @@ impl LinkFlowState<role::ReceiverMarker> {
         // last known value indicated by the receiver.
 
         match flow.echo {
-            true => Some(state.as_link_flow(output_handle, false)),
+            true => Some(state.as_link_flow(output_handle, false, false)),
             false => None,
         }
     }
