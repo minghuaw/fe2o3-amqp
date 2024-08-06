@@ -31,8 +31,8 @@ impl<'s> SliceReader<'s> {
 impl<'s> private::Sealed for SliceReader<'s> {}
 
 impl<'s> Read<'s> for SliceReader<'s> {
-    fn peek(&mut self) -> Result<Option<u8>, io::Error> {
-        Ok(self.slice.first().copied())
+    fn peek(&mut self) -> Option<u8> {
+        self.slice.first().copied()
     }
 
     fn peek_bytes(&mut self, n: usize) -> Result<Option<&[u8]>, io::Error> {
@@ -93,9 +93,9 @@ mod tests {
         let slice = SHORT_BUFFER;
         let mut reader = SliceReader::new(slice);
 
-        let peek0 = reader.peek().unwrap().unwrap();
-        let peek1 = reader.peek().unwrap().unwrap();
-        let peek2 = reader.peek().unwrap().unwrap();
+        let peek0 = reader.peek().unwrap();
+        let peek1 = reader.peek().unwrap();
+        let peek2 = reader.peek().unwrap();
 
         assert_eq!(peek0, slice[0]);
         assert_eq!(peek1, slice[0]);
@@ -108,7 +108,7 @@ mod tests {
         let mut reader = SliceReader::new(slice);
 
         for i in 0..slice.len() {
-            let peek = reader.peek().unwrap().unwrap();
+            let peek = reader.peek().unwrap();
             let next = reader.next().unwrap().unwrap();
 
             assert_eq!(peek, slice[i]);
@@ -118,7 +118,7 @@ mod tests {
         let peek_none = reader.peek();
         let next_none = reader.next();
 
-        assert!(matches!(peek_none, Ok(None)) || peek_none.is_err());
+        assert!(peek_none.is_none());
         assert!(matches!(next_none, Ok(None)) || next_none.is_err());
     }
 
@@ -156,7 +156,7 @@ mod tests {
         let peek_none = reader.peek();
         let next_none = reader.next();
 
-        assert!(peek_none.is_err() || matches!(peek_none, Ok(None)));
+        assert!(peek_none.is_none());
         assert!(next_none.is_err() || matches!(next_none, Ok(None)));
     }
 
@@ -165,7 +165,7 @@ mod tests {
         let slice = LONG_BUFFER;
         let mut reader = SliceReader::new(slice);
 
-        let peek0 = reader.peek().unwrap().unwrap();
+        let peek0 = reader.peek().unwrap();
         assert_eq!(peek0, slice[0]);
 
         // Read first 10 bytes
@@ -189,7 +189,7 @@ mod tests {
         let slice = SHORT_BUFFER;
         let mut reader = SliceReader::new(slice);
 
-        let peek0 = reader.peek().unwrap().unwrap();
+        let peek0 = reader.peek().unwrap();
         assert_eq!(peek0, slice[0]);
 
         // Read first 10 bytes
@@ -200,7 +200,7 @@ mod tests {
         let peek_err = reader.peek();
         let next_err = reader.next();
 
-        assert!(peek_err.is_err() || matches!(peek_err, Ok(None)));
+        assert!(peek_err.is_none());
         assert!(next_err.is_err() || matches!(next_err, Ok(None)));
     }
 }

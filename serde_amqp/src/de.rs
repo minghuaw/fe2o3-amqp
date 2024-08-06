@@ -76,7 +76,7 @@ impl<'de, R: Read<'de>> Deserializer<R> {
     fn get_elem_code_or_peek_byte(&mut self) -> Option<Result<u8, Error>> {
         match &self.elem_format_code {
             Some(c) => Some(Ok(c.clone() as u8)),
-            None => self.reader.peek().map_err(Into::into).transpose(),
+            None => self.reader.peek().map(Ok),
         }
     }
 
@@ -1248,7 +1248,7 @@ where
         // The deserializer will only peek the next u8
         let code = self
             .reader
-            .peek()?
+            .peek()
             .ok_or_else(|| Error::unexpected_eof(""))?;
         match code.try_into()? {
             EncodingCodes::DescribedType => self.parse_described_identifier(visitor),
@@ -1368,7 +1368,7 @@ impl<'a, 'de, R: Read<'de>> de::SeqAccess<'de> for TransparentVecAccess<'a, R> {
     where
         T: de::DeserializeSeed<'de>,
     {
-        match self.de.reader.peek()?.map(|b| b.try_into()).transpose()? {
+        match self.de.reader.peek().map(|b| b.try_into()).transpose()? {
             Some(EncodingCodes::DescribedType) => {
                 let peek = PeekDescriptor::deserialize(self.as_mut())?;
                 let peek = PeekTypeCode::Composite(peek);
@@ -1648,7 +1648,7 @@ impl<'a, 'de, R: Read<'de>> de::SeqAccess<'de> for DescribedAccess<'a, R> {
         if self.counter >= self.field_count {
             return Ok(None);
         }
-        let byte = match self.de.reader.peek()? {
+        let byte = match self.de.reader.peek() {
             Some(b) => b,
             None => return Ok(None),
         };
@@ -1686,7 +1686,7 @@ impl<'a, 'de, R: Read<'de>> de::MapAccess<'de> for DescribedAccess<'a, R> {
         if self.counter >= self.field_count {
             return Ok(None);
         }
-        let byte = match self.de.reader.peek()? {
+        let byte = match self.de.reader.peek() {
             Some(b) => b,
             None => return Ok(None),
         };
@@ -1737,7 +1737,7 @@ impl<'a, 'de, R: Read<'de>> de::MapAccess<'de> for DescribedAccess<'a, R> {
         if self.counter >= self.field_count {
             return Ok(None);
         }
-        let byte = match self.de.reader.peek()? {
+        let byte = match self.de.reader.peek() {
             Some(b) => b,
             None => return Ok(None),
         };

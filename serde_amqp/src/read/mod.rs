@@ -17,7 +17,7 @@ mod private {
 /// A custom Read trait for internal use
 pub trait Read<'de>: private::Sealed {
     /// Peek the next byte without consuming
-    fn peek(&mut self) -> Result<Option<u8>, io::Error>;
+    fn peek(&mut self) -> Option<u8>;
 
     /// Read the next byte
     fn next(&mut self) -> Result<Option<u8>, io::Error>;

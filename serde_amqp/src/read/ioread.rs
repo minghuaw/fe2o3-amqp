@@ -45,14 +45,18 @@ impl<R: io::Read> IoReader<R> {
 impl<R: io::Read> private::Sealed for IoReader<R> {}
 
 impl<'de, R: io::Read + 'de> Read<'de> for IoReader<R> {
-    fn peek(&mut self) -> Result<Option<u8>, io::Error> {
+    fn peek(&mut self) -> Option<u8> {
         match self.buf.first() {
-            Some(b) => Ok(Some(*b)),
+            Some(b) => Some(*b),
             None => {
                 let mut buf = [0u8; 1];
-                self.reader.read_exact(&mut buf)?;
-                self.buf.push(buf[0]);
-                Ok(Some(buf[0]))
+                match self.reader.read_exact(&mut buf) {
+                    Ok(_) => {
+                        self.buf.push(buf[0]);
+                        Some(buf[0])
+                    }
+                    Err(_) => None,
+                }
             }
         }
     }
@@ -136,9 +140,9 @@ mod tests {
         let reader = SHORT_BUFFER;
         let mut io_reader = IoReader::new(reader);
 
-        let peek0 = io_reader.peek().unwrap().unwrap();
-        let peek1 = io_reader.peek().unwrap().unwrap();
-        let peek2 = io_reader.peek().unwrap().unwrap();
+        let peek0 = io_reader.peek().unwrap();
+        let peek1 = io_reader.peek().unwrap();
+        let peek2 = io_reader.peek().unwrap();
 
         assert_eq!(peek0, reader[0]);
         assert_eq!(peek1, reader[0]);
@@ -151,7 +155,7 @@ mod tests {
         let mut io_reader = IoReader::new(reader);
 
         for i in 0..reader.len() {
-            let peek = io_reader.peek().unwrap().unwrap();
+            let peek = io_reader.peek().unwrap();
             let next = io_reader.next().unwrap().unwrap();
 
             assert_eq!(peek, reader[i]);
@@ -161,7 +165,7 @@ mod tests {
         let peek_none = io_reader.peek();
         let next_none = io_reader.next();
 
-        assert!(peek_none.is_err() || matches!(peek_none, Ok(None)));
+        assert!(peek_none.is_none());
         assert!(next_none.is_err() || matches!(next_none, Ok(None)));
     }
 
@@ -199,7 +203,7 @@ mod tests {
         let peek_none = io_reader.peek();
         let next_none = io_reader.next();
 
-        assert!(matches!(peek_none, Ok(None)) || peek_none.is_err());
+        assert!(peek_none.is_none());
         assert!(matches!(next_none, Ok(None)) || next_none.is_err());
     }
 
@@ -208,7 +212,7 @@ mod tests {
         let reader = LONG_BUFFER;
         let mut io_reader = IoReader::new(reader);
 
-        let peek0 = io_reader.peek().unwrap().unwrap();
+        let peek0 = io_reader.peek().unwrap();
         assert_eq!(peek0, reader[0]);
 
         // Read first 10 bytes
@@ -232,7 +236,7 @@ mod tests {
         let b = bytes::Bytes::from_static(SHORT_BUFFER);
         let mut io_reader = IoReader::new(b.reader());
 
-        let peek0 = io_reader.peek().unwrap().unwrap();
+        let peek0 = io_reader.peek().unwrap();
         assert_eq!(peek0, SHORT_BUFFER[0]);
 
         // Read first 10 bytes
@@ -243,7 +247,7 @@ mod tests {
         let peek_err = io_reader.peek();
         let next_err = io_reader.next();
 
-        assert!(matches!(peek_err, Ok(None)) || peek_err.is_err());
+        assert!(peek_err.is_none());
         assert!(matches!(next_err, Ok(None)) || next_err.is_err());
     }
 
