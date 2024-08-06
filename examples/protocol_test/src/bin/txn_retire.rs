@@ -1,6 +1,8 @@
 use fe2o3_amqp::{
-    sasl_profile::SaslProfile, transaction::{Transaction, Controller, TransactionalRetirement, TransactionDischarge}, types::primitives::Value, Connection,
-    Delivery, Receiver, Session,
+    sasl_profile::SaslProfile,
+    transaction::{Controller, Transaction, TransactionDischarge, TransactionalRetirement},
+    types::{messaging::Body, primitives::Value},
+    Connection, Delivery, Receiver, Session,
 };
 use tokio::net::TcpStream;
 use tracing::Level;
@@ -49,16 +51,14 @@ async fn main() {
         Ok(controller) => controller,
         Err(attach_error) => {
             tracing::error!(?attach_error);
-            return
-        },
+            return;
+        }
     };
 
-    let delivery: Delivery<Value> = receiver.recv().await.unwrap();
+    let delivery: Delivery<Body<Value>> = receiver.recv().await.unwrap();
 
     // Transactionally retiring
-    let mut txn = Transaction::declare(&mut controller, None)
-        .await
-        .unwrap();
+    let txn = Transaction::declare(&mut controller, None).await.unwrap();
     txn.accept(&mut receiver, &delivery).await.unwrap();
     txn.commit().await.unwrap();
 

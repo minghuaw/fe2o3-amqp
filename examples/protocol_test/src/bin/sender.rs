@@ -1,11 +1,6 @@
-use fe2o3_amqp::types::messaging::Message;
 use fe2o3_amqp::Connection;
 use fe2o3_amqp::Sender;
 use fe2o3_amqp::Session;
-use fe2o3_amqp::types::primitives::Binary;
-use fe2o3_amqp::types::primitives::Value;
-use tracing::Level;
-use tracing_subscriber::FmtSubscriber;
 
 #[tokio::main]
 async fn main() {

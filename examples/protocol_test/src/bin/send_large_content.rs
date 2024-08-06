@@ -1,9 +1,9 @@
-use std::{env, collections::VecDeque};
+use std::collections::VecDeque;
 
 use anyhow::{anyhow, Result};
 use fe2o3_amqp::{
     types::{
-        messaging::Message,
+        messaging::{AmqpValue, Message},
         primitives::{Binary, Symbol, Value},
     },
     Connection, Sender, Session,
@@ -82,6 +82,7 @@ impl TryFrom<Vec<String>> for TestSender {
 }
 
 #[derive(Debug)]
+#[allow(dead_code)]
 enum MessageSizeInMb {
     Binary(usize),
     String(usize),
@@ -156,14 +157,14 @@ struct MessageIter {
 }
 
 impl Iterator for MessageIter {
-    type Item = Message<Value>;
+    type Item = Message<AmqpValue<Value>>;
 
     fn next(&mut self) -> Option<Self::Item> {
         self.sizes.pop_front().map(|size| generate_message(size))
     }
 }
 
-fn generate_message(size: MessageSizeInMb) -> Message<Value> {
+fn generate_message(size: MessageSizeInMb) -> Message<AmqpValue<Value>> {
     match size {
         MessageSizeInMb::Binary(total_in_mb) => {
             let binary = Binary::from(vec![b'b'; total_in_mb * MEGABYTE]);
@@ -182,12 +183,12 @@ fn generate_message(size: MessageSizeInMb) -> Message<Value> {
             Message::builder().value(Value::Symbol(s)).build()
         }
         MessageSizeInMb::List {
-            total_size,
-            num_elem,
+            total_size: _,
+            num_elem: _,
         } => todo!(),
         MessageSizeInMb::Map {
-            total_size,
-            num_elem,
+            total_size: _,
+            num_elem: _,
         } => todo!(),
     }
 }

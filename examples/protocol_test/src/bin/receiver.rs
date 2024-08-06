@@ -1,12 +1,4 @@
-use fe2o3_amqp::{
-    connection::Connection,
-    link::Receiver,
-    sasl_profile::SaslProfile,
-    session::Session,
-    types::{primitives::Value, definitions::{ReceiverSettleMode, SenderSettleMode}},
-    Delivery,
-};
-use tokio::net::TcpStream;
+use fe2o3_amqp::{connection::Connection, link::Receiver, session::Session};
 use tracing::Level;
 use tracing_subscriber::FmtSubscriber;
 
@@ -20,9 +12,11 @@ async fn main() {
 
     tracing::info!("Starting connection");
     let mut connection = Connection::open(
-        "connection-1",                     // container id
-        "amqp://guest:guest@localhost:5672" // url
-    ).await.unwrap();
+        "connection-1",                      // container id
+        "amqp://guest:guest@localhost:5672", // url
+    )
+    .await
+    .unwrap();
 
     let mut session = Session::begin(&mut connection).await.unwrap();
 
@@ -30,8 +24,10 @@ async fn main() {
     let mut receiver = Receiver::attach(
         &mut session,
         "rust-receiver-link-1", // link name
-        "q1"                    // source address
-    ).await.unwrap();
+        "q1",                   // source address
+    )
+    .await
+    .unwrap();
 
     // Receive the message from the broker
     let delivery = receiver.recv::<String>().await.unwrap();

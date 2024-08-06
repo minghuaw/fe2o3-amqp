@@ -1,13 +1,14 @@
-use std::time::Duration;
-
 use fe2o3_amqp::{
     acceptor::{
-        ConnectionAcceptor, LinkAcceptor, LinkEndpoint, SessionAcceptor, ListenerConnectionHandle, ListenerSessionHandle, SupportedReceiverSettleModes,
+        ConnectionAcceptor, LinkAcceptor, LinkEndpoint, ListenerConnectionHandle,
+        ListenerSessionHandle, SessionAcceptor, SupportedReceiverSettleModes,
     },
-    types::primitives::Value, transaction::coordinator::ControlLinkAcceptor, Receiver, Sender, Sendable,
+    transaction::coordinator::ControlLinkAcceptor,
+    types::primitives::Value,
+    Receiver, Sendable, Sender,
 };
 use tokio::net::TcpListener;
-use tracing::{Level, instrument};
+use tracing::{instrument, Level};
 use tracing_subscriber::FmtSubscriber;
 
 const BASE_ADDR: &str = "localhost:5672";
@@ -40,7 +41,7 @@ async fn connection_main(mut connection: ListenerConnectionHandle) {
         .control_link_acceptor(
             ControlLinkAcceptor::builder()
                 .supported_receiver_settle_modes(SupportedReceiverSettleModes::First)
-                .build()
+                .build(),
         )
         .build();
 
@@ -82,7 +83,7 @@ async fn sender_main(mut sender: Sender) {
     //         },
     //     }
     // }
-    
+
     let sendable = Sendable::builder()
         .message("hello world")
         .settled(false)
@@ -123,19 +124,21 @@ async fn receiver_main(mut receiver: Receiver) {
             Ok(delivery) => {
                 // tracing::info!(body = ?delivery.body());
                 match receiver.accept(&delivery).await {
-                    Ok(outcome) => {tracing::info!(?outcome)},
+                    Ok(outcome) => {
+                        tracing::info!(?outcome)
+                    }
                     Err(error) => {
                         tracing::error!(?error);
                         receiver.close().await.unwrap();
-                        return
-                    },
+                        return;
+                    }
                 }
-            },
+            }
             Err(error) => {
                 tracing::error!(?error);
                 receiver.close().await.unwrap();
-                return
-            },
+                return;
+            }
         }
     }
 }
