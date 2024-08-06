@@ -46,6 +46,7 @@ where
         link_credit: Option<u32>,
         drain: Option<bool>,
         echo: bool,
+        include_properties: bool,
     ) -> Result<(), Self::FlowError> {
         let handle = self
             .output_handle
@@ -53,7 +54,7 @@ where
             .ok_or(Self::FlowError::IllegalState)?
             .into();
 
-        let flow = self.get_link_flow(handle, link_credit, drain, echo);
+        let flow = self.get_link_flow(handle, link_credit, drain, echo, include_properties);
         writer
             .send(LinkFrame::Flow(flow))
             .await // cancel safe
@@ -408,6 +409,7 @@ impl ReceiverLink<Target> {
             link_credit: Option<u32>,
             drain: Option<bool>,
             echo: bool,
+            include_properties: bool,
         ) -> Result<(), FlowError> {
             let handle = self
                 .output_handle
@@ -415,7 +417,7 @@ impl ReceiverLink<Target> {
                 .ok_or(FlowError::IllegalState)?
                 .into();
 
-            let flow = self.get_link_flow(handle, link_credit, drain, echo);
+            let flow = self.get_link_flow(handle, link_credit, drain, echo, include_properties);
             writer
                 .blocking_send(LinkFrame::Flow(flow))
                 .map_err(|_| FlowError::IllegalSessionState)
@@ -507,12 +509,20 @@ impl<T> ReceiverLink<T> {
         link_credit: Option<u32>,
         drain: Option<bool>,
         echo: bool,
+        include_properties: bool,
     ) -> LinkFlow {
         match (link_credit, drain) {
             (Some(link_credit), Some(drain)) => {
                 let mut guard = self.flow_state.lock.write();
                 guard.link_credit = link_credit;
                 guard.drain = drain;
+
+                let properties = if include_properties {
+                    guard.properties.clone()
+                } else {
+                    None
+                };
+
                 LinkFlow {
                     handle,
                     // When the flow state is being sent from the receiver endpoint to the sender
@@ -525,12 +535,19 @@ impl<T> ReceiverLink<T> {
                     available: None,
                     drain,
                     echo,
-                    properties: guard.properties.clone(),
+                    properties,
                 }
             }
             (Some(link_credit), None) => {
                 let mut guard = self.flow_state.lock.write();
                 guard.link_credit = link_credit;
+
+                let properties = if include_properties {
+                    guard.properties.clone()
+                } else {
+                    None
+                };
+
                 LinkFlow {
                     handle,
                     // When the flow state is being sent from the receiver endpoint to the sender
@@ -543,12 +560,19 @@ impl<T> ReceiverLink<T> {
                     available: None,
                     drain: guard.drain,
                     echo,
-                    properties: guard.properties.clone(),
+                    properties,
                 }
             }
             (None, Some(drain)) => {
                 let mut guard = self.flow_state.lock.write();
                 guard.drain = drain;
+
+                let properties = if include_properties {
+                    guard.properties.clone()
+                } else {
+                    None
+                };
+
                 LinkFlow {
                     handle,
                     // When the flow state is being sent from the receiver endpoint to the sender
@@ -561,11 +585,18 @@ impl<T> ReceiverLink<T> {
                     available: None,
                     drain,
                     echo,
-                    properties: guard.properties.clone(),
+                    properties,
                 }
             }
             (None, None) => {
                 let guard = self.flow_state.lock.read();
+
+                let properties = if include_properties {
+                    guard.properties.clone()
+                } else {
+                    None
+                };
+
                 LinkFlow {
                     handle,
                     // When the flow state is being sent from the receiver endpoint to the sender
@@ -578,7 +609,7 @@ impl<T> ReceiverLink<T> {
                     available: None,
                     drain: guard.drain,
                     echo,
-                    properties: guard.properties.clone(),
+                    properties,
                 }
             }
         }

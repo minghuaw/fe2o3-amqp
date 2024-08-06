@@ -174,6 +174,7 @@ pub(crate) trait ReceiverLink: Link + LinkExt {
         link_credit: Option<u32>,
         drain: Option<bool>,
         echo: bool,
+        include_properties: bool,
     ) -> Result<(), Self::FlowError>;
 
     /// Handles delivery state that is carried in a Transfer

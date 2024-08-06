@@ -67,7 +67,7 @@ where
         self.recver
             .inner
             .link
-            .send_flow(&self.recver.inner.outgoing, Some(0), Some(true), true)
+            .send_flow(&self.recver.inner.outgoing, Some(0), Some(true), true, false)
             .await?;
 
         // self.cleaned_up = true;
@@ -164,6 +164,7 @@ where
                 Some(0),
                 Some(true),
                 true,
+                false
             ) {
                 #[cfg(feature = "tracing")]
                 tracing::error!("error {:?}", _err);
