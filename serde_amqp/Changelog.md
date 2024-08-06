@@ -1,5 +1,12 @@
 # Change Log
 
+## 0.12.0
+
+### Breaking
+
+1. Changed return types of functions in `serde_amqp::read::Read` trait
+2. Drain `IoReader` and `SliceReader` even when `read_exact` fails
+
 ## 0.11.1
 
 1. Fixed a bug with value serializer that doesn't handle nested composite type properly
