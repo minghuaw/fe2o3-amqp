@@ -24,17 +24,7 @@ use crate::{
 };
 
 use super::{
-    builder::{self, WithTarget, WithoutName, WithoutSource},
-    delivery::{Delivery, DeliveryInfo},
-    error::DetachError,
-    incomplete_transfer::IncompleteTransfer,
-    receiver_link::count_number_of_sections_and_offset,
-    role,
-    shared_inner::{LinkEndpointInner, LinkEndpointInnerDetach, LinkEndpointInnerReattach},
-    ArcReceiverUnsettledMap, DetachThenResumeReceiverError, DispositionError,
-    IllegalLinkStateError, LinkFrame, LinkRelay, LinkStateError, ReceiverAttachError,
-    ReceiverAttachExchange, ReceiverFlowState, ReceiverLink, ReceiverResumeError,
-    ReceiverResumeErrorKind, ReceiverTransferError, RecvError, DEFAULT_CREDIT,
+    builder::{self, WithTarget, WithoutName, WithoutSource}, delivery::{Delivery, DeliveryInfo}, error::DetachError, incomplete_transfer::IncompleteTransfer, receiver_link::count_number_of_sections_and_offset, role, shared_inner::{LinkEndpointInner, LinkEndpointInnerDetach, LinkEndpointInnerReattach}, ArcReceiverUnsettledMap, DetachThenResumeReceiverError, DispositionError, FlowError, IllegalLinkStateError, LinkFrame, LinkRelay, LinkStateError, ReceiverAttachError, ReceiverAttachExchange, ReceiverFlowState, ReceiverLink, ReceiverResumeError, ReceiverResumeErrorKind, ReceiverTransferError, RecvError, DEFAULT_CREDIT
 };
 
 cfg_transaction! {
@@ -307,6 +297,11 @@ impl Receiver {
     /// Setting the credit will set the `drain` field to false and stop draining
     pub async fn drain(&mut self) -> Result<(), IllegalLinkStateError> {
         self.inner.drain().await
+    }
+
+    /// Send the link properties to the remote peer via a `Flow` performative
+    pub async fn send_properties(&self) -> Result<(), FlowError> {
+        self.inner.send_properties().await
     }
 
     /// Detach the link.
@@ -1033,7 +1028,7 @@ where
         }
 
         self.link
-            .send_flow(&self.outgoing, Some(credit), Some(false), false)
+            .send_flow(&self.outgoing, Some(credit), Some(false), false, false)
             .await // cancel safe
     }
 
@@ -1081,7 +1076,7 @@ where
                 // Reset link credit
                 self.processed.swap(0, Ordering::Release);
                 self.link
-                    .send_flow(&self.outgoing, Some(max_credit), Some(false), false)
+                    .send_flow(&self.outgoing, Some(max_credit), Some(false), false, false)
                     .await?; // cancel safe
             }
         }
@@ -1103,8 +1098,14 @@ where
 
         // Send a flow with Drain set to true
         self.link
-            .send_flow(&self.outgoing, None, Some(true), false)
+            .send_flow(&self.outgoing, None, Some(true), false, false)
             .await
+    }
+
+    /// Send the properties of the link via a Flow frame
+    #[inline]
+    pub async fn send_properties(&self) -> Result<(), FlowError> {
+        self.link.send_flow(&self.outgoing, None, None, false, true).await
     }
 }
 
