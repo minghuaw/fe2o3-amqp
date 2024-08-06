@@ -30,7 +30,7 @@ impl<R: io::Read> IoReader<R> {
     }
 
     /// Fill the internal buffer with the given length
-    pub fn fill_buffer(&mut self, len: usize) -> Result<(), Error> {
+    pub fn fill_buffer(&mut self, len: usize) -> Result<(), io::Error> {
         let l = self.buf.len();
         if l < len {
             self.buf.resize(len, 0);
@@ -55,33 +55,29 @@ impl<'de, R: io::Read + 'de> Read<'de> for IoReader<R> {
                         self.buf.push(buf[0]);
                         Some(buf[0])
                     }
-                    Err(_) => None, // EOF
+                    Err(_) => None,
                 }
             }
         }
     }
 
-    fn peek_bytes(&mut self, n: usize) -> Option<&[u8]> {
+    fn peek_bytes(&mut self, n: usize) -> Result<Option<&[u8]>, io::Error> {
         let l = self.buf.len();
         if l < n {
-            match self.fill_buffer(n) {
-                Ok(_) => Some(&self.buf[..n]),
-                Err(_) => None,
-            }
+            self.fill_buffer(n)?;
+            Ok(Some(&self.buf[..n]))
         } else {
-            Some(&self.buf[..n])
+            Ok(Some(&self.buf[..n]))
         }
     }
 
-    fn next(&mut self) -> Option<u8> {
+    fn next(&mut self) -> Result<Option<u8>, io::Error> {
         match self.pop_first() {
-            Some(b) => Some(b),
+            Some(b) => Ok(Some(b)),
             None => {
                 let mut buf = [0u8; 1];
-                match self.reader.read_exact(&mut buf) {
-                    Ok(_) => Some(buf[0]),
-                    Err(_) => None, // EOF
-                }
+                self.reader.read_exact(&mut buf)?;
+                Ok(Some(buf[0]))
             }
         }
     }
@@ -92,9 +88,10 @@ impl<'de, R: io::Read + 'de> Read<'de> for IoReader<R> {
 
         if l < n {
             (buf[..l]).copy_from_slice(&self.buf[..l]);
-            self.reader.read_exact(&mut buf[l..])?;
+            let result = self.reader.read_exact(&mut buf[l..]);
+            // drain the buffer even if the read fails
             self.buf.drain(..l);
-            Ok(())
+            result
         } else {
             buf.copy_from_slice(&self.buf[..n]);
             self.buf.drain(..n);
@@ -127,6 +124,8 @@ impl<'de, R: io::Read + 'de> Read<'de> for IoReader<R> {
 #[allow(clippy::all)]
 #[cfg(test)]
 mod tests {
+    use bytes::Buf;
+
     use crate::read::ioread::IoReader;
 
     use super::Read;
@@ -141,9 +140,9 @@ mod tests {
         let reader = SHORT_BUFFER;
         let mut io_reader = IoReader::new(reader);
 
-        let peek0 = io_reader.peek().expect("Should not return error");
-        let peek1 = io_reader.peek().expect("Should not return error");
-        let peek2 = io_reader.peek().expect("Should not return error");
+        let peek0 = io_reader.peek().unwrap();
+        let peek1 = io_reader.peek().unwrap();
+        let peek2 = io_reader.peek().unwrap();
 
         assert_eq!(peek0, reader[0]);
         assert_eq!(peek1, reader[0]);
@@ -156,8 +155,8 @@ mod tests {
         let mut io_reader = IoReader::new(reader);
 
         for i in 0..reader.len() {
-            let peek = io_reader.peek().expect("Should not return error");
-            let next = io_reader.next().expect("Should not return error");
+            let peek = io_reader.peek().unwrap();
+            let next = io_reader.next().unwrap().unwrap();
 
             assert_eq!(peek, reader[i]);
             assert_eq!(next, reader[i]);
@@ -167,7 +166,7 @@ mod tests {
         let next_none = io_reader.next();
 
         assert!(peek_none.is_none());
-        assert!(next_none.is_none());
+        assert!(next_none.is_err() || matches!(next_none, Ok(None)));
     }
 
     #[test]
@@ -177,22 +176,18 @@ mod tests {
 
         // Read first 10 bytes
         const N: usize = 10;
-        let bytes = io_reader
-            .read_const_bytes::<N>()
-            .expect("Should not return error");
+        let bytes = io_reader.read_const_bytes::<N>().unwrap();
         assert_eq!(bytes.len(), N);
         assert_eq!(&bytes[..], &reader[..N]);
 
         // Read the second bytes
-        let bytes = io_reader
-            .read_const_bytes::<N>()
-            .expect("Should not return error");
+        let bytes = io_reader.read_const_bytes::<N>().unwrap();
         assert_eq!(bytes.len(), N);
         assert_eq!(&bytes[..], &reader[(N)..(2 * N)]);
 
         // Read None
         let bytes = io_reader.read_const_bytes::<N>();
-        assert!(bytes.is_none());
+        assert!(bytes.is_err());
     }
 
     #[test]
@@ -203,21 +198,13 @@ mod tests {
         // Read first 10 bytes
         const N: usize = 10;
         let bytes = io_reader.read_const_bytes::<N>();
-        assert!(bytes.is_none());
-
-        for i in 0..reader.len() {
-            let peek = io_reader.peek().expect("Should not return error");
-            let next = io_reader.next().expect("Should not return error");
-
-            assert_eq!(peek, reader[i]);
-            assert_eq!(next, reader[i]);
-        }
+        assert!(bytes.is_err());
 
         let peek_none = io_reader.peek();
         let next_none = io_reader.next();
 
         assert!(peek_none.is_none());
-        assert!(next_none.is_none());
+        assert!(matches!(next_none, Ok(None)) || next_none.is_err());
     }
 
     #[test]
@@ -225,62 +212,50 @@ mod tests {
         let reader = LONG_BUFFER;
         let mut io_reader = IoReader::new(reader);
 
-        let peek0 = io_reader.peek().expect("Should not return error");
+        let peek0 = io_reader.peek().unwrap();
         assert_eq!(peek0, reader[0]);
 
         // Read first 10 bytes
         const N: usize = 10;
-        let bytes = io_reader
-            .read_const_bytes::<N>()
-            .expect("Should not return error");
+        let bytes = io_reader.read_const_bytes::<N>().unwrap();
         assert_eq!(bytes.len(), N);
         assert_eq!(&bytes[..], &reader[..N]);
 
         // Read the second bytes
-        let bytes = io_reader
-            .read_const_bytes::<N>()
-            .expect("Should not return error");
+        let bytes = io_reader.read_const_bytes::<N>().unwrap();
         assert_eq!(bytes.len(), N);
         assert_eq!(&bytes[..], &reader[(N)..(2 * N)]);
 
         // Read None
         let bytes = io_reader.read_const_bytes::<N>();
-        assert!(bytes.is_none());
+        assert!(bytes.is_err());
     }
 
     #[test]
     fn test_incomplete_read_const_bytes_after_peek() {
-        let reader = SHORT_BUFFER;
-        let mut io_reader = IoReader::new(std::io::Cursor::new(reader));
+        let b = bytes::Bytes::from_static(SHORT_BUFFER);
+        let mut io_reader = IoReader::new(b.reader());
 
-        let peek0 = io_reader.peek().expect("Should not return error");
-        assert_eq!(peek0, reader[0]);
+        let peek0 = io_reader.peek().unwrap();
+        assert_eq!(peek0, SHORT_BUFFER[0]);
 
         // Read first 10 bytes
         const N: usize = 10;
         let bytes = io_reader.read_const_bytes::<N>();
-        assert!(bytes.is_none());
-
-        for i in 0..reader.len() {
-            let peek = io_reader.peek().expect("Should not return error");
-            let next = io_reader.next().expect("Should not return error");
-
-            assert_eq!(peek, reader[i]);
-            assert_eq!(next, reader[i]);
-        }
+        assert!(bytes.is_err());
 
         let peek_err = io_reader.peek();
         let next_err = io_reader.next();
 
         assert!(peek_err.is_none());
-        assert!(next_err.is_none());
+        assert!(matches!(next_err, Ok(None)) || next_err.is_err());
     }
 
     #[test]
     fn test_peek_bytes() {
         let mut reader = IoReader::new(SHORT_BUFFER);
-        let peek0 = reader.peek_bytes(2).unwrap().to_vec();
-        let peek1 = reader.peek_bytes(2).unwrap();
+        let peek0 = reader.peek_bytes(2).unwrap().unwrap().to_vec();
+        let peek1 = reader.peek_bytes(2).unwrap().unwrap();
 
         assert_eq!(peek0, &SHORT_BUFFER[..2]);
         assert_eq!(peek1, &SHORT_BUFFER[..2]);

@@ -20,29 +20,25 @@ pub trait Read<'de>: private::Sealed {
     fn peek(&mut self) -> Option<u8>;
 
     /// Read the next byte
-    fn next(&mut self) -> Option<u8>;
+    fn next(&mut self) -> Result<Option<u8>, io::Error>;
 
     /// Read n bytes
     ///
     /// Prefered to use this when the size is small and can be stack allocated
-    fn read_const_bytes<const N: usize>(&mut self) -> Option<[u8; N]> {
+    fn read_const_bytes<const N: usize>(&mut self) -> Result<[u8; N], io::Error> {
         let mut buf = [0u8; N];
-        match self.read_exact(&mut buf) {
-            Ok(_) => Some(buf),
-            Err(_) => None,
-        }
+        self.read_exact(&mut buf)?;
+        Ok(buf)
     }
 
     /// Peek `n` number of bytes without consuming
-    fn peek_bytes(&mut self, n: usize) -> Option<&[u8]>;
+    fn peek_bytes(&mut self, n: usize) -> Result<Option<&[u8]>, io::Error>;
 
     /// Consuming `n` number of bytes
-    fn read_bytes(&mut self, n: usize) -> Option<Vec<u8>> {
+    fn read_bytes(&mut self, n: usize) -> Result<Vec<u8>, io::Error> {
         let mut buf = vec![0u8; n];
-        match self.read_exact(&mut buf) {
-            Ok(_) => Some(buf),
-            Err(_) => None,
-        }
+        self.read_exact(&mut buf)?;
+        Ok(buf)
     }
 
     /// Read to buffer

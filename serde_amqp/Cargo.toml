@@ -35,6 +35,7 @@ chrono = ["dep:chrono"]
 criterion = "0.5"
 rand = { workspace = true }
 uuid = { workspace = true, features = ["v4"] }
+bytes = { workspace = true }
 
 [dependencies]
 ordered-float = { workspace = true, features = ["serde"] }
