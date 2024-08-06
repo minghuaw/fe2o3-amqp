@@ -61,4 +61,6 @@ jobs:
         run: (cd fe2o3-amqp-management && cargo make test)
       - name: test fe2o3-amqp-ws
         run: (cd fe2o3-amqp-ws && cargo make test)
+      - name: check examples
+        run: (cd examples && cargo make check)
       
