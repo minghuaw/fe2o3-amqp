@@ -8,7 +8,7 @@ use fe2o3_amqp_types::{
 
 use crate::{
     endpoint::ReceiverLink,
-    link::{delivery, DispositionError, FlowError, RecvError, SendError},
+    link::{delivery, FlowError, RecvError},
     Delivery, Receiver,
 };
 
@@ -35,10 +35,11 @@ where
 impl<'r, Txn> TxnAcquisition<'r, Txn>
 where
     Txn: TransactionExt
-        + TransactionDischarge<Error = SendError>
-        + TransactionalRetirement<RetireError = DispositionError>
+        + TransactionDischarge
+        + TransactionalRetirement
         + Send
         + Sync,
+    <Txn as TransactionDischarge>::Error: From<FlowError>,
 {
     /// Get an immutable reference to the underlying transaction
     pub fn txn(&self) -> &Txn {
@@ -89,21 +90,21 @@ where
     }
 
     /// Commit the transactional acquisition
-    pub async fn commit(mut self) -> Result<(), SendError> {
+    pub async fn commit(mut self) -> Result<(), <Txn as TransactionDischarge>::Error> {
         self.cleanup().await?;
         self.txn.discharge(false).await?;
         Ok(())
     }
 
     /// Rollback the transactional acquisition
-    pub async fn rollback(mut self) -> Result<(), SendError> {
+    pub async fn rollback(mut self) -> Result<(), <Txn as TransactionDischarge>::Error> {
         self.cleanup().await?;
         self.txn.discharge(true).await?;
         Ok(())
     }
 
     /// Accept the message
-    pub async fn accept<T>(&mut self, delivery: &Delivery<T>) -> Result<(), DispositionError>
+    pub async fn accept<T>(&mut self, delivery: &Delivery<T>) -> Result<(), <Txn as TransactionalRetirement>::RetireError>
     where
         T: Send + Sync,
     {
@@ -115,7 +116,7 @@ where
         &mut self,
         delivery: &Delivery<T>,
         error: impl Into<Option<definitions::Error>>,
-    ) -> Result<(), DispositionError>
+    ) -> Result<(), <Txn as TransactionalRetirement>::RetireError>
     where
         T: Send + Sync,
     {
@@ -123,7 +124,7 @@ where
     }
 
     /// Release the message
-    pub async fn release<T>(&mut self, delivery: &Delivery<T>) -> Result<(), DispositionError>
+    pub async fn release<T>(&mut self, delivery: &Delivery<T>) -> Result<(), <Txn as TransactionalRetirement>::RetireError>
     where
         T: Send + Sync,
     {
@@ -135,7 +136,7 @@ where
         &mut self,
         delivery: &Delivery<T>,
         modified: Modified,
-    ) -> Result<(), DispositionError>
+    ) -> Result<(), <Txn as TransactionalRetirement>::RetireError>
     where
         T: Send + Sync,
     {
