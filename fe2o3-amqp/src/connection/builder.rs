@@ -68,8 +68,17 @@ pub struct Builder<'a, Mode, Tls> {
     /// The id of the source container
     pub container_id: String,
 
-    /// The name of the target host
+    /// The hostname of the target host
+    /// 
+    /// This will be used as the hostname in the Open frame. If not supplied, the hostname will be
+    /// extracted from the url.
     pub hostname: Option<&'a str>,
+
+    /// The hostname used for SASL negotiation
+    /// 
+    /// This will be used as the hostname in the SASL negotiation. If not supplied, the hostname will
+    /// be extracted from the url.
+    pub sasl_hostname: Option<&'a str>,
 
     /// URL scheme
     pub scheme: &'a str,
@@ -170,6 +179,7 @@ impl<'a, Mode: std::fmt::Debug> std::fmt::Debug for Builder<'a, Mode, ()> {
         f.debug_struct("Builder")
             .field("container_id", &self.container_id)
             .field("hostname", &self.hostname)
+            .field("sasl_hostname", &self.sasl_hostname)
             .field("scheme", &self.scheme)
             .field("domain", &self.domain)
             .field("max_frame_size", &self.max_frame_size)
@@ -194,6 +204,7 @@ cfg_rustls! {
             f.debug_struct("Builder")
                 .field("container_id", &self.container_id)
                 .field("hostname", &self.hostname)
+                .field("sasl_hostname", &self.sasl_hostname)
                 .field("scheme", &self.scheme)
                 .field("domain", &self.domain)
                 .field("max_frame_size", &self.max_frame_size)
@@ -222,6 +233,7 @@ cfg_not_wasm32! {
                 f.debug_struct("Builder")
                     .field("container_id", &self.container_id)
                     .field("hostname", &self.hostname)
+                    .field("sasl_hostname", &self.sasl_hostname)
                     .field("scheme", &self.scheme)
                     .field("domain", &self.domain)
                     .field("max_frame_size", &self.max_frame_size)
@@ -254,6 +266,7 @@ impl<'a, Mode> Builder<'a, Mode, ()> {
         Self {
             container_id: String::new(),
             hostname: None,
+            sasl_hostname: None,
             scheme: "amqp", // Assume non-TLS by default
             domain: None,
             // set to 512 before Open frame is sent
@@ -286,6 +299,7 @@ impl<'a, Tls> Builder<'a, mode::ConnectorNoId, Tls> {
         Builder {
             container_id: id.into(),
             hostname: self.hostname,
+            sasl_hostname: self.sasl_hostname,
             scheme: self.scheme,
             domain: self.domain,
             // set to 512 before Open frame is sent
@@ -334,6 +348,7 @@ impl<'a, Mode, Tls> Builder<'a, Mode, Tls> {
             Builder {
                 container_id: self.container_id,
                 hostname: self.hostname,
+                sasl_hostname: self.sasl_hostname,
                 scheme: self.scheme,
                 domain: self.domain,
                 // set to 512 before Open frame is sent
@@ -397,6 +412,7 @@ impl<'a, Mode, Tls> Builder<'a, Mode, Tls> {
                 Builder {
                     container_id: self.container_id,
                     hostname: self.hostname,
+                    sasl_hostname: self.sasl_hostname,
                     scheme: self.scheme,
                     domain: self.domain,
                     // set to 512 before Open frame is sent
@@ -424,8 +440,20 @@ impl<'a, Mode, Tls> Builder<'a, Mode, Tls> {
 
 impl<'a, Mode, Tls> Builder<'a, Mode, Tls> {
     /// The name of the target host
+    /// 
+    /// This will be used as the hostname in the Open frame. If not supplied, the hostname will be
+    /// extracted from the url.
     pub fn hostname(mut self, hostname: impl Into<Option<&'a str>>) -> Self {
         self.hostname = hostname.into();
+        self
+    }
+
+    /// The hostname used for SASL negotiation
+    /// 
+    /// This will be used as the hostname in the SASL negotiation. If not supplied, the hostname will
+    /// be extracted from the url.
+    pub fn sasl_hostname(mut self, sasl_hostname: impl Into<Option<&'a str>>) -> Self {
+        self.sasl_hostname = sasl_hostname.into();
         self
     }
 
@@ -570,7 +598,7 @@ impl<'a, Mode, Tls> Builder<'a, Mode, Tls> {
 
 impl<'a, Tls> Builder<'a, mode::ConnectorWithId, Tls> {
     /// Performs SASL negotiation
-    #[cfg_attr(feature = "tracing", instrument(skip_all, fields(hostname = ?self.hostname)))]
+    #[cfg_attr(feature = "tracing", instrument(skip_all, fields(sasl_hostname = ?self.sasl_hostname)))]
     pub async fn negotiate_sasl<Io>(
         &mut self,
         transport: &mut Transport<Io, sasl::Frame>,
@@ -590,7 +618,7 @@ impl<'a, Tls> Builder<'a, mode::ConnectorWithId, Tls> {
             #[cfg(feature = "log")]
             log::trace!("received = {:?}", frame);
 
-            match profile.on_frame(frame, self.hostname)? {
+            match profile.on_frame(frame, self.sasl_hostname)? {
                 Negotiation::Init(init) => {
                     let frame = sasl::Frame::Init(init);
                     #[cfg(feature = "tracing")]
@@ -865,7 +893,12 @@ cfg_not_wasm32! {
             // only override if value exists
             self.scheme = url.scheme();
             if let Some(hostname) = url.host_str() {
-                self.hostname = Some(hostname);
+                if self.hostname.is_none() {
+                    self.hostname = Some(hostname);
+                }
+                if self.sasl_hostname.is_none() {
+                    self.sasl_hostname = Some(hostname);
+                }
             }
             if let Some(domain) = url.domain() {
                 self.domain = Some(domain);
@@ -1133,7 +1166,12 @@ cfg_not_wasm32! {
                 // only override if value exists
                 self.scheme = url.scheme();
                 if let Some(hostname) = url.host_str() {
-                    self.hostname = Some(hostname);
+                    if self.hostname.is_none() {
+                        self.hostname = Some(hostname);
+                    }
+                    if self.sasl_hostname.is_none() {
+                        self.sasl_hostname = Some(hostname);
+                    }
                 }
                 if let Some(domain) = url.domain() {
                     self.domain = Some(domain);
@@ -1261,7 +1299,12 @@ cfg_not_wasm32! {
                 // only override if value exists
                 self.scheme = url.scheme();
                 if let Some(hostname) = url.host_str() {
-                    self.hostname = Some(hostname);
+                    if self.hostname.is_none() {
+                        self.hostname = Some(hostname);
+                    }
+                    if self.sasl_hostname.is_none() {
+                        self.sasl_hostname = Some(hostname);
+                    }
                 }
                 if let Some(domain) = url.domain() {
                     self.domain = Some(domain);
