@@ -69,13 +69,13 @@ pub struct Builder<'a, Mode, Tls> {
     pub container_id: String,
 
     /// The hostname of the target host
-    /// 
+    ///
     /// This will be used as the hostname in the Open frame. If not supplied, the hostname will be
     /// extracted from the url.
     pub hostname: Option<&'a str>,
 
     /// The hostname used for SASL negotiation
-    /// 
+    ///
     /// This will be used as the hostname in the SASL negotiation. If not supplied, the hostname will
     /// be extracted from the url.
     pub sasl_hostname: Option<&'a str>,
@@ -440,7 +440,7 @@ impl<'a, Mode, Tls> Builder<'a, Mode, Tls> {
 
 impl<'a, Mode, Tls> Builder<'a, Mode, Tls> {
     /// The name of the target host
-    /// 
+    ///
     /// This will be used as the hostname in the Open frame. If not supplied, the hostname will be
     /// extracted from the url.
     pub fn hostname(mut self, hostname: impl Into<Option<&'a str>>) -> Self {
@@ -449,7 +449,7 @@ impl<'a, Mode, Tls> Builder<'a, Mode, Tls> {
     }
 
     /// The hostname used for SASL negotiation
-    /// 
+    ///
     /// This will be used as the hostname in the SASL negotiation. If not supplied, the hostname will
     /// be extracted from the url.
     pub fn sasl_hostname(mut self, sasl_hostname: impl Into<Option<&'a str>>) -> Self {
