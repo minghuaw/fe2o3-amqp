@@ -10,6 +10,6 @@ tokio = { version = "1", features = ["net", "rt", "rt-multi-thread", "macros"] }
 fe2o3-amqp = { features = [],  path = "../../fe2o3-amqp" }
 tokio-native-tls = "0.3.0"
 native-tls = "0.2.8"
-tokio-rustls = "0.26.0"
-rustls = "0.23.12"
+tokio-rustls = { version = "0.26.0", default-features = false }
+rustls = { version = "0.23.12", default-features = false }
 webpki-roots = "0.26.3"
