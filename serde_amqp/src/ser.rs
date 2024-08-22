@@ -1797,6 +1797,19 @@ mod test {
     }
 
     #[test]
+    fn test_serialize_empty_array() {
+        let val: Array<i32> = Array::from(vec![]);
+        let expected = vec![
+            EncodingCodes::Array8 as u8,
+            0x01, // length
+            0x00, // count
+                  // There is no element, and thus there is no element constructor
+                  // The same behavior is observed in amqpnetlite
+        ];
+        assert_eq_on_serialized_vs_expected(val, &expected);
+    }
+
+    #[test]
     fn test_serialize_array() {
         let val: Array<u8> = (0..253).collect();
         let mut expected = vec![

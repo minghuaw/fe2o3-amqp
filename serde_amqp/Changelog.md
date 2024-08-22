@@ -1,5 +1,9 @@
 # Change Log
 
+## 0.12.1
+
+1. Fixed empty `Array` not deserialized properly (issue #277)
+
 ## 0.12.0
 
 ### Breaking
