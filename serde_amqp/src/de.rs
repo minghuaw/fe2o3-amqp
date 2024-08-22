@@ -846,35 +846,48 @@ where
                     .next()?
                     .ok_or_else(|| Error::unexpected_eof("Expecting count"))?
                     as usize;
-                let format_code = self
-                    .read_format_code()
-                    .ok_or_else(|| Error::unexpected_eof("Expecting format code"))??;
-                self.elem_format_code = Some(format_code);
 
-                // Account for offset
-                let len = len - OFFSET_ARRAY8;
-                // let buf = self.reader.read_bytes(len)?;
+                // If count is zero, jump to visitor
+                match count {
+                    0 => visitor.visit_seq(ArrayAccess::new(self, len, count)),
+                    _ => {
+                        let format_code = self
+                            .read_format_code()
+                            .ok_or_else(|| Error::unexpected_eof("Expecting format code"))??;
+                        self.elem_format_code = Some(format_code);
 
-                visitor.visit_seq(ArrayAccess::new(self, len, count))
+                        // Account for offset
+                        let len = len - OFFSET_ARRAY8;
+                        // let buf = self.reader.read_bytes(len)?;
+
+                        visitor.visit_seq(ArrayAccess::new(self, len, count))
+                    }
+                }
             }
             EncodingCodes::Array32 => {
                 // Read "header" bytes
                 let len_bytes = self.reader.read_const_bytes()?;
-                let count_bytes = self.reader.read_const_bytes()?;
-                let format_code = self
-                    .read_format_code()
-                    .ok_or_else(|| Error::unexpected_eof("Expecting format code"))??;
-                self.elem_format_code = Some(format_code);
-
-                // Conversion
                 let len = u32::from_be_bytes(len_bytes) as usize;
+
+                let count_bytes = self.reader.read_const_bytes()?;
                 let count = u32::from_be_bytes(count_bytes) as usize;
 
-                // Account for offset
-                let len = len - OFFSET_ARRAY32;
-                // let buf = self.reader.read_bytes(len)?;
+                // If count is zero, jump to visitor
+                match count {
+                    0 => visitor.visit_seq(ArrayAccess::new(self, len, count)),
+                    _ => {
+                        let format_code = self
+                            .read_format_code()
+                            .ok_or_else(|| Error::unexpected_eof("Expecting format code"))??;
+                        self.elem_format_code = Some(format_code);
 
-                visitor.visit_seq(ArrayAccess::new(self, len, count))
+                        // Account for offset
+                        let len = len - OFFSET_ARRAY32;
+                        // let buf = self.reader.read_bytes(len)?;
+
+                        visitor.visit_seq(ArrayAccess::new(self, len, count))
+                    }
+                }
             }
             EncodingCodes::List0 => {
                 let len = 0;
@@ -1978,6 +1991,125 @@ mod tests {
         assert_eq_from_reader_vs_expected(buf, expected);
     }
 
+    /// Helper function to test deserialization of en empty array
+    ///
+    /// The spec isn't really clear on how an empty array should be serialized.
+    /// So we'll try to cover all possible cases. Future test cases should be added here
+    fn test_deserialize_empty_array_inner<T>()
+    where
+        for<'de> T: Deserialize<'de> + std::fmt::Debug + PartialEq + Clone,
+    {
+        use crate::primitives::Array;
+
+        let expected: Array<T> = Array::from(vec![]);
+
+        // Empty array8 with no type constructor
+        let buf = [
+            EncodingCodes::Array8 as u8,
+            0x01, // length
+            0x00, // count
+                  // The type constructor could be missing if the array is empty
+                  // This behavior is observed in amqpnetlite
+        ];
+        assert_eq_from_reader_vs_expected(&buf, expected.clone());
+
+        // Empty array8 with a null type constructor
+        let buf = [
+            EncodingCodes::Array8 as u8,
+            0x02, // length
+            0x00, // count
+            0x40, // null
+        ];
+        assert_eq_from_reader_vs_expected(&buf, expected.clone());
+
+        // Empty array32 with no type constructor
+        let buf = [
+            EncodingCodes::Array32 as u8,
+            0x00,
+            0x00,
+            0x00,
+            0x04, // length
+            0x00,
+            0x00,
+            0x00,
+            0x00, // count
+        ];
+        assert_eq_from_reader_vs_expected(&buf, expected.clone());
+
+        // Empty array32 with a null type constructor
+        let buf = [
+            EncodingCodes::Array32 as u8,
+            0x00,
+            0x00,
+            0x00,
+            0x05, // length
+            0x00,
+            0x00,
+            0x00,
+            0x00, // count
+            0x40, // null
+        ];
+        assert_eq_from_reader_vs_expected(&buf, expected);
+    }
+
+    #[test]
+    fn test_deserialize_empty_array() {
+        use crate::primitives::*;
+
+        // Cover all primitive types
+
+        // bool
+        test_deserialize_empty_array_inner::<bool>();
+
+        // signed int
+        test_deserialize_empty_array_inner::<i8>();
+        test_deserialize_empty_array_inner::<i16>();
+        test_deserialize_empty_array_inner::<i32>();
+        test_deserialize_empty_array_inner::<i64>();
+
+        // unsigned int
+        test_deserialize_empty_array_inner::<u8>();
+        test_deserialize_empty_array_inner::<u16>();
+        test_deserialize_empty_array_inner::<u32>();
+        test_deserialize_empty_array_inner::<u64>();
+
+        // float
+        test_deserialize_empty_array_inner::<f32>();
+        test_deserialize_empty_array_inner::<f64>();
+
+        // decimal32, decimal64, decimal128
+        test_deserialize_empty_array_inner::<Dec32>();
+        test_deserialize_empty_array_inner::<Dec64>();
+        test_deserialize_empty_array_inner::<Dec128>();
+
+        // char
+        test_deserialize_empty_array_inner::<char>();
+
+        // timestamp
+        test_deserialize_empty_array_inner::<Timestamp>();
+
+        // uuid
+        test_deserialize_empty_array_inner::<Uuid>();
+
+        // binary
+        test_deserialize_empty_array_inner::<Binary>();
+
+        // string
+        test_deserialize_empty_array_inner::<String>();
+
+        // symbol
+        test_deserialize_empty_array_inner::<Symbol>();
+
+        // list
+        test_deserialize_empty_array_inner::<List<i32>>();
+
+        // map
+        test_deserialize_empty_array_inner::<OrderedMap<i32, i32>>();
+
+        // array
+        test_deserialize_empty_array_inner::<Array<i32>>();
+    }
+
     #[test]
     fn test_deserialize_array() {
         use crate::primitives::Array;
@@ -1985,6 +2117,43 @@ mod tests {
 
         let expected = Array::from(vec![1i32, 2, 3, 4]);
         let buf = to_vec(&expected).unwrap();
+        assert_eq_from_reader_vs_expected(&buf, expected);
+    }
+
+    #[test]
+    fn test_deserialize_empty_list() {
+        // List0
+        let expected: Vec<i32> = vec![];
+        let buf = vec![EncodingCodes::List0 as u8];
+        assert_eq_from_reader_vs_expected(&buf, expected);
+
+        // List0
+        let expected: &[i32; 0] = &[]; // slice will be (de)serialized as List
+        let buf = vec![EncodingCodes::List0 as u8];
+        assert_eq_from_reader_vs_expected(&buf, *expected);
+
+        // List8
+        let expected: Vec<i32> = vec![];
+        let buf = vec![
+            EncodingCodes::List8 as u8,
+            1, // size
+            0, // count
+        ];
+        assert_eq_from_reader_vs_expected(&buf, expected);
+
+        // List32
+        let expected: Vec<i32> = vec![];
+        let buf = vec![
+            EncodingCodes::List32 as u8,
+            0,
+            0,
+            0,
+            4, // size
+            0,
+            0,
+            0,
+            0, // count
+        ];
         assert_eq_from_reader_vs_expected(&buf, expected);
     }
 
