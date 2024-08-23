@@ -1,5 +1,9 @@
 # Change Log
 
+## 0.12.2
+
+1. Fixed bug caused by not creating new `SizeSerializer` in `SerializeSeq::serialize_element` (issue #279)
+
 ## 0.12.1
 
 1. Fixed empty `Array` not deserialized properly (issue #277)

@@ -134,7 +134,7 @@ impl<'a> ser::Serializer for &'a mut SizeSerializer {
                 IsArrayElement::FirstElement => Ok(9),
                 IsArrayElement::OtherElement => Ok(8),
             },
-            _ => unreachable!(),
+            _ => unreachable!("serialize_i64 is only used for Long and Timestamp"),
         }
     }
 
@@ -221,15 +221,15 @@ impl<'a> ser::Serializer for &'a mut SizeSerializer {
                     U8_MAX..=U32_MAX_MINUS_4 => Ok(5 + v.len()),
                     _ => Err(Error::too_long()),
                 },
-                _ => unreachable!(),
+                _ => unreachable!("serialize_str is only used for Symbol and String"),
             },
             IsArrayElement::FirstElement => match self.new_type {
                 NewType::Symbol | NewType::SymbolRef | NewType::None => Ok(5 + v.len()),
-                _ => unreachable!(),
+                _ => unreachable!("serialize_str is only used for Symbol and String"),
             },
             IsArrayElement::OtherElement => match self.new_type {
                 NewType::Symbol | NewType::SymbolRef | NewType::None => Ok(4 + v.len()),
-                _ => unreachable!(),
+                _ => unreachable!("serialize_str is only used for Symbol and String"),
             },
         }
     }
@@ -270,7 +270,7 @@ impl<'a> ser::Serializer for &'a mut SizeSerializer {
             | NewType::Array
             | NewType::Symbol
             | NewType::SymbolRef
-            | NewType::TransparentVec => unreachable!(),
+            | NewType::TransparentVec => unreachable!("serialize_bytes is only used for Binary, Decimal32, Decimal64, Decimal128, and Uuid"),
         }
     }
 
@@ -452,7 +452,8 @@ impl<'a> ser::SerializeSeq for SeqSerializer<'a> {
     {
         match self.se.new_type {
             NewType::None => {
-                self.cumulated_size += value.serialize(&mut *self.se)?;
+                let mut serializer = SizeSerializer::new();
+                self.cumulated_size += value.serialize(&mut serializer)?;
             }
             NewType::Array => {
                 let mut serializer = SizeSerializer::new();
@@ -472,7 +473,9 @@ impl<'a> ser::SerializeSeq for SeqSerializer<'a> {
             | NewType::Symbol
             | NewType::SymbolRef
             | NewType::Timestamp
-            | NewType::Uuid => unreachable!(),
+            | NewType::Uuid => {
+                unreachable!("SeqSerializer is only used for List, Array, and TransparentVec")
+            }
         }
 
         self.idx += 1;
@@ -495,7 +498,9 @@ impl<'a> ser::SerializeSeq for SeqSerializer<'a> {
             | NewType::Symbol
             | NewType::SymbolRef
             | NewType::Timestamp
-            | NewType::Uuid => unreachable!(),
+            | NewType::Uuid => {
+                unreachable!("SeqSerializer is only used for List, Array, and TransparentVec")
+            }
         }
     }
 }
@@ -702,7 +707,9 @@ impl<'a> ser::SerializeTupleStruct for TupleStructSerializer<'a> {
                     self.cumulated_size += value.serialize(&mut serializer)?;
                     Ok(())
                 }
-                StructEncoding::DescribedMap => unreachable!(),
+                StructEncoding::DescribedMap => {
+                    unreachable!("TupleStructSerializer is NOT used for DescribedMap")
+                }
             },
         }
     }
@@ -720,7 +727,9 @@ impl<'a> ser::SerializeTupleStruct for TupleStructSerializer<'a> {
                 let _ = self.se.struct_encoding.pop();
                 Ok(self.cumulated_size)
             }
-            StructEncoding::DescribedMap => unreachable!(),
+            StructEncoding::DescribedMap => {
+                unreachable!("TupleStructSerializer is NOT used for DescribedMap")
+            }
         }
     }
 }
@@ -774,7 +783,8 @@ impl<'a> ser::SerializeStruct for StructSerializer<'a> {
                     Ok(())
                 }
                 StructEncoding::DescribedBasic => {
-                    self.cumulated_size += value.serialize(&mut *self.se)?;
+                    let mut serializer = SizeSerializer::new();
+                    self.cumulated_size += value.serialize(&mut serializer)?;
                     Ok(())
                 }
             }
@@ -829,7 +839,8 @@ impl<'a> ser::SerializeTupleVariant for VariantSerializer<'a> {
     where
         T: ser::Serialize + ?Sized,
     {
-        self.cumulated_size += value.serialize(&mut *self.se)?;
+        let mut serializer = SizeSerializer::new();
+        self.cumulated_size += value.serialize(&mut serializer)?;
         Ok(())
     }
 
@@ -1287,5 +1298,24 @@ mod tests {
         let ssize = serialized_size(&value).unwrap();
         let buf = to_vec(&value).unwrap();
         assert_eq!(ssize, buf.len());
+    }
+
+    #[test]
+    fn serialized_size_of_described_list_of_timestamps() {
+        use crate::{described::Described, descriptor::Descriptor, primitives::*, Value};
+
+        let timestamp = Timestamp::from_milliseconds(12345);
+        let mut list = List::new();
+        list.push(Value::Timestamp(timestamp));
+
+        let described = Described {
+            descriptor: Descriptor::Code(0x73),
+            value: Value::List(list),
+        };
+
+        let value = Value::Described(Box::new(described));
+
+        let size_result = serialized_size(&value);
+        assert!(size_result.is_ok());
     }
 }
