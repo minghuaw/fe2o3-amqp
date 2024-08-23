@@ -473,7 +473,9 @@ impl<'a> ser::SerializeSeq for SeqSerializer<'a> {
             | NewType::Symbol
             | NewType::SymbolRef
             | NewType::Timestamp
-            | NewType::Uuid => unreachable!("SeqSerializer is only used for List, Array, and TransparentVec"),
+            | NewType::Uuid => {
+                unreachable!("SeqSerializer is only used for List, Array, and TransparentVec")
+            }
         }
 
         self.idx += 1;
@@ -496,7 +498,9 @@ impl<'a> ser::SerializeSeq for SeqSerializer<'a> {
             | NewType::Symbol
             | NewType::SymbolRef
             | NewType::Timestamp
-            | NewType::Uuid => unreachable!("SeqSerializer is only used for List, Array, and TransparentVec"),
+            | NewType::Uuid => {
+                unreachable!("SeqSerializer is only used for List, Array, and TransparentVec")
+            }
         }
     }
 }
@@ -703,7 +707,9 @@ impl<'a> ser::SerializeTupleStruct for TupleStructSerializer<'a> {
                     self.cumulated_size += value.serialize(&mut serializer)?;
                     Ok(())
                 }
-                StructEncoding::DescribedMap => unreachable!("TupleStructSerializer is NOT used for DescribedMap"),
+                StructEncoding::DescribedMap => {
+                    unreachable!("TupleStructSerializer is NOT used for DescribedMap")
+                }
             },
         }
     }
@@ -721,7 +727,9 @@ impl<'a> ser::SerializeTupleStruct for TupleStructSerializer<'a> {
                 let _ = self.se.struct_encoding.pop();
                 Ok(self.cumulated_size)
             }
-            StructEncoding::DescribedMap => unreachable!("TupleStructSerializer is NOT used for DescribedMap"),
+            StructEncoding::DescribedMap => {
+                unreachable!("TupleStructSerializer is NOT used for DescribedMap")
+            }
         }
     }
 }
@@ -1294,19 +1302,19 @@ mod tests {
 
     #[test]
     fn serialized_size_of_described_list_of_timestamps() {
-        use crate::{primitives::*, Value, described::Described, descriptor::Descriptor};
+        use crate::{described::Described, descriptor::Descriptor, primitives::*, Value};
 
         let timestamp = Timestamp::from_milliseconds(12345);
         let mut list = List::new();
         list.push(Value::Timestamp(timestamp));
-    
+
         let described = Described {
             descriptor: Descriptor::Code(0x73),
             value: Value::List(list),
         };
-    
+
         let value = Value::Described(Box::new(described));
-    
+
         let size_result = serialized_size(&value);
         assert!(size_result.is_ok());
     }
