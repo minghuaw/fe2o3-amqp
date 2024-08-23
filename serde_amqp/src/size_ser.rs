@@ -775,7 +775,8 @@ impl<'a> ser::SerializeStruct for StructSerializer<'a> {
                     Ok(())
                 }
                 StructEncoding::DescribedBasic => {
-                    self.cumulated_size += value.serialize(&mut *self.se)?;
+                    let mut serializer = SizeSerializer::new();
+                    self.cumulated_size += value.serialize(&mut serializer)?;
                     Ok(())
                 }
             }
@@ -830,7 +831,8 @@ impl<'a> ser::SerializeTupleVariant for VariantSerializer<'a> {
     where
         T: ser::Serialize + ?Sized,
     {
-        self.cumulated_size += value.serialize(&mut *self.se)?;
+        let mut serializer = SizeSerializer::new();
+        self.cumulated_size += value.serialize(&mut serializer)?;
         Ok(())
     }
 
