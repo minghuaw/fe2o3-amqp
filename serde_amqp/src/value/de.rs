@@ -209,7 +209,7 @@ impl<'de> de::Visitor<'de> for ValueVisitor {
                 Ok(Value::Described(val))
             }
             ValueType::Null => {
-                de.newtype_variant()?;
+                de.newtype_variant::<()>()?;
                 Ok(Value::Null)
             }
             ValueType::Bool => {

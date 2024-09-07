@@ -1,5 +1,10 @@
 # Change Log
 
+## 0.12.3
+
+1. Fix warning caused by [changes to never type fallback for edition
+   2024](https://github.com/rust-lang/rust/issues/123748)
+
 ## 0.12.2
 
 1. Fixed bug caused by not creating new `SizeSerializer` in `SerializeSeq::serialize_element` (issue #279)
