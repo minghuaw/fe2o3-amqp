@@ -252,6 +252,7 @@ pub mod descriptor;
 pub mod error;
 pub mod fixed_width;
 pub mod format_code;
+pub mod lazy;
 pub mod primitives;
 pub mod read;
 pub mod ser;
