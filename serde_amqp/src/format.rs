@@ -1,6 +1,6 @@
 use std::convert::TryFrom;
 
-use crate::{error::Error, format_code::EncodingCodes};
+use crate::format_code::EncodingCodes;
 
 /// Offset of List in other implementations
 /// The two implementations below do not count the byte(s) taken by `size` itself
@@ -34,14 +34,14 @@ pub enum Category {
     Array(usize),
 }
 
-pub struct IsComposite;
+pub struct IsDescribed;
 
 impl TryFrom<EncodingCodes> for Category {
-    type Error = IsComposite;
+    type Error = IsDescribed;
 
     fn try_from(value: EncodingCodes) -> Result<Self, Self::Error> {
         let value = match value {
-            EncodingCodes::DescribedType => return Err(IsComposite),
+            EncodingCodes::DescribedType => return Err(IsDescribed),
 
             EncodingCodes::Null => Category::Fixed(0),
 
