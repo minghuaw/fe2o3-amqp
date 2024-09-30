@@ -24,10 +24,6 @@ pub enum Error {
     #[error("Invalid value")]
     InvalidValue,
 
-    /// A described type is found while a primitive type is expected
-    #[error("Expecting non-described constructor")]
-    IsDescribedType,
-
     /// Found invalid UTF-8 encoding
     #[error("Invalid UTF-8 encoding")]
     InvalidUtf8Encoding,
