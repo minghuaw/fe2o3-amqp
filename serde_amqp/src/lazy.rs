@@ -85,6 +85,9 @@ where
 }
 
 /// A lazy value
+/// 
+/// This unfortunately does not implement `serde::Deserialize` or `serde::Serialize` yet. Please
+/// use [`LazyValue::from_reader`] to decode from a reader.
 #[derive(Debug, Clone)]
 pub struct LazyValue(Bytes);
 
@@ -101,6 +104,28 @@ impl LazyValue {
     /// Get the bytes as a slice
     pub fn as_slice(&self) -> &[u8] {
         self.0.as_ref()
+    }
+
+    /// Get the underlying bytes
+    pub fn as_bytes(&self) -> &Bytes {
+        &self.0
+    }
+
+    /// Convert the lazy value into bytes
+    pub fn into_bytes(self) -> Bytes {
+        self.0
+    }
+}
+
+impl From<LazyValue> for Bytes {
+    fn from(lazy_value: LazyValue) -> Self {
+        lazy_value.into_bytes()
+    }
+}
+
+impl From<LazyValue> for Vec<u8> {
+    fn from(lazy_value: LazyValue) -> Self {
+        lazy_value.into_bytes().to_vec()
     }
 }
 
