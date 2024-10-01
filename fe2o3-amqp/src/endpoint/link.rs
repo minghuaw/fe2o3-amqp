@@ -195,7 +195,7 @@ pub(crate) trait ReceiverLink: Link + LinkExt {
     // More than one transfer frames should be hanlded by the
     // `Receiver`
     fn on_complete_transfer<'a, T, P>(
-        &'a mut self,
+        &mut self,
         transfer: Transfer,
         payload: P,
         section_number: u32,
@@ -203,7 +203,7 @@ pub(crate) trait ReceiverLink: Link + LinkExt {
     ) -> Result<Delivery<T>, Self::TransferError>
     where
         for<'de> T: FromBody<'de> + Send,
-        for<'b> P: IntoReader + AsByteIterator<'b> + Send + 'a;
+        P: IntoReader<'a> + AsByteIterator + Send + 'a;
 
     async fn dispose(
         &self,

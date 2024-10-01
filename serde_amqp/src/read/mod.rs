@@ -55,7 +55,6 @@ pub trait Read<'de>: private::Sealed {
         V: serde::de::Visitor<'de>;
 }
 
-
 fn read_fixed_bytes<'de, R>(mut reader: R, width: usize) -> Result<(Vec<u8>, R), Error>
 where
     R: Read<'de>,
@@ -95,7 +94,10 @@ where
     Ok((bytes, reader))
 }
 
-pub(crate) fn read_primitive_bytes_or_else<'de, R, F>(mut reader: R, f: F) -> Result<(Vec<u8>, R), Error>
+pub(crate) fn read_primitive_bytes_or_else<'de, R, F>(
+    mut reader: R,
+    f: F,
+) -> Result<(Vec<u8>, R), Error>
 where
     R: Read<'de>,
     F: FnOnce(R) -> Result<(Vec<u8>, R), Error>,

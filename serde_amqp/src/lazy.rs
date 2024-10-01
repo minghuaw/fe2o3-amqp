@@ -2,10 +2,13 @@
 
 use bytes::Bytes;
 
-use crate::{read::{Read, read_primitive_bytes_or_else, read_described_bytes}, Error};
+use crate::{
+    read::{read_described_bytes, read_primitive_bytes_or_else, Read},
+    Error,
+};
 
 /// A lazy value
-/// 
+///
 /// This unfortunately does not implement `serde::Deserialize` or `serde::Serialize` yet. Please
 /// use [`LazyValue::from_reader`] to decode from a reader.
 #[derive(Debug, Clone)]
@@ -51,7 +54,10 @@ impl From<LazyValue> for Vec<u8> {
 
 #[cfg(test)]
 mod tests {
-    use crate::{described::Described, descriptor::Descriptor, format_code::EncodingCodes, primitives::Array, to_vec};
+    use crate::{
+        described::Described, descriptor::Descriptor, format_code::EncodingCodes,
+        primitives::Array, to_vec,
+    };
 
     use super::*;
 

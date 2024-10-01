@@ -1,9 +1,10 @@
 //! Common utilities
 
-use bytes::{buf, Buf};
+use bytes::Buf;
 use fe2o3_amqp_types::definitions::DeliveryNumber;
 use fe2o3_amqp_types::messaging::DeliveryState;
 use futures_util::Future;
+use serde_amqp::read::{IoReader, SliceReader};
 use std::io;
 use std::ops::Deref;
 use std::slice::Iter;
@@ -146,62 +147,72 @@ cfg_acceptor! {
     pub struct Initialized {}
 }
 
-pub(crate) trait AsByteIterator<'a> {
-    type IterImpl: Iterator<Item = &'a u8> + ExactSizeIterator + DoubleEndedIterator;
+pub(crate) trait AsByteIterator {
+    type IterImpl<'i>: Iterator<Item = &'i u8> + ExactSizeIterator + DoubleEndedIterator
+    where
+        Self: 'i;
 
-    fn as_byte_iterator(&'a self) -> Self::IterImpl;
+    fn as_byte_iterator(&self) -> Self::IterImpl<'_>;
 }
 
-pub(crate) trait IntoReader {
-    type Reader: io::Read;
+pub(crate) trait IntoReader<'a> {
+    type Reader: serde_amqp::read::Read<'a>;
 
     fn into_reader(self) -> Self::Reader;
 }
 
-impl IntoReader for Payload {
-    type Reader = buf::Reader<Payload>;
+impl<'a> IntoReader<'a> for &'a Payload {
+    type Reader = SliceReader<'a>;
 
     fn into_reader(self) -> Self::Reader {
-        self.reader()
+        SliceReader::new(self)
     }
 }
 
-impl<'a> AsByteIterator<'a> for Payload {
-    type IterImpl = std::slice::Iter<'a, u8>;
+impl AsByteIterator for Payload {
+    type IterImpl<'i> = std::slice::Iter<'i, u8> where Self: 'i;
 
-    fn as_byte_iterator(&'a self) -> Self::IterImpl {
+    fn as_byte_iterator(&self) -> Self::IterImpl<'_> {
         self.iter()
     }
 }
 
-impl<'a> AsByteIterator<'a> for &[u8] {
-    type IterImpl = std::slice::Iter<'a, u8>;
+impl<'a> AsByteIterator for &'a Payload {
+    type IterImpl<'i> = std::slice::Iter<'i, u8> where Self: 'i;
 
-    fn as_byte_iterator(&'a self) -> Self::IterImpl {
+    fn as_byte_iterator(&self) -> Self::IterImpl<'_> {
         self.iter()
     }
 }
 
-impl<'a> AsByteIterator<'a> for Vec<u8> {
-    type IterImpl = std::slice::Iter<'a, u8>;
+impl AsByteIterator for &[u8] {
+    type IterImpl<'i> = std::slice::Iter<'i, u8> where Self: 'i;
 
-    fn as_byte_iterator(&'a self) -> Self::IterImpl {
+    fn as_byte_iterator(&self) -> Self::IterImpl<'_> {
         self.iter()
     }
 }
 
-impl IntoReader for Vec<Payload> {
-    type Reader = ByteReader<Payload>;
+impl AsByteIterator for Vec<u8> {
+    type IterImpl<'i> = std::slice::Iter<'i, u8> where Self: 'i;
+
+    fn as_byte_iterator(&self) -> Self::IterImpl<'_> {
+        self.iter()
+    }
+}
+
+impl IntoReader<'static> for Vec<Payload> {
+    type Reader = IoReader<ByteReader<Payload>>;
 
     fn into_reader(self) -> Self::Reader {
-        ByteReader { inner: self }
+        IoReader::new(ByteReader { inner: self })
     }
 }
 
-impl<'a> AsByteIterator<'a> for Vec<Payload> {
-    type IterImpl = ByteReaderIter<'a>;
+impl AsByteIterator for Vec<Payload> {
+    type IterImpl<'i> = ByteReaderIter<'i> where Self: 'i;
 
-    fn as_byte_iterator(&'a self) -> Self::IterImpl {
+    fn as_byte_iterator(&self) -> Self::IterImpl<'_> {
         ByteReaderIter {
             inner: self.iter().map(|p| p.iter()).collect(),
         }
@@ -281,9 +292,8 @@ pub(crate) fn is_consecutive(left: &DeliveryNumber, right: &DeliveryNumber) -> b
 
 #[cfg(test)]
 mod tests {
-    use std::io::Read;
-
-    use bytes::{Buf, Bytes};
+    use bytes::Bytes;
+    use serde_amqp::read::Read;
 
     use super::{AsByteIterator, IntoReader};
 
@@ -297,34 +307,20 @@ mod tests {
         let mut reader = v.into_reader();
 
         let mut buf = [0u8; 1];
-        let nread = reader.read(&mut buf).unwrap();
-        assert_eq!(nread, 1);
+        reader.read_exact(&mut buf).unwrap();
         assert_eq!(buf, [1u8]);
 
         let mut buf = [0u8; 1];
-        let nread = reader.read(&mut buf).unwrap();
-        assert_eq!(nread, 1);
+        reader.read_exact(&mut buf).unwrap();
         assert_eq!(buf, [2u8]);
 
         let mut buf = [0u8; 3];
-        let nread = reader.read(&mut buf).unwrap();
-        assert_eq!(nread, 3);
+        reader.read_exact(&mut buf).unwrap();
         assert_eq!(buf, [3, 4, 5]);
 
         let mut buf = [0u8; 10];
-        let nread = reader.read(&mut buf).unwrap();
-        assert_eq!(nread, 4);
+        reader.read_exact(&mut buf).unwrap();
         assert_eq!(buf, [6, 7, 8, 9, 0, 0, 0, 0, 0, 0]);
-    }
-
-    #[test]
-    fn test_regular_read() {
-        let src = &[1u8, 2, 3, 4];
-        let mut dst = [0u8; 6];
-
-        let nread = src.reader().read(&mut dst).unwrap();
-        assert_eq!(nread, 4);
-        assert_eq!(dst, [1, 2, 3, 4, 0, 0]);
     }
 
     #[test]
