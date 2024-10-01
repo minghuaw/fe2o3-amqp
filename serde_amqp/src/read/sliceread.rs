@@ -50,15 +50,6 @@ impl<'s> Read<'s> for SliceReader<'s> {
     }
 
     fn read_exact(&mut self, buf: &mut [u8]) -> Result<(), io::Error> {
-        // let n = buf.len();
-
-        // if self.slice.len() < n {
-        //     Err(io::Error::new(io::ErrorKind::UnexpectedEof, ""))
-        // } else {
-        //     let read_slice = self.get_byte_slice(n)?;
-        //     buf.copy_from_slice(read_slice);
-        //     Ok(())
-        // }
         std::io::Read::read_exact(&mut self.slice, buf)
     }
 

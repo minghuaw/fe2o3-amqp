@@ -1,6 +1,6 @@
 //! Implementation of Message as defined in AMQP 1.0 protocol Part 3.2
 
-use std::{io, marker::PhantomData};
+use std::marker::PhantomData;
 
 use serde::{
     de::{self},
@@ -40,7 +40,9 @@ pub trait DecodeIntoMessage: Sized {
     type DecodeError;
 
     /// Decode reader into [`Message<T>`]
-    fn decode_into_message(reader: impl io::Read) -> Result<Message<Self>, Self::DecodeError>;
+    fn decode_message_from_reader<'de>(
+        reader: impl serde_amqp::read::Read<'de>,
+    ) -> Result<Message<Self>, Self::DecodeError>;
 }
 
 impl<T> DecodeIntoMessage for T
@@ -49,9 +51,13 @@ where
 {
     type DecodeError = serde_amqp::Error;
 
-    fn decode_into_message(reader: impl io::Read) -> Result<Message<Self>, Self::DecodeError> {
-        let message: Deserializable<Message<T>> = serde_amqp::from_reader(reader)?;
-        Ok(message.0)
+    fn decode_message_from_reader<'de>(
+        reader: impl serde_amqp::read::Read<'de>,
+    ) -> Result<Message<Self>, Self::DecodeError> {
+        use serde::Deserialize;
+
+        let mut de = serde_amqp::de::Deserializer::new(reader);
+        Deserializable::<Message<T>>::deserialize(&mut de).map(|deserializable| deserializable.0)
     }
 }
 

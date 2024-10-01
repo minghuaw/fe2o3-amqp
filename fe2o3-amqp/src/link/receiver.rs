@@ -919,7 +919,7 @@ where
                         count_number_of_sections_and_offset(&payload);
                     let delivery = self.link.on_complete_transfer(
                         transfer,
-                        payload,
+                        &payload,
                         section_number,
                         section_offset,
                     )?;
@@ -969,8 +969,12 @@ where
             None => {
                 let (section_number, section_offset) =
                     count_number_of_sections_and_offset(&payload);
-                self.link
-                    .on_complete_transfer(transfer, payload, section_number, section_offset)?
+                self.link.on_complete_transfer(
+                    transfer,
+                    &payload,
+                    section_number,
+                    section_offset,
+                )?
             }
         };
 
