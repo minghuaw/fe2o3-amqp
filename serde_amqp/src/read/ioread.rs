@@ -2,7 +2,7 @@ use std::io;
 
 use crate::error::Error;
 
-use super::{private, Read};
+use super::{private, read_described_bytes, read_primitive_bytes_or_else, Read};
 
 /// A reader for IO stream
 #[derive(Debug)]
@@ -99,7 +99,7 @@ impl<'de, R: io::Read + 'de> Read<'de> for IoReader<R> {
         }
     }
 
-    fn forward_read_bytes<V>(&mut self, len: usize, visitor: V) -> Result<V::Value, Error>
+    fn forward_read_bytes_with_hint<V>(&mut self, len: usize, visitor: V) -> Result<V::Value, Error>
     where
         V: serde::de::Visitor<'de>,
     {
@@ -107,6 +107,14 @@ impl<'de, R: io::Read + 'de> Read<'de> for IoReader<R> {
         let result = visitor.visit_bytes(&self.buf[..len]);
         self.buf.drain(..len);
         result
+    }
+
+    fn forward_read_bytes<V>(&mut self, visitor: V) -> Result<V::Value, Error>
+        where
+            V: serde::de::Visitor<'de> 
+    {
+        let bytes = read_primitive_bytes_or_else(self, read_described_bytes)?;
+        visitor.visit_bytes(&bytes)
     }
 
     fn forward_read_str<V>(&mut self, len: usize, visitor: V) -> Result<V::Value, Error>
