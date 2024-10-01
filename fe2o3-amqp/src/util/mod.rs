@@ -319,8 +319,8 @@ mod tests {
         assert_eq!(buf, [3, 4, 5]);
 
         let mut buf = [0u8; 10];
-        reader.read_exact(&mut buf).unwrap();
-        assert_eq!(buf, [6, 7, 8, 9, 0, 0, 0, 0, 0, 0]);
+        let res = reader.read_exact(&mut buf);
+        assert!(res.is_err());
     }
 
     #[test]
