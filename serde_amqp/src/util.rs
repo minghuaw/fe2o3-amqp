@@ -1,9 +1,15 @@
 use crate::{descriptor::PeekDescriptor, value::de::ValueType};
 
-#[derive(Debug)]
-pub(crate) enum NewType {
-    None,
+#[derive(Debug, Default)]
+pub(crate) enum SequenceType {
+    #[default]
+    List,
     Array,
+    TransparentVec,
+}
+
+#[derive(Debug)]
+pub(crate) enum NonNativeType {
     Dec32,
     Dec64,
     Dec128,
@@ -11,13 +17,6 @@ pub(crate) enum NewType {
     SymbolRef,
     Timestamp,
     Uuid,
-    TransparentVec,
-}
-
-impl Default for NewType {
-    fn default() -> Self {
-        Self::None
-    }
 }
 
 #[derive(Debug, Clone)]

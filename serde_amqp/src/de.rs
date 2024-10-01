@@ -19,7 +19,7 @@ use crate::{
     },
     format_code::EncodingCodes,
     read::{IoReader, Read, SliceReader},
-    util::{EnumType, NewType, PeekTypeCode, StructEncoding},
+    util::{EnumType, NonNativeType, PeekTypeCode, SequenceType, StructEncoding},
 };
 
 /// Deserialize an instance of type T from an IO stream
@@ -40,7 +40,8 @@ pub fn from_slice<'de, T: de::Deserialize<'de>>(slice: &'de [u8]) -> Result<T, E
 #[derive(Debug)]
 pub struct Deserializer<R> {
     reader: R,
-    new_type: NewType,
+    non_native_type: Option<NonNativeType>,
+    seq_type: Option<SequenceType>,
     enum_type: EnumType,
     struct_encoding: StructEncoding,
     elem_format_code: Option<EncodingCodes>,
@@ -51,7 +52,8 @@ impl<'de, R: Read<'de>> Deserializer<R> {
     pub fn new(reader: R) -> Self {
         Self {
             reader,
-            new_type: Default::default(),
+            non_native_type: None,
+            seq_type: None,
             enum_type: Default::default(),
             struct_encoding: StructEncoding::None,
             elem_format_code: None,
@@ -604,9 +606,9 @@ where
     where
         V: de::Visitor<'de>,
     {
-        match self.new_type {
-            NewType::Timestamp => {
-                self.new_type = NewType::None;
+        match self.non_native_type {
+            Some(NonNativeType::Timestamp) => {
+                self.non_native_type = None;
                 visitor.visit_i64(self.parse_timestamp()?)
             }
             _ => visitor.visit_i64(self.parse_i64()?),
@@ -674,11 +676,11 @@ where
     where
         V: de::Visitor<'de>,
     {
-        match self.new_type {
-            NewType::Symbol => {
+        match self.non_native_type {
+            Some(NonNativeType::Symbol) => {
                 // Leave symbol as visit_string because serde(untagged)
                 // on descriptor will visit String instead of str
-                self.new_type = NewType::None;
+                self.non_native_type = None;
                 visitor.visit_string(self.parse_symbol()?)
             }
             _ => visitor.visit_string(self.parse_string()?),
@@ -718,15 +720,17 @@ where
     where
         V: de::Visitor<'de>,
     {
-        match self.new_type {
+        match self.non_native_type {
             // Use bytes to reduce number of memcpy
-            NewType::Dec32 | NewType::Dec64 | NewType::Dec128 => {
-                self.new_type = NewType::None;
+            Some(NonNativeType::Dec32)
+            | Some(NonNativeType::Dec64)
+            | Some(NonNativeType::Dec128) => {
+                self.non_native_type = None;
                 self.parse_decimal(visitor)
             }
             // Use bytes to reduce number of memcpy
-            NewType::Uuid => {
-                self.new_type = NewType::None;
+            Some(NonNativeType::Uuid) => {
+                self.non_native_type = None;
                 self.parse_uuid(visitor)
             }
             _ => {
@@ -796,30 +800,30 @@ where
         V: de::Visitor<'de>,
     {
         if name == SYMBOL {
-            self.new_type = NewType::Symbol;
+            self.non_native_type = Some(NonNativeType::Symbol);
             // Leave symbol as visit_string because serde(untagged)
             // on descriptor will visit String instead of str
             self.deserialize_string(visitor)
         } else if name == SYMBOL_REF {
-            self.new_type = NewType::SymbolRef;
+            self.non_native_type = Some(NonNativeType::SymbolRef);
             self.deserialize_str(visitor)
         } else if name == DECIMAL32 {
-            self.new_type = NewType::Dec32;
+            self.non_native_type = Some(NonNativeType::Dec32);
             self.deserialize_bytes(visitor)
         } else if name == DECIMAL64 {
-            self.new_type = NewType::Dec64;
+            self.non_native_type = Some(NonNativeType::Dec64);
             self.deserialize_bytes(visitor)
         } else if name == DECIMAL128 {
-            self.new_type = NewType::Dec128;
+            self.non_native_type = Some(NonNativeType::Dec128);
             self.deserialize_bytes(visitor)
         } else if name == UUID {
-            self.new_type = NewType::Uuid;
+            self.non_native_type = Some(NonNativeType::Uuid);
             self.deserialize_bytes(visitor)
         } else if name == TIMESTAMP {
-            self.new_type = NewType::Timestamp;
+            self.non_native_type = Some(NonNativeType::Timestamp);
             self.deserialize_i64(visitor)
         } else if name == TRANSPARENT_VEC {
-            self.new_type = NewType::TransparentVec;
+            self.seq_type = Some(SequenceType::TransparentVec);
             visitor.visit_seq(TransparentVecAccess::new(self))
         } else {
             visitor.visit_newtype_struct(self)

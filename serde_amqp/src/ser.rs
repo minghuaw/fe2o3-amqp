@@ -16,7 +16,7 @@ use crate::{
     error::Error,
     format::{OFFSET_LIST32, OFFSET_LIST8, OFFSET_MAP32, OFFSET_MAP8},
     format_code::EncodingCodes,
-    util::{FieldRole, IsArrayElement, NewType, StructEncoding},
+    util::{FieldRole, IsArrayElement, NonNativeType, SequenceType, StructEncoding},
 };
 
 pub(crate) const U8_MAX: usize = u8::MAX as usize;
@@ -45,7 +45,10 @@ pub struct Serializer<W> {
     pub writer: W,
 
     /// Any particular new_type wrapper
-    new_type: NewType,
+    non_native_type: Option<NonNativeType>,
+
+    /// Any particular sequence type
+    seq_type: Option<SequenceType>,
 
     /// How a struct should be encoded
     struct_encoding: Vec<StructEncoding>,
@@ -66,8 +69,9 @@ impl<W: Write> Serializer<W> {
     pub fn new(writer: W) -> Self {
         Self {
             writer,
-            new_type: Default::default(),
-            struct_encoding: Default::default(),
+            non_native_type: None,
+            seq_type: None,
+            struct_encoding: Vec::new(),
             is_array_elem: IsArrayElement::False,
         }
     }
@@ -81,7 +85,8 @@ impl<W: Write> Serializer<W> {
     pub fn symbol(writer: W) -> Self {
         Self {
             writer,
-            new_type: NewType::Symbol,
+            non_native_type: Some(NonNativeType::Symbol),
+            seq_type: None,
             struct_encoding: Default::default(),
             is_array_elem: IsArrayElement::False,
         }
@@ -91,7 +96,8 @@ impl<W: Write> Serializer<W> {
     pub fn described_list(writer: W) -> Self {
         Self {
             writer,
-            new_type: Default::default(),
+            non_native_type: None,
+            seq_type: None,
             struct_encoding: vec![StructEncoding::DescribedList],
             is_array_elem: IsArrayElement::False,
         }
@@ -101,7 +107,8 @@ impl<W: Write> Serializer<W> {
     pub fn described_map(writer: W) -> Self {
         Self {
             writer,
-            new_type: Default::default(),
+            non_native_type: None,
+            seq_type: None,
             struct_encoding: vec![StructEncoding::DescribedMap],
             is_array_elem: IsArrayElement::False,
         }
@@ -111,7 +118,8 @@ impl<W: Write> Serializer<W> {
     pub fn described_basic(writer: W) -> Self {
         Self {
             writer,
-            new_type: Default::default(),
+            non_native_type: None,
+            seq_type: None,
             struct_encoding: vec![StructEncoding::DescribedBasic],
             is_array_elem: IsArrayElement::False,
         }
@@ -221,8 +229,8 @@ impl<'a, W: Write + 'a> ser::Serializer for &'a mut Serializer<W> {
 
     #[inline]
     fn serialize_i64(self, v: i64) -> Result<Self::Ok, Self::Error> {
-        match self.new_type {
-            NewType::None => match self.is_array_elem {
+        match self.non_native_type {
+            None => match self.is_array_elem {
                 IsArrayElement::False => match v {
                     val @ -128..=127 => {
                         let buf = [EncodingCodes::SmallLong as u8, val as u8];
@@ -246,7 +254,7 @@ impl<'a, W: Write + 'a> ser::Serializer for &'a mut Serializer<W> {
                     self.writer.write_all(&buf)?;
                 }
             },
-            NewType::Timestamp => {
+            Some(NonNativeType::Timestamp) => {
                 if let IsArrayElement::False | IsArrayElement::FirstElement = self.is_array_elem {
                     let code = [EncodingCodes::Timestamp as u8];
                     self.writer.write_all(&code)?;
@@ -399,8 +407,8 @@ impl<'a, W: Write + 'a> ser::Serializer for &'a mut Serializer<W> {
     fn serialize_str(self, v: &str) -> Result<Self::Ok, Self::Error> {
         match self.is_array_elem {
             IsArrayElement::False => {
-                match self.new_type {
-                    NewType::Symbol | NewType::SymbolRef => {
+                match self.non_native_type {
+                    Some(NonNativeType::Symbol) | Some(NonNativeType::SymbolRef) => {
                         // Symbols are encoded as ASCII characters [ASCII].
                         //
                         // Returns the length of this String, in bytes,
@@ -422,9 +430,9 @@ impl<'a, W: Write + 'a> ser::Serializer for &'a mut Serializer<W> {
                             }
                             _ => return Err(Error::too_long()),
                         }
-                        self.new_type = NewType::None;
+                        self.non_native_type = None;
                     }
-                    NewType::None => {
+                    None => {
                         // A string represents a sequence of Unicode characters
                         // as defined by the Unicode V6.0.0 standard [UNICODE6].
                         let l = v.len();
@@ -449,8 +457,8 @@ impl<'a, W: Write + 'a> ser::Serializer for &'a mut Serializer<W> {
                     _ => unreachable!(),
                 }
             }
-            IsArrayElement::FirstElement => match self.new_type {
-                NewType::Symbol | NewType::SymbolRef => {
+            IsArrayElement::FirstElement => match self.non_native_type {
+                Some(NonNativeType::Symbol) | Some(NonNativeType::SymbolRef) => {
                     // Symbols are encoded as ASCII characters [ASCII].
                     //
                     // Returns the length of this String, in bytes,
@@ -463,7 +471,7 @@ impl<'a, W: Write + 'a> ser::Serializer for &'a mut Serializer<W> {
                     self.writer.write_all(&code)?;
                     self.writer.write_all(&width)?;
                 }
-                NewType::None => {
+                None => {
                     // A string represents a sequence of Unicode characters
                     // as defined by the Unicode V6.0.0 standard [UNICODE6].
                     let l = v.chars().count();
@@ -475,8 +483,8 @@ impl<'a, W: Write + 'a> ser::Serializer for &'a mut Serializer<W> {
                 }
                 _ => unreachable!(),
             },
-            IsArrayElement::OtherElement => match self.new_type {
-                NewType::Symbol | NewType::SymbolRef => {
+            IsArrayElement::OtherElement => match self.non_native_type {
+                Some(NonNativeType::Symbol) | Some(NonNativeType::SymbolRef) => {
                     // Symbols are encoded as ASCII characters [ASCII].
                     //
                     // Returns the length of this String, in bytes,
@@ -487,7 +495,7 @@ impl<'a, W: Write + 'a> ser::Serializer for &'a mut Serializer<W> {
                     let width = (l as u32).to_be_bytes();
                     self.writer.write_all(&width)?;
                 }
-                NewType::None => {
+                None => {
                     // A string represents a sequence of Unicode characters
                     // as defined by the Unicode V6.0.0 standard [UNICODE6].
                     let l = v.chars().count();
@@ -505,8 +513,8 @@ impl<'a, W: Write + 'a> ser::Serializer for &'a mut Serializer<W> {
     #[inline]
     fn serialize_bytes(self, v: &[u8]) -> Result<Self::Ok, Self::Error> {
         let l = v.len();
-        match self.new_type {
-            NewType::None => {
+        match self.non_native_type {
+            None => {
                 match self.is_array_elem {
                     IsArrayElement::False => {
                         match l {
@@ -539,40 +547,38 @@ impl<'a, W: Write + 'a> ser::Serializer for &'a mut Serializer<W> {
                     }
                 }
             }
-            NewType::Dec32 => {
+            Some(NonNativeType::Dec32) => {
                 if let IsArrayElement::False | IsArrayElement::FirstElement = self.is_array_elem {
                     let code = [EncodingCodes::Decimal32 as u8];
                     self.writer.write_all(&code)?;
                 }
-                self.new_type = NewType::None;
+                self.non_native_type = None;
             }
-            NewType::Dec64 => {
+            Some(NonNativeType::Dec64) => {
                 if let IsArrayElement::False | IsArrayElement::FirstElement = self.is_array_elem {
                     let code = [EncodingCodes::Decimal64 as u8];
                     self.writer.write_all(&code)?;
                 }
-                self.new_type = NewType::None;
+                self.non_native_type = None;
             }
-            NewType::Dec128 => {
+            Some(NonNativeType::Dec128) => {
                 if let IsArrayElement::False | IsArrayElement::FirstElement = self.is_array_elem {
                     let code = [EncodingCodes::Decimal128 as u8];
                     self.writer.write_all(&code)?;
                 }
-                self.new_type = NewType::None;
+                self.non_native_type = None;
             }
-            NewType::Uuid => {
+            Some(NonNativeType::Uuid) => {
                 if let IsArrayElement::False | IsArrayElement::FirstElement = self.is_array_elem {
                     let code = [EncodingCodes::Uuid as u8];
                     self.writer.write_all(&code)?;
                 }
-                self.new_type = NewType::None;
+                self.non_native_type = None;
             }
             // Timestamp should be handled by i64
-            NewType::Timestamp
-            | NewType::Array
-            | NewType::Symbol
-            | NewType::SymbolRef
-            | NewType::TransparentVec => unreachable!(),
+            Some(NonNativeType::Timestamp)
+            | Some(NonNativeType::Symbol)
+            | Some(NonNativeType::SymbolRef) => unreachable!(),
         }
 
         self.writer.write_all(v).map_err(Into::into)
@@ -633,23 +639,23 @@ impl<'a, W: Write + 'a> ser::Serializer for &'a mut Serializer<W> {
         T: Serialize + ?Sized,
     {
         if name == SYMBOL {
-            self.new_type = NewType::Symbol;
+            self.non_native_type = Some(NonNativeType::Symbol);
         } else if name == SYMBOL_REF {
-            self.new_type = NewType::SymbolRef;
+            self.non_native_type = Some(NonNativeType::SymbolRef);
         } else if name == ARRAY {
-            self.new_type = NewType::Array;
+            self.seq_type = Some(SequenceType::Array);
         } else if name == DECIMAL32 {
-            self.new_type = NewType::Dec32;
+            self.non_native_type = Some(NonNativeType::Dec32);
         } else if name == DECIMAL64 {
-            self.new_type = NewType::Dec64;
+            self.non_native_type = Some(NonNativeType::Dec64);
         } else if name == DECIMAL128 {
-            self.new_type = NewType::Dec128;
+            self.non_native_type = Some(NonNativeType::Dec128);
         } else if name == TIMESTAMP {
-            self.new_type = NewType::Timestamp
+            self.non_native_type = Some(NonNativeType::Timestamp);
         } else if name == UUID {
-            self.new_type = NewType::Uuid;
+            self.non_native_type = Some(NonNativeType::Uuid);
         } else if name == TRANSPARENT_VEC {
-            self.new_type = NewType::TransparentVec;
+            self.seq_type = Some(SequenceType::TransparentVec);
         }
         value.serialize(self)
     }
@@ -834,13 +840,13 @@ impl<'a, W: Write + 'a> ser::SerializeSeq for SeqSerializer<'a, W> {
     where
         T: Serialize + ?Sized,
     {
-        match self.se.new_type {
-            NewType::None => {
+        match self.se.seq_type {
+            None | Some(SequenceType::List) => {
                 // Element in the list always has it own constructor
                 let mut se = Serializer::new(&mut self.buf);
                 value.serialize(&mut se)?;
             }
-            NewType::Array => {
+            Some(SequenceType::Array) => {
                 let mut se = match self.num {
                     // The first element should include the contructor code
                     0 => {
@@ -857,18 +863,11 @@ impl<'a, W: Write + 'a> ser::SerializeSeq for SeqSerializer<'a, W> {
                 };
                 value.serialize(&mut se)?;
             }
-            NewType::TransparentVec => {
+            Some(SequenceType::TransparentVec) => {
                 // FIXME: Directly write to the writer
                 let mut se = Serializer::new(&mut self.buf);
                 value.serialize(&mut se)?;
             }
-            NewType::Dec32
-            | NewType::Dec64
-            | NewType::Dec128
-            | NewType::Symbol
-            | NewType::SymbolRef
-            | NewType::Timestamp
-            | NewType::Uuid => unreachable!(),
         }
 
         self.num += 1;
@@ -878,17 +877,12 @@ impl<'a, W: Write + 'a> ser::SerializeSeq for SeqSerializer<'a, W> {
     #[inline]
     fn end(self) -> Result<Self::Ok, Self::Error> {
         let Self { se, num, buf } = self;
-        match se.new_type {
-            NewType::None => write_list(&mut se.writer, num, &buf, &se.is_array_elem),
-            NewType::Array => write_array(&mut se.writer, num, &buf, &se.is_array_elem),
-            NewType::TransparentVec => write_transparent_vec(&mut se.writer, &buf),
-            NewType::Dec32
-            | NewType::Dec64
-            | NewType::Dec128
-            | NewType::Symbol
-            | NewType::SymbolRef
-            | NewType::Timestamp
-            | NewType::Uuid => unreachable!(),
+        match se.seq_type {
+            None | Some(SequenceType::List) => {
+                write_list(&mut se.writer, num, &buf, &se.is_array_elem)
+            }
+            Some(SequenceType::Array) => write_array(&mut se.writer, num, &buf, &se.is_array_elem),
+            Some(SequenceType::TransparentVec) => write_transparent_vec(&mut se.writer, &buf),
         }
     }
 }

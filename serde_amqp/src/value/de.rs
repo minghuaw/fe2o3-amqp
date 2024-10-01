@@ -12,7 +12,7 @@ use crate::{
     error::Error,
     format_code::EncodingCodes,
     primitives::OrderedMap,
-    util::{EnumType, NewType},
+    util::{EnumType, NonNativeType, SequenceType},
 };
 
 use super::Value;
@@ -532,7 +532,8 @@ pub fn from_value<T: de::DeserializeOwned>(value: Value) -> Result<T, Error> {
 /// A structure that deserializes a [`Value`] into type `T`
 #[derive(Debug)]
 pub struct Deserializer {
-    new_type: NewType,
+    non_native_type: Option<NonNativeType>,
+    seq_type: Option<SequenceType>,
     value: Value,
     enum_type: EnumType,
 }
@@ -541,7 +542,8 @@ impl Deserializer {
     /// Creates a new value deserializer
     pub fn new(value: Value) -> Self {
         Self {
-            new_type: Default::default(),
+            non_native_type: None,
+            seq_type: None,
             enum_type: Default::default(),
             value,
         }
@@ -549,7 +551,8 @@ impl Deserializer {
 
     pub(crate) fn array(value: Value) -> Self {
         Self {
-            new_type: NewType::Array,
+            non_native_type: None,
+            seq_type: Some(SequenceType::Array),
             enum_type: Default::default(),
             value,
         }
@@ -646,12 +649,12 @@ impl<'de> de::Deserializer<'de> for Deserializer {
     where
         V: de::Visitor<'de>,
     {
-        match self.new_type {
-            NewType::None => match self.value {
+        match self.non_native_type {
+            None => match self.value {
                 Value::Long(v) => visitor.visit_i64(v),
                 _ => Err(Error::InvalidValue),
             },
-            NewType::Timestamp => match self.value {
+            Some(NonNativeType::Timestamp) => match self.value {
                 Value::Timestamp(ref v) => visitor.visit_i64(v.milliseconds()),
                 _ => Err(Error::InvalidValue),
             },
@@ -741,12 +744,12 @@ impl<'de> de::Deserializer<'de> for Deserializer {
     where
         V: de::Visitor<'de>,
     {
-        match self.new_type {
-            NewType::None => match self.value {
+        match self.non_native_type {
+            None => match self.value {
                 Value::String(v) => visitor.visit_string(v),
                 _ => Err(Error::InvalidValue),
             },
-            NewType::Symbol => match self.value {
+            Some(NonNativeType::Symbol) => match self.value {
                 Value::Symbol(v) => visitor.visit_string(v.into_inner()),
                 _ => Err(Error::InvalidValue),
             },
@@ -767,8 +770,8 @@ impl<'de> de::Deserializer<'de> for Deserializer {
     where
         V: de::Visitor<'de>,
     {
-        match self.new_type {
-            NewType::None => match self.value {
+        match self.non_native_type {
+            None => match self.value {
                 Value::Binary(v) => visitor.visit_byte_buf(v.into_vec()),
                 _ => Err(Error::InvalidValue),
             },
@@ -782,20 +785,20 @@ impl<'de> de::Deserializer<'de> for Deserializer {
     where
         V: de::Visitor<'de>,
     {
-        match self.new_type {
-            NewType::Dec32 => match self.value {
+        match self.non_native_type {
+            Some(NonNativeType::Dec32) => match self.value {
                 Value::Decimal32(v) => visitor.visit_bytes(&v.into_inner()),
                 _ => Err(Error::InvalidValue),
             },
-            NewType::Dec64 => match self.value {
+            Some(NonNativeType::Dec64) => match self.value {
                 Value::Decimal64(v) => visitor.visit_bytes(&v.into_inner()),
                 _ => Err(Error::InvalidValue),
             },
-            NewType::Dec128 => match self.value {
+            Some(NonNativeType::Dec128) => match self.value {
                 Value::Decimal128(v) => visitor.visit_bytes(&v.into_inner()),
                 _ => Err(Error::InvalidValue),
             },
-            NewType::Uuid => match self.value {
+            Some(NonNativeType::Uuid) => match self.value {
                 Value::Uuid(v) => visitor.visit_bytes(&v.into_inner()),
                 _ => Err(Error::InvalidValue),
             },
@@ -847,25 +850,25 @@ impl<'de> de::Deserializer<'de> for Deserializer {
         V: de::Visitor<'de>,
     {
         if name == SYMBOL {
-            self.new_type = NewType::Symbol;
+            self.non_native_type = Some(NonNativeType::Symbol);
             self.deserialize_string(visitor)
         } else if name == DECIMAL32 {
-            self.new_type = NewType::Dec32;
+            self.non_native_type = Some(NonNativeType::Dec32);
             self.deserialize_bytes(visitor)
         } else if name == DECIMAL64 {
-            self.new_type = NewType::Dec64;
+            self.non_native_type = Some(NonNativeType::Dec64);
             self.deserialize_bytes(visitor)
         } else if name == DECIMAL128 {
-            self.new_type = NewType::Dec128;
+            self.non_native_type = Some(NonNativeType::Dec128);
             self.deserialize_bytes(visitor)
         } else if name == UUID {
-            self.new_type = NewType::Uuid;
+            self.non_native_type = Some(NonNativeType::Uuid);
             self.deserialize_bytes(visitor)
         } else if name == TIMESTAMP {
-            self.new_type = NewType::Timestamp;
+            self.non_native_type = Some(NonNativeType::Timestamp);
             self.deserialize_i64(visitor)
         } else if name == ARRAY {
-            self.new_type = NewType::Array;
+            self.seq_type = Some(SequenceType::Array);
             self.deserialize_seq(visitor)
         } else {
             visitor.visit_newtype_struct(self)
@@ -877,8 +880,8 @@ impl<'de> de::Deserializer<'de> for Deserializer {
     where
         V: de::Visitor<'de>,
     {
-        match self.new_type {
-            NewType::None => match self.value {
+        match self.seq_type {
+            None | Some(SequenceType::List) => match self.value {
                 Value::List(v) => {
                     let iter = v.into_iter();
                     visitor.visit_seq(SeqAccess {
@@ -888,7 +891,7 @@ impl<'de> de::Deserializer<'de> for Deserializer {
                 }
                 _ => Err(Error::InvalidValue),
             },
-            NewType::Array => match self.value {
+            Some(SequenceType::Array) => match self.value {
                 Value::Array(v) => {
                     let v = v.into_inner();
                     let iter = v.into_iter();

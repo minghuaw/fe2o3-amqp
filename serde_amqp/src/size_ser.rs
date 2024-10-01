@@ -9,7 +9,7 @@ use crate::{
         DESCRIPTOR, SYMBOL, SYMBOL_REF, TIMESTAMP, TRANSPARENT_VEC, UUID,
     },
     ser::{U32_MAX_MINUS_4, U8_MAX, U8_MAX_MINUS_1},
-    util::{FieldRole, IsArrayElement, NewType, StructEncoding},
+    util::{FieldRole, IsArrayElement, NonNativeType, SequenceType, StructEncoding},
 };
 
 /// Obtain the serialized size without allocating `Vec<u8>`
@@ -26,7 +26,8 @@ where
 pub struct SizeSerializer {
     /// How a struct should be encoded
     pub(crate) struct_encoding: Vec<StructEncoding>,
-    pub(crate) new_type: NewType,
+    pub(crate) non_native_type: Option<NonNativeType>,
+    pub(crate) seq_type: Option<SequenceType>,
     pub(crate) is_array_element: IsArrayElement,
 }
 
@@ -41,7 +42,8 @@ impl SizeSerializer {
     pub fn new() -> Self {
         Self {
             struct_encoding: Vec::new(),
-            new_type: NewType::None,
+            non_native_type: None,
+            seq_type: None,
             is_array_element: IsArrayElement::False,
         }
     }
@@ -49,7 +51,8 @@ impl SizeSerializer {
     fn described_list() -> Self {
         Self {
             struct_encoding: vec![StructEncoding::DescribedList],
-            new_type: NewType::None,
+            non_native_type: None,
+            seq_type: None,
             is_array_element: IsArrayElement::False,
         }
     }
@@ -57,7 +60,8 @@ impl SizeSerializer {
     fn described_map() -> Self {
         Self {
             struct_encoding: vec![StructEncoding::DescribedMap],
-            new_type: NewType::None,
+            non_native_type: None,
+            seq_type: None,
             is_array_element: IsArrayElement::False,
         }
     }
@@ -120,8 +124,8 @@ impl<'a> ser::Serializer for &'a mut SizeSerializer {
     }
 
     fn serialize_i64(self, v: i64) -> Result<Self::Ok, Self::Error> {
-        match self.new_type {
-            NewType::None => match self.is_array_element {
+        match self.non_native_type {
+            None => match self.is_array_element {
                 IsArrayElement::False => match v {
                     -128..=127 => Ok(2),
                     _ => Ok(9),
@@ -129,7 +133,7 @@ impl<'a> ser::Serializer for &'a mut SizeSerializer {
                 IsArrayElement::FirstElement => Ok(9),
                 IsArrayElement::OtherElement => Ok(8),
             },
-            NewType::Timestamp => match self.is_array_element {
+            Some(NonNativeType::Timestamp) => match self.is_array_element {
                 IsArrayElement::False => Ok(9),
                 IsArrayElement::FirstElement => Ok(9),
                 IsArrayElement::OtherElement => Ok(8),
@@ -204,31 +208,35 @@ impl<'a> ser::Serializer for &'a mut SizeSerializer {
 
     fn serialize_str(self, v: &str) -> Result<Self::Ok, Self::Error> {
         match self.is_array_element {
-            IsArrayElement::False => match self.new_type {
-                NewType::Symbol | NewType::SymbolRef => match v.len() {
+            IsArrayElement::False => match self.non_native_type {
+                Some(NonNativeType::Symbol) | Some(NonNativeType::SymbolRef) => match v.len() {
                     0..=U8_MAX_MINUS_1 => {
-                        self.new_type = NewType::None;
+                        self.non_native_type = None;
                         Ok(2 + v.len())
                     }
                     U8_MAX..=U32_MAX_MINUS_4 => {
-                        self.new_type = NewType::None;
+                        self.non_native_type = None;
                         Ok(5 + v.len())
                     }
                     _ => Err(Error::too_long()),
                 },
-                NewType::None => match v.len() {
+                None => match v.len() {
                     0..=U8_MAX_MINUS_1 => Ok(2 + v.len()),
                     U8_MAX..=U32_MAX_MINUS_4 => Ok(5 + v.len()),
                     _ => Err(Error::too_long()),
                 },
                 _ => unreachable!("serialize_str is only used for Symbol and String"),
             },
-            IsArrayElement::FirstElement => match self.new_type {
-                NewType::Symbol | NewType::SymbolRef | NewType::None => Ok(5 + v.len()),
+            IsArrayElement::FirstElement => match self.non_native_type {
+                Some(NonNativeType::Symbol) | Some(NonNativeType::SymbolRef) | None => {
+                    Ok(5 + v.len())
+                }
                 _ => unreachable!("serialize_str is only used for Symbol and String"),
             },
-            IsArrayElement::OtherElement => match self.new_type {
-                NewType::Symbol | NewType::SymbolRef | NewType::None => Ok(4 + v.len()),
+            IsArrayElement::OtherElement => match self.non_native_type {
+                Some(NonNativeType::Symbol) | Some(NonNativeType::SymbolRef) | None => {
+                    Ok(4 + v.len())
+                }
                 _ => unreachable!("serialize_str is only used for Symbol and String"),
             },
         }
@@ -236,8 +244,8 @@ impl<'a> ser::Serializer for &'a mut SizeSerializer {
 
     fn serialize_bytes(self, v: &[u8]) -> Result<Self::Ok, Self::Error> {
         let l = v.len();
-        match self.new_type {
-            NewType::None => match self.is_array_element {
+        match self.non_native_type {
+            None => match self.is_array_element {
                 IsArrayElement::False => match l {
                     0..=U8_MAX_MINUS_1 => Ok(2 + l),
                     U8_MAX..=U32_MAX_MINUS_4 => Ok(5 + l),
@@ -246,31 +254,29 @@ impl<'a> ser::Serializer for &'a mut SizeSerializer {
                 IsArrayElement::FirstElement => Ok(5 + l),
                 IsArrayElement::OtherElement => Ok(4 + l),
             },
-            NewType::Dec32 => match self.is_array_element {
+            Some(NonNativeType::Dec32) => match self.is_array_element {
                 IsArrayElement::False => Ok(1 + l),
                 IsArrayElement::FirstElement => Ok(1 + l),
                 IsArrayElement::OtherElement => Ok(l),
             },
-            NewType::Dec64 => match self.is_array_element {
+            Some(NonNativeType::Dec64) => match self.is_array_element {
                 IsArrayElement::False => Ok(1 + l),
                 IsArrayElement::FirstElement => Ok(1 + l),
                 IsArrayElement::OtherElement => Ok(l),
             },
-            NewType::Dec128 => match self.is_array_element {
+            Some(NonNativeType::Dec128) => match self.is_array_element {
                 IsArrayElement::False => Ok(1 + l),
                 IsArrayElement::FirstElement => Ok(1 + l),
                 IsArrayElement::OtherElement => Ok(l),
             },
-            NewType::Uuid => match self.is_array_element {
+            Some(NonNativeType::Uuid) => match self.is_array_element {
                 IsArrayElement::False => Ok(1 + l),
                 IsArrayElement::FirstElement => Ok(1 + l),
                 IsArrayElement::OtherElement => Ok(l),
             },
-            NewType::Timestamp
-            | NewType::Array
-            | NewType::Symbol
-            | NewType::SymbolRef
-            | NewType::TransparentVec => unreachable!("serialize_bytes is only used for Binary, Decimal32, Decimal64, Decimal128, and Uuid"),
+            Some(NonNativeType::Timestamp)
+            | Some(NonNativeType::Symbol)
+            | Some(NonNativeType::SymbolRef) => unreachable!("serialize_bytes is only used for Binary, Decimal32, Decimal64, Decimal128, and Uuid"),
         }
     }
 
@@ -311,23 +317,23 @@ impl<'a> ser::Serializer for &'a mut SizeSerializer {
         T: serde::Serialize + ?Sized,
     {
         if name == SYMBOL {
-            self.new_type = NewType::Symbol;
+            self.non_native_type = Some(NonNativeType::Symbol);
         } else if name == SYMBOL_REF {
-            self.new_type = NewType::SymbolRef;
+            self.non_native_type = Some(NonNativeType::SymbolRef);
         } else if name == ARRAY {
-            self.new_type = NewType::Array;
+            self.seq_type = Some(SequenceType::Array);
         } else if name == DECIMAL32 {
-            self.new_type = NewType::Dec32;
+            self.non_native_type = Some(NonNativeType::Dec32);
         } else if name == DECIMAL64 {
-            self.new_type = NewType::Dec64;
+            self.non_native_type = Some(NonNativeType::Dec64);
         } else if name == DECIMAL128 {
-            self.new_type = NewType::Dec128;
+            self.non_native_type = Some(NonNativeType::Dec128);
         } else if name == TIMESTAMP {
-            self.new_type = NewType::Timestamp
+            self.non_native_type = Some(NonNativeType::Timestamp);
         } else if name == UUID {
-            self.new_type = NewType::Uuid;
+            self.non_native_type = Some(NonNativeType::Uuid);
         } else if name == TRANSPARENT_VEC {
-            self.new_type = NewType::TransparentVec;
+            self.seq_type = Some(SequenceType::TransparentVec);
         }
         value.serialize(self)
     }
@@ -450,12 +456,12 @@ impl<'a> ser::SerializeSeq for SeqSerializer<'a> {
     where
         T: ser::Serialize + ?Sized,
     {
-        match self.se.new_type {
-            NewType::None => {
+        match self.se.seq_type {
+            None | Some(SequenceType::List) => {
                 let mut serializer = SizeSerializer::new();
                 self.cumulated_size += value.serialize(&mut serializer)?;
             }
-            NewType::Array => {
+            Some(SequenceType::Array) => {
                 let mut serializer = SizeSerializer::new();
                 match self.idx {
                     0 => serializer.is_array_element = IsArrayElement::FirstElement,
@@ -463,18 +469,9 @@ impl<'a> ser::SerializeSeq for SeqSerializer<'a> {
                 }
                 self.cumulated_size += value.serialize(&mut serializer)?;
             }
-            NewType::TransparentVec => {
+            Some(SequenceType::TransparentVec) => {
                 let mut serializer = SizeSerializer::new();
                 self.cumulated_size += value.serialize(&mut serializer)?;
-            }
-            NewType::Dec32
-            | NewType::Dec64
-            | NewType::Dec128
-            | NewType::Symbol
-            | NewType::SymbolRef
-            | NewType::Timestamp
-            | NewType::Uuid => {
-                unreachable!("SeqSerializer is only used for List, Array, and TransparentVec")
             }
         }
 
@@ -483,23 +480,16 @@ impl<'a> ser::SerializeSeq for SeqSerializer<'a> {
     }
 
     fn end(self) -> Result<usize, Error> {
-        match self.se.new_type {
-            NewType::None => list_size(self.cumulated_size, &self.se.is_array_element)
-                .map_err(|_| Error::too_long()),
-            NewType::Array => array_size(self.cumulated_size, &self.se.is_array_element)
-                .map_err(|_| Error::too_long()),
-            NewType::TransparentVec => {
-                transparent_vec_size(self.cumulated_size, &self.se.is_array_element)
+        match self.se.seq_type {
+            None | Some(SequenceType::List) => {
+                list_size(self.cumulated_size, &self.se.is_array_element)
                     .map_err(|_| Error::too_long())
             }
-            NewType::Dec32
-            | NewType::Dec64
-            | NewType::Dec128
-            | NewType::Symbol
-            | NewType::SymbolRef
-            | NewType::Timestamp
-            | NewType::Uuid => {
-                unreachable!("SeqSerializer is only used for List, Array, and TransparentVec")
+            Some(SequenceType::Array) => array_size(self.cumulated_size, &self.se.is_array_element)
+                .map_err(|_| Error::too_long()),
+            Some(SequenceType::TransparentVec) => {
+                transparent_vec_size(self.cumulated_size, &self.se.is_array_element)
+                    .map_err(|_| Error::too_long())
             }
         }
     }

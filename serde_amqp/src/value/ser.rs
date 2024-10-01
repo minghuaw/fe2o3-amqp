@@ -15,7 +15,7 @@ use crate::{
     descriptor::Descriptor,
     error::Error,
     primitives::{Array, Dec128, Dec32, Dec64, OrderedMap, Symbol, Timestamp, Uuid},
-    util::{FieldRole, NewType},
+    util::{FieldRole, NonNativeType, SequenceType},
 };
 
 use super::Value;
@@ -68,14 +68,16 @@ where
 /// A structure that serializes types into [`Value`]
 #[derive(Debug)]
 pub struct Serializer {
-    new_type: NewType,
+    non_native_type: Option<NonNativeType>,
+    seq_type: Option<SequenceType>,
 }
 
 impl Serializer {
     /// Creates a new value serializer
     pub fn new() -> Self {
         Self {
-            new_type: Default::default(),
+            non_native_type: None,
+            seq_type: None,
         }
     }
 }
@@ -120,10 +122,10 @@ impl<'a> ser::Serializer for &'a mut Serializer {
 
     #[inline]
     fn serialize_i64(self, v: i64) -> Result<Self::Ok, Self::Error> {
-        match self.new_type {
-            NewType::None => Ok(Value::Long(v)),
-            NewType::Timestamp => {
-                self.new_type = NewType::None;
+        match self.non_native_type {
+            None => Ok(Value::Long(v)),
+            Some(NonNativeType::Timestamp) => {
+                self.non_native_type = None;
                 Ok(Value::Timestamp(Timestamp::from(v)))
             }
             _ => Err(Error::InvalidValue),
@@ -167,10 +169,10 @@ impl<'a> ser::Serializer for &'a mut Serializer {
 
     #[inline]
     fn serialize_str(self, v: &str) -> Result<Self::Ok, Self::Error> {
-        match self.new_type {
-            NewType::None => Ok(Value::String(String::from(v))),
-            NewType::Symbol | NewType::SymbolRef => {
-                self.new_type = NewType::None;
+        match self.non_native_type {
+            None => Ok(Value::String(String::from(v))),
+            Some(NonNativeType::Symbol) | Some(NonNativeType::SymbolRef) => {
+                self.non_native_type = None;
                 Ok(Value::Symbol(Symbol::from(v)))
             }
             _ => Err(Error::InvalidValue),
@@ -179,29 +181,27 @@ impl<'a> ser::Serializer for &'a mut Serializer {
 
     #[inline]
     fn serialize_bytes(self, v: &[u8]) -> Result<Self::Ok, Self::Error> {
-        match self.new_type {
-            NewType::None => Ok(Value::Binary(ByteBuf::from(v.to_vec()))),
-            NewType::Dec32 => {
-                self.new_type = NewType::None;
+        match self.non_native_type {
+            None => Ok(Value::Binary(ByteBuf::from(v.to_vec()))),
+            Some(NonNativeType::Dec32) => {
+                self.non_native_type = None;
                 Ok(Value::Decimal32(Dec32::try_from(v)?))
             }
-            NewType::Dec64 => {
-                self.new_type = NewType::None;
+            Some(NonNativeType::Dec64) => {
+                self.non_native_type = None;
                 Ok(Value::Decimal64(Dec64::try_from(v)?))
             }
-            NewType::Dec128 => {
-                self.new_type = NewType::None;
+            Some(NonNativeType::Dec128) => {
+                self.non_native_type = None;
                 Ok(Value::Decimal128(Dec128::try_from(v)?))
             }
-            NewType::Uuid => {
-                self.new_type = NewType::Uuid;
+            Some(NonNativeType::Uuid) => {
+                self.non_native_type = None;
                 Ok(Value::Uuid(Uuid::try_from(v)?))
             }
-            NewType::Timestamp => Err(Error::InvalidValue),
-            NewType::Array => Err(Error::InvalidValue),
-            NewType::Symbol => Err(Error::InvalidValue),
-            NewType::SymbolRef => Err(Error::InvalidValue),
-            NewType::TransparentVec => Err(Error::InvalidValue),
+            Some(NonNativeType::Timestamp) => Err(Error::InvalidValue),
+            Some(NonNativeType::Symbol) => Err(Error::InvalidValue),
+            Some(NonNativeType::SymbolRef) => Err(Error::InvalidValue),
         }
     }
 
@@ -235,21 +235,21 @@ impl<'a> ser::Serializer for &'a mut Serializer {
         T: serde::Serialize + ?Sized,
     {
         if name == SYMBOL {
-            self.new_type = NewType::Symbol;
+            self.non_native_type = Some(NonNativeType::Symbol);
         } else if name == SYMBOL_REF {
-            self.new_type = NewType::SymbolRef;
+            self.non_native_type = Some(NonNativeType::SymbolRef);
         } else if name == ARRAY {
-            self.new_type = NewType::Array;
+            self.seq_type = Some(SequenceType::Array);
         } else if name == DECIMAL32 {
-            self.new_type = NewType::Dec32;
+            self.non_native_type = Some(NonNativeType::Dec32);
         } else if name == DECIMAL64 {
-            self.new_type = NewType::Dec64;
+            self.non_native_type = Some(NonNativeType::Dec64);
         } else if name == DECIMAL128 {
-            self.new_type = NewType::Dec128;
+            self.non_native_type = Some(NonNativeType::Dec128);
         } else if name == TIMESTAMP {
-            self.new_type = NewType::Timestamp
+            self.non_native_type = Some(NonNativeType::Timestamp);
         } else if name == UUID {
-            self.new_type = NewType::Uuid
+            self.non_native_type = Some(NonNativeType::Uuid);
         }
         value.serialize(self)
     }
@@ -416,9 +416,9 @@ impl<'a> ser::SerializeSeq for SeqSerializer<'a> {
     }
 
     fn end(self) -> Result<Self::Ok, Self::Error> {
-        match self.se.new_type {
-            NewType::None => Ok(Value::List(self.vec)),
-            NewType::Array => Ok(Value::Array(Array::from(self.vec))),
+        match self.se.seq_type {
+            None | Some(SequenceType::List) => Ok(Value::List(self.vec)),
+            Some(SequenceType::Array) => Ok(Value::Array(Array::from(self.vec))),
             _ => Err(Error::InvalidValue),
         }
     }
