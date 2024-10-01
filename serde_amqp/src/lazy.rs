@@ -16,11 +16,11 @@ pub struct LazyValue(Bytes);
 
 impl LazyValue {
     /// Create a new LazyValue
-    pub fn from_reader<'de, R>(reader: R) -> Result<Self, Error>
+    pub fn from_reader<'de, R>(reader: &mut R) -> Result<Self, Error>
     where
         R: Read<'de>,
     {
-        let (bytes, _) = read_primitive_bytes_or_else(reader, read_described_bytes)?;
+        let bytes = read_primitive_bytes_or_else(reader, read_described_bytes)?;
         Ok(LazyValue(Bytes::from(bytes)))
     }
 
@@ -65,8 +65,8 @@ mod tests {
     fn test_read_fixed_bytes() {
         let bytes = [EncodingCodes::Ubyte as u8, 0x01];
 
-        let reader = crate::read::SliceReader::new(&bytes);
-        let lazy_value = LazyValue::from_reader(reader).unwrap();
+        let mut reader = crate::read::SliceReader::new(&bytes);
+        let lazy_value = LazyValue::from_reader(&mut reader).unwrap();
         assert_eq!(lazy_value.as_slice(), &bytes);
     }
 
@@ -74,8 +74,8 @@ mod tests {
     fn test_read_variable() {
         let src = "Hello, World!";
         let bytes = to_vec(&src).unwrap();
-        let reader = crate::read::SliceReader::new(&bytes);
-        let lazy_value = LazyValue::from_reader(reader).unwrap();
+        let mut reader = crate::read::SliceReader::new(&bytes);
+        let lazy_value = LazyValue::from_reader(&mut reader).unwrap();
         assert_eq!(lazy_value.as_slice(), &bytes);
     }
 
@@ -83,8 +83,8 @@ mod tests {
     fn test_read_compound() {
         let src = [1, 2, 3, 4, 5];
         let bytes = to_vec(&src).unwrap();
-        let reader = crate::read::SliceReader::new(&bytes);
-        let lazy_value = LazyValue::from_reader(reader).unwrap();
+        let mut reader = crate::read::SliceReader::new(&bytes);
+        let lazy_value = LazyValue::from_reader(&mut reader).unwrap();
         assert_eq!(lazy_value.as_slice(), &bytes);
     }
 
@@ -92,8 +92,8 @@ mod tests {
     fn test_read_array() {
         let src = Array(vec![1, 2, 3, 4, 5]);
         let bytes = to_vec(&src).unwrap();
-        let reader = crate::read::SliceReader::new(&bytes);
-        let lazy_value = LazyValue::from_reader(reader).unwrap();
+        let mut reader = crate::read::SliceReader::new(&bytes);
+        let lazy_value = LazyValue::from_reader(&mut reader).unwrap();
         assert_eq!(lazy_value.as_slice(), &bytes);
     }
 
@@ -105,8 +105,8 @@ mod tests {
         let described = Described { descriptor, value };
 
         let bytes = to_vec(&described).unwrap();
-        let reader = crate::read::SliceReader::new(&bytes);
-        let lazy_value = LazyValue::from_reader(reader).unwrap();
+        let mut reader = crate::read::SliceReader::new(&bytes);
+        let lazy_value = LazyValue::from_reader(&mut reader).unwrap();
         assert_eq!(lazy_value.as_slice(), &bytes);
 
         // Described with a name descriptor
@@ -115,8 +115,8 @@ mod tests {
         let described = Described { descriptor, value };
 
         let bytes = to_vec(&described).unwrap();
-        let reader = crate::read::SliceReader::new(&bytes);
-        let lazy_value = LazyValue::from_reader(reader).unwrap();
+        let mut reader = crate::read::SliceReader::new(&bytes);
+        let lazy_value = LazyValue::from_reader(&mut reader).unwrap();
         assert_eq!(lazy_value.as_slice(), &bytes);
     }
 }

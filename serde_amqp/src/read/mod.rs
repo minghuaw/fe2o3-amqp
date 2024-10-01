@@ -45,7 +45,13 @@ pub trait Read<'de>: private::Sealed {
     fn read_exact(&mut self, buf: &mut [u8]) -> Result<(), io::Error>;
 
     /// Forward bytes to visitor
-    fn forward_read_bytes<V>(&mut self, len: usize, visitor: V) -> Result<V::Value, Error>
+    fn forward_read_bytes_with_hint<V>(&mut self, len: usize, visitor: V) -> Result<V::Value, Error>
+    where
+        V: serde::de::Visitor<'de>;
+
+    /// Forward bytes to visitor without hint. The reader would attempt to read the bytes
+    /// of the next value into a buffer and then forward it to the visitor.
+    fn forward_read_bytes<V>(&mut self, visitor: V) -> Result<V::Value, Error>
     where
         V: serde::de::Visitor<'de>;
 
@@ -55,15 +61,15 @@ pub trait Read<'de>: private::Sealed {
         V: serde::de::Visitor<'de>;
 }
 
-fn read_fixed_bytes<'de, R>(mut reader: R, width: usize) -> Result<(Vec<u8>, R), Error>
+fn read_fixed_bytes<'de, R>(reader: &mut R, width: usize) -> Result<Vec<u8>, Error>
 where
     R: Read<'de>,
 {
     let bytes = reader.read_bytes(width + 1)?;
-    Ok((bytes, reader))
+    Ok(bytes)
 }
 
-fn read_encoded_len<'de, R>(mut reader: R, width: usize) -> Result<(usize, R), Error>
+fn read_encoded_len<'de, R>(reader: &mut R, width: usize) -> Result<usize, Error>
 where
     R: Read<'de>,
 {
@@ -73,41 +79,41 @@ where
     match width {
         1 => {
             let len = len_bytes[1] as usize;
-            Ok((len, reader))
+            Ok(len)
         }
         4 => {
             let mut len_bytes_ = [0; 4];
             len_bytes_.copy_from_slice(&len_bytes[1..]);
             let len = u32::from_be_bytes(len_bytes_) as usize;
-            Ok((len, reader))
+            Ok(len)
         }
         _ => unreachable!(),
     }
 }
 
-fn read_encoded_len_bytes<'de, R>(reader: R, width: usize) -> Result<(Vec<u8>, R), Error>
+fn read_encoded_len_bytes<'de, R>(reader: &mut R, width: usize) -> Result<Vec<u8>, Error>
 where
     R: Read<'de>,
 {
-    let (len, mut reader) = read_encoded_len(reader, width)?;
+    let len = read_encoded_len(reader, width)?;
     let bytes = reader.read_bytes(1 + width + len)?;
-    Ok((bytes, reader))
+    Ok(bytes)
 }
 
 pub(crate) fn read_primitive_bytes_or_else<'de, R, F>(
-    mut reader: R,
+    reader: &mut R,
     f: F,
-) -> Result<(Vec<u8>, R), Error>
+) -> Result<Vec<u8>, Error>
 where
     R: Read<'de>,
-    F: FnOnce(R) -> Result<(Vec<u8>, R), Error>,
+    F: FnOnce(&mut R) -> Result<Vec<u8>, Error>,
 {
     let code: EncodingCodes = reader
         .peek()
         .ok_or(Error::unexpected_eof("parse LazyValue"))
         .and_then(|code| code.try_into())?;
 
-    let (bytes, reader) = match Category::try_from(code) {
+    let bytes = match Category::try_from(code) {
         Ok(Category::Fixed(width)) => read_fixed_bytes(reader, width)?,
         Ok(Category::Variable(width)) => read_encoded_len_bytes(reader, width)?,
         Ok(Category::Compound(width)) => read_encoded_len_bytes(reader, width)?,
@@ -115,10 +121,10 @@ where
         Err(_is_described) => f(reader)?,
     };
 
-    Ok((bytes, reader))
+    Ok(bytes)
 }
 
-pub(crate) fn read_described_bytes<'de, R>(mut reader: R) -> Result<(Vec<u8>, R), Error>
+pub(crate) fn read_described_bytes<'de, R>(reader: &mut R) -> Result<Vec<u8>, Error>
 where
     R: Read<'de>,
 {
@@ -126,14 +132,14 @@ where
     let mut bytes = reader.read_bytes(1)?;
 
     // Read the descriptor
-    let (mut descriptor_bytes, reader) =
+    let mut descriptor_bytes =
         read_primitive_bytes_or_else(reader, |_| Err(Error::InvalidFormatCode))?;
     bytes.append(&mut descriptor_bytes);
 
     // Read the value
-    let (mut value_bytes, reader) =
+    let mut value_bytes =
         read_primitive_bytes_or_else(reader, |_| Err(Error::InvalidFormatCode))?;
     bytes.append(&mut value_bytes);
 
-    Ok((bytes, reader))
+    Ok(bytes)
 }

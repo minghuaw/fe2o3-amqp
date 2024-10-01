@@ -53,11 +53,18 @@ impl<'s> Read<'s> for SliceReader<'s> {
         std::io::Read::read_exact(&mut self.slice, buf)
     }
 
-    fn forward_read_bytes<V>(&mut self, len: usize, visitor: V) -> Result<V::Value, Error>
+    fn forward_read_bytes_with_hint<V>(&mut self, len: usize, visitor: V) -> Result<V::Value, Error>
     where
         V: serde::de::Visitor<'s>,
     {
         visitor.visit_borrowed_bytes(self.get_byte_slice(len)?)
+    }
+
+    fn forward_read_bytes<V>(&mut self, visitor: V) -> Result<V::Value, Error>
+    where
+        V: serde::de::Visitor<'s>,
+    {
+        visitor.visit_borrowed_bytes(self.slice)
     }
 
     fn forward_read_str<V>(&mut self, len: usize, visitor: V) -> Result<V::Value, Error>

@@ -378,9 +378,9 @@ impl<'de, R: Read<'de>> Deserializer<R> {
             .get_elem_code_or_read_format_code()
             .ok_or_else(|| Error::unexpected_eof("parse_decimal"))??
         {
-            EncodingCodes::Decimal32 => self.reader.forward_read_bytes(DECIMAL32_WIDTH, visitor),
-            EncodingCodes::Decimal64 => self.reader.forward_read_bytes(DECIMAL64_WIDTH, visitor),
-            EncodingCodes::Decimal128 => self.reader.forward_read_bytes(DECIMAL128_WIDTH, visitor),
+            EncodingCodes::Decimal32 => self.reader.forward_read_bytes_with_hint(DECIMAL32_WIDTH, visitor),
+            EncodingCodes::Decimal64 => self.reader.forward_read_bytes_with_hint(DECIMAL64_WIDTH, visitor),
+            EncodingCodes::Decimal128 => self.reader.forward_read_bytes_with_hint(DECIMAL128_WIDTH, visitor),
             _ => Err(Error::InvalidFormatCode),
         }
     }
@@ -394,7 +394,7 @@ impl<'de, R: Read<'de>> Deserializer<R> {
             .get_elem_code_or_read_format_code()
             .ok_or_else(|| Error::unexpected_eof("parse_uuid"))??
         {
-            EncodingCodes::Uuid => self.reader.forward_read_bytes(UUID_WIDTH, visitor),
+            EncodingCodes::Uuid => self.reader.forward_read_bytes_with_hint(UUID_WIDTH, visitor),
             _ => Err(Error::InvalidFormatCode),
         }
     }
@@ -744,7 +744,7 @@ where
                     }
                     _ => return Err(Error::InvalidFormatCode),
                 };
-                self.reader.forward_read_bytes(len, visitor)
+                self.reader.forward_read_bytes_with_hint(len, visitor)
             }
         }
     }
