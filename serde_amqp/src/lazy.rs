@@ -1,10 +1,12 @@
 //! Implements `LazyValue`
 
 use bytes::Bytes;
+use serde::{de::Visitor, Deserialize, Serialize};
 
 use crate::{
-    read::{read_described_bytes, read_primitive_bytes_or_else, Read},
+    read::{read_described_bytes, read_primitive_bytes_or_else, Read, SliceReader},
     Error,
+    __constants::LAZY_VALUE,
 };
 
 /// A lazy value
@@ -52,10 +54,54 @@ impl From<LazyValue> for Vec<u8> {
     }
 }
 
+impl Serialize for LazyValue {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        serializer.serialize_newtype_struct(LAZY_VALUE, serde_bytes::Bytes::new(self.as_slice()))
+    }
+}
+
+struct LazyValueVisitor;
+
+impl<'de> Visitor<'de> for LazyValueVisitor {
+    type Value = LazyValue;
+
+    fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+        formatter.write_str("LazyValue")
+    }
+
+    fn visit_bytes<E>(self, v: &[u8]) -> Result<Self::Value, E>
+    where
+        E: serde::de::Error,
+    {
+        let mut reader = SliceReader::new(v);
+        LazyValue::from_reader(&mut reader).map_err(serde::de::Error::custom)
+    }
+
+    fn visit_borrowed_bytes<E>(self, v: &'de [u8]) -> Result<Self::Value, E>
+    where
+        E: serde::de::Error,
+    {
+        let mut reader = SliceReader::new(v);
+        LazyValue::from_reader(&mut reader).map_err(serde::de::Error::custom)
+    }
+}
+
+impl<'de> Deserialize<'de> for LazyValue {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        deserializer.deserialize_newtype_struct(LAZY_VALUE, LazyValueVisitor)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use crate::{
-        described::Described, descriptor::Descriptor, format_code::EncodingCodes,
+        described::Described, descriptor::Descriptor, format_code::EncodingCodes, from_slice,
         primitives::Array, to_vec,
     };
 
@@ -118,5 +164,27 @@ mod tests {
         let mut reader = crate::read::SliceReader::new(&bytes);
         let lazy_value = LazyValue::from_reader(&mut reader).unwrap();
         assert_eq!(lazy_value.as_slice(), &bytes);
+    }
+
+    #[test]
+    fn test_serialize() {
+        let src = "Hello, World!";
+        let bytes = to_vec(&src).unwrap();
+        let mut reader = SliceReader::new(&bytes);
+        let lazy_value = LazyValue::from_reader(&mut reader).unwrap();
+
+        assert_eq!(lazy_value.as_slice(), &bytes);
+
+        let serialized = to_vec(&lazy_value).unwrap();
+        assert_eq!(serialized, bytes);
+    }
+
+    #[test]
+    fn test_deserialize() {
+        let src = "Hello, World!";
+        let bytes = to_vec(&src).unwrap();
+        let lazy: LazyValue = from_slice(&bytes).unwrap();
+
+        assert_eq!(lazy.as_slice(), &bytes);
     }
 }

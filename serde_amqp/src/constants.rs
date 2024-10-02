@@ -28,3 +28,4 @@ pub(crate) const UUID: &str = "AMQP1.0_UUID";
 
 // This is not a type defined in the standard
 pub(crate) const TRANSPARENT_VEC: &str = "__TRANSPARENT_VEC";
+pub(crate) const LAZY_VALUE: &str = "__LAZY_VALUE";

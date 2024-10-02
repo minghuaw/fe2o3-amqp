@@ -110,8 +110,8 @@ impl<'de, R: io::Read + 'de> Read<'de> for IoReader<R> {
     }
 
     fn forward_read_bytes<V>(&mut self, visitor: V) -> Result<V::Value, Error>
-        where
-            V: serde::de::Visitor<'de> 
+    where
+        V: serde::de::Visitor<'de>,
     {
         let bytes = read_primitive_bytes_or_else(self, read_described_bytes)?;
         visitor.visit_bytes(&bytes)

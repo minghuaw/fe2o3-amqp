@@ -9,12 +9,13 @@ use serde_bytes::ByteBuf;
 use crate::{
     __constants::{
         ARRAY, DECIMAL128, DECIMAL32, DECIMAL64, DESCRIBED_BASIC, DESCRIBED_LIST, DESCRIBED_MAP,
-        DESCRIPTOR, SYMBOL, SYMBOL_REF, TIMESTAMP, UUID,
+        DESCRIPTOR, LAZY_VALUE, SYMBOL, SYMBOL_REF, TIMESTAMP, UUID,
     },
     described::Described,
     descriptor::Descriptor,
     error::Error,
     primitives::{Array, Dec128, Dec32, Dec64, OrderedMap, Symbol, Timestamp, Uuid},
+    read::SliceReader,
     util::{FieldRole, NonNativeType, SequenceType},
 };
 
@@ -199,6 +200,15 @@ impl<'a> ser::Serializer for &'a mut Serializer {
                 self.non_native_type = None;
                 Ok(Value::Uuid(Uuid::try_from(v)?))
             }
+            Some(NonNativeType::LazyValue) => {
+                use serde::Deserialize;
+
+                // LazyValue is just the serialized bytes, so we need to deserialize it into a Value
+                let reader = SliceReader::new(v);
+                let mut de = crate::de::Deserializer::new(reader);
+                let value = Value::deserialize(&mut de)?;
+                Ok(value)
+            }
             Some(NonNativeType::Timestamp) => Err(Error::InvalidValue),
             Some(NonNativeType::Symbol) => Err(Error::InvalidValue),
             Some(NonNativeType::SymbolRef) => Err(Error::InvalidValue),
@@ -250,6 +260,8 @@ impl<'a> ser::Serializer for &'a mut Serializer {
             self.non_native_type = Some(NonNativeType::Timestamp);
         } else if name == UUID {
             self.non_native_type = Some(NonNativeType::Uuid);
+        } else if name == LAZY_VALUE {
+            self.non_native_type = Some(NonNativeType::LazyValue);
         }
         value.serialize(self)
     }

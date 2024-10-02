@@ -45,7 +45,11 @@ pub trait Read<'de>: private::Sealed {
     fn read_exact(&mut self, buf: &mut [u8]) -> Result<(), io::Error>;
 
     /// Forward bytes to visitor
-    fn forward_read_bytes_with_hint<V>(&mut self, len: usize, visitor: V) -> Result<V::Value, Error>
+    fn forward_read_bytes_with_hint<V>(
+        &mut self,
+        len: usize,
+        visitor: V,
+    ) -> Result<V::Value, Error>
     where
         V: serde::de::Visitor<'de>;
 
@@ -137,8 +141,7 @@ where
     bytes.append(&mut descriptor_bytes);
 
     // Read the value
-    let mut value_bytes =
-        read_primitive_bytes_or_else(reader, |_| Err(Error::InvalidFormatCode))?;
+    let mut value_bytes = read_primitive_bytes_or_else(reader, |_| Err(Error::InvalidFormatCode))?;
     bytes.append(&mut value_bytes);
 
     Ok(bytes)

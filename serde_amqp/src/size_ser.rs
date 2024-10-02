@@ -6,7 +6,7 @@ use crate::{
     Error,
     __constants::{
         ARRAY, DECIMAL128, DECIMAL32, DECIMAL64, DESCRIBED_BASIC, DESCRIBED_LIST, DESCRIBED_MAP,
-        DESCRIPTOR, SYMBOL, SYMBOL_REF, TIMESTAMP, TRANSPARENT_VEC, UUID,
+        DESCRIPTOR, LAZY_VALUE, SYMBOL, SYMBOL_REF, TIMESTAMP, TRANSPARENT_VEC, UUID,
     },
     ser::{U32_MAX_MINUS_4, U8_MAX, U8_MAX_MINUS_1},
     util::{FieldRole, IsArrayElement, NonNativeType, SequenceType, StructEncoding},
@@ -274,6 +274,7 @@ impl<'a> ser::Serializer for &'a mut SizeSerializer {
                 IsArrayElement::FirstElement => Ok(1 + l),
                 IsArrayElement::OtherElement => Ok(l),
             },
+            Some(NonNativeType::LazyValue) => Ok(l),
             Some(NonNativeType::Timestamp)
             | Some(NonNativeType::Symbol)
             | Some(NonNativeType::SymbolRef) => unreachable!("serialize_bytes is only used for Binary, Decimal32, Decimal64, Decimal128, and Uuid"),
@@ -334,6 +335,8 @@ impl<'a> ser::Serializer for &'a mut SizeSerializer {
             self.non_native_type = Some(NonNativeType::Uuid);
         } else if name == TRANSPARENT_VEC {
             self.seq_type = Some(SequenceType::TransparentVec);
+        } else if name == LAZY_VALUE {
+            self.non_native_type = Some(NonNativeType::LazyValue);
         }
         value.serialize(self)
     }

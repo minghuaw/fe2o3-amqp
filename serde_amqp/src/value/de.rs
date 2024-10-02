@@ -6,8 +6,8 @@ use serde_bytes::ByteBuf;
 
 use crate::{
     __constants::{
-        ARRAY, DECIMAL128, DECIMAL32, DECIMAL64, DESCRIBED_BASIC, DESCRIPTOR, SYMBOL, TIMESTAMP,
-        UUID, VALUE,
+        ARRAY, DECIMAL128, DECIMAL32, DECIMAL64, DESCRIBED_BASIC, DESCRIPTOR, LAZY_VALUE, SYMBOL,
+        TIMESTAMP, UUID, VALUE,
     },
     error::Error,
     format_code::EncodingCodes,
@@ -802,6 +802,13 @@ impl<'de> de::Deserializer<'de> for Deserializer {
                 Value::Uuid(v) => visitor.visit_bytes(&v.into_inner()),
                 _ => Err(Error::InvalidValue),
             },
+            Some(NonNativeType::LazyValue) => {
+                // LazyValue is the serialized form of a value, so we should
+                // just serialzie Self
+
+                let bytes = crate::to_vec(&self.value)?;
+                visitor.visit_bytes(&bytes)
+            }
             _ => self.deserialize_byte_buf(visitor),
         }
     }
@@ -870,6 +877,9 @@ impl<'de> de::Deserializer<'de> for Deserializer {
         } else if name == ARRAY {
             self.seq_type = Some(SequenceType::Array);
             self.deserialize_seq(visitor)
+        } else if name == LAZY_VALUE {
+            self.non_native_type = Some(NonNativeType::LazyValue);
+            self.deserialize_bytes(visitor)
         } else {
             visitor.visit_newtype_struct(self)
         }

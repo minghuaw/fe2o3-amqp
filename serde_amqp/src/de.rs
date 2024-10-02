@@ -9,7 +9,7 @@ use std::convert::TryInto;
 use crate::{
     __constants::{
         ARRAY, DECIMAL128, DECIMAL32, DECIMAL64, DESCRIBED_BASIC, DESCRIBED_LIST, DESCRIBED_MAP,
-        DESCRIPTOR, SYMBOL, SYMBOL_REF, TIMESTAMP, TRANSPARENT_VEC, UUID, VALUE,
+        DESCRIPTOR, LAZY_VALUE, SYMBOL, SYMBOL_REF, TIMESTAMP, TRANSPARENT_VEC, UUID, VALUE,
     },
     descriptor::PeekDescriptor,
     error::Error,
@@ -380,9 +380,15 @@ impl<'de, R: Read<'de>> Deserializer<R> {
             .get_elem_code_or_read_format_code()
             .ok_or_else(|| Error::unexpected_eof("parse_decimal"))??
         {
-            EncodingCodes::Decimal32 => self.reader.forward_read_bytes_with_hint(DECIMAL32_WIDTH, visitor),
-            EncodingCodes::Decimal64 => self.reader.forward_read_bytes_with_hint(DECIMAL64_WIDTH, visitor),
-            EncodingCodes::Decimal128 => self.reader.forward_read_bytes_with_hint(DECIMAL128_WIDTH, visitor),
+            EncodingCodes::Decimal32 => self
+                .reader
+                .forward_read_bytes_with_hint(DECIMAL32_WIDTH, visitor),
+            EncodingCodes::Decimal64 => self
+                .reader
+                .forward_read_bytes_with_hint(DECIMAL64_WIDTH, visitor),
+            EncodingCodes::Decimal128 => self
+                .reader
+                .forward_read_bytes_with_hint(DECIMAL128_WIDTH, visitor),
             _ => Err(Error::InvalidFormatCode),
         }
     }
@@ -396,7 +402,9 @@ impl<'de, R: Read<'de>> Deserializer<R> {
             .get_elem_code_or_read_format_code()
             .ok_or_else(|| Error::unexpected_eof("parse_uuid"))??
         {
-            EncodingCodes::Uuid => self.reader.forward_read_bytes_with_hint(UUID_WIDTH, visitor),
+            EncodingCodes::Uuid => self
+                .reader
+                .forward_read_bytes_with_hint(UUID_WIDTH, visitor),
             _ => Err(Error::InvalidFormatCode),
         }
     }
@@ -733,6 +741,10 @@ where
                 self.non_native_type = None;
                 self.parse_uuid(visitor)
             }
+            Some(NonNativeType::LazyValue) => {
+                self.non_native_type = None;
+                self.reader.forward_read_bytes(visitor)
+            }
             _ => {
                 let len = match self
                     .get_elem_code_or_read_format_code()
@@ -825,6 +837,9 @@ where
         } else if name == TRANSPARENT_VEC {
             self.seq_type = Some(SequenceType::TransparentVec);
             visitor.visit_seq(TransparentVecAccess::new(self))
+        } else if name == LAZY_VALUE {
+            self.non_native_type = Some(NonNativeType::LazyValue);
+            self.deserialize_bytes(visitor)
         } else {
             visitor.visit_newtype_struct(self)
         }
