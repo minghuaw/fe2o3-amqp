@@ -180,11 +180,41 @@ mod tests {
     }
 
     #[test]
+    fn test_serialize_compound() {
+        let src_str = "Hello, World!";
+        let bytes = to_vec(&src_str).unwrap();
+        let mut reader = SliceReader::new(&bytes);
+        let lazy_value = LazyValue::from_reader(&mut reader).unwrap();
+
+        let list = [&lazy_value, &lazy_value, &lazy_value];
+        let serialized = to_vec(&list).unwrap();
+
+        let expected_list = [&src_str, &src_str, &src_str];
+        let expected_bytes = to_vec(&expected_list).unwrap();
+
+        assert_eq!(serialized, expected_bytes);
+    }
+
+    #[test]
     fn test_deserialize() {
         let src = "Hello, World!";
         let bytes = to_vec(&src).unwrap();
         let lazy: LazyValue = from_slice(&bytes).unwrap();
 
         assert_eq!(lazy.as_slice(), &bytes);
+    }
+
+    #[test]
+    fn test_deserialize_compound() {
+        let src_str = "Hello, World!";
+        let list = [&src_str, &src_str, &src_str];
+        let bytes = to_vec(&list).unwrap();
+
+        let lazy: Vec<LazyValue> = from_slice(&bytes).unwrap();
+        let expected_bytes = to_vec(&src_str).unwrap();
+
+        for lazy_value in lazy {
+            assert_eq!(lazy_value.as_slice(), &expected_bytes);
+        }
     }
 }
