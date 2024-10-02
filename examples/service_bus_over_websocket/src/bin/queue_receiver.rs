@@ -14,6 +14,9 @@ async fn main() {
     let sa_key_value = env::var("SHARED_ACCESS_KEY_VALUE").unwrap();
     let queue_name = env::var("QUEUE_NAME").unwrap();
 
+    // Remove the following line if you are using native-tls
+    rustls::crypto::aws_lc_rs::default_provider().install_default().unwrap();
+
     // wss://[sas-policy]:[sas-key]@[ns].servicebus.windows.net/$servicebus/websocket
     let ws_address = format!("wss://{sa_key_name}:{sa_key_value}@{hostname}/$servicebus/websocket");
 

@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.13.0
+
+1. Updated deps
+
 ## 0.12.0
 
 1. Display `InvalidType` info in `DecodeError`

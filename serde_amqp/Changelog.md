@@ -1,5 +1,15 @@
 # Change Log
 
+## 0.13.0
+
+### Breaking
+
+1. Removed `Error::IsDescribed` variant
+
+### New Features
+
+1. Added `LazyValue` type.
+
 ## 0.12.3
 
 1. Fix warning caused by [changes to never type fallback for edition
