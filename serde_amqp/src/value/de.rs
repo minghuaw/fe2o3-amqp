@@ -807,7 +807,7 @@ impl<'de> de::Deserializer<'de> for Deserializer {
                 // just serialzie Self
 
                 let bytes = crate::to_vec(&self.value)?;
-                visitor.visit_bytes(&bytes)
+                visitor.visit_byte_buf(bytes)
             }
             _ => self.deserialize_byte_buf(visitor),
         }

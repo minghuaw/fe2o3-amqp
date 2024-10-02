@@ -55,7 +55,7 @@ pub trait Read<'de>: private::Sealed {
 
     /// Forward bytes to visitor without hint. The reader would attempt to read the bytes
     /// of the next value into a buffer and then forward it to the visitor.
-    fn forward_read_bytes<V>(&mut self, visitor: V) -> Result<V::Value, Error>
+    fn forward_read_byte_buf<V>(&mut self, visitor: V) -> Result<V::Value, Error>
     where
         V: serde::de::Visitor<'de>;
 
@@ -73,7 +73,7 @@ where
     Ok(bytes)
 }
 
-fn read_encoded_len<'de, R>(reader: &mut R, width: usize) -> Result<usize, Error>
+fn peek_encoded_len<'de, R>(reader: &mut R, width: usize) -> Result<usize, Error>
 where
     R: Read<'de>,
 {
@@ -99,7 +99,7 @@ fn read_encoded_len_bytes<'de, R>(reader: &mut R, width: usize) -> Result<Vec<u8
 where
     R: Read<'de>,
 {
-    let len = read_encoded_len(reader, width)?;
+    let len = peek_encoded_len(reader, width)?;
     let bytes = reader.read_bytes(1 + width + len)?;
     Ok(bytes)
 }

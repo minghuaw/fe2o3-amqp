@@ -4,7 +4,7 @@ use bytes::Bytes;
 use serde::{de::Visitor, Deserialize, Serialize};
 
 use crate::{
-    read::{read_described_bytes, read_primitive_bytes_or_else, Read, SliceReader},
+    read::{read_described_bytes, read_primitive_bytes_or_else, Read},
     Error,
     __constants::LAZY_VALUE,
 };
@@ -72,20 +72,11 @@ impl<'de> Visitor<'de> for LazyValueVisitor {
         formatter.write_str("LazyValue")
     }
 
-    fn visit_bytes<E>(self, v: &[u8]) -> Result<Self::Value, E>
+    fn visit_byte_buf<E>(self, v: Vec<u8>) -> Result<Self::Value, E>
     where
         E: serde::de::Error,
     {
-        let mut reader = SliceReader::new(v);
-        LazyValue::from_reader(&mut reader).map_err(serde::de::Error::custom)
-    }
-
-    fn visit_borrowed_bytes<E>(self, v: &'de [u8]) -> Result<Self::Value, E>
-    where
-        E: serde::de::Error,
-    {
-        let mut reader = SliceReader::new(v);
-        LazyValue::from_reader(&mut reader).map_err(serde::de::Error::custom)
+        Ok(LazyValue(Bytes::from(v)))
     }
 }
 
@@ -102,7 +93,7 @@ impl<'de> Deserialize<'de> for LazyValue {
 mod tests {
     use crate::{
         described::Described, descriptor::Descriptor, format_code::EncodingCodes, from_slice,
-        from_value, primitives::Array, to_value, to_vec, Value,
+        from_value, primitives::Array, read::SliceReader, to_value, to_vec, Value,
     };
 
     use super::*;

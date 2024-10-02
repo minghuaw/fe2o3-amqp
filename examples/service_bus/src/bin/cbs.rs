@@ -7,8 +7,8 @@ use dotenv::dotenv;
 use fe2o3_amqp::{
     connection::ConnectionHandle,
     sasl_profile::SaslProfile,
-    Connection, Receiver, Sender, Session,
     types::{messaging::Body, primitives::Value},
+    Connection, Receiver, Sender, Session,
 };
 use fe2o3_amqp_cbs::{client::CbsClient, token::CbsToken};
 use hmac::{

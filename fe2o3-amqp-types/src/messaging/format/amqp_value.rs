@@ -99,7 +99,7 @@ where
 #[cfg(test)]
 mod tests {
     use serde::{Deserialize, Serialize};
-    use serde_amqp::{from_slice, to_vec, Value};
+    use serde_amqp::{from_slice, lazy::LazyValue, to_vec, Value};
 
     use crate::messaging::{
         message::__private::{Deserializable, Serializable},
@@ -208,5 +208,15 @@ mod tests {
         let buf = to_vec(&Serializable(msg)).unwrap();
         let decoded: Deserializable<Message<TestExample>> = from_slice(&buf).unwrap();
         assert_eq!(decoded.0.body, expected)
+    }
+
+    #[test]
+    fn test_decoding_some_str_as_lazy_value() {
+        let src = Message::builder().value(TEST_STR).build();
+        let buf = to_vec(&Serializable(src)).unwrap();
+        let msg: Deserializable<Message<AmqpValue<LazyValue>>> = from_slice(&buf).unwrap();
+
+        let expected = to_vec(&TEST_STR).unwrap();
+        assert_eq!(msg.0.body.0.as_slice(), expected);
     }
 }

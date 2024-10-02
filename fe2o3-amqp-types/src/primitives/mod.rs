@@ -8,7 +8,7 @@ use serde_amqp::format_code::EncodingCodes;
 use serde_bytes::ByteBuf;
 
 pub use serde_amqp::primitives::*;
-pub use serde_amqp::value::Value;
+pub use serde_amqp::{lazy::LazyValue, value::Value};
 
 mod simple_value;
 pub use simple_value::SimpleValue;

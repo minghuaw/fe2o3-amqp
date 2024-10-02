@@ -109,7 +109,7 @@ impl<'de, R: io::Read + 'de> Read<'de> for IoReader<R> {
         result
     }
 
-    fn forward_read_bytes<V>(&mut self, visitor: V) -> Result<V::Value, Error>
+    fn forward_read_byte_buf<V>(&mut self, visitor: V) -> Result<V::Value, Error>
     where
         V: serde::de::Visitor<'de>,
     {

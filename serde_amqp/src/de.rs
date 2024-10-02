@@ -350,7 +350,7 @@ impl<'de, R: Read<'de>> Deserializer<R> {
     }
 
     #[inline]
-    fn parse_byte_buf(&mut self) -> Result<Vec<u8>, Error> {
+    fn parse_binary(&mut self) -> Result<Vec<u8>, Error> {
         match self
             .get_elem_code_or_read_format_code()
             .ok_or_else(|| Error::unexpected_eof("parse_byte_buf"))??
@@ -721,7 +721,12 @@ where
     where
         V: de::Visitor<'de>,
     {
-        visitor.visit_byte_buf(self.parse_byte_buf()?)
+        // visitor.visit_byte_buf(self.parse_byte_buf()?)
+        match self.non_native_type {
+            None => visitor.visit_byte_buf(self.parse_binary()?),
+            Some(NonNativeType::LazyValue) => self.reader.forward_read_byte_buf(visitor),
+            _ => unreachable!("Only Binary and LazyValue are expected in deserialize_byte_buf"),
+        }
     }
 
     fn deserialize_bytes<V>(self, visitor: V) -> Result<V::Value, Self::Error>
@@ -742,8 +747,7 @@ where
                 self.parse_uuid(visitor)
             }
             Some(NonNativeType::LazyValue) => {
-                self.non_native_type = None;
-                self.reader.forward_read_bytes(visitor)
+                unreachable!()
             }
             _ => {
                 let len = match self
@@ -839,7 +843,7 @@ where
             visitor.visit_seq(TransparentVecAccess::new(self))
         } else if name == LAZY_VALUE {
             self.non_native_type = Some(NonNativeType::LazyValue);
-            self.deserialize_bytes(visitor)
+            self.deserialize_byte_buf(visitor)
         } else {
             visitor.visit_newtype_struct(self)
         }
