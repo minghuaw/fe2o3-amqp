@@ -20,6 +20,8 @@ pub(crate) mod de;
 pub(crate) mod ser;
 
 /// Primitive type definitions
+///
+/// An empty message body may be represented as [`Value::Null`].
 #[derive(Debug, Clone, Hash, PartialEq, Eq, PartialOrd, Ord, Default)]
 pub enum Value {
     /// Described type

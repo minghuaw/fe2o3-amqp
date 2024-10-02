@@ -9,15 +9,19 @@ use crate::{
     __constants::LAZY_VALUE,
 };
 
-/// A lazy value
+/// A lazy value.
 ///
-/// This unfortunately does not implement `serde::Deserialize` or `serde::Serialize` yet. Please
-/// use [`LazyValue::from_reader`] to decode from a reader.
-#[derive(Debug, Clone)]
+/// This is a thin wrapper around a [`Bytes`] value that can be accessed via
+/// [`LazyValue::as_slice`], [`LazyValue::as_bytes`], or [`LazyValue::into_bytes`], which
+/// can then be used for lazy deserialization.
+///
+/// An empty message body may be represented as a `LazyValue` with a Null byte. This is to
+/// ensure that it can be serialized/deserialized into a valid AMQP value.
+#[derive(Debug, Clone, Hash, PartialEq, Eq, PartialOrd, Ord)]
 pub struct LazyValue(Bytes);
 
 impl LazyValue {
-    /// Create a new LazyValue
+    /// Reads the bytes of the next valid AMQP value from the reader and returns a [`LazyValue`]
     pub fn from_reader<'de, R>(reader: &mut R) -> Result<Self, Error>
     where
         R: Read<'de>,
