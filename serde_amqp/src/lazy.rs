@@ -102,7 +102,7 @@ impl<'de> Deserialize<'de> for LazyValue {
 mod tests {
     use crate::{
         described::Described, descriptor::Descriptor, format_code::EncodingCodes, from_slice,
-        primitives::Array, to_vec,
+        from_value, primitives::Array, to_value, to_vec, Value,
     };
 
     use super::*;
@@ -196,6 +196,17 @@ mod tests {
     }
 
     #[test]
+    fn test_serialize_into_value() {
+        let src = "Hello, World!";
+        let bytes = to_vec(&src).unwrap();
+        let mut reader = SliceReader::new(&bytes);
+        let lazy_value = LazyValue::from_reader(&mut reader).unwrap();
+
+        let value = to_value(&lazy_value).unwrap();
+        assert_eq!(value, Value::String(src.into()));
+    }
+
+    #[test]
     fn test_deserialize() {
         let src = "Hello, World!";
         let bytes = to_vec(&src).unwrap();
@@ -216,5 +227,15 @@ mod tests {
         for lazy_value in lazy {
             assert_eq!(lazy_value.as_slice(), &expected_bytes);
         }
+    }
+
+    #[test]
+    fn test_deserialize_from_value() {
+        let src = "Hello, World!";
+        let value = Value::String(src.into());
+        let lazy: LazyValue = from_value(value).unwrap();
+
+        let expected = to_vec(&src).unwrap();
+        assert_eq!(lazy.as_slice(), &expected);
     }
 }

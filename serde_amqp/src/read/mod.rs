@@ -104,9 +104,10 @@ where
     Ok(bytes)
 }
 
+/// Read bytes of a primitive type or calls `op` if the encoded type is a described type
 pub(crate) fn read_primitive_bytes_or_else<'de, R, F>(
     reader: &mut R,
-    f: F,
+    op: F,
 ) -> Result<Vec<u8>, Error>
 where
     R: Read<'de>,
@@ -122,12 +123,13 @@ where
         Ok(Category::Variable(width)) => read_encoded_len_bytes(reader, width)?,
         Ok(Category::Compound(width)) => read_encoded_len_bytes(reader, width)?,
         Ok(Category::Array(width)) => read_encoded_len_bytes(reader, width)?,
-        Err(_is_described) => f(reader)?,
+        Err(_is_described) => op(reader)?,
     };
 
     Ok(bytes)
 }
 
+/// Read bytes of a described type
 pub(crate) fn read_described_bytes<'de, R>(reader: &mut R) -> Result<Vec<u8>, Error>
 where
     R: Read<'de>,
