@@ -56,6 +56,10 @@ type SessionRelay = Arc<Sender<SessionIncomingItem>>;
 /// A handle to the [`Connection`] event loop.
 ///
 /// Dropping the handle will also stop the [`Connection`] event loop.
+///
+/// # Generic Parameters
+///
+/// - `R`: The type of the session listener. This will be `()` on the client side.
 #[allow(dead_code)]
 pub struct ConnectionHandle<R> {
     /// Only change this value in `on_close` method

@@ -54,6 +54,10 @@ pub const DEFAULT_WINDOW: Uint = 2048;
 /// A handle to the [`Session`] event loop
 ///
 /// Dropping the handle will also stop the [`Session`] event loop
+///
+/// # Generic Parameters
+///
+/// - `R`: The type of the listener for the link. This will be `()` on the client side.
 #[allow(dead_code)]
 pub struct SessionHandle<R> {
     /// This value should only be changed in the `on_end` method
