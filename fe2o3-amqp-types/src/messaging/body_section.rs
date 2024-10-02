@@ -7,6 +7,7 @@ use std::{
 
 use serde::{de, ser, Deserialize, Serialize};
 use serde_amqp::{
+    lazy::LazyValue,
     primitives::{
         Array, Binary, Dec128, Dec32, Dec64, OrderedMap, Symbol, SymbolRef, Timestamp, Uuid,
     },
@@ -314,6 +315,30 @@ impl<'de> FromBody<'de> for Value {
 impl FromEmptyBody for Value {
     fn from_empty_body() -> Result<Self, serde_amqp::Error> {
         Ok(Self::Null)
+    }
+}
+
+/* -------------------------------------------------------------------------- */
+
+impl IntoBody for LazyValue {
+    type Body = AmqpValue<Self>;
+
+    fn into_body(self) -> Self::Body {
+        AmqpValue(self)
+    }
+}
+
+impl<'de> FromBody<'de> for LazyValue {
+    type Body = AmqpValue<Self>;
+
+    fn from_body(deserializable: Self::Body) -> Self {
+        deserializable.0
+    }
+}
+
+impl FromEmptyBody for LazyValue {
+    fn from_empty_body() -> Result<Self, serde_amqp::Error> {
+        serde_amqp::from_value(Value::Null)
     }
 }
 

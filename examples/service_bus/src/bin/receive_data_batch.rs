@@ -1,7 +1,7 @@
 use dotenv::dotenv;
-use fe2o3_amqp::Delivery;
 use fe2o3_amqp::types::messaging::Batch;
 use fe2o3_amqp::types::messaging::Data;
+use fe2o3_amqp::Delivery;
 use fe2o3_amqp::Receiver;
 use std::env;
 
@@ -11,7 +11,7 @@ use fe2o3_amqp::Session;
 
 fn process_delivery_data(delivery: &Delivery<Batch<Data>>) {
     for Data(data) in delivery.body() {
-        let msg = std::str::from_utf8(&data).unwrap();
+        let msg = std::str::from_utf8(data).unwrap();
         println!("Received: {:?}", msg);
     }
 }

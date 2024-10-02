@@ -42,7 +42,10 @@ cfg_transaction! {
 }
 
 #[cfg(docsrs)]
-use fe2o3_amqp_types::messaging::{AmqpSequence, AmqpValue, Batch, Body};
+use fe2o3_amqp_types::messaging::{
+    primitives::{LazyValue, Value},
+    AmqpSequence, AmqpValue, Batch, Body,
+};
 
 /// Credit mode for the link
 #[derive(Debug, Clone)]
@@ -250,6 +253,15 @@ impl Receiver {
     /// ```rust,ignore
     /// // `Body<Value>` covers all possibilities
     /// let delivery: Delivery<Body<Value>> = receiver.recv::<Body<Value>>().await.unwrap();
+    /// receiver.accept(&delivery).await.unwrap();
+    /// ```
+    ///
+    /// Lazy deserialization is supported with [`Body<LazyValue>`]. The [`LazyValue`] type is a
+    /// a thin wrapper around the encoded bytes and can be deserialized lazily.
+    ///
+    /// ```rust,ignore
+    /// // `Body<LazyValue>` covers all possibilities and can be deserialized lazily
+    /// let delivery: Delivery<Body<LazyValue>> = receiver.recv::<Body<LazyValue>>().await.unwrap();
     /// receiver.accept(&delivery).await.unwrap();
     /// ```
     ///
@@ -919,7 +931,7 @@ where
                         count_number_of_sections_and_offset(&payload);
                     let delivery = self.link.on_complete_transfer(
                         transfer,
-                        payload,
+                        &payload,
                         section_number,
                         section_offset,
                     )?;
@@ -969,8 +981,12 @@ where
             None => {
                 let (section_number, section_offset) =
                     count_number_of_sections_and_offset(&payload);
-                self.link
-                    .on_complete_transfer(transfer, payload, section_number, section_offset)?
+                self.link.on_complete_transfer(
+                    transfer,
+                    &payload,
+                    section_number,
+                    section_offset,
+                )?
             }
         };
 

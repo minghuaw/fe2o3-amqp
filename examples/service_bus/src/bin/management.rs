@@ -2,7 +2,7 @@ use dotenv::dotenv;
 use fe2o3_amqp_management::{client::MgmtClient, operations::ReadRequest};
 use std::env;
 
-use fe2o3_amqp::{Connection, sasl_profile::SaslProfile, Session, Sender};
+use fe2o3_amqp::{sasl_profile::SaslProfile, Connection, Sender, Session};
 
 #[tokio::main]
 async fn main() {
@@ -33,7 +33,8 @@ async fn main() {
         // .management_node_address(format!("{}/{}", queue_name, "$management"))
         .management_node_address("$management")
         .attach(&mut session)
-        .await.unwrap();
+        .await
+        .unwrap();
 
     let read_request = ReadRequest::name("q1", "com.microsoft:servicebus", None);
     let response = mgmt_client.call(read_request).await.unwrap();

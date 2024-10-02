@@ -125,7 +125,7 @@ where
     }
 
     fn on_complete_transfer<'a, T, P>(
-        &'a mut self,
+        &mut self,
         transfer: Transfer,
         payload: P,
         section_number: u32,
@@ -133,7 +133,7 @@ where
     ) -> Result<Delivery<T>, Self::TransferError>
     where
         for<'de> T: FromBody<'de> + Send,
-        for<'b> P: IntoReader + AsByteIterator<'b> + Send + 'a,
+        P: IntoReader<'a> + AsByteIterator + Send + 'a,
     {
         match self.local_state {
             LinkState::Attached | LinkState::IncompleteAttachExchanged => {}
@@ -158,7 +158,7 @@ where
         let (result, mode) = if settled_by_sender {
             // If the message is pre-settled, there is no need to
             // add to the unsettled map and no need to reply to the Sender
-            let result = T::decode_into_message(payload.into_reader());
+            let result = T::decode_message_from_reader(payload.into_reader());
             (result, None)
         } else {
             // If the message is being sent settled by the sender, the value of this
@@ -177,7 +177,7 @@ where
                 None => None,
             };
 
-            let result = T::decode_into_message(payload.into_reader());
+            let result = T::decode_message_from_reader(payload.into_reader());
 
             let state = DeliveryState::Received(Received {
                 section_number, // What is section number?
@@ -351,9 +351,9 @@ fn consecutive_chunk_indices(delivery_infos: &[DeliveryInfo]) -> Vec<usize> {
 }
 
 /// Count number of sections in encoded message
-pub(crate) fn count_number_of_sections_and_offset<'a, B>(bytes: &'a B) -> (u32, u64)
+pub(crate) fn count_number_of_sections_and_offset<'a, B>(bytes: B) -> (u32, u64)
 where
-    B: AsByteIterator<'a>,
+    B: AsByteIterator + 'a,
 {
     let b0 = bytes.as_byte_iterator();
     let len = b0.len();
@@ -957,7 +957,7 @@ mod tests {
         // let mut serializer = serde_amqp::ser::Serializer::new(&mut buf);
         // message.serialize(&mut serializer).unwrap();
         let buf = to_vec(&Serializable(message)).unwrap();
-        let (_nums, _offset) = count_number_of_sections_and_offset(&buf);
+        let (_nums, _offset) = count_number_of_sections_and_offset(&*buf);
     }
 
     #[test]

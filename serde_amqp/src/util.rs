@@ -17,6 +17,7 @@ pub(crate) enum NonNativeType {
     SymbolRef,
     Timestamp,
     Uuid,
+    LazyValue,
 }
 
 #[derive(Debug, Clone)]

@@ -1,7 +1,14 @@
 use std::env;
 
 use dotenv::dotenv;
-use fe2o3_amqp::{Connection, sasl_profile::SaslProfile, Session, Sender, types::{primitives::Binary, messaging::{Message, Data}}};
+use fe2o3_amqp::{
+    sasl_profile::SaslProfile,
+    types::{
+        messaging::{Data, Message},
+        primitives::Binary,
+    },
+    Connection, Sender, Session,
+};
 
 #[tokio::main]
 async fn main() {

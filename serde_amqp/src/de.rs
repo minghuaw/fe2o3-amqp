@@ -9,7 +9,7 @@ use std::convert::TryInto;
 use crate::{
     __constants::{
         ARRAY, DECIMAL128, DECIMAL32, DECIMAL64, DESCRIBED_BASIC, DESCRIBED_LIST, DESCRIBED_MAP,
-        DESCRIPTOR, SYMBOL, SYMBOL_REF, TIMESTAMP, TRANSPARENT_VEC, UUID, VALUE,
+        DESCRIPTOR, LAZY_VALUE, SYMBOL, SYMBOL_REF, TIMESTAMP, TRANSPARENT_VEC, UUID, VALUE,
     },
     descriptor::PeekDescriptor,
     error::Error,
@@ -350,7 +350,7 @@ impl<'de, R: Read<'de>> Deserializer<R> {
     }
 
     #[inline]
-    fn parse_byte_buf(&mut self) -> Result<Vec<u8>, Error> {
+    fn parse_binary(&mut self) -> Result<Vec<u8>, Error> {
         match self
             .get_elem_code_or_read_format_code()
             .ok_or_else(|| Error::unexpected_eof("parse_byte_buf"))??
@@ -380,9 +380,15 @@ impl<'de, R: Read<'de>> Deserializer<R> {
             .get_elem_code_or_read_format_code()
             .ok_or_else(|| Error::unexpected_eof("parse_decimal"))??
         {
-            EncodingCodes::Decimal32 => self.reader.forward_read_bytes(DECIMAL32_WIDTH, visitor),
-            EncodingCodes::Decimal64 => self.reader.forward_read_bytes(DECIMAL64_WIDTH, visitor),
-            EncodingCodes::Decimal128 => self.reader.forward_read_bytes(DECIMAL128_WIDTH, visitor),
+            EncodingCodes::Decimal32 => self
+                .reader
+                .forward_read_bytes_with_hint(DECIMAL32_WIDTH, visitor),
+            EncodingCodes::Decimal64 => self
+                .reader
+                .forward_read_bytes_with_hint(DECIMAL64_WIDTH, visitor),
+            EncodingCodes::Decimal128 => self
+                .reader
+                .forward_read_bytes_with_hint(DECIMAL128_WIDTH, visitor),
             _ => Err(Error::InvalidFormatCode),
         }
     }
@@ -396,7 +402,9 @@ impl<'de, R: Read<'de>> Deserializer<R> {
             .get_elem_code_or_read_format_code()
             .ok_or_else(|| Error::unexpected_eof("parse_uuid"))??
         {
-            EncodingCodes::Uuid => self.reader.forward_read_bytes(UUID_WIDTH, visitor),
+            EncodingCodes::Uuid => self
+                .reader
+                .forward_read_bytes_with_hint(UUID_WIDTH, visitor),
             _ => Err(Error::InvalidFormatCode),
         }
     }
@@ -713,7 +721,12 @@ where
     where
         V: de::Visitor<'de>,
     {
-        visitor.visit_byte_buf(self.parse_byte_buf()?)
+        // visitor.visit_byte_buf(self.parse_byte_buf()?)
+        match self.non_native_type {
+            None => visitor.visit_byte_buf(self.parse_binary()?),
+            Some(NonNativeType::LazyValue) => self.reader.forward_read_byte_buf(visitor),
+            _ => unreachable!("Only Binary and LazyValue are expected in deserialize_byte_buf"),
+        }
     }
 
     fn deserialize_bytes<V>(self, visitor: V) -> Result<V::Value, Self::Error>
@@ -733,6 +746,9 @@ where
                 self.non_native_type = None;
                 self.parse_uuid(visitor)
             }
+            Some(NonNativeType::LazyValue) => {
+                unreachable!()
+            }
             _ => {
                 let len = match self
                     .get_elem_code_or_read_format_code()
@@ -748,7 +764,7 @@ where
                     }
                     _ => return Err(Error::InvalidFormatCode),
                 };
-                self.reader.forward_read_bytes(len, visitor)
+                self.reader.forward_read_bytes_with_hint(len, visitor)
             }
         }
     }
@@ -825,6 +841,9 @@ where
         } else if name == TRANSPARENT_VEC {
             self.seq_type = Some(SequenceType::TransparentVec);
             visitor.visit_seq(TransparentVecAccess::new(self))
+        } else if name == LAZY_VALUE {
+            self.non_native_type = Some(NonNativeType::LazyValue);
+            self.deserialize_byte_buf(visitor)
         } else {
             visitor.visit_newtype_struct(self)
         }

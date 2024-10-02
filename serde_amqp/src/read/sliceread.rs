@@ -2,7 +2,7 @@ use std::io;
 
 use crate::error::Error;
 
-use super::{private, Read};
+use super::{private, read_described_bytes, read_primitive_bytes_or_else, Read};
 
 /// A reader for a slice of bytes
 #[derive(Debug)]
@@ -50,23 +50,22 @@ impl<'s> Read<'s> for SliceReader<'s> {
     }
 
     fn read_exact(&mut self, buf: &mut [u8]) -> Result<(), io::Error> {
-        // let n = buf.len();
-
-        // if self.slice.len() < n {
-        //     Err(io::Error::new(io::ErrorKind::UnexpectedEof, ""))
-        // } else {
-        //     let read_slice = self.get_byte_slice(n)?;
-        //     buf.copy_from_slice(read_slice);
-        //     Ok(())
-        // }
         std::io::Read::read_exact(&mut self.slice, buf)
     }
 
-    fn forward_read_bytes<V>(&mut self, len: usize, visitor: V) -> Result<V::Value, Error>
+    fn forward_read_bytes_with_hint<V>(&mut self, len: usize, visitor: V) -> Result<V::Value, Error>
     where
         V: serde::de::Visitor<'s>,
     {
         visitor.visit_borrowed_bytes(self.get_byte_slice(len)?)
+    }
+
+    fn forward_read_byte_buf<V>(&mut self, visitor: V) -> Result<V::Value, Error>
+    where
+        V: serde::de::Visitor<'s>,
+    {
+        let buf = read_primitive_bytes_or_else(self, read_described_bytes)?;
+        visitor.visit_byte_buf(buf)
     }
 
     fn forward_read_str<V>(&mut self, len: usize, visitor: V) -> Result<V::Value, Error>

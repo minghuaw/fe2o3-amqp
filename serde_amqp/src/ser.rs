@@ -11,7 +11,7 @@ use serde::{
 use crate::{
     __constants::{
         ARRAY, DECIMAL128, DECIMAL32, DECIMAL64, DESCRIBED_BASIC, DESCRIBED_LIST, DESCRIBED_MAP,
-        DESCRIPTOR, SYMBOL, SYMBOL_REF, TIMESTAMP, TRANSPARENT_VEC, UUID,
+        DESCRIPTOR, LAZY_VALUE, SYMBOL, SYMBOL_REF, TIMESTAMP, TRANSPARENT_VEC, UUID,
     },
     error::Error,
     format::{OFFSET_LIST32, OFFSET_LIST8, OFFSET_MAP32, OFFSET_MAP8},
@@ -575,6 +575,9 @@ impl<'a, W: Write + 'a> ser::Serializer for &'a mut Serializer<W> {
                 }
                 self.non_native_type = None;
             }
+            Some(NonNativeType::LazyValue) => {
+                // We just need to write the bytes
+            }
             // Timestamp should be handled by i64
             Some(NonNativeType::Timestamp)
             | Some(NonNativeType::Symbol)
@@ -656,6 +659,8 @@ impl<'a, W: Write + 'a> ser::Serializer for &'a mut Serializer<W> {
             self.non_native_type = Some(NonNativeType::Uuid);
         } else if name == TRANSPARENT_VEC {
             self.seq_type = Some(SequenceType::TransparentVec);
+        } else if name == LAZY_VALUE {
+            self.non_native_type = Some(NonNativeType::LazyValue);
         }
         value.serialize(self)
     }

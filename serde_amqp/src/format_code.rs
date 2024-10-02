@@ -182,21 +182,8 @@ impl TryFrom<u8> for EncodingCodes {
 #[cfg(test)]
 mod tests {
     #[test]
-    fn size_of_encoding_codes() {
-        let s = std::mem::size_of::<super::EncodingCodes>();
-        println!("{}", s);
-    }
-
-    #[test]
     fn debug_encoding_codes() {
         let code = super::EncodingCodes::Null;
-        println!("0x{:x}", code.clone() as u8);
         assert_eq!(code as u8, 0x40);
-    }
-
-    #[test]
-    fn print_encoding_codes() {
-        let code = super::EncodingCodes::Boolean;
-        println!("{}", code);
     }
 }

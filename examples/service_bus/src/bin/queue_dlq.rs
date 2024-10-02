@@ -2,9 +2,9 @@
 
 use dotenv::dotenv;
 use fe2o3_amqp::connection::ConnectionHandle;
-use fe2o3_amqp::transaction::{Controller, Transaction};
 use fe2o3_amqp::transaction::TransactionDischarge;
 use fe2o3_amqp::transaction::TransactionalRetirement;
+use fe2o3_amqp::transaction::{Controller, Transaction};
 use fe2o3_amqp::types::messaging::Body;
 use fe2o3_amqp::types::messaging::Message;
 use fe2o3_amqp::types::messaging::Properties;
@@ -86,10 +86,10 @@ async fn main() {
     println!("Received from DLQ: {:?}", delivery);
 
     // The Azure ServiceBus SDK disposes the DLQ message in a txn
-    let mut controller = Controller::attach(&mut session, "controller").await.unwrap();
-    let txn = Transaction::declare(&mut controller, None)
+    let mut controller = Controller::attach(&mut session, "controller")
         .await
         .unwrap();
+    let txn = Transaction::declare(&mut controller, None).await.unwrap();
     txn.accept(&mut receiver, &delivery).await.unwrap();
     txn.commit().await.unwrap();
 
