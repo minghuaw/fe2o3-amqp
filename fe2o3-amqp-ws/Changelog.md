@@ -1,5 +1,13 @@
 # fe2o3-amqp-ws
 
+## 0.13.0
+
+1. Updated deps
+
+## 0.12.0
+
+1. Updated deps
+
 ## 0.11.0
 
 1. Updated deps.

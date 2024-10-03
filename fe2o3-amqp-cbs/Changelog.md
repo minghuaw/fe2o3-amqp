@@ -1,5 +1,13 @@
 # Change Log
 
+## 0.13.0
+
+1. Updated deps
+
+## 0.12.0
+
+1. Updated deps
+
 ## 0.11.0
 
 1. Updated deps

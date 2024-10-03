@@ -10,3 +10,4 @@ dotenv = "0.15.0"
 tokio = { version = "1", features = ["net", "rt", "rt-multi-thread", "macros"] }
 fe2o3-amqp = { path = "../../fe2o3-amqp" }
 fe2o3-amqp-ws = { path = "../../fe2o3-amqp-ws", features = ["rustls-tls-webpki-roots"] }
+rustls = "0.23"

@@ -1,6 +1,6 @@
 [package]
 name = "fe2o3-amqp-ws"
-version = "0.12.0"
+version = "0.13.0"
 edition = "2021"
 description = "WebSocket binding stream for AMQP1.0"
 license = "MIT/Apache-2.0"
@@ -29,11 +29,11 @@ futures-util = { workspace = true, features = ["sink"] }
 http = "1"
 pin-project-lite = { workspace = true }
 thiserror = { workspace = true }
-tungstenite = "0.23"
+tungstenite = "0.24"
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 tokio = { workspace = true, features = ["net"] }
-tokio-tungstenite = "0.23"
+tokio-tungstenite = "0.24"
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 tokio = { workspace = true, features = ["sync", "macros"] }
