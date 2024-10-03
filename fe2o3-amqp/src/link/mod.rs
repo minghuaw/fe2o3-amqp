@@ -117,12 +117,6 @@ pub mod role {
     }
 }
 
-// pub(crate) struct Transferable {
-//     input_handle: InputHandle,
-//     transfer: Transfer,
-//     payload: Payload,
-// }
-
 pub(crate) enum SenderAttachExchange {
     Complete,
     IncompleteUnsettled(Vec<(DeliveryTag, ResumingDelivery)>),
