@@ -42,9 +42,9 @@ cfg_transaction! {
 }
 
 #[cfg(docsrs)]
-use fe2o3_amqp_types::messaging::{
+use fe2o3_amqp_types::{
+    messaging::{AmqpSequence, AmqpValue, Batch, Body},
     primitives::{LazyValue, Value},
-    AmqpSequence, AmqpValue, Batch, Body,
 };
 
 /// Credit mode for the link
