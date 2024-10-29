@@ -2,6 +2,8 @@
 #![deny(missing_docs, missing_debug_implementations)]
 #![warn(clippy::unused_async)]
 
+#![allow(clippy::result_large_err)] // TODO: refactor in 0.14.0
+
 //! A rust implementation of AMQP 1.0 protocol based on serde and tokio.
 //!
 //! [![crate_version](https://img.shields.io/crates/v/fe2o3-amqp.svg?style=flat)](https://crates.io/crates/fe2o3-amqp)
