@@ -9,6 +9,15 @@ use crate::{
     __constants::LAZY_VALUE,
 };
 
+/// Serialize a value into a [`LazyValue`].
+pub fn to_lazy_value<T>(value: &T) -> Result<LazyValue, Error>
+where
+    T: Serialize,
+{
+    let bytes = crate::to_vec(value)?;
+    Ok(LazyValue(Bytes::from(bytes)))
+}
+
 /// A lazy value.
 ///
 /// This is a thin wrapper around a [`Bytes`] value that can be accessed via

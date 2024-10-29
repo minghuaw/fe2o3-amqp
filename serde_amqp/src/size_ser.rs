@@ -871,6 +871,7 @@ mod tests {
     use serde_bytes::ByteBuf;
 
     use crate::{
+        lazy::to_lazy_value,
         primitives::{Array, Dec128, Dec32, Dec64, Symbol, Timestamp, Uuid},
         to_vec,
     };
@@ -1310,5 +1311,27 @@ mod tests {
 
         let size_result = serialized_size(&value);
         assert!(size_result.is_ok());
+    }
+
+    #[test]
+    fn serialized_size_of_lazy_value_match_with_value() {
+        use crate::{described::Described, descriptor::Descriptor, primitives::*, Value};
+
+        let timestamp = Timestamp::from_milliseconds(12345);
+        let mut list = List::new();
+        list.push(Value::Timestamp(timestamp));
+
+        let described = Described {
+            descriptor: Descriptor::Code(0x73),
+            value: Value::List(list),
+        };
+
+        let value = Value::Described(Box::new(described));
+        let lazy_value = to_lazy_value(&value).unwrap();
+
+        let value_size = serialized_size(&value).unwrap();
+        let lazy_value_size = serialized_size(&lazy_value).unwrap();
+
+        assert_eq!(value_size, lazy_value_size);
     }
 }
