@@ -301,6 +301,7 @@ fn map_amqp_websocket_request(req: impl IntoClientRequest) -> Result<Request, tu
     Ok(request)
 }
 
+#[allow(clippy::result_large_err)] // TODO: refactor
 fn verify_response(response: Response) -> Result<Response, Error> {
     use http::StatusCode;
 
