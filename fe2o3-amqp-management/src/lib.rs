@@ -26,12 +26,3 @@ pub const DEFAULT_CLIENT_NODE_ADDRESS: &str = "mgmt-client";
 pub use client::MgmtClient;
 pub use request::Request;
 pub use response::Response;
-
-#[cfg(test)]
-mod tests {
-    #[test]
-    fn it_works() {
-        let result = 2 + 2;
-        assert_eq!(result, 4);
-    }
-}
