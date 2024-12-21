@@ -60,7 +60,7 @@ enum Field {
 
 struct FieldVisitor {}
 
-impl<'de> de::Visitor<'de> for FieldVisitor {
+impl de::Visitor<'_> for FieldVisitor {
     type Value = Field;
 
     fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
@@ -140,7 +140,7 @@ pub(crate) enum PeekDescriptor {
 
 struct PeekDescriptorVisitor {}
 
-impl<'de> de::Visitor<'de> for PeekDescriptorVisitor {
+impl de::Visitor<'_> for PeekDescriptorVisitor {
     type Value = PeekDescriptor;
 
     fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {

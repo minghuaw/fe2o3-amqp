@@ -92,7 +92,7 @@ mod performative_impl {
 
     struct FieldVisitor {}
 
-    impl<'de> de::Visitor<'de> for FieldVisitor {
+    impl de::Visitor<'_> for FieldVisitor {
         type Value = Field;
 
         fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {

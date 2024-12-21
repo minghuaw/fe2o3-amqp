@@ -98,7 +98,7 @@ impl ser::Serialize for Uuid {
 
 struct Visitor {}
 
-impl<'de> de::Visitor<'de> for Visitor {
+impl de::Visitor<'_> for Visitor {
     type Value = Uuid;
 
     fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {

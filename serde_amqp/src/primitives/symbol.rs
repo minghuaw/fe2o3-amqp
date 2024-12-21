@@ -32,7 +32,7 @@ use crate::__constants::{SYMBOL, SYMBOL_REF};
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct SymbolRef<'a>(pub &'a str);
 
-impl<'a> SymbolRef<'a> {
+impl SymbolRef<'_> {
     /// Returns the inner value as str
     pub fn as_str(&self) -> &str {
         self.0
@@ -54,19 +54,19 @@ impl<'a> Deref for SymbolRef<'a> {
 }
 
 /// The `Ord` and `Hash` is exactly the same as wrapped `&str`
-impl<'a> Borrow<str> for SymbolRef<'a> {
+impl Borrow<str> for SymbolRef<'_> {
     fn borrow(&self) -> &str {
         self.0
     }
 }
 
-impl<'a, 'b> Borrow<str> for &'a SymbolRef<'b> {
+impl Borrow<str> for &SymbolRef<'_> {
     fn borrow(&self) -> &str {
         self.0
     }
 }
 
-impl<'a> Serialize for SymbolRef<'a> {
+impl Serialize for SymbolRef<'_> {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: serde::Serializer,

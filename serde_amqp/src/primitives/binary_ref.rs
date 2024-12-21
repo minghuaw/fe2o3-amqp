@@ -15,7 +15,7 @@ impl<'a> From<&'a Binary> for BinaryRef<'a> {
     }
 }
 
-impl<'a> Serialize for BinaryRef<'a> {
+impl Serialize for BinaryRef<'_> {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: serde::Serializer,
@@ -33,7 +33,7 @@ impl<'de> de::Deserialize<'de> for BinaryRef<'de> {
     }
 }
 
-impl<'a> LowerHex for BinaryRef<'a> {
+impl LowerHex for BinaryRef<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         for byte in self.0 {
             write!(f, "{:x}", byte)?;
@@ -42,7 +42,7 @@ impl<'a> LowerHex for BinaryRef<'a> {
     }
 }
 
-impl<'a> UpperHex for BinaryRef<'a> {
+impl UpperHex for BinaryRef<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         for byte in self.0 {
             write!(f, "{:X}", byte)?;

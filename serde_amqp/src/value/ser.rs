@@ -407,13 +407,13 @@ impl<'a> SeqSerializer<'a> {
     }
 }
 
-impl<'a> AsMut<Serializer> for SeqSerializer<'a> {
+impl AsMut<Serializer> for SeqSerializer<'_> {
     fn as_mut(&mut self) -> &mut Serializer {
         self.se
     }
 }
 
-impl<'a> ser::SerializeSeq for SeqSerializer<'a> {
+impl ser::SerializeSeq for SeqSerializer<'_> {
     type Ok = Value;
     type Error = Error;
 
@@ -436,7 +436,7 @@ impl<'a> ser::SerializeSeq for SeqSerializer<'a> {
     }
 }
 
-impl<'a> ser::SerializeTuple for SeqSerializer<'a> {
+impl ser::SerializeTuple for SeqSerializer<'_> {
     type Ok = Value;
     type Error = Error;
 
@@ -508,7 +508,7 @@ impl<'a> TupleStructSerializer<'a> {
     }
 }
 
-impl<'a> AsMut<Serializer> for TupleStructSerializer<'a> {
+impl AsMut<Serializer> for TupleStructSerializer<'_> {
     fn as_mut(&mut self) -> &mut Serializer {
         match &mut self.kind {
             TupleStructSerializerKind::Basic { se, .. } => se,
@@ -517,7 +517,7 @@ impl<'a> AsMut<Serializer> for TupleStructSerializer<'a> {
     }
 }
 
-impl<'a> ser::SerializeTupleStruct for TupleStructSerializer<'a> {
+impl ser::SerializeTupleStruct for TupleStructSerializer<'_> {
     type Ok = Value;
 
     type Error = Error;
@@ -622,7 +622,7 @@ impl<'a> StructSerializer<'a> {
     }
 }
 
-impl<'a> AsMut<Serializer> for StructSerializer<'a> {
+impl AsMut<Serializer> for StructSerializer<'_> {
     fn as_mut(&mut self) -> &mut Serializer {
         match &mut self.kind {
             StructSerializerKind::Basic { se, .. } => se,
@@ -632,7 +632,7 @@ impl<'a> AsMut<Serializer> for StructSerializer<'a> {
     }
 }
 
-impl<'a> ser::SerializeStruct for StructSerializer<'a> {
+impl ser::SerializeStruct for StructSerializer<'_> {
     type Ok = Value;
 
     type Error = Error;
@@ -699,13 +699,13 @@ impl<'a> MapSerializer<'a> {
     }
 }
 
-impl<'a> AsMut<Serializer> for MapSerializer<'a> {
+impl AsMut<Serializer> for MapSerializer<'_> {
     fn as_mut(&mut self) -> &mut Serializer {
         self.se
     }
 }
 
-impl<'a> ser::SerializeMap for MapSerializer<'a> {
+impl ser::SerializeMap for MapSerializer<'_> {
     type Ok = Value;
     type Error = Error;
 
@@ -770,13 +770,13 @@ impl<'a> VariantSerializer<'a> {
     }
 }
 
-impl<'a> AsMut<Serializer> for VariantSerializer<'a> {
+impl AsMut<Serializer> for VariantSerializer<'_> {
     fn as_mut(&mut self) -> &mut Serializer {
         self.se
     }
 }
 
-impl<'a> ser::SerializeTupleVariant for VariantSerializer<'a> {
+impl ser::SerializeTupleVariant for VariantSerializer<'_> {
     type Ok = Value;
     type Error = Error;
 
@@ -797,7 +797,7 @@ impl<'a> ser::SerializeTupleVariant for VariantSerializer<'a> {
     }
 }
 
-impl<'a> ser::SerializeStructVariant for VariantSerializer<'a> {
+impl ser::SerializeStructVariant for VariantSerializer<'_> {
     type Ok = Value;
     type Error = Error;
 

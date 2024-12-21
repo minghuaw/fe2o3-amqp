@@ -160,12 +160,6 @@ pub enum SimpleValue {
     /// label = "64-bit two’s-complement integer representing milliseconds since the unix epoch"
     Timestamp(Timestamp),
 
-    /// An absolute point in time
-    ///
-    /// encoding name = "ms64", code = 0x83,
-    /// category = fixed, width = 8
-    /// label = "64-bit two’s-complement integer representing milliseconds since the unix epoch"
-
     /// A universally unique identifier as defined by RFC-4122 in section 4.1.2
     ///
     /// encoding code = 0x98,

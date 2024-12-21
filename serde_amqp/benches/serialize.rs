@@ -222,6 +222,70 @@ fn criterion_benchmark(c: &mut Criterion) {
     c.bench_function("serialize List<u64> 10MB", |b| {
         b.iter(|| serde_amqp::to_vec(black_box(&value)).unwrap())
     });
+
+    // list of strings
+    // 10 strings of 16B
+    let value = (0..10)
+        .map(|_| Alphanumeric.sample_string(&mut rand::thread_rng(), 16))
+        .map(String::from)
+        .collect::<Vec<_>>();
+    c.bench_function("serialize List<String> 10x16B", |b| {
+        b.iter(|| serde_amqp::to_vec(black_box(&value)).unwrap())
+    });
+
+    // 100 strings of 16B
+    let value = (0..100)
+        .map(|_| Alphanumeric.sample_string(&mut rand::thread_rng(), 16))
+        .map(String::from)
+        .collect::<Vec<_>>();
+    c.bench_function("serialize List<String> 100x16B", |b| {
+        b.iter(|| serde_amqp::to_vec(black_box(&value)).unwrap())
+    });
+
+    // 1000 strings of 16B
+    let value = (0..1000)
+        .map(|_| Alphanumeric.sample_string(&mut rand::thread_rng(), 16))
+        .map(String::from)
+        .collect::<Vec<_>>();
+    c.bench_function("serialize List<String> 1000x16B", |b| {
+        b.iter(|| serde_amqp::to_vec(black_box(&value)).unwrap())
+    });
+
+    // 10 strings of 1kB
+    let value = (0..10)
+        .map(|_| Alphanumeric.sample_string(&mut rand::thread_rng(), 1024))
+        .map(String::from)
+        .collect::<Vec<_>>();
+    c.bench_function("serialize List<String> 10x1kB", |b| {
+        b.iter(|| serde_amqp::to_vec(black_box(&value)).unwrap())
+    });
+
+    // 100 strings of 1kB
+    let value = (0..100)
+        .map(|_| Alphanumeric.sample_string(&mut rand::thread_rng(), 1024))
+        .map(String::from)
+        .collect::<Vec<_>>();
+    c.bench_function("serialize List<String> 100x1kB", |b| {
+        b.iter(|| serde_amqp::to_vec(black_box(&value)).unwrap())
+    });
+
+    // 1000 strings of 1kB
+    let value = (0..1000)
+        .map(|_| Alphanumeric.sample_string(&mut rand::thread_rng(), 1024))
+        .map(String::from)
+        .collect::<Vec<_>>();
+    c.bench_function("serialize List<String> 1000x1kB", |b| {
+        b.iter(|| serde_amqp::to_vec(black_box(&value)).unwrap())
+    });
+
+    // 10 strings of 1MB
+    let value = (0..10)
+        .map(|_| Alphanumeric.sample_string(&mut rand::thread_rng(), 1024 * 1024))
+        .map(String::from)
+        .collect::<Vec<_>>();
+    c.bench_function("serialize List<String> 10x1MB", |b| {
+        b.iter(|| serde_amqp::to_vec(black_box(&value)).unwrap())
+    });
 }
 
 criterion_group!(benches, criterion_benchmark);

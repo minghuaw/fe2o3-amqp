@@ -248,7 +248,7 @@ where
 ///
 /// impl FromEmptyBody for Foo {}
 ///
-/// impl<'de> FromBody<'de> for Foo {
+/// impl FromBody<'_> for Foo {
 ///     type Body = AmqpValue<Self>;
 ///
 ///     fn from_body(body: Self::Body) -> Self {
@@ -304,7 +304,7 @@ impl IntoBody for Value {
     }
 }
 
-impl<'de> FromBody<'de> for Value {
+impl FromBody<'_> for Value {
     type Body = AmqpValue<Value>;
 
     fn from_body(deserializable: Self::Body) -> Self {
@@ -328,7 +328,7 @@ impl IntoBody for LazyValue {
     }
 }
 
-impl<'de> FromBody<'de> for LazyValue {
+impl FromBody<'_> for LazyValue {
     type Body = AmqpValue<Self>;
 
     fn from_body(deserializable: Self::Body) -> Self {
@@ -398,7 +398,7 @@ impl<'a> IntoBody for &'a str {
     }
 }
 
-impl<'a> IntoBody for Cow<'a, str> {
+impl IntoBody for Cow<'_, str> {
     type Body = AmqpValue<Self>;
 
     fn into_body(self) -> Self::Body {
@@ -406,7 +406,7 @@ impl<'a> IntoBody for Cow<'a, str> {
     }
 }
 
-impl<'a> IntoBody for SymbolRef<'a> {
+impl IntoBody for SymbolRef<'_> {
     type Body = AmqpValue<Self>;
 
     fn into_body(self) -> Self::Body {
@@ -489,7 +489,7 @@ macro_rules! impl_from_deserializable_or_empty_body {
     };
 
     (AmqpValue, $type:ty) => {
-        impl<'de> FromBody<'de> for $type {
+        impl FromBody<'_> for $type {
             type Body = AmqpValue<Self>;
 
             fn from_body(deserializable: Self::Body) -> Self {
