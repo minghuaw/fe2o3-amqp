@@ -28,7 +28,7 @@ impl<'s> SliceReader<'s> {
     }
 }
 
-impl<'s> private::Sealed for SliceReader<'s> {}
+impl private::Sealed for SliceReader<'_> {}
 
 impl<'s> Read<'s> for SliceReader<'s> {
     fn peek(&mut self) -> Option<u8> {

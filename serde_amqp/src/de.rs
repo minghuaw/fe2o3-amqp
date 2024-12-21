@@ -511,7 +511,7 @@ impl<'de, R: Read<'de>> Deserializer<R> {
     }
 }
 
-impl<'de, 'a, R> de::Deserializer<'de> for &'a mut Deserializer<R>
+impl<'de, R> de::Deserializer<'de> for &mut Deserializer<R>
 where
     R: Read<'de>,
 {
@@ -1311,13 +1311,13 @@ impl<'a, R> ArrayAccess<'a, R> {
     }
 }
 
-impl<'a, R> AsMut<Deserializer<R>> for ArrayAccess<'a, R> {
+impl<R> AsMut<Deserializer<R>> for ArrayAccess<'_, R> {
     fn as_mut(&mut self) -> &mut Deserializer<R> {
         self.de
     }
 }
 
-impl<'a, 'de, R: Read<'de>> de::SeqAccess<'de> for ArrayAccess<'a, R> {
+impl<'de, R: Read<'de>> de::SeqAccess<'de> for ArrayAccess<'_, R> {
     type Error = Error;
 
     fn next_element_seed<T>(&mut self, seed: T) -> Result<Option<T::Value>, Self::Error>
@@ -1355,13 +1355,13 @@ impl<'a, R> ListAccess<'a, R> {
     }
 }
 
-impl<'a, R> AsMut<Deserializer<R>> for ListAccess<'a, R> {
+impl<R> AsMut<Deserializer<R>> for ListAccess<'_, R> {
     fn as_mut(&mut self) -> &mut Deserializer<R> {
         self.de
     }
 }
 
-impl<'a, 'de, R: Read<'de>> de::SeqAccess<'de> for ListAccess<'a, R> {
+impl<'de, R: Read<'de>> de::SeqAccess<'de> for ListAccess<'_, R> {
     type Error = Error;
 
     fn next_element_seed<T>(&mut self, seed: T) -> Result<Option<T::Value>, Self::Error>
@@ -1391,13 +1391,13 @@ impl<'a, R> TransparentVecAccess<'a, R> {
     }
 }
 
-impl<'a, R> AsMut<Deserializer<R>> for TransparentVecAccess<'a, R> {
+impl<R> AsMut<Deserializer<R>> for TransparentVecAccess<'_, R> {
     fn as_mut(&mut self) -> &mut Deserializer<R> {
         self.de
     }
 }
 
-impl<'a, 'de, R: Read<'de>> de::SeqAccess<'de> for TransparentVecAccess<'a, R> {
+impl<'de, R: Read<'de>> de::SeqAccess<'de> for TransparentVecAccess<'_, R> {
     type Error = Error;
 
     fn next_element_seed<T>(&mut self, seed: T) -> Result<Option<T::Value>, Self::Error>
@@ -1453,13 +1453,13 @@ impl<'a, R> MapAccess<'a, R> {
     }
 }
 
-impl<'a, R> AsMut<Deserializer<R>> for MapAccess<'a, R> {
+impl<R> AsMut<Deserializer<R>> for MapAccess<'_, R> {
     fn as_mut(&mut self) -> &mut Deserializer<R> {
         self.de
     }
 }
 
-impl<'a, 'de, R: Read<'de>> de::MapAccess<'de> for MapAccess<'a, R> {
+impl<'de, R: Read<'de>> de::MapAccess<'de> for MapAccess<'_, R> {
     type Error = Error;
 
     fn next_key_seed<K>(&mut self, seed: K) -> Result<Option<K::Value>, Self::Error>
@@ -1517,13 +1517,13 @@ impl<'a, R> VariantAccess<'a, R> {
     }
 }
 
-impl<'a, R> AsMut<Deserializer<R>> for VariantAccess<'a, R> {
+impl<R> AsMut<Deserializer<R>> for VariantAccess<'_, R> {
     fn as_mut(&mut self) -> &mut Deserializer<R> {
         self.de
     }
 }
 
-impl<'a, 'de, R: Read<'de>> de::EnumAccess<'de> for VariantAccess<'a, R> {
+impl<'de, R: Read<'de>> de::EnumAccess<'de> for VariantAccess<'_, R> {
     type Error = Error;
     type Variant = Self;
 
@@ -1536,7 +1536,7 @@ impl<'a, 'de, R: Read<'de>> de::EnumAccess<'de> for VariantAccess<'a, R> {
     }
 }
 
-impl<'a, 'de, R: Read<'de>> de::VariantAccess<'de> for VariantAccess<'a, R> {
+impl<'de, R: Read<'de>> de::VariantAccess<'de> for VariantAccess<'_, R> {
     type Error = Error;
 
     fn unit_variant(self) -> Result<(), Self::Error> {
@@ -1668,13 +1668,13 @@ impl<'a, 'de, R: Read<'de>> DescribedAccess<'a, R> {
     }
 }
 
-impl<'a, R> AsMut<Deserializer<R>> for DescribedAccess<'a, R> {
+impl<R> AsMut<Deserializer<R>> for DescribedAccess<'_, R> {
     fn as_mut(&mut self) -> &mut Deserializer<R> {
         self.de
     }
 }
 
-impl<'a, 'de, R: Read<'de>> de::SeqAccess<'de> for DescribedAccess<'a, R> {
+impl<'de, R: Read<'de>> de::SeqAccess<'de> for DescribedAccess<'_, R> {
     type Error = Error;
 
     fn next_element_seed<T>(&mut self, seed: T) -> Result<Option<T::Value>, Self::Error>
@@ -1711,7 +1711,7 @@ impl<'a, 'de, R: Read<'de>> de::SeqAccess<'de> for DescribedAccess<'a, R> {
     }
 }
 
-impl<'a, 'de, R: Read<'de>> de::MapAccess<'de> for DescribedAccess<'a, R> {
+impl<'de, R: Read<'de>> de::MapAccess<'de> for DescribedAccess<'_, R> {
     type Error = Error;
 
     fn next_key_seed<K>(&mut self, seed: K) -> Result<Option<K::Value>, Self::Error>

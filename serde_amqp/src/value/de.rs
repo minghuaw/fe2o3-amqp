@@ -114,7 +114,7 @@ impl From<EncodingCodes> for ValueType {
 
 struct FieldVisitor {}
 
-impl<'de> de::Visitor<'de> for FieldVisitor {
+impl de::Visitor<'_> for FieldVisitor {
     type Value = ValueType;
 
     fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {

@@ -78,7 +78,7 @@ impl Serialize for LazyValue {
 
 struct LazyValueVisitor;
 
-impl<'de> Visitor<'de> for LazyValueVisitor {
+impl Visitor<'_> for LazyValueVisitor {
     type Value = LazyValue;
 
     fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {

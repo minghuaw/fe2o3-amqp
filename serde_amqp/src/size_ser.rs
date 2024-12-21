@@ -451,7 +451,7 @@ impl<'a> SeqSerializer<'a> {
     }
 }
 
-impl<'a> ser::SerializeSeq for SeqSerializer<'a> {
+impl ser::SerializeSeq for SeqSerializer<'_> {
     type Ok = usize;
     type Error = Error;
 
@@ -552,7 +552,7 @@ impl<'a> TupleSerializer<'a> {
     }
 }
 
-impl<'a> ser::SerializeTuple for TupleSerializer<'a> {
+impl ser::SerializeTuple for TupleSerializer<'_> {
     type Ok = usize;
     type Error = Error;
 
@@ -586,7 +586,7 @@ impl<'a> MapSerializer<'a> {
     }
 }
 
-impl<'a> ser::SerializeMap for MapSerializer<'a> {
+impl ser::SerializeMap for MapSerializer<'_> {
     type Ok = usize;
     type Error = Error;
 
@@ -667,7 +667,7 @@ impl<'a> TupleStructSerializer<'a> {
     }
 }
 
-impl<'a> ser::SerializeTupleStruct for TupleStructSerializer<'a> {
+impl ser::SerializeTupleStruct for TupleStructSerializer<'_> {
     type Ok = usize;
     type Error = Error;
 
@@ -743,7 +743,7 @@ impl<'a> StructSerializer<'a> {
     }
 }
 
-impl<'a> ser::SerializeStruct for StructSerializer<'a> {
+impl ser::SerializeStruct for StructSerializer<'_> {
     type Ok = usize;
     type Error = Error;
 
@@ -824,7 +824,7 @@ impl<'a> VariantSerializer<'a> {
     }
 }
 
-impl<'a> ser::SerializeTupleVariant for VariantSerializer<'a> {
+impl ser::SerializeTupleVariant for VariantSerializer<'_> {
     type Ok = usize;
     type Error = Error;
 
@@ -847,7 +847,7 @@ impl<'a> ser::SerializeTupleVariant for VariantSerializer<'a> {
     }
 }
 
-impl<'a> ser::SerializeStructVariant for VariantSerializer<'a> {
+impl ser::SerializeStructVariant for VariantSerializer<'_> {
     type Ok = usize;
     type Error = Error;
 
