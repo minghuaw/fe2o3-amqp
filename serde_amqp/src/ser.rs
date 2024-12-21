@@ -12,11 +12,7 @@ use crate::{
     __constants::{
         ARRAY, DECIMAL128, DECIMAL32, DECIMAL64, DESCRIBED_BASIC, DESCRIBED_LIST, DESCRIBED_MAP,
         DESCRIPTOR, LAZY_VALUE, SYMBOL, SYMBOL_REF, TIMESTAMP, TRANSPARENT_VEC, UUID,
-    },
-    error::Error,
-    format::{OFFSET_LIST32, OFFSET_LIST8, OFFSET_MAP32, OFFSET_MAP8},
-    format_code::EncodingCodes,
-    util::{FieldRole, IsArrayElement, NonNativeType, SequenceType, StructEncoding},
+    }, error::Error, format::{OFFSET_LIST32, OFFSET_LIST8, OFFSET_MAP32, OFFSET_MAP8}, format_code::EncodingCodes, serialized_size, util::{FieldRole, IsArrayElement, NonNativeType, SequenceType, StructEncoding}
 };
 
 pub(crate) const U8_MAX: usize = u8::MAX as usize;
@@ -37,6 +33,9 @@ where
     value.serialize(&mut serializer)?;
     Ok(writer)
 }
+
+// TODO: place an optional arena (bumpalo) into the serializer, and whenever a seq serializer is
+// created, the internal buffer (or all the nested serializers) will be created in the arena
 
 /// A struct for serializing Rust structs/values into AMQP1.0 wire format
 #[derive(Debug)]
@@ -696,9 +695,9 @@ impl<'a, W: Write + 'a> ser::Serializer for &'a mut Serializer<W> {
     //
     // This will be encoded as primitive type `Array`
     #[inline]
-    fn serialize_seq(self, _len: Option<usize>) -> Result<Self::SerializeSeq, Self::Error> {
+    fn serialize_seq(self, len: Option<usize>) -> Result<Self::SerializeSeq, Self::Error> {
         // The most external array should be treated as IsArrayElement::False
-        Ok(SeqSerializer::new(self))
+        Ok(SeqSerializer::new(self, len))
     }
 
     // A statically sized heterogeneous sequence of values
@@ -813,20 +812,49 @@ impl<'a, W: Write + 'a> ser::Serializer for &'a mut Serializer<W> {
     }
 }
 
+/// Internal state of the sequence serializer
+#[derive(Debug, Clone)]
+enum SeqSerializerState {
+    /// Initialized with the length hint
+    Init(Option<usize>),
+
+    /// Buffering the serialized bytes
+    Buffer(Vec<u8>),
+}
+
 /// Serializer for sequence types
 #[derive(Debug)]
 pub struct SeqSerializer<'a, W: 'a> {
     se: &'a mut Serializer<W>,
-    num: usize,
-    buf: Vec<u8>,
+    state: SeqSerializerState,
+    index: usize,
 }
 
 impl<'a, W: 'a> SeqSerializer<'a, W> {
-    fn new(se: &'a mut Serializer<W>) -> Self {
+    fn new(se: &'a mut Serializer<W>, len: Option<usize>) -> Self {
         Self {
             se,
-            num: 0,
-            buf: Vec::new(),
+            state: SeqSerializerState::Init(len),
+            index: 0,
+        }
+    }
+
+    fn get_buffer_mut_or_alloc<T>(&mut self, element: &T) -> Result<&mut Vec<u8>, Error> 
+    where
+        T: Serialize + ?Sized,
+    {
+        if let SeqSerializerState::Init(len) = self.state {
+            let total_len = match len {
+                Some(len) => len * serialized_size(element)?,
+                None => 0,
+            };
+            let buf = Vec::with_capacity(total_len);
+            self.state = SeqSerializerState::Buffer(buf);
+        }
+
+        match &mut self.state {
+            SeqSerializerState::Buffer(buf) => Ok(buf),
+            _ => unreachable!("SeqSerializerState::Init should have been handled"),
         }
     }
 }
@@ -848,20 +876,23 @@ impl<'a, W: Write + 'a> ser::SerializeSeq for SeqSerializer<'a, W> {
         match self.se.seq_type {
             None | Some(SequenceType::List) => {
                 // Element in the list always has it own constructor
-                let mut se = Serializer::new(&mut self.buf);
+                let buf = self.get_buffer_mut_or_alloc(value)?;
+                let mut se = Serializer::new(buf);
                 value.serialize(&mut se)?;
             }
             Some(SequenceType::Array) => {
-                let mut se = match self.num {
+                let mut se = match self.index {
                     // The first element should include the contructor code
                     0 => {
-                        let mut serializer = Serializer::new(&mut self.buf);
+                        let buf = self.get_buffer_mut_or_alloc(value)?;
+                        let mut serializer = Serializer::new(buf);
                         serializer.is_array_elem = IsArrayElement::FirstElement;
                         serializer
                     }
                     // The remaining element should only write the value bytes
                     _ => {
-                        let mut serializer = Serializer::new(&mut self.buf);
+                        let buf = self.get_buffer_mut_or_alloc(value)?;
+                        let mut serializer = Serializer::new(buf);
                         serializer.is_array_elem = IsArrayElement::OtherElement;
                         serializer
                     }
@@ -870,23 +901,31 @@ impl<'a, W: Write + 'a> ser::SerializeSeq for SeqSerializer<'a, W> {
             }
             Some(SequenceType::TransparentVec) => {
                 // FIXME: Directly write to the writer
-                let mut se = Serializer::new(&mut self.buf);
+                let buf = self.get_buffer_mut_or_alloc(value)?;
+                let mut se = Serializer::new(buf);
                 value.serialize(&mut se)?;
             }
         }
 
-        self.num += 1;
+        self.index += 1;
         Ok(())
     }
 
     #[inline]
     fn end(self) -> Result<Self::Ok, Self::Error> {
-        let Self { se, num, buf } = self;
+        // let Self { se, num, buf } = self;
+
+        let Self { se, state, index } = self;
+        let buf = match state {
+            SeqSerializerState::Init(_) => Vec::new(),
+            SeqSerializerState::Buffer(buf) => buf,
+        };
+
         match se.seq_type {
             None | Some(SequenceType::List) => {
-                write_list(&mut se.writer, num, &buf, &se.is_array_elem)
+                write_list(&mut se.writer, index, &buf, &se.is_array_elem)
             }
-            Some(SequenceType::Array) => write_array(&mut se.writer, num, &buf, &se.is_array_elem),
+            Some(SequenceType::Array) => write_array(&mut se.writer, index, &buf, &se.is_array_elem),
             Some(SequenceType::TransparentVec) => write_transparent_vec(&mut se.writer, &buf),
         }
     }
