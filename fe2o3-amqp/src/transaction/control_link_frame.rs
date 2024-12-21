@@ -100,7 +100,7 @@ impl<'de> de::Deserialize<'de> for Field {
 
 struct Visitor {}
 
-impl<'de> de::Visitor<'de> for Visitor {
+impl de::Visitor for Visitor {
     type Value = ControlMessageBody;
 
     fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
