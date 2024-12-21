@@ -256,15 +256,15 @@ impl<'a> Borrow<dyn AnnotationKey + 'a> for OwnedKey {
     }
 }
 
-impl<'a> PartialEq for (dyn AnnotationKey + 'a) {
+impl PartialEq for (dyn AnnotationKey + '_) {
     fn eq(&self, other: &Self) -> bool {
         self.key().eq(&other.key())
     }
 }
 
-impl<'a> Eq for (dyn AnnotationKey + 'a) {}
+impl Eq for (dyn AnnotationKey + '_) {}
 
-impl<'a> PartialOrd for (dyn AnnotationKey + 'a) {
+impl PartialOrd for (dyn AnnotationKey + '_) {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
         // self.key().partial_cmp(&other.key())
 
@@ -277,13 +277,13 @@ impl<'a> PartialOrd for (dyn AnnotationKey + 'a) {
     }
 }
 
-impl<'a> Ord for (dyn AnnotationKey + 'a) {
+impl Ord for (dyn AnnotationKey + '_) {
     fn cmp(&self, other: &Self) -> std::cmp::Ordering {
         self.key().cmp(&other.key())
     }
 }
 
-impl<'a> Hash for (dyn AnnotationKey + 'a) {
+impl Hash for (dyn AnnotationKey + '_) {
     fn hash<H: Hasher>(&self, state: &mut H) {
         self.key().hash(state)
     }
