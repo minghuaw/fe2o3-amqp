@@ -23,7 +23,7 @@ impl IntoBody for ControlMessageBody {
 
 impl FromEmptyBody for ControlMessageBody {}
 
-impl<'de> FromBody<'de> for ControlMessageBody {
+impl FromBody<'_> for ControlMessageBody {
     type Body = AmqpValue<Self>;
 
     fn from_body(deserializable: Self::Body) -> Self {
@@ -50,7 +50,7 @@ enum Field {
 
 struct FieldVisitor {}
 
-impl<'de> de::Visitor<'de> for FieldVisitor {
+impl de::Visitor<'_> for FieldVisitor {
     type Value = Field;
 
     fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {

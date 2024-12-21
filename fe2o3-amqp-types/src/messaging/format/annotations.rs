@@ -111,7 +111,7 @@ enum Field {
 
 struct FieldVisitor {}
 
-impl<'de> de::Visitor<'de> for FieldVisitor {
+impl de::Visitor<'_> for FieldVisitor {
     type Value = Field;
 
     fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
@@ -199,7 +199,7 @@ pub trait AnnotationKey {
     fn key(&self) -> BorrowedKey<'_>;
 }
 
-impl<'a> AnnotationKey for BorrowedKey<'a> {
+impl AnnotationKey for BorrowedKey<'_> {
     fn key(&self) -> BorrowedKey<'_> {
         self.clone()
     }
@@ -244,7 +244,7 @@ impl AnnotationKey for Symbol {
     }
 }
 
-impl<'a> AnnotationKey for SymbolRef<'a> {
+impl AnnotationKey for SymbolRef<'_> {
     fn key(&self) -> BorrowedKey<'_> {
         BorrowedKey::Symbol(SymbolRef(self.0))
     }

@@ -285,7 +285,7 @@ impl Receiver {
     ///     a: i32
     /// }
     ///
-    /// impl<'de> FromBody<'de> for Foo {
+    /// impl FromBody<'_> for Foo {
     ///     type Body = AmqpValue<Foo>;
     ///
     ///     fn from_body(body: Self::Body) -> Self {

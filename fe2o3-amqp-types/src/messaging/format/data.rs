@@ -110,7 +110,7 @@ impl IntoBody for Data {
     }
 }
 
-impl<'de> FromBody<'de> for Data {
+impl FromBody<'_> for Data {
     type Body = Data;
 
     fn from_body(deserializable: Self::Body) -> Self {
@@ -138,7 +138,7 @@ impl IntoBody for Batch<Data> {
     }
 }
 
-impl<'de> FromBody<'de> for Batch<Data> {
+impl FromBody<'_> for Batch<Data> {
     type Body = Batch<Data>;
 
     fn from_body(deserializable: Self::Body) -> Self {
