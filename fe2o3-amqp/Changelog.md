@@ -1,5 +1,9 @@
 # Change Log
 
+## 0.13.1
+
+1. Fixed documentation error
+
 ## 0.13.0
 
 1. Added support for using `LazyValue` as message body

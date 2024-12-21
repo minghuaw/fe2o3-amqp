@@ -125,7 +125,7 @@ mod tests {
 
     impl FromEmptyBody for TestExample {}
 
-    impl<'de> FromBody<'de> for TestExample {
+    impl FromBody<'_> for TestExample {
         type Body = AmqpValue<Self>;
 
         fn from_body(deserializable: Self::Body) -> Self {

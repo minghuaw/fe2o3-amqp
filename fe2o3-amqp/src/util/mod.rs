@@ -170,7 +170,10 @@ impl<'a> IntoReader<'a> for &'a Payload {
 }
 
 impl AsByteIterator for Payload {
-    type IterImpl<'i> = std::slice::Iter<'i, u8> where Self: 'i;
+    type IterImpl<'i>
+        = std::slice::Iter<'i, u8>
+    where
+        Self: 'i;
 
     fn as_byte_iterator(&self) -> Self::IterImpl<'_> {
         self.iter()
@@ -178,7 +181,10 @@ impl AsByteIterator for Payload {
 }
 
 impl<'a> AsByteIterator for &'a Payload {
-    type IterImpl<'i> = std::slice::Iter<'i, u8> where Self: 'i;
+    type IterImpl<'i>
+        = std::slice::Iter<'i, u8>
+    where
+        Self: 'i;
 
     fn as_byte_iterator(&self) -> Self::IterImpl<'_> {
         self.iter()
@@ -186,7 +192,10 @@ impl<'a> AsByteIterator for &'a Payload {
 }
 
 impl AsByteIterator for &[u8] {
-    type IterImpl<'i> = std::slice::Iter<'i, u8> where Self: 'i;
+    type IterImpl<'i>
+        = std::slice::Iter<'i, u8>
+    where
+        Self: 'i;
 
     fn as_byte_iterator(&self) -> Self::IterImpl<'_> {
         self.iter()
@@ -194,7 +203,10 @@ impl AsByteIterator for &[u8] {
 }
 
 impl AsByteIterator for Vec<u8> {
-    type IterImpl<'i> = std::slice::Iter<'i, u8> where Self: 'i;
+    type IterImpl<'i>
+        = std::slice::Iter<'i, u8>
+    where
+        Self: 'i;
 
     fn as_byte_iterator(&self) -> Self::IterImpl<'_> {
         self.iter()
@@ -210,7 +222,10 @@ impl IntoReader<'static> for Vec<Payload> {
 }
 
 impl AsByteIterator for Vec<Payload> {
-    type IterImpl<'i> = ByteReaderIter<'i> where Self: 'i;
+    type IterImpl<'i>
+        = ByteReaderIter<'i>
+    where
+        Self: 'i;
 
     fn as_byte_iterator(&self) -> Self::IterImpl<'_> {
         ByteReaderIter {

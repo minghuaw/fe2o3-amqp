@@ -1,5 +1,9 @@
 # Change Log
 
+## 0.13.1
+
+1. Added `to_lazy_value`
+
 ## 0.13.0
 
 ### Breaking

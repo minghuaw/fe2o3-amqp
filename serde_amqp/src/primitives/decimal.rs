@@ -67,7 +67,7 @@ mod dec32 {
 
     struct Visitor {}
 
-    impl<'de> de::Visitor<'de> for Visitor {
+    impl de::Visitor<'_> for Visitor {
         type Value = Dec32;
 
         fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
@@ -145,7 +145,7 @@ mod dec64 {
 
     struct Visitor {}
 
-    impl<'de> de::Visitor<'de> for Visitor {
+    impl de::Visitor<'_> for Visitor {
         type Value = Dec64;
 
         fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
@@ -223,7 +223,7 @@ mod dec128 {
 
     struct Visitor {}
 
-    impl<'de> de::Visitor<'de> for Visitor {
+    impl de::Visitor<'_> for Visitor {
         type Value = Dec128;
 
         fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {

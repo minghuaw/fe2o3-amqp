@@ -100,7 +100,7 @@ impl BodySection for Data {}
 
 impl SerializableBody for Data {}
 
-impl<'de> DeserializableBody<'de> for Data {}
+impl DeserializableBody<'_> for Data {}
 
 impl IntoBody for Data {
     type Body = Self;
@@ -110,7 +110,7 @@ impl IntoBody for Data {
     }
 }
 
-impl<'de> FromBody<'de> for Data {
+impl FromBody<'_> for Data {
     type Body = Data;
 
     fn from_body(deserializable: Self::Body) -> Self {
@@ -128,7 +128,7 @@ impl BodySection for Batch<Data> {}
 
 impl SerializableBody for Batch<Data> {}
 
-impl<'de> DeserializableBody<'de> for Batch<Data> {}
+impl DeserializableBody<'_> for Batch<Data> {}
 
 impl IntoBody for Batch<Data> {
     type Body = Self;
@@ -138,7 +138,7 @@ impl IntoBody for Batch<Data> {
     }
 }
 
-impl<'de> FromBody<'de> for Batch<Data> {
+impl FromBody<'_> for Batch<Data> {
     type Body = Batch<Data>;
 
     fn from_body(deserializable: Self::Body) -> Self {

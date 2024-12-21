@@ -59,7 +59,7 @@ impl<'de> serde_amqp::serde::de::Deserialize<'de> for SaslMechanisms {
             sasl_server_mechanisms,
         }
         struct FieldVisitor {}
-        impl<'de> serde_amqp::serde::de::Visitor<'de> for FieldVisitor {
+        impl de::Visitor<'_> for FieldVisitor {
             type Value = Field;
             fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
                 formatter.write_str("field identifier")
