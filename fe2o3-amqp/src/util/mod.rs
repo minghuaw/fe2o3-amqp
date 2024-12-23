@@ -180,7 +180,7 @@ impl AsByteIterator for Payload {
     }
 }
 
-impl<'a> AsByteIterator for &'a Payload {
+impl AsByteIterator for &Payload {
     type IterImpl<'i>
         = std::slice::Iter<'i, u8>
     where
@@ -271,13 +271,13 @@ impl<'a> Iterator for ByteReaderIter<'a> {
     }
 }
 
-impl<'a> ExactSizeIterator for ByteReaderIter<'a> {
+impl ExactSizeIterator for ByteReaderIter<'_> {
     fn len(&self) -> usize {
         self.inner.iter().map(|iter| iter.len()).sum()
     }
 }
 
-impl<'a> DoubleEndedIterator for ByteReaderIter<'a> {
+impl DoubleEndedIterator for ByteReaderIter<'_> {
     fn next_back(&mut self) -> Option<Self::Item> {
         self.inner
             .iter_mut()
