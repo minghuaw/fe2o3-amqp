@@ -283,42 +283,6 @@ fn criterion_benchmark(c: &mut Criterion) {
         b.iter(|| serde_amqp::to_vec(black_box(&value)).unwrap())
     });
 
-    // 10 Random strings of size between 16B and 1kB
-    let value = (0..10)
-        .map(|_| {
-            let size = rand::thread_rng().gen_range(16..1024);
-            Alphanumeric.sample_string(&mut rand::thread_rng(), size)
-        })
-        .map(String::from)
-        .collect::<Vec<_>>();
-    c.bench_function("serialize List<String> 10x16B-10kB", |b| {
-        b.iter(|| serde_amqp::to_vec(black_box(&value)).unwrap())
-    });
-
-    // 100 Random strings of size between 16B and 1kB
-    let value = (0..100)
-        .map(|_| {
-            let size = rand::thread_rng().gen_range(16..1024);
-            Alphanumeric.sample_string(&mut rand::thread_rng(), size)
-        })
-        .map(String::from)
-        .collect::<Vec<_>>();
-    c.bench_function("serialize List<String> 100x16B-10kB", |b| {
-        b.iter(|| serde_amqp::to_vec(black_box(&value)).unwrap())
-    });
-
-    // 1000 Random strings of size between 16B and 1kB
-    let value = (0..1000)
-        .map(|_| {
-            let size = rand::thread_rng().gen_range(16..1024);
-            Alphanumeric.sample_string(&mut rand::thread_rng(), size)
-        })
-        .map(String::from)
-        .collect::<Vec<_>>();
-    c.bench_function("serialize List<String> 1000x16B-10kB", |b| {
-        b.iter(|| serde_amqp::to_vec(black_box(&value)).unwrap())
-    });
-
     // Map of 10 u64 -> u64
     let value = (0..10)
         .map(|_| {
@@ -394,54 +358,6 @@ fn criterion_benchmark(c: &mut Criterion) {
         })
         .collect::<std::collections::HashMap<_, _>>();
     c.bench_function("serialize Map<String, String> 1000x16B", |b| {
-        b.iter(|| serde_amqp::to_vec(black_box(&value)).unwrap())
-    });
-
-    // Map of 10 random String (16B-1kB) -> random String (16B-1kB)
-    let value = (0..10)
-        .map(|_| {
-            let key_size = rand::thread_rng().gen_range(16..1024);
-            let key = Alphanumeric.sample_string(&mut rand::thread_rng(), key_size);
-            let key = String::from(key);
-            let value_size = rand::thread_rng().gen_range(16..1024);
-            let value = Alphanumeric.sample_string(&mut rand::thread_rng(), value_size);
-            let value = String::from(value);
-            (key, value)
-        })
-        .collect::<std::collections::HashMap<_, _>>();
-    c.bench_function("serialize Map<String, String> 10x16B-1kB", |b| {
-        b.iter(|| serde_amqp::to_vec(black_box(&value)).unwrap())
-    });
-
-    // Map of 100 random String (16B-1kB) -> random String (16B-1kB)
-    let value = (0..100)
-        .map(|_| {
-            let key_size = rand::thread_rng().gen_range(16..1024);
-            let key = Alphanumeric.sample_string(&mut rand::thread_rng(), key_size);
-            let key = String::from(key);
-            let value_size = rand::thread_rng().gen_range(16..1024);
-            let value = Alphanumeric.sample_string(&mut rand::thread_rng(), value_size);
-            let value = String::from(value);
-            (key, value)
-        })
-        .collect::<std::collections::HashMap<_, _>>();
-    c.bench_function("serialize Map<String, String> 100x16B-1kB", |b| {
-        b.iter(|| serde_amqp::to_vec(black_box(&value)).unwrap())
-    });
-
-    // Map of 1000 random String (16B-1kB) -> random String (16B-1kB)
-    let value = (0..1000)
-        .map(|_| {
-            let key_size = rand::thread_rng().gen_range(16..1024);
-            let key = Alphanumeric.sample_string(&mut rand::thread_rng(), key_size);
-            let key = String::from(key);
-            let value_size = rand::thread_rng().gen_range(16..1024);
-            let value = Alphanumeric.sample_string(&mut rand::thread_rng(), value_size);
-            let value = String::from(value);
-            (key, value)
-        })
-        .collect::<std::collections::HashMap<_, _>>();
-    c.bench_function("serialize Map<String, String> 1000x16B-1kB", |b| {
         b.iter(|| serde_amqp::to_vec(black_box(&value)).unwrap())
     });
 }
