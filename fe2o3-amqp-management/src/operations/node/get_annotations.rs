@@ -35,7 +35,7 @@ impl<'a> GetAnnotationsRequest<'a> {
     }
 }
 
-impl<'a> Request for GetAnnotationsRequest<'a> {
+impl Request for GetAnnotationsRequest<'_> {
     const OPERATION: &'static str = GET_ANNOTATIONS;
 
     type Response = GetAnnotationsResponse;

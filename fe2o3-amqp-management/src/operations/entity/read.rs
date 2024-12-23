@@ -75,7 +75,7 @@ impl<'a> ReadRequest<'a> {
     }
 }
 
-impl<'a> Request for ReadRequest<'a> {
+impl Request for ReadRequest<'_> {
     const OPERATION: &'static str = READ;
 
     type Response = ReadResponse;

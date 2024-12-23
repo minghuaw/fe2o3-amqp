@@ -35,7 +35,7 @@ impl<'a> GetTypesRequest<'a> {
     }
 }
 
-impl<'a> Request for GetTypesRequest<'a> {
+impl Request for GetTypesRequest<'_> {
     const OPERATION: &'static str = GET_TYPES;
 
     type Response = GetTypesResponse;

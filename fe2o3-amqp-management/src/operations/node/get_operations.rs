@@ -38,7 +38,7 @@ impl<'a> GetOperationsRequest<'a> {
     }
 }
 
-impl<'a> Request for GetOperationsRequest<'a> {
+impl Request for GetOperationsRequest<'_> {
     const OPERATION: &'static str = GET_OPERATIONS;
 
     type Response = GetOperationsResponse;

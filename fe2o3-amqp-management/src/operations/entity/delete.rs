@@ -79,7 +79,7 @@ impl<'a> DeleteRequest<'a> {
     }
 }
 
-impl<'a> Request for DeleteRequest<'a> {
+impl Request for DeleteRequest<'_> {
     const OPERATION: &'static str = DELETE;
 
     type Response = DeleteResponse;

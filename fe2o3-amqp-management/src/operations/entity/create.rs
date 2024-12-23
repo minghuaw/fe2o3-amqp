@@ -84,7 +84,7 @@ impl<'a> CreateRequest<'a> {
     }
 }
 
-impl<'a> Request for CreateRequest<'a> {
+impl Request for CreateRequest<'_> {
     const OPERATION: &'static str = CREATE;
 
     type Response = CreateResponse;

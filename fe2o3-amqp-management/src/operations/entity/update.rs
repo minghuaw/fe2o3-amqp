@@ -94,7 +94,7 @@ impl<'a> UpdateRequest<'a> {
     }
 }
 
-impl<'a> Request for UpdateRequest<'a> {
+impl Request for UpdateRequest<'_> {
     const OPERATION: &'static str = UPDATE;
 
     type Response = UpdateResponse;
