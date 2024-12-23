@@ -33,7 +33,7 @@ impl<'a> GetMgmtNodesRequest<'a> {
     }
 }
 
-impl<'a> Request for GetMgmtNodesRequest<'a> {
+impl Request for GetMgmtNodesRequest<'_> {
     const OPERATION: &'static str = GET_MGMT_NODES;
 
     type Response = GetMgmtNodesResponse;

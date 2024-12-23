@@ -1,5 +1,11 @@
 # Change Log
 
+## 0.13.2
+
+1. Improve serializer performance in serializing list and map types by
+   pre-allocating the buffer based on the suggested length and the serialized
+   size of the first element/entry.
+
 ## 0.13.1
 
 1. Added `to_lazy_value`

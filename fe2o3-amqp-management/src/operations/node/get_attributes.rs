@@ -35,7 +35,7 @@ impl<'a> GetAttributesRequest<'a> {
     }
 }
 
-impl<'a> Request for GetAttributesRequest<'a> {
+impl Request for GetAttributesRequest<'_> {
     const OPERATION: &'static str = GET_ATTRIBUTES;
 
     type Response = GetAttributesResponse;

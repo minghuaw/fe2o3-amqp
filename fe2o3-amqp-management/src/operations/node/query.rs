@@ -82,7 +82,7 @@ impl<'a> QueryRequest<'a> {
     }
 }
 
-impl<'a> Request for QueryRequest<'a> {
+impl Request for QueryRequest<'_> {
     const OPERATION: &'static str = QUERY;
 
     type Response = QueryResponse;

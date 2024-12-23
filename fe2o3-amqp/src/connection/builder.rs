@@ -174,7 +174,7 @@ impl<'a, Tls> From<Builder<'a, mode::ConnectorWithId, Tls>> for Open {
     }
 }
 
-impl<'a, Mode: std::fmt::Debug> std::fmt::Debug for Builder<'a, Mode, ()> {
+impl<Mode: std::fmt::Debug> std::fmt::Debug for Builder<'_, Mode, ()> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("Builder")
             .field("container_id", &self.container_id)
@@ -254,13 +254,13 @@ cfg_not_wasm32! {
     }
 }
 
-impl<'a, Mode> Default for Builder<'a, Mode, ()> {
+impl<Mode> Default for Builder<'_, Mode, ()> {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl<'a, Mode> Builder<'a, Mode, ()> {
+impl<Mode> Builder<'_, Mode, ()> {
     /// Creates a new builder for [`crate::Connection`]
     pub fn new() -> Self {
         Self {
@@ -323,6 +323,7 @@ impl<'a, Tls> Builder<'a, mode::ConnectorNoId, Tls> {
     }
 }
 
+#[allow(clippy::needless_lifetimes)]
 impl<'a, Mode, Tls> Builder<'a, Mode, Tls> {
     /// Alias for [`rustls_connector`](#method.rustls_connector) if only `"rustls"` is enabled
     #[cfg_attr(docsrs, doc(cfg(all(feature = "rustls", not(feature = "native-tls")))))]
@@ -753,7 +754,7 @@ impl<'a, Tls> Builder<'a, mode::ConnectorWithId, Tls> {
 /*                                 Without TLS                                */
 /* -------------------------------------------------------------------------- */
 
-impl<'a> Builder<'a, mode::ConnectorWithId, ()> {
+impl Builder<'_, mode::ConnectorWithId, ()> {
     #[cfg(all(feature = "rustls", not(feature = "native-tls")))]
     async fn connect_tls_with_rustls_default<Io, F>(
         self,

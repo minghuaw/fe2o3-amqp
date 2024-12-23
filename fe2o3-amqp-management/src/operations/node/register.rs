@@ -47,7 +47,7 @@ impl<'a> RegisterRequest<'a> {
     }
 }
 
-impl<'a> Request for RegisterRequest<'a> {
+impl Request for RegisterRequest<'_> {
     const OPERATION: &'static str = REGISTER;
 
     type Response = RegisterResponse;

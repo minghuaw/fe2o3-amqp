@@ -50,7 +50,7 @@ impl<'a> PutTokenRequest<'a> {
     }
 }
 
-impl<'a> Request for PutTokenRequest<'a> {
+impl Request for PutTokenRequest<'_> {
     const OPERATION: &'static str = PUT_TOKEN;
 
     type Response = PutTokenResponse;
