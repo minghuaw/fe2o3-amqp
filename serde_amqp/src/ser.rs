@@ -744,8 +744,8 @@ impl<'a, W: Write + 'a> ser::Serializer for &'a mut Serializer<W> {
     }
 
     #[inline]
-    fn serialize_map(self, _len: Option<usize>) -> Result<Self::SerializeMap, Self::Error> {
-        Ok(MapSerializer::new(self))
+    fn serialize_map(self, len: Option<usize>) -> Result<Self::SerializeMap, Self::Error> {
+        Ok(MapSerializer::new(self, len))
     }
 
     // The serde data model treats struct as "A statically sized heterogeneous key-value pairing"
@@ -831,16 +831,16 @@ enum SeqSerializerState {
 #[derive(Debug)]
 pub struct SeqSerializer<'a, W: 'a> {
     se: &'a mut Serializer<W>,
+    num: usize,
     state: SeqSerializerState,
-    index: usize,
 }
 
 impl<'a, W: 'a> SeqSerializer<'a, W> {
     fn new(se: &'a mut Serializer<W>, len: Option<usize>) -> Self {
         Self {
             se,
+            num: 0,
             state: SeqSerializerState::Init(len),
-            index: 0,
         }
     }
 
@@ -886,7 +886,7 @@ impl<'a, W: Write + 'a> ser::SerializeSeq for SeqSerializer<'a, W> {
                 value.serialize(&mut se)?;
             }
             Some(SequenceType::Array) => {
-                let mut se = match self.index {
+                let mut se = match self.num {
                     // The first element should include the contructor code
                     0 => {
                         let buf = self.get_buffer_mut_or_alloc(value)?;
@@ -912,7 +912,7 @@ impl<'a, W: Write + 'a> ser::SerializeSeq for SeqSerializer<'a, W> {
             }
         }
 
-        self.index += 1;
+        self.num += 1;
         Ok(())
     }
 
@@ -920,7 +920,7 @@ impl<'a, W: Write + 'a> ser::SerializeSeq for SeqSerializer<'a, W> {
     fn end(self) -> Result<Self::Ok, Self::Error> {
         // let Self { se, num, buf } = self;
 
-        let Self { se, state, index } = self;
+        let Self { se, num, state } = self;
         let buf = match state {
             SeqSerializerState::Init(_) => Vec::new(),
             SeqSerializerState::Buffer(buf) => buf,
@@ -928,10 +928,10 @@ impl<'a, W: Write + 'a> ser::SerializeSeq for SeqSerializer<'a, W> {
 
         match se.seq_type {
             None | Some(SequenceType::List) => {
-                write_list(&mut se.writer, index, &buf, &se.is_array_elem)
+                write_list(&mut se.writer, num, &buf, &se.is_array_elem)
             }
             Some(SequenceType::Array) => {
-                write_array(&mut se.writer, index, &buf, &se.is_array_elem)
+                write_array(&mut se.writer, num, &buf, &se.is_array_elem)
             }
             Some(SequenceType::TransparentVec) => write_transparent_vec(&mut se.writer, &buf),
         }
@@ -1064,20 +1064,136 @@ fn write_list<'a, W: Write + 'a>(
     Ok(())
 }
 
+#[derive(Debug)]
+enum MapSerializerState {
+    /// Initialized with the length hint
+    /// 
+    /// `Init(None)` is also used as the temporary state when the buffer is being
+    /// taken out
+    Init(Option<usize>),
+    
+    /// Initialized with the length hint and the first key
+    /// 
+    /// The buffer should only contain the serialized bytes of the first key
+    KeyInit {
+        len: Option<usize>,
+        buf: Vec<u8>,
+    },
+
+    /// Buffering the serialized bytes
+    Buffer(Vec<u8>),
+}
+
+impl MapSerializerState {
+    fn take(&mut self) -> Self {
+        std::mem::replace(self, MapSerializerState::Init(None))
+    }
+}
+
 /// Serializer for map types
 #[derive(Debug)]
 pub struct MapSerializer<'a, W: 'a> {
     se: &'a mut Serializer<W>,
+
+    /// Actual number of elements in the map (a pair of key and value will be counted as 2)
     num: usize,
-    buf: Vec<u8>,
+
+    state: MapSerializerState,
 }
 
 impl<'a, W: 'a> MapSerializer<'a, W> {
-    fn new(se: &'a mut Serializer<W>) -> Self {
+    fn new(se: &'a mut Serializer<W>, len: Option<usize>) -> Self {
         Self {
             se,
             num: 0,
-            buf: Vec::new(),
+            state: MapSerializerState::Init(len),
+        }
+    }
+
+    fn get_buffer_or_alloc_for_entry<K, V>(&mut self, key: &K, value: &V) -> Result<&mut Vec<u8>, Error>
+    where
+        K: Serialize + ?Sized,
+        V: Serialize + ?Sized,
+    {
+        match self.state.take() {
+            MapSerializerState::Init(len) => {
+                let cap = match len {
+                    Some(len) => len * (serialized_size(key)? + serialized_size(value)?),
+                    None => 0,
+                };
+                let buf = Vec::with_capacity(cap);
+                self.state = MapSerializerState::Buffer(buf);
+            }
+            MapSerializerState::KeyInit { len, mut buf } => {
+                let reserve = match len {
+                    Some(len) => len * (serialized_size(key)? + serialized_size(value)?) - buf.len(),
+                    None => 0,
+                };
+                buf.reserve(reserve);
+                self.state = MapSerializerState::Buffer(buf);
+            }
+            // Make sure to put the buffer back because take will put a `Init(None)` as temporary state
+            state => self.state = state,
+        }
+
+        match &mut self.state {
+            MapSerializerState::Buffer(buf) => Ok(buf),
+            _ => unreachable!("MapSerializerState::Init should have been handled"),
+        }
+    }
+
+    fn get_buffer_or_alloc_for_key<K>(&mut self, key: &K) -> Result<&mut Vec<u8>, Error> 
+    where 
+        K: Serialize + ?Sized,
+    {
+        match self.state.take() {
+            MapSerializerState::Init(len) => {
+                let cap = serialized_size(key)?;
+                let buf = Vec::with_capacity(cap);
+                self.state = MapSerializerState::KeyInit { len, buf };
+            }
+            // Make sure to put the state back because take will put a `Init(None)` as temporary state
+            state => self.state = state,
+        }
+
+        match &mut self.state {
+            MapSerializerState::KeyInit { len: _, buf } => Ok(buf),
+            MapSerializerState::Buffer(buf) => Ok(buf),
+            MapSerializerState::Init(_) => unreachable!("MapSerializerState::Init should have been handled"),
+        }
+    }
+
+    fn get_buffer_or_alloc_for_value<V>(&mut self, value: &V) -> Result<&mut Vec<u8>, Error> 
+    where 
+        V: Serialize + ?Sized,
+    {
+        match self.state.take() {
+            // Though this should not appear, we should handle it
+            // just to be safe
+            MapSerializerState::Init(len) => {
+                let cap = match len {
+                    Some(len) => len * serialized_size(value)?,
+                    None => 0,
+                };
+                let buf = Vec::with_capacity(cap);
+                self.state = MapSerializerState::Buffer(buf);
+            }
+            MapSerializerState::KeyInit { len, mut buf } => {
+                let key_len = buf.len();
+                let val_len = serialized_size(value)?;
+                let reserve = match len {
+                    Some(len) => len * (key_len + val_len) - key_len,
+                    None => 0,
+                };
+                buf.reserve(reserve);
+                self.state = MapSerializerState::Buffer(buf);
+            }
+            state => self.state = state,
+        }
+
+        match &mut self.state {
+            MapSerializerState::Buffer(buf) => Ok(buf),
+            _ => unreachable!("MapSerializerState::KeyInit should have been handled"),
         }
     }
 }
@@ -1094,7 +1210,8 @@ impl<'a, W: Write + 'a> ser::SerializeMap for MapSerializer<'a, W> {
         K: Serialize + ?Sized,
         V: Serialize + ?Sized,
     {
-        let mut serializer = Serializer::new(&mut self.buf);
+        let buf = self.get_buffer_or_alloc_for_entry(key, value)?;
+        let mut serializer = Serializer::new(buf);
         key.serialize(&mut serializer)?;
         value.serialize(&mut serializer)?;
         self.num += 2;
@@ -1106,7 +1223,8 @@ impl<'a, W: Write + 'a> ser::SerializeMap for MapSerializer<'a, W> {
     where
         T: Serialize + ?Sized,
     {
-        let mut serializer = Serializer::new(&mut self.buf);
+        let buf = self.get_buffer_or_alloc_for_key(key)?;
+        let mut serializer = Serializer::new(buf);
         key.serialize(&mut serializer)?;
         self.num += 1;
         Ok(())
@@ -1117,7 +1235,8 @@ impl<'a, W: Write + 'a> ser::SerializeMap for MapSerializer<'a, W> {
     where
         T: Serialize + ?Sized,
     {
-        let mut serializer = Serializer::new(&mut self.buf);
+        let buf = self.get_buffer_or_alloc_for_value(value)?;
+        let mut serializer = Serializer::new(buf);
         value.serialize(&mut serializer)?;
         self.num += 1;
         Ok(())
@@ -1125,7 +1244,14 @@ impl<'a, W: Write + 'a> ser::SerializeMap for MapSerializer<'a, W> {
 
     #[inline]
     fn end(self) -> Result<Self::Ok, Self::Error> {
-        let Self { se, num, buf } = self;
+        let Self { se, num, state } = self;
+        let buf = match state {
+            MapSerializerState::Init(_) => Vec::new(),
+            // This should not happen but we should handle it just to be safe
+            MapSerializerState::KeyInit { len: _, buf } => buf,
+            MapSerializerState::Buffer(buf) => buf,
+        };
+
         write_map(&mut se.writer, num, &buf, &se.is_array_elem)
     }
 }
