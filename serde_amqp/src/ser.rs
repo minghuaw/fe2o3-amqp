@@ -12,7 +12,12 @@ use crate::{
     __constants::{
         ARRAY, DECIMAL128, DECIMAL32, DECIMAL64, DESCRIBED_BASIC, DESCRIBED_LIST, DESCRIBED_MAP,
         DESCRIPTOR, LAZY_VALUE, SYMBOL, SYMBOL_REF, TIMESTAMP, TRANSPARENT_VEC, UUID,
-    }, error::Error, format::{OFFSET_LIST32, OFFSET_LIST8, OFFSET_MAP32, OFFSET_MAP8}, format_code::EncodingCodes, serialized_size, util::{FieldRole, IsArrayElement, NonNativeType, SequenceType, StructEncoding}
+    },
+    error::Error,
+    format::{OFFSET_LIST32, OFFSET_LIST8, OFFSET_MAP32, OFFSET_MAP8},
+    format_code::EncodingCodes,
+    serialized_size,
+    util::{FieldRole, IsArrayElement, NonNativeType, SequenceType, StructEncoding},
 };
 
 pub(crate) const U8_MAX: usize = u8::MAX as usize;
@@ -839,7 +844,7 @@ impl<'a, W: 'a> SeqSerializer<'a, W> {
         }
     }
 
-    fn get_buffer_mut_or_alloc<T>(&mut self, element: &T) -> Result<&mut Vec<u8>, Error> 
+    fn get_buffer_mut_or_alloc<T>(&mut self, element: &T) -> Result<&mut Vec<u8>, Error>
     where
         T: Serialize + ?Sized,
     {
@@ -925,7 +930,9 @@ impl<'a, W: Write + 'a> ser::SerializeSeq for SeqSerializer<'a, W> {
             None | Some(SequenceType::List) => {
                 write_list(&mut se.writer, index, &buf, &se.is_array_elem)
             }
-            Some(SequenceType::Array) => write_array(&mut se.writer, index, &buf, &se.is_array_elem),
+            Some(SequenceType::Array) => {
+                write_array(&mut se.writer, index, &buf, &se.is_array_elem)
+            }
             Some(SequenceType::TransparentVec) => write_transparent_vec(&mut se.writer, &buf),
         }
     }
