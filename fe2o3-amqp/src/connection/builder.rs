@@ -260,7 +260,7 @@ impl<Mode> Default for Builder<'_, Mode, ()> {
     }
 }
 
-impl<'a, Mode> Builder<'a, Mode, ()> {
+impl<Mode> Builder<'_, Mode, ()> {
     /// Creates a new builder for [`crate::Connection`]
     pub fn new() -> Self {
         Self {
