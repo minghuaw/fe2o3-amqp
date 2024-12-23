@@ -323,7 +323,8 @@ impl<'a, Tls> Builder<'a, mode::ConnectorNoId, Tls> {
     }
 }
 
-impl<Mode, Tls> Builder<'_, Mode, Tls> {
+#[allow(clippy::needless_lifetimes)]
+impl<'a, Mode, Tls> Builder<'a, Mode, Tls> {
     /// Alias for [`rustls_connector`](#method.rustls_connector) if only `"rustls"` is enabled
     #[cfg_attr(docsrs, doc(cfg(all(feature = "rustls", not(feature = "native-tls")))))]
     #[cfg(any(docsrs, all(feature = "rustls", not(feature = "native-tls"))))]
