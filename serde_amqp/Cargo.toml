@@ -32,17 +32,17 @@ json = ["serde_json"]
 chrono = ["dep:chrono"]
 
 [dev-dependencies]
-criterion = { workspace = true }
-rand = { workspace = true }
+criterion.workspace = true
+rand.workspace = true
 uuid = { workspace = true, features = ["v4"] }
-bytes = { workspace = true }
+bytes.workspace = true
 
 [dependencies]
 ordered-float = { workspace = true, features = ["serde"] }
 serde = { workspace = true, features = ["derive"] }
-serde_bytes = { workspace = true }
-thiserror = { workspace = true }
-bytes = { workspace = true }
+serde_bytes.workspace = true
+thiserror.workspace = true
+bytes.workspace = true
 indexmap = { workspace = true, features = ["serde"] }
 
 # derive

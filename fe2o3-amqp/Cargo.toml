@@ -40,18 +40,18 @@ acceptor = []
 scram = ["sha-1", "sha2", "rand", "base64", "stringprep", "hmac", "pbkdf2"]
 
 [dependencies]
-serde_amqp = { workspace = true }
-fe2o3-amqp-types = { workspace = true }
+serde_amqp.workspace = true
+fe2o3-amqp-types.workspace = true
 
-bytes = { workspace = true }
+bytes.workspace = true
 tokio-util = { workspace = true, features = ["codec"] } # tokio-rs/tokio#4816
-thiserror = { workspace = true }
-serde = { workspace = true }
+thiserror.workspace = true
+serde.workspace = true
 futures-util = { workspace = true, features = ["sink"] }
-pin-project-lite = { workspace = true }
-url = { workspace = true }
-slab = { workspace = true }
-serde_bytes = { workspace = true }
+pin-project-lite.workspace = true
+url.workspace = true
+slab.workspace = true
+serde_bytes.workspace = true
 parking_lot = { workspace = true, features = ["send_guard"] }
 
 # Optinoal deps that are feature themselves
@@ -81,17 +81,17 @@ tokio-stream = { workspace = true, features = ["time"] }
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 tokio = { workspace = true, features = ["sync", "io-util", "rt", "macros"] } # "net" feature doesn't support wasm32
 ring = { workspace = true, default-features = false, features = ["wasm32_unknown_unknown_js"], optional = true }
-getrandom = { workspace = true }
-fluvio-wasm-timer = { workspace = true }
+getrandom.workspace = true
+fluvio-wasm-timer.workspace = true
 
 [dev-dependencies]
-tokio-test = { workspace = true }
-testcontainers = { workspace = true }
-fe2o3-amqp-ext = { workspace = true }
+tokio-test.workspace = true
+testcontainers.workspace = true
+fe2o3-amqp-ext.workspace = true
 
 [target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
 tokio = { workspace = true, features = ["rt", "rt-multi-thread", "macros", "parking_lot"] }
 
 [target.'cfg(target_arch = "wasm32")'.dev-dependencies]
 tokio = { workspace = true, features = ["rt", "macros", "parking_lot"]}
-getrandom = { workspace = true }
+getrandom.workspace = true
