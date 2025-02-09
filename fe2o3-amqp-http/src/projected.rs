@@ -11,20 +11,21 @@ type ApplicationPropertiesBuilder = MapBuilder<String, SimpleValue, ApplicationP
 /// > When interpreting the message content, it MUST be considered as
 /// equivalent to a single data section obtained by concatenating all the
 /// data sections, the data section boundaries MUST be ignored.
-pub trait IntoProjected<B> 
+pub trait TryIntoProjected<B> 
 where 
-    B: Into<Data>,
+    B: TryInto<Data>,
+    B::Error: std::error::Error,
 {
     type Error: std::error::Error;
 
     fn into_projected(self) -> Result<Message<Data>, Self::Error>;
 }
 
-fn project_headers(
+fn project_headers<BE>(
     mut prop_builder: PropertiesBuilder,
     mut app_prop_builder: ApplicationPropertiesBuilder,
     headers: &http::HeaderMap
-) -> Result<(Properties, ApplicationProperties), ProjectedModeError> {
+) -> Result<(Properties, ApplicationProperties), ProjectedModeError<BE>> {
     // 4.1.3 Headers
     // The following HTTP Headers defined in RFC7230 MUST NOT be mapped into AMQP HTTP messages
     // - TE
@@ -96,11 +97,12 @@ fn project_headers(
     Ok((prop_builder.build(), app_prop_builder.build()))
 }
 
-impl<B> IntoProjected<B> for Request<B> 
+impl<B> TryIntoProjected<B> for Request<B> 
 where 
-    B: Into<Data>,
+    B: TryInto<Data>,
+    B::Error: std::error::Error,
 {
-    type Error = ProjectedModeError;
+    type Error = ProjectedModeError<B::Error>;
 
     /// Implement HTTP mapping to AMQP message in projected mode.
     /// 
@@ -129,7 +131,7 @@ where
 
         let (properties, application_properties) = project_headers(prop_builder, app_prop_builder, &parts.headers)?;
 
-        let data = body.into();
+        let data = body.try_into().map_err(ProjectedModeError::Body)?;
         let msg = Message::builder()
             .properties(properties)
             .application_properties(application_properties)
@@ -140,11 +142,12 @@ where
     }
 }
 
-impl<B> IntoProjected<B> for Response<B> 
+impl<B> TryIntoProjected<B> for Response<B> 
 where 
-    B: Into<Data>,
+    B: TryInto<Data>,
+    B::Error: std::error::Error,
 {
-    type Error = ProjectedModeError;
+    type Error = ProjectedModeError<B::Error>;
 
     fn into_projected(self) -> Result<Message<Data>, Self::Error> {
         let (parts, body) = self.into_parts();
@@ -161,7 +164,7 @@ where
 
         let (properties, application_properties) = project_headers(prop_builder, app_prop_builder, &parts.headers)?;
 
-        let data = body.into();
+        let data = body.try_into().map_err(ProjectedModeError::Body)?;
         let msg = Message::builder()
             .properties(properties)
             .application_properties(application_properties)
@@ -169,5 +172,43 @@ where
             .build();
 
         Ok(msg)
+    }
+}
+
+pub trait TryFromProjected 
+where 
+    Self: Sized,
+{
+    type Body;
+    type Error: std::error::Error;
+
+    fn try_from_projected(msg: Message<Data>) -> Result<Self, Self::Error>;
+}
+
+impl<B> TryFromProjected for Request<B> 
+where 
+    B: TryFrom<Data>,
+    B::Error: std::error::Error,
+{
+    type Body = B;
+
+    type Error = ProjectedModeError<B::Error>;
+
+    fn try_from_projected(msg: Message<Data>) -> Result<Self, Self::Error> {
+        todo!()
+    }
+}
+
+impl<B> TryFromProjected for Response<B> 
+where 
+    B: TryFrom<Data>,
+    B::Error: std::error::Error,
+{
+    type Body = B;
+
+    type Error = ProjectedModeError<B::Error>;
+
+    fn try_from_projected(msg: Message<Data>) -> Result<Self, Self::Error> {
+        todo!()
     }
 }
