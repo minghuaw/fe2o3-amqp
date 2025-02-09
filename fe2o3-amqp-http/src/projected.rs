@@ -21,11 +21,46 @@ where
     fn into_projected(self) -> Result<Message<Data>, Self::Error>;
 }
 
-fn project_headers<BE>(
+pub(crate) fn project_request_line<BE>(
+    prop_builder: PropertiesBuilder,
+    app_prop_builder: ApplicationPropertiesBuilder,
+    method: &str,
+    uri: &str,
+    version: &http::Version
+) -> (PropertiesBuilder, ApplicationPropertiesBuilder) {
+    // 4.1.1 Request Line
+    // The HTTP method MUST be set in the properties section, subject field. 
+    // The HTTP request-target value MUST be URI-decoded and set in the properties section, to field.
+    // The version value SHOULD be set in application-properties section, as value of the “http:request” string property. 
+    // The assumed default value is “1.1” if the property is absent. 
+    let prop_builder = prop_builder.subject(method).to(uri);
+    let app_prop_builder = app_prop_builder.insert("http:request", format!("{:?}", version));
+
+    (prop_builder, app_prop_builder)
+}
+
+pub(crate) fn project_status_line<BE>(
+    prop_builder: PropertiesBuilder,
+    app_prop_builder: ApplicationPropertiesBuilder,
+    status: &http::StatusCode,
+    version: &http::Version
+) -> (PropertiesBuilder, ApplicationPropertiesBuilder) {
+    // 4.1.2 Status Line
+    // The HTTP status code MUST be set in the properties section, subject field.
+    // The HTTP reason phrase is OPTIONAL and is omitted here.
+    // The version value SHOULD be set in application-properties section, as value of the “http:response” string property. 
+    // The assumed default value is “1.1” if the property is absent.
+    let prop_builder = prop_builder.subject(status.as_str());
+    let app_prop_builder = app_prop_builder.insert("http:response", format!("{:?}", version));
+
+    (prop_builder, app_prop_builder)
+}
+
+pub(crate) fn project_headers<BE>(
     mut prop_builder: PropertiesBuilder,
     mut app_prop_builder: ApplicationPropertiesBuilder,
     headers: &http::HeaderMap
-) -> Result<(Properties, ApplicationProperties), ProjectedModeError<BE>> {
+) -> Result<(PropertiesBuilder, ApplicationPropertiesBuilder), ProjectedModeError<BE>> {
     // 4.1.3 Headers
     // The following HTTP Headers defined in RFC7230 MUST NOT be mapped into AMQP HTTP messages
     // - TE
@@ -94,121 +129,5 @@ fn project_headers<BE>(
         app_prop_builder = app_prop_builder.insert(name.as_str().to_lowercase(), value.to_str()?);
     }
     
-    Ok((prop_builder.build(), app_prop_builder.build()))
-}
-
-impl<B> TryIntoProjected<B> for Request<B> 
-where 
-    B: TryInto<Data>,
-    B::Error: std::error::Error,
-{
-    type Error = ProjectedModeError<B::Error>;
-
-    /// Implement HTTP mapping to AMQP message in projected mode.
-    /// 
-    /// See Section 4.1 for more details.
-    fn into_projected(self) -> Result<Message<Data>, Self::Error> {
-        //  An implementation MUST ignore and exclude all RFC7230 headers and
-        //  RFC7230 information items not explicitly covered below
-
-        // MUST include all headers and information items from RFC7231 and other 
-        // HTTP extension specifications.
-        
-        let (parts, body) = self.into_parts();
-
-        // 4.1.1 Request Line
-        let prop_builder = Properties::builder()
-            // HTTP method MUST be set in the properties section, subject field. 
-            .subject(parts.method.as_str())
-            // HTTP request-target value MUST be URI-decoded and set in the
-            // properties section, to field.
-            .to(parts.uri.to_string());
-        let app_prop_builder = ApplicationProperties::builder()
-            // The version value SHOULD be set in application-properties section, as
-            // value of the “http:request” string property. The assumed default
-            // value is “1.1” if the property is absent. 
-            .insert("http:request", format!("{:?}", parts.version)); // TODO: something better than Debug fmt?
-
-        let (properties, application_properties) = project_headers(prop_builder, app_prop_builder, &parts.headers)?;
-
-        let data = body.try_into().map_err(ProjectedModeError::Body)?;
-        let msg = Message::builder()
-            .properties(properties)
-            .application_properties(application_properties)
-            .data(data)
-            .build();
-
-        Ok(msg)
-    }
-}
-
-impl<B> TryIntoProjected<B> for Response<B> 
-where 
-    B: TryInto<Data>,
-    B::Error: std::error::Error,
-{
-    type Error = ProjectedModeError<B::Error>;
-
-    fn into_projected(self) -> Result<Message<Data>, Self::Error> {
-        let (parts, body) = self.into_parts();
-
-        // 4.1.2 Status Line
-        let app_prop_builder = ApplicationProperties::builder()
-            // The version value SHOULD be set in application-properties section, as value of the 
-            // “http:response” string property. The assumed default value is “1.1” if the property is absent.
-            .insert("http:response", format!("{:?}", parts.version)); // TODO: something better than Debug fmt?
-        let prop_builder = Properties::builder()
-            // HTTP status code MUST be set in the properties section, subject field.
-            .subject(parts.status.as_str());
-            // HTTP reason phrase is OPTIONAL and is omitted here.
-
-        let (properties, application_properties) = project_headers(prop_builder, app_prop_builder, &parts.headers)?;
-
-        let data = body.try_into().map_err(ProjectedModeError::Body)?;
-        let msg = Message::builder()
-            .properties(properties)
-            .application_properties(application_properties)
-            .data(data)
-            .build();
-
-        Ok(msg)
-    }
-}
-
-pub trait TryFromProjected 
-where 
-    Self: Sized,
-{
-    type Body;
-    type Error: std::error::Error;
-
-    fn try_from_projected(msg: Message<Data>) -> Result<Self, Self::Error>;
-}
-
-impl<B> TryFromProjected for Request<B> 
-where 
-    B: TryFrom<Data>,
-    B::Error: std::error::Error,
-{
-    type Body = B;
-
-    type Error = ProjectedModeError<B::Error>;
-
-    fn try_from_projected(msg: Message<Data>) -> Result<Self, Self::Error> {
-        todo!()
-    }
-}
-
-impl<B> TryFromProjected for Response<B> 
-where 
-    B: TryFrom<Data>,
-    B::Error: std::error::Error,
-{
-    type Body = B;
-
-    type Error = ProjectedModeError<B::Error>;
-
-    fn try_from_projected(msg: Message<Data>) -> Result<Self, Self::Error> {
-        todo!()
-    }
+    Ok((prop_builder, app_prop_builder))
 }
