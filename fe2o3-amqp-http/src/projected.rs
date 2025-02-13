@@ -2,19 +2,21 @@ use std::str::FromStr;
 
 use fe2o3_amqp_types::{
     messaging::{
-        header, map_builder::MapBuilder, properties, ApplicationProperties, Data, Message,
-        Properties,
+        map_builder::MapBuilder, properties, ApplicationProperties, Batch, Data, Message, Properties
     },
-    primitives::{Binary, SimpleValue, Value},
+    primitives::{Binary, SimpleValue},
 };
 use http::{
-    header::{ToStrError, CONTENT_ENCODING, CONTENT_TYPE, DATE, EXPIRES, FROM}, HeaderName, HeaderValue, Method, Request, Response
+    header::{CONTENT_ENCODING, CONTENT_TYPE, DATE, EXPIRES, FROM}, HeaderName, HeaderValue, Method, Request, Response
 };
 
 use crate::{error::{TryFromProjectedError, TryIntoProjectedError}, util::{parse_http_version, timestamp_to_httpdate}};
 
 type PropertiesBuilder = properties::Builder;
 type ApplicationPropertiesBuilder = MapBuilder<String, SimpleValue, ApplicationProperties>;
+type ProjectedMessageBody = Batch<Data>;
+type ProjectedMessage = Message<ProjectedMessageBody>;
+
 
 /// Type Parameter B is the body type of the HTTP message.
 ///
@@ -23,12 +25,12 @@ type ApplicationPropertiesBuilder = MapBuilder<String, SimpleValue, ApplicationP
 /// data sections, the data section boundaries MUST be ignored.
 pub trait TryIntoProjected<B>
 where
-    B: TryInto<Data>,
+    B: TryInto<ProjectedMessageBody>,
     B::Error: std::error::Error,
 {
     type Error: std::error::Error;
 
-    fn into_projected(self) -> Result<Message<Data>, Self::Error>;
+    fn into_projected(self) -> Result<ProjectedMessage, Self::Error>;
 }
 
 fn project_request_line(
@@ -151,7 +153,7 @@ fn project_headers<BE>(
 
 impl<B> TryIntoProjected<B> for Request<B>
 where
-    B: TryInto<Data>,
+    B: TryInto<ProjectedMessageBody>,
     B::Error: std::error::Error,
 {
     type Error = TryIntoProjectedError<B::Error>;
@@ -159,7 +161,7 @@ where
     /// Implement HTTP mapping to AMQP message in projected mode.
     ///
     /// See Section 4.1 for more details.
-    fn into_projected(self) -> Result<Message<Data>, Self::Error> {
+    fn into_projected(self) -> Result<ProjectedMessage, Self::Error> {
         //  An implementation MUST ignore and exclude all RFC7230 headers and
         //  RFC7230 information items not explicitly covered below
 
@@ -188,7 +190,7 @@ where
         let msg = Message::builder()
             .properties(properties)
             .application_properties(application_properties)
-            .data(data)
+            .data_batch(data)
             .build();
 
         Ok(msg)
@@ -197,12 +199,12 @@ where
 
 impl<B> TryIntoProjected<B> for Response<B>
 where
-    B: TryInto<Data>,
+    B: TryInto<ProjectedMessageBody>,
     B::Error: std::error::Error,
 {
     type Error = TryIntoProjectedError<B::Error>;
 
-    fn into_projected(self) -> Result<Message<Data>, Self::Error> {
+    fn into_projected(self) -> Result<ProjectedMessage, Self::Error> {
         let (parts, body) = self.into_parts();
 
         let prop_builder = Properties::builder();
@@ -224,7 +226,7 @@ where
         let msg = Message::builder()
             .properties(properties)
             .application_properties(application_properties)
-            .data(data)
+            .data_batch(data)
             .build();
 
         Ok(msg)
@@ -238,19 +240,19 @@ where
     type Body;
     type Error: std::error::Error;
 
-    fn try_from_projected(msg: Message<Data>) -> Result<Self, Self::Error>;
+    fn try_from_projected(msg: ProjectedMessage) -> Result<Self, Self::Error>;
 }
 
 impl<B> TryFromProjected for Request<B>
 where
-    B: TryFrom<Data>,
+    B: TryFrom<ProjectedMessageBody>,
     B::Error: std::error::Error,
 {
     type Body = B;
 
     type Error = TryFromProjectedError<B::Error>;
 
-    fn try_from_projected(msg: Message<Data>) -> Result<Self, Self::Error> {
+    fn try_from_projected(msg: ProjectedMessage) -> Result<Self, Self::Error> {
         // If properties are missing, method is definitely missing
         let properties = msg.properties.ok_or(TryFromProjectedError::MethodNotPresent)?;
         // There shouldn't be any allocation for the default 
@@ -330,14 +332,14 @@ where
 
 impl<B> TryFromProjected for Response<B>
 where
-    B: TryFrom<Data>,
+    B: TryFrom<ProjectedMessageBody>,
     B::Error: std::error::Error,
 {
     type Body = B;
 
     type Error = TryFromProjectedError<B::Error>;
 
-    fn try_from_projected(msg: Message<Data>) -> Result<Self, Self::Error> {
+    fn try_from_projected(msg: ProjectedMessage) -> Result<Self, Self::Error> {
         let properties = msg.properties.ok_or(TryFromProjectedError::StatusNotPresent)?;
         let application_properties = msg.application_properties.unwrap_or_default();
         
