@@ -1,0 +1,19 @@
+[package]
+name = "fe2o3-amqp-http"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+fe2o3-amqp.workspace = true
+fe2o3-amqp-types.workspace = true
+serde.workspace = true
+thiserror.workspace = true
+
+http.workspace = true
+httpdate.workspace = true
+http-body.workspace = true
+http-body-util.workspace = true
+
+# Optional dependencies
+log = { workspace = true, optional = true }
+tracing = { workspace = true, optional = true }

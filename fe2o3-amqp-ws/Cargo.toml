@@ -26,21 +26,21 @@ rustls-tls-webpki-roots = ["tokio-tungstenite/rustls-tls-webpki-roots"]
 
 [dependencies]
 futures-util = { workspace = true, features = ["sink"] }
-http = "1"
-pin-project-lite = { workspace = true }
-thiserror = { workspace = true }
-tungstenite = "0.24"
+http.workspace = true
+pin-project-lite.workspace = true
+thiserror.workspace = true
+tungstenite.workspace = true
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 tokio = { workspace = true, features = ["net"] }
-tokio-tungstenite = "0.24"
+tokio-tungstenite.workspace = true
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 tokio = { workspace = true, features = ["sync", "macros"] }
-getrandom = { workspace = true }
-js-sys = "0.3"
-wasm-bindgen = "0.2"
-web-sys = { version = "0.3", features = [
+getrandom.workspace = true
+js-sys.workspace = true
+wasm-bindgen.workspace = true
+web-sys = { workspace = true, features = [
   "WebSocket",
   "MessageEvent",
   "CloseEvent",
@@ -49,7 +49,7 @@ web-sys = { version = "0.3", features = [
 ] }
 
 [dev-dependencies]
-fe2o3-amqp = { workspace = true }
+fe2o3-amqp.workspace = true
 
 [target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
 tokio = { workspace = true, features = ["net", "rt-multi-thread"] }

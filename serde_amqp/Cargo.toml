@@ -32,27 +32,27 @@ json = ["serde_json"]
 chrono = ["dep:chrono"]
 
 [dev-dependencies]
-criterion = "0.5"
-rand = { workspace = true }
+criterion.workspace = true
+rand.workspace = true
 uuid = { workspace = true, features = ["v4"] }
-bytes = { workspace = true }
+bytes.workspace = true
 
 [dependencies]
 ordered-float = { workspace = true, features = ["serde"] }
 serde = { workspace = true, features = ["derive"] }
-serde_bytes = { workspace = true }
-thiserror = { workspace = true }
-bytes = { workspace = true }
-indexmap = { version = "2", features = ["serde"] }
+serde_bytes.workspace = true
+thiserror.workspace = true
+bytes.workspace = true
+indexmap = { workspace = true, features = ["serde"] }
 
 # derive
 serde_amqp_derive = { workspace = true, optional = true }
 
-# Optinal dependencies
-serde_json = { version = "1", optional = true }
-chrono = { version = "0.4.30", optional = true }
+# Optional dependencies
+serde_json = { workspace = true, optional = true }
+chrono = { workspace = true, optional = true }
 uuid = { workspace = true, optional = true }
-time = { version = "0.3", optional = true }
+time = { workspace = true, optional = true }
 
 [[bench]]
 name = "serialize"

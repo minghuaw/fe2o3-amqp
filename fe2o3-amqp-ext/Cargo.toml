@@ -13,4 +13,4 @@ readme = "Readme.md"
 
 [dependencies]
 serde_amqp = { workspace = true, features = ["derive"] }
-fe2o3-amqp-types = { workspace = true }
+fe2o3-amqp-types.workspace = true
