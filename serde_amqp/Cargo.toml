@@ -41,7 +41,7 @@ uuid = { workspace = true, features = ["v4"] }
 
 [target.'cfg(target_arch = "wasm32")'.dev-dependencies]
 uuid = { workspace = true, features = ["v4", "rng-getrandom"] }
-getrandom = { workspace = true, features = ["js"] }
+# getrandom = { workspace = true, features = ["wasm_js"] }
 
 [dependencies]
 ordered-float = { workspace = true, features = ["serde"] }

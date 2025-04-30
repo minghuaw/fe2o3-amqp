@@ -82,7 +82,7 @@ tokio-stream = { workspace = true, features = ["time"] }
 uuid = { workspace = true, features = ["v4", "rng-getrandom"], optional = true }
 tokio = { workspace = true, features = ["sync", "io-util", "rt", "macros"] } # "net" feature doesn't support wasm32
 ring = { workspace = true, default-features = false, features = ["wasm32_unknown_unknown_js"], optional = true }
-getrandom = { workspace = true, features = ["js"] }
+getrandom = { workspace = true, features = ["wasm_js"] }
 wasmtimer.workspace = true
 
 [dev-dependencies]
@@ -95,4 +95,4 @@ tokio = { workspace = true, features = ["rt", "rt-multi-thread", "macros", "park
 
 [target.'cfg(target_arch = "wasm32")'.dev-dependencies]
 tokio = { workspace = true, features = ["rt", "macros", "parking_lot"]}
-getrandom = { workspace = true, features = ["js"] }
+getrandom = { workspace = true, features = ["wasm_js"] }
