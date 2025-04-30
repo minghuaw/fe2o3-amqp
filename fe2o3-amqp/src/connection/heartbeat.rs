@@ -32,7 +32,7 @@ cfg_not_wasm32! {
         }
 
         fn poll_tick(&mut self, cx: &mut Context<'_>) -> Poll<Self::Instant> {
-            self.poll_tick(cx)
+            tokio::time::Interval::poll_tick(self, cx)
         }
     }
 }
