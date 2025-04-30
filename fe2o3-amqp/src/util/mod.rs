@@ -73,13 +73,13 @@ cfg_wasm32! {
         }
     }
 
-    type DelayImpl = wasmtimer::tokio::Delay;
+    type DelayImpl = wasmtimer::tokio::Sleep;
 
-    impl Delay for wasmtimer::tokio::Delay {
+    impl Delay for wasmtimer::tokio::Sleep {
         type Instant = wasmtimer::std::Instant;
 
         fn from_duration(duration: Duration) -> Self {
-            wasmtimer::tokio::Delay::new(duration)
+            wasmtimer::tokio::sleep(duration)
         }
 
         fn reset_at(self: Pin<&mut Self>, at: Self::Instant) {
