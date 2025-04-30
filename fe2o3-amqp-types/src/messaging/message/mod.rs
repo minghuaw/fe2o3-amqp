@@ -826,7 +826,7 @@ mod tests {
         let result: Result<Deserializable<Message<Data>>, _> = from_reader(&buf[..]);
         assert!(result.is_ok());
         let message = result.unwrap().0;
-        assert!(message.body.0.len() > 0);
+        assert!(!message.body.0.is_empty());
     }
 
     #[test]

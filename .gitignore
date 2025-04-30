@@ -1,6 +1,7 @@
 **/target
 **/Cargo.lock
 .vscode/
+.idea/
 .DS_Store
 
 *flamegraph.svg

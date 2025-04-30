@@ -384,7 +384,7 @@ fn xor(lhs: &[u8], rhs: &[u8]) -> Result<Vec<u8>, XorLengthMismatch> {
 }
 
 fn generate_nonce() -> [u8; 32] {
-    rand::thread_rng().gen()
+    rand::rng().random()
 }
 
 #[cfg(test)]

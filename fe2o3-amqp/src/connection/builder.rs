@@ -597,7 +597,7 @@ impl<'a, Mode, Tls> Builder<'a, Mode, Tls> {
     }
 }
 
-impl<'a, Tls> Builder<'a, mode::ConnectorWithId, Tls> {
+impl<Tls> Builder<'_, mode::ConnectorWithId, Tls> {
     /// Performs SASL negotiation
     #[cfg_attr(feature = "tracing", instrument(skip_all, fields(sasl_hostname = ?self.sasl_hostname)))]
     pub async fn negotiate_sasl<Io>(
@@ -816,7 +816,7 @@ impl Builder<'_, mode::ConnectorWithId, ()> {
 }
 
 cfg_not_wasm32! {
-    impl<'a> Builder<'a, mode::ConnectorWithId, ()> {
+    impl Builder<'_, mode::ConnectorWithId, ()> {
         /// Open a [`crate::Connection`] with an url
         ///
         /// # Raw AMQP connection

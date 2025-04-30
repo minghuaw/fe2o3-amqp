@@ -1,5 +1,11 @@
 # Change Log
 
+## 0.13.2
+
+1. Changed `HeartBeat` and `IdleTimeout` timer dep from `fluvio-wasm-timer`
+   "0.2.5" with `wasmtimer` "0.4.1" when targeting `wasm32` to avoid
+   RUSTSEC-2024-0384
+
 ## 0.13.1
 
 1. Fixed documentation error

@@ -697,7 +697,7 @@ impl endpoint::Connection for Connection {
         tracing::trace!(?frame);
         #[cfg(feature = "log")]
         log::trace!("SEND frame = {:?}", frame);
-        writer.send(frame).await.map_err(Into::into)?;
+        writer.send(frame).await?;
 
         // change local state after successfully sending the frame
         match &self.local_state {
@@ -722,7 +722,7 @@ impl endpoint::Connection for Connection {
     {
         let error_is_some = error.is_some();
         let frame = Frame::new(0u16, FrameBody::Close(Close { error }));
-        writer.send(frame).await.map_err(Into::into)?;
+        writer.send(frame).await?;
 
         match &self.local_state {
             ConnectionState::Opened => match error_is_some {
