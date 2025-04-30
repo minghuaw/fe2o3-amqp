@@ -89,16 +89,16 @@ cfg_wasm32! {
 }
 
 #[derive(Debug)]
-pub(crate) struct IdleTimeout<T = DelayImpl> 
-where 
-    T: Delay
+pub(crate) struct IdleTimeout<T = DelayImpl>
+where
+    T: Delay,
 {
     delay: Pin<Box<T>>,
     duration: Duration,
 }
 
-impl<T> IdleTimeout<T> 
-where 
+impl<T> IdleTimeout<T>
+where
     T: Delay,
 {
     pub fn new(duration: Duration) -> Self {

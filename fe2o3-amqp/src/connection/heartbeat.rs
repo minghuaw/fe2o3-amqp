@@ -1,6 +1,10 @@
 //! Implements an asynchronous heartbeat
 
-use std::{io, task::{Context, Poll}, time::Duration};
+use std::{
+    io,
+    task::{Context, Poll},
+    time::Duration,
+};
 
 use futures_util::Stream;
 use pin_project_lite::pin_project;
@@ -26,7 +30,7 @@ cfg_not_wasm32! {
         fn new_with_period(period: Duration) -> Self {
             tokio::time::interval(period)
         }
-    
+
         fn poll_tick(&mut self, cx: &mut Context<'_>) -> Poll<Self::Instant> {
             self.poll_tick(cx)
         }
@@ -42,7 +46,7 @@ cfg_wasm32! {
         fn new_with_period(period: Duration) -> Self {
             wasmtimer::tokio::interval(period)
         }
-    
+
         fn poll_tick(&mut self, cx: &mut Context<'_>) -> Poll<Self::Instant> {
             self.poll_tick(cx)
         }
@@ -50,8 +54,8 @@ cfg_wasm32! {
 }
 
 #[derive(Debug)]
-struct IntervalStream<T=IntervalImpl> {
-    interval: T
+struct IntervalStream<T = IntervalImpl> {
+    interval: T,
 }
 
 impl<T> IntervalStream<T>
@@ -72,10 +76,7 @@ where
 {
     type Item = T::Instant;
 
-    fn poll_next(
-        self: std::pin::Pin<&mut Self>,
-        cx: &mut Context<'_>,
-    ) -> Poll<Option<Self::Item>> {
+    fn poll_next(self: std::pin::Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
         let this = self.get_mut();
         match this.interval.poll_tick(cx) {
             Poll::Ready(instant) => Poll::Ready(Some(instant)),

@@ -58,7 +58,7 @@ pub trait Response: Sized {
 
             return Err(StatusError {
                 code: status_code,
-                description: status_description.map(Into::into),
+                description: status_description,
             }
             .into());
         }
