@@ -37,4 +37,4 @@ serde_amqp = { workspace = true, features = ["derive", "extensions"] }
 serde = { workspace = true, features = ["derive"] }
 serde_bytes = { workspace = true }
 ordered-float = { workspace = true, features = ["serde"] }
-serde_repr = "0.1"
+serde_repr.workspace = true
