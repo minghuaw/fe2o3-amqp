@@ -82,7 +82,7 @@ tokio-stream = { workspace = true, features = ["time"] }
 tokio = { workspace = true, features = ["sync", "io-util", "rt", "macros"] } # "net" feature doesn't support wasm32
 ring = { workspace = true, default-features = false, features = ["wasm32_unknown_unknown_js"], optional = true }
 getrandom = { workspace = true }
-fluvio-wasm-timer = "0.2"
+wasmtimer.workspace = true
 
 [dev-dependencies]
 tokio-test.workspace = true

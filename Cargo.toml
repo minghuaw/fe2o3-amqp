@@ -99,5 +99,5 @@ tokio-tungstenite = "0.24"
 js-sys = "0.3"
 wasm-bindgen = "0.2"
 web-sys = "0.3"
-
+wasmtimer = "0.4"
 
