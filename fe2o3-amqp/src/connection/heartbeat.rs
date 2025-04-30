@@ -6,7 +6,7 @@ use futures_util::Stream;
 use pin_project_lite::pin_project;
 
 /// A helper trait to abstract over the `Interval` type used in the heartbeat implementation.
-pub trait HeartBeatInterval: Unpin {
+trait Interval: Unpin {
     /// Type of the instant returned by the interval.
     type Instant;
 
@@ -18,9 +18,9 @@ pub trait HeartBeatInterval: Unpin {
 }
 
 cfg_not_wasm32! {
-    type Interval = tokio::time::Interval;
+    type IntervalImpl = tokio::time::Interval;
 
-    impl HeartBeatInterval for tokio::time::Interval {
+    impl Interval for tokio::time::Interval {
         type Instant = tokio::time::Instant;
 
         fn new_with_period(period: Duration) -> Self {
@@ -34,9 +34,9 @@ cfg_not_wasm32! {
 }
 
 cfg_wasm32! {
-    type Interval = wasmtimer::tokio::Interval;
+    type IntervalImpl = wasmtimer::tokio::Interval;
 
-    impl HeartBeatInterval for wasmtimer::tokio::Interval {
+    impl Interval for wasmtimer::tokio::Interval {
         type Instant = wasmtimer::std::Instant;
 
         fn new_with_period(period: Duration) -> Self {
@@ -49,23 +49,53 @@ cfg_wasm32! {
     }
 }
 
+#[derive(Debug)]
+struct IntervalStream<T=IntervalImpl> {
+    interval: T
+}
+
+impl<T> IntervalStream<T>
+where
+    T: Interval,
+{
+    /// Create a new `IntervalStream` with the given period.
+    fn new(period: Duration) -> Self {
+        Self {
+            interval: T::new_with_period(period),
+        }
+    }
+}
+
+impl<T> Stream for IntervalStream<T>
+where
+    T: Interval,
+{
+    type Item = T::Instant;
+
+    fn poll_next(
+        self: std::pin::Pin<&mut Self>,
+        cx: &mut Context<'_>,
+    ) -> Poll<Option<Self::Item>> {
+        let this = self.get_mut();
+        match this.interval.poll_tick(cx) {
+            Poll::Ready(instant) => Poll::Ready(Some(instant)),
+            Poll::Pending => Poll::Pending,
+        }
+    }
+}
+
 pin_project! {
     /// A wrapper over an `Option<IntervalStream>` which will never tick ready if the underlying
     /// `Interval` is `None`
     #[derive(Debug)]
-    pub struct HeartBeat<T = Interval> 
-    where
-        T: HeartBeatInterval,
-    {
+    pub struct HeartBeat {
+        // TODO: consider using `Interval` directly instead of `IntervalStream`
         #[pin]
-        interval: Option<T>,
+        interval: Option<IntervalStream>,
     }
 }
 
-impl<T> HeartBeat<T> 
-where 
-    T: HeartBeatInterval,
-{
+impl HeartBeat {
     /// A [`HeartBeat`] that will never yield `Poll::Ready(_)` with `StreamExt::next()`
     pub fn never() -> Self {
         Self { interval: None }
@@ -73,15 +103,13 @@ where
 
     /// A [`HeartBeat`] that will yield `Poll::Ready(_)` per the given interval with `StreamExt::next()`
     pub fn new(period: Duration) -> Self {
-        let interval = Some(T::new_with_period(period));
-        Self { interval }
+        Self {
+            interval: Some(IntervalStream::new(period)),
+        }
     }
 }
 
-impl<T> Stream for HeartBeat<T> 
-where 
-    T: HeartBeatInterval,
-{
+impl Stream for HeartBeat {
     type Item = io::Result<()>;
 
     fn poll_next(
@@ -89,9 +117,12 @@ where
         cx: &mut std::task::Context<'_>,
     ) -> std::task::Poll<Option<Self::Item>> {
         let this = self.project();
-        let interval = this.interval.get_mut();
-        match interval {
-            Some(interval) => interval.poll_tick(cx).map(|_| Some(Ok(()))),
+        match this.interval.as_pin_mut() {
+            Some(interval) => match interval.poll_next(cx) {
+                Poll::Ready(Some(_instant)) => Poll::Ready(Some(Ok(()))),
+                Poll::Ready(None) => Poll::Ready(None),
+                Poll::Pending => Poll::Pending,
+            },
             None => Poll::Pending,
         }
     }
