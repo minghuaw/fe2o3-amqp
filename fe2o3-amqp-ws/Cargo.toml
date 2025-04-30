@@ -37,7 +37,7 @@ tokio-tungstenite.workspace = true
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 tokio = { workspace = true, features = ["sync", "macros"] }
-getrandom = { workspace = true }
+getrandom = { workspace = true, features = ["js"]}
 js-sys.workspace = true
 wasm-bindgen.workspace = true
 web-sys = { workspace = true, features = [

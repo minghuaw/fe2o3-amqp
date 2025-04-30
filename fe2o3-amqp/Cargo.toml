@@ -94,4 +94,4 @@ tokio = { workspace = true, features = ["rt", "rt-multi-thread", "macros", "park
 
 [target.'cfg(target_arch = "wasm32")'.dev-dependencies]
 tokio = { workspace = true, features = ["rt", "macros", "parking_lot"]}
-getrandom = { workspace = true }
+getrandom = { workspace = true, features = ["js"] }
