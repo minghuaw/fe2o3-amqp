@@ -81,7 +81,7 @@ tokio-stream = { workspace = true, features = ["time"] }
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 tokio = { workspace = true, features = ["sync", "io-util", "rt", "macros"] } # "net" feature doesn't support wasm32
 ring = { workspace = true, default-features = false, features = ["wasm32_unknown_unknown_js"], optional = true }
-getrandom = { workspace = true }
+getrandom = { workspace = true, features = ["js"] }
 wasmtimer.workspace = true
 
 [dev-dependencies]

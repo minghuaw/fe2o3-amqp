@@ -23,88 +23,98 @@ pub(crate) enum Running {
     Stop,
 }
 
+pub(crate) trait Instant {
+    fn now() -> Self;
+
+    fn add(self, duration: Duration) -> Self;
+}
+
+pub(crate) trait Delay: Future {
+    type Instant: Instant;
+
+    fn from_duration(duration: Duration) -> Self;
+    fn reset_at(self: Pin<&mut Self>, at: Self::Instant);
+}
+
 cfg_not_wasm32! {
-    use tokio::time::{Instant, Sleep};
-
-    #[derive(Debug)]
-    struct InnerDelay {
-        delay: Pin<Box<Sleep>>,
-        duration: Duration,
-    }
-
-    impl InnerDelay {
-        fn new(duration: Duration) -> Self {
-            let delay = Box::pin(tokio::time::sleep(duration));
-            Self { delay, duration }
+    impl Instant for tokio::time::Instant {
+        fn now() -> Self {
+            tokio::time::Instant::now()
         }
 
-        fn reset(&mut self) {
-            let now = Instant::now();
-            let next = now + self.duration;
-            // this is equivalent to wasm-timer's `reset_at`
-            self.delay.as_mut().reset(next);
+        fn add(self, duration: Duration) -> Self {
+            self + duration
         }
     }
 
-    impl Future for InnerDelay {
-        type Output = io::Result<()>;
+    type DelayImpl = tokio::time::Sleep;
 
-        fn poll(mut self: Pin<&mut Self>, cx: &mut std::task::Context<'_>) -> Poll<Self::Output> {
-            let delay = Pin::new(&mut self.delay);
-            delay.poll(cx).map(Ok)
+    impl Delay for tokio::time::Sleep {
+        type Instant = tokio::time::Instant;
+
+        fn from_duration(duration: Duration) -> Self {
+            tokio::time::sleep(duration)
+        }
+
+        fn reset_at(self: Pin<&mut Self>, at: Self::Instant) {
+            self.reset(at);
         }
     }
 }
 
 cfg_wasm32! {
-    use fluvio_wasm_timer::{Delay};
-
-    #[derive(Debug)]
-    struct InnerDelay {
-        delay: Delay,
-        duration: Duration,
-    }
-
-    impl InnerDelay {
-        fn new(duration: Duration) -> Self {
-            let delay = Delay::new(duration);
-            Self { delay, duration }
+    impl Instant for wasmtimer::std::Instant {
+        fn now() -> Self {
+            wasmtimer::std::Instant::now()
         }
 
-        fn reset(&mut self) {
-            let duration = self.duration;
-            self.delay.reset(duration);
+        fn add(self, duration: Duration) -> Self {
+            self + duration
         }
     }
 
-    impl Future for InnerDelay {
-        type Output = io::Result<()>;
+    type DelayImpl = wasmtimer::tokio::Delay;
 
-        fn poll(mut self: Pin<&mut Self>, cx: &mut std::task::Context<'_>) -> Poll<Self::Output> {
-            let delay = Pin::new(&mut self.delay);
-            delay.poll(cx)
+    impl Delay for wasmtimer::tokio::Delay {
+        type Instant = wasmtimer::std::Instant;
+
+        fn from_duration(duration: Duration) -> Self {
+            wasmtimer::tokio::Delay::new(duration)
+        }
+
+        fn reset_at(self: Pin<&mut Self>, at: Self::Instant) {
+            self.reset(at);
         }
     }
 }
 
 #[derive(Debug)]
-pub(crate) struct IdleTimeout {
-    delay: InnerDelay,
+pub(crate) struct IdleTimeout<T = DelayImpl> 
+where 
+    T: Delay
+{
+    delay: Pin<Box<T>>,
+    duration: Duration,
 }
 
-impl IdleTimeout {
+impl<T> IdleTimeout<T> 
+where 
+    T: Delay,
+{
     pub fn new(duration: Duration) -> Self {
-        let delay = InnerDelay::new(duration);
-        Self { delay }
+        let delay = Box::pin(T::from_duration(duration));
+        Self { delay, duration }
     }
 
     pub fn reset(&mut self) {
-        self.delay.reset();
+        let now = T::Instant::now();
+        let next = now.add(self.duration);
+        self.delay.as_mut().reset_at(next);
     }
 }
 
 impl Future for IdleTimeout {
-    type Output = io::Result<()>;
+    type Output = ();
 
     fn poll(mut self: Pin<&mut Self>, cx: &mut std::task::Context<'_>) -> Poll<Self::Output> {
         let delay = Pin::new(&mut self.delay);
