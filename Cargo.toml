@@ -82,10 +82,10 @@ sha2 = "0.10"
 base64 = "0.22"
 stringprep = "0.1"
 hmac = "0.12"
-pbkdf2 = "0.12"
+pbkdf2 = { version = "0.12", default-features = false }
 webpki-roots = "0.26"
-tokio-rustls = "0.26"
-librustls = { package = "rustls", version = "0.23" }
+tokio-rustls = { version = "0.26", default-features = false }
+librustls = { package = "rustls", version = "0.23", default-features = false }
 libnative-tls = { package = "native-tls", version = "0.2" }
 tokio-native-tls = "0.3"
 ring = { version = "0.17", default-features = false }
