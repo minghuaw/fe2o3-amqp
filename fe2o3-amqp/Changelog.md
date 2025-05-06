@@ -1,5 +1,9 @@
 # Change Log
 
+## 0.13.3
+
+1. Restore `default-features = false` for dependencies `pbkdf2`, `rustls`, and `tokio-rustls` to avoid breaking changes in dependencies (see issue [#309](https://github.com/minghuaw/fe2o3-amqp/issues/309))
+
 ## 0.13.2
 
 1. Changed `HeartBeat` and `IdleTimeout` timer dep from `fluvio-wasm-timer`
