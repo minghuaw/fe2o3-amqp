@@ -1,5 +1,7 @@
 //! Simple values. A subset of the primitive types.
 
+use serde_amqp::described::Described;
+
 use super::*;
 
 /// A subset of `Value`
@@ -205,6 +207,16 @@ pub enum SimpleValue {
     /// given application will be small, e.g. small enough that it is reasonable
     /// to cache all the distinct values. Symbols are encoded as ASCII characters ASCII.
     Symbol(Symbol),
+
+    /// A described value.
+    ///
+    /// A described value is a value that has an associated descriptor.
+    ///
+    /// encoding name = "described", encoding code = 0x00,
+    /// category = variable, width = 0
+    /// label = "described value"
+    /// The descriptor is a value that describes the value.
+    Described(Box<Described<Value>>),
 }
 
 impl SimpleValue {
@@ -232,6 +244,7 @@ impl SimpleValue {
             SimpleValue::Binary(_) => EncodingCodes::Vbin32,
             SimpleValue::String(_) => EncodingCodes::Str32,
             SimpleValue::Symbol(_) => EncodingCodes::Sym32,
+            SimpleValue::Described(_) => EncodingCodes::DescribedType,
         };
         code as u8
     }
@@ -264,6 +277,7 @@ impl ser::Serialize for SimpleValue {
             SimpleValue::Binary(v) => serializer.serialize_bytes(v.as_slice()),
             SimpleValue::String(v) => serializer.serialize_str(v),
             SimpleValue::Symbol(v) => v.serialize(serializer),
+            SimpleValue::Described(v) => v.serialize(serializer),
         }
     }
 }
@@ -305,7 +319,8 @@ impl TryFrom<Value> for SimpleValue {
             Value::Binary(v) => SimpleValue::Binary(v),
             Value::String(v) => SimpleValue::String(v),
             Value::Symbol(v) => SimpleValue::Symbol(v),
-            Value::List(_) | Value::Map(_) | Value::Array(_) | Value::Described(_) => {
+            Value::Described(v) => SimpleValue::Described(v),
+            Value::List(_) | Value::Map(_) | Value::Array(_) => {
                 return Err(serde_amqp::error::Error::InvalidValue)
             }
         };
@@ -337,6 +352,7 @@ impl From<SimpleValue> for Value {
             SimpleValue::Binary(v) => Value::Binary(v),
             SimpleValue::String(v) => Value::String(v),
             SimpleValue::Symbol(v) => Value::Symbol(v),
+            SimpleValue::Described(v) => Value::Described(v),
         }
     }
 }
