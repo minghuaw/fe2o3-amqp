@@ -1,5 +1,9 @@
 # fe2o3-amqp-ws
 
+## 0.14.0
+
+1. Put wrapped type of `Error::Http(_)` behind `Box` to avoid `clippy::result-large-err` (PR #313)
+
 ## 0.13.0
 
 1. Updated deps
