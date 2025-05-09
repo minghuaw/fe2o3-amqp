@@ -20,7 +20,7 @@ pub struct Error {
     pub description: Option<String>,
 
     /// <field name="info" type="fields"/>
-    pub info: Option<Fields>,
+    pub info: Option<Box<Fields>>,
 }
 
 impl std::fmt::Display for Error {
@@ -45,7 +45,7 @@ impl Error {
         Self {
             condition: condition.into(),
             description: description.into(),
-            info: info.into(),
+            info: info.into().map(Box::new),
         }
     }
 }

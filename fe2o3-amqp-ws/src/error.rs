@@ -6,6 +6,8 @@ use tungstenite::{
     Message,
 };
 
+pub type HttpResponse = Response<Option<Vec<u8>>>;
+
 /// Error with websocket binding
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
@@ -47,7 +49,7 @@ pub enum Error {
 
     /// A `tungsteninte::Error::Http` error
     #[error("HTTP error: {}", .0.status())]
-    Http(Response<Option<Vec<u8>>>),
+    Http(Box<HttpResponse>),
 
     /// A `tungsteninte::Error::HttpFormat` error
     #[error("HTTP format error: {0}")]
@@ -83,7 +85,7 @@ impl<T: Into<tungstenite::Error>> From<T> for Error {
             tungstenite::Error::WriteBufferFull(val) => Self::WriteBufferFull(val),
             tungstenite::Error::Utf8 => Self::Utf8,
             tungstenite::Error::Url(val) => Self::Url(val),
-            tungstenite::Error::Http(val) => Self::Http(val),
+            tungstenite::Error::Http(val) => Self::Http(Box::new(val)),
             tungstenite::Error::HttpFormat(val) => Self::HttpFormat(val),
             tungstenite::Error::AttackAttempt => Self::AttackAttempt,
         }
