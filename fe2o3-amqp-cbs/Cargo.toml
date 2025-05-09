@@ -1,6 +1,6 @@
 [package]
 name = "fe2o3-amqp-cbs"
-version = "0.13.0"
+version = "0.14.0"
 edition = "2021"
 description = "An experimental impl of AMQP 1.0 CBS extension"
 license = "MIT/Apache-2.0"

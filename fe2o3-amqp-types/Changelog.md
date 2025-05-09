@@ -1,5 +1,11 @@
 # Change Log
 
+## 0.14.0
+
+1. Added `Described` variant to `SimpleValue` (PR #312)
+2. Put `Error::info` behind `Box` to avoid `clippy::result-large-err` (PR #313)
+3. Updated depdencies (PR #315)
+
 ## 0.13.0
 
 1. Added support for using `LazyValue` as message body
