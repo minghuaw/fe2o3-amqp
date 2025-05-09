@@ -1,5 +1,4 @@
 #![deny(missing_docs, missing_debug_implementations)]
-#![allow(clippy::result_large_err)] // TODO: refactor in 0.14.0
 
 //! An experimental implementation of AMQP 1.0 management working draft with `fe2o3-amqp`
 //!
