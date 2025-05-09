@@ -12,7 +12,6 @@ serde_json = "1"
 fe2o3-amqp = { path = "../../fe2o3-amqp", default-features = false, features = ["acceptor", "transaction", "scram", "tracing", "log"] }
 fe2o3-amqp-ws = { path = "../../fe2o3-amqp-ws" }
 fe2o3-amqp-ext = { path = "../../fe2o3-amqp-ext" }
-# fe2o3-amqp = { version = "0.0.13", features = ["acceptor", "transaction"] }
 tokio = { version = "1", features = ["net", "macros", "rt-multi-thread", "rt", "time"] }
 tracing = "0.1.31"
 tracing-subscriber = "0.3.9"
