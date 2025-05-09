@@ -83,7 +83,7 @@ base64 = "0.22"
 stringprep = "0.1"
 hmac = "0.12"
 pbkdf2 = { version = "0.12", default-features = false }
-webpki-roots = "0.26"
+webpki-roots = "1"
 tokio-rustls = { version = "0.26", default-features = false }
 librustls = { package = "rustls", version = "0.23", default-features = false }
 libnative-tls = { package = "native-tls", version = "0.2" }
