@@ -77,6 +77,7 @@ use std::{
     task::Poll,
 };
 
+use bytes::Bytes;
 use futures_util::{ready, Sink, Stream};
 use pin_project_lite::pin_project;
 use tokio::io::{AsyncRead, AsyncWrite};
@@ -147,7 +148,7 @@ pin_project! {
     pub struct WebSocketStream<S> {
         #[pin]
         inner: S,
-        current_binary: Option<std::io::Cursor<Vec<u8>>>,
+        current_binary: Option<std::io::Cursor<Bytes>>,
     }
 }
 
@@ -190,7 +191,7 @@ where
                         "Text messsage is not supported",
                     )))
                 }
-                tungstenite::Message::Binary(vec) => *this.current_binary = Some(Cursor::new(vec)),
+                tungstenite::Message::Binary(buf) => *this.current_binary = Some(Cursor::new(buf)),
 
                 // This is already handled by tungstenite
                 tungstenite::Message::Ping(_) => {}
@@ -227,7 +228,8 @@ where
         let mut this = self.project();
         ready!(this.inner.as_mut().poll_ready(cx)).map_err(map_tungstenite_error)?;
         let n = buf.len();
-        let item = tungstenite::Message::binary(buf);
+        let bin = Bytes::copy_from_slice(buf);
+        let item = tungstenite::Message::binary(bin);
         let item = WsMessage(item);
         match this.inner.start_send(item) {
             Ok(_) => Poll::Ready(Ok(n)),

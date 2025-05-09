@@ -30,6 +30,7 @@ http.workspace = true
 pin-project-lite = { workspace = true }
 thiserror = { workspace = true }
 tungstenite.workspace = true
+bytes.workspace = true
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 tokio = { workspace = true, features = ["net"] }
