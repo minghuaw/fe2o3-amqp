@@ -62,7 +62,7 @@ serde_amqp = { path = "serde_amqp", version = "0.13" }
 bytes = "1"
 serde = "1"
 serde_bytes = "0.11"
-thiserror = "1"
+thiserror = "2"
 log = "0.4"
 tracing = "0.1"
 tokio = { version = "1", default-features = false }
