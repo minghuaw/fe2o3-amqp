@@ -1,5 +1,9 @@
 # Change Log
 
+## 0.14.0
+
+1. Bumped version to "0.14.0" to match other `fe2o3-amqp` crates
+
 ## 0.13.3
 
 1. Restore `default-features = false` for dependencies `pbkdf2`, `rustls`, and `tokio-rustls` to avoid breaking changes in dependencies (see issue [#309](https://github.com/minghuaw/fe2o3-amqp/issues/309))
