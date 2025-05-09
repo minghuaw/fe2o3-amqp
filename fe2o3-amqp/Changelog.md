@@ -3,6 +3,7 @@
 ## 0.14.0
 
 1. Bumped version to "0.14.0" to match other `fe2o3-amqp` crates
+2. Updated depdencies (PR #315)
 
 ## 0.13.3
 
