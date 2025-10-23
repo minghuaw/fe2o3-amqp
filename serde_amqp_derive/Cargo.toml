@@ -21,7 +21,7 @@ serde = { workspace = true, features = ["derive"] }
 
 [dependencies]
 convert_case = "0.6.0"
-darling = "0.20"
+darling = "0.21"
 proc-macro2 = "1"
 quote = "1"
 syn = { version = "2", features = ["parsing", "derive"] } 
