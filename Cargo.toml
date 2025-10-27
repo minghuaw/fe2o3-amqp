@@ -107,4 +107,4 @@ chrono = "0.4.30"
 time = "0.3"
 
 # dev only dependencies
-testcontainers = "0.15.0"
+testcontainers = "0.25.1"
