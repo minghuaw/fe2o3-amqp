@@ -957,7 +957,13 @@ cfg_not_wasm32! {
             Io: AsyncRead + AsyncWrite + std::fmt::Debug + SendBound + Unpin + 'static,
         {
             match self.scheme {
-                "amqp" => self.connect_with_stream(stream, spawn_engine).await,
+                "amqp" => {
+                    // If EXTERNAL is chosen, we should error out here
+                    if matches!(self.sasl_profile, Some(SaslProfile::External)) {
+                        return Err(OpenError::InvalidSchemeForSaslExternal);
+                    }
+                    self.connect_with_stream(stream, spawn_engine).await
+                },
                 "amqps" => {
                     #[cfg(all(feature = "rustls", not(feature = "native-tls")))]
                     {
@@ -1199,7 +1205,13 @@ cfg_not_wasm32! {
                 Io: AsyncRead + AsyncWrite + std::fmt::Debug + SendBound + Unpin + 'static,
             {
                 match self.scheme {
-                    "amqp" => self.connect_with_stream(stream, spawn_engine).await,
+                    "amqp" => {
+                        // If EXTERNAL is chosen, we should error out here
+                        if matches!(self.sasl_profile, Some(SaslProfile::External)) {
+                            return Err(OpenError::InvalidSchemeForSaslExternal);
+                        }
+                        self.connect_with_stream(stream, spawn_engine).await
+                    },
                     "amqps" => {
                         let domain = self.domain.ok_or(OpenError::InvalidDomain)?;
                         let tls_stream = Transport::connect_tls_with_rustls(
@@ -1332,7 +1344,13 @@ cfg_not_wasm32! {
                 Io: AsyncRead + AsyncWrite + std::fmt::Debug + SendBound + Unpin + 'static,
             {
                 match self.scheme {
-                    "amqp" => self.connect_with_stream(stream, spawn_engine).await,
+                    "amqp" => {
+                        // If EXTERNAL is chosen, we should error out here
+                        if matches!(self.sasl_profile, Some(SaslProfile::External)) {
+                            return Err(OpenError::InvalidSchemeForSaslExternal);
+                        }
+                        self.connect_with_stream(stream, spawn_engine).await
+                    },
                     "amqps" => {
                         let domain = self.domain.ok_or(OpenError::InvalidDomain)?;
                         let tls_stream = Transport::connect_tls_with_native_tls(

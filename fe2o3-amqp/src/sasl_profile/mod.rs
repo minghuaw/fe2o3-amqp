@@ -26,7 +26,7 @@ cfg_scram! {
     pub(crate) const SCRAM_SHA_512: &str = "SCRAM-SHA-512";
 }
 
-// pub const EXTERN: Symbol = Symbol::from("EXTERNAL");
+pub(crate) const EXTERNAL: &str = "EXTERNAL";
 pub(crate) const ANONYMOUS: &str = "ANONYMOUS";
 pub(crate) const PLAIN: &str = "PLAIN";
 
@@ -50,6 +50,9 @@ pub enum SaslProfile {
         /// Password
         password: String,
     },
+
+    /// SASL profile for EXTERNAL mechanism
+    External,
 
     /// SASL-SCRAM-SHA-1
     #[cfg_attr(docsrs, doc(cfg(feature = "scram")))]
@@ -110,6 +113,7 @@ impl SaslProfile {
                 username: _,
                 password: _,
             } => PLAIN,
+            SaslProfile::External => EXTERNAL,
             #[cfg(feature = "scram")]
             SaslProfile::ScramSha1(_) => SCRAM_SHA_1,
             #[cfg(feature = "scram")]
@@ -123,6 +127,8 @@ impl SaslProfile {
     pub(crate) fn initial_response(&mut self) -> Option<Binary> {
         match self {
             SaslProfile::Anonymous => None,
+            SaslProfile::External => None, // TODO: if this works, keep it
+            //SaslProfile::External => Some(Binary::from("")), // TODO: otherwise keep this one
             SaslProfile::Plain { username, password } => {
                 let username = username.as_bytes();
                 let password = password.as_bytes();
@@ -175,8 +181,8 @@ impl SaslProfile {
                 }
             }
             Frame::Challenge(challenge) => match self {
-                SaslProfile::Anonymous | SaslProfile::Plain { .. } => Err(Error::NotImplemented(
-                    Some("SASL Challenge is not implemented for ANONYMOUS or PLAIN.".to_string()),
+                SaslProfile::Anonymous | SaslProfile::Plain { .. } | SaslProfile::External => Err(Error::NotImplemented(
+                    Some("SASL Challenge is not implemented for ANONYMOUS, PLAIN, or EXTERNAL.".to_string()),
                 )),
                 #[cfg(feature = "scram")]
                 SaslProfile::ScramSha1(SaslScramSha1 { client })
@@ -194,7 +200,7 @@ impl SaslProfile {
             },
             Frame::Outcome(outcome) => {
                 match self {
-                    SaslProfile::Anonymous | SaslProfile::Plain { .. } => {}
+                    SaslProfile::Anonymous | SaslProfile::Plain { .. } | SaslProfile::External => {}
                     #[cfg(feature = "scram")]
                     SaslProfile::ScramSha1(SaslScramSha1 { client })
                     | SaslProfile::ScramSha256(SaslScramSha256 { client })

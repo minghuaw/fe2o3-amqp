@@ -35,6 +35,10 @@ pub enum OpenError {
     #[error(r#"Invalid scheme. Only "amqp" and "amqps" are supported."#)]
     InvalidScheme,
 
+    /// Scheme is invalid for SaslProfile::External
+    #[error(r#"SASL EXTERNAL mechanism requires "amqps" scheme."#)]
+    InvalidSchemeForSaslExternal,
+
     /// Protocol negotiation failed due to protocol header mismatch
     #[error("Protocol header mismatch. Found {0:?}")]
     ProtocolHeaderMismatch(Bytes),
