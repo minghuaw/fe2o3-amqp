@@ -17,3 +17,8 @@ cargo run --bin sasl_scram_sha_256 --features "scram"
 ```sh
 cargo run --bin sasl_scram_sha_512 --features "scram"
 ```
+
+```sh
+cargo run --bin sasl_external --features "rustls"
+```
+
