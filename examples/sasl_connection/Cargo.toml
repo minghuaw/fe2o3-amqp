@@ -13,9 +13,7 @@ scram = ["fe2o3-amqp/scram"]
 [dependencies]
 tokio = { version = "1", features = ["net", "rt", "rt-multi-thread", "macros"] }
 fe2o3-amqp = { features = ["rustls"], path = "../../fe2o3-amqp" }
-#tokio-rustls = {version = "0.26", default-features = false, features = ["ring", "tls12"] }
 tokio-rustls = { version = "0.26.0", default-features = false }
-#rustls = { version = "0.23.36", optional = true }
 rustls = { version = "0.23.36", default-features = false, optional = true }
 webpki-roots = "0.26"
 
