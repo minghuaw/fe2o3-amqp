@@ -24,7 +24,7 @@ async fn main() {
         .tls_connector(tls_connector)
         .sasl_profile(SaslProfile::External)
         .domain("localhost")
-        .hostname("localhost:5671")
+        .hostname("localhost")
         .scheme("amqps")
         .alt_tls_establishment(true)
         .open_with_stream(stream).await.unwrap();
