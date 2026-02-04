@@ -1,7 +1,7 @@
 use rustls::{ClientConfig, RootCertStore};
-use tokio::net::TcpStream;
 use tokio_rustls::TlsConnector;
 use std::sync::Arc;
+use url::Url;
 use fe2o3_amqp::{
     sasl_profile::SaslProfile, types::primitives::Value, Connection, Receiver, Sender,
     Session,
@@ -16,18 +16,15 @@ async fn main() {
                               .with_root_certificates(root_store)
                               .with_no_client_auth();
     let tls_connector = TlsConnector::from(Arc::new(config));
-
-    let stream = TcpStream::connect("localhost:5671").await.unwrap();
+    let addr = format!("amqps://localhost:5671");
+    let url = Url::parse(&addr).unwrap();
 
     let mut connection = Connection::builder()
         .container_id("connection-1")
         .tls_connector(tls_connector)
         .sasl_profile(SaslProfile::External)
-        .domain("localhost")
-        .hostname("localhost")
-        .scheme("amqps")
         .alt_tls_establishment(true)
-        .open_with_stream(stream).await.unwrap();
+        .open(url).await.unwrap();
     let mut session = Session::begin(&mut connection).await.unwrap();
     let mut sender = Sender::attach(&mut session, "rust-sender-link-1", "q1")
         .await

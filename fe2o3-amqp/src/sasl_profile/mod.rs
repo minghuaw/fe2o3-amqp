@@ -127,8 +127,7 @@ impl SaslProfile {
     pub(crate) fn initial_response(&mut self) -> Option<Binary> {
         match self {
             SaslProfile::Anonymous => None,
-            SaslProfile::External => None, // TODO: if this works, keep it
-            //SaslProfile::External => Some(Binary::from("")), // TODO: otherwise keep this one
+            SaslProfile::External => None,
             SaslProfile::Plain { username, password } => {
                 let username = username.as_bytes();
                 let password = password.as_bytes();
