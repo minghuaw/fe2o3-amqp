@@ -1,5 +1,6 @@
 //! Session Listener
 
+use std::collections::HashMap;
 
 use fe2o3_amqp_types::{
     definitions::{self, ConnectionError},
@@ -230,32 +231,43 @@ impl SessionAcceptor {
         let local_state = SessionState::Unmapped;
         let (session_control_tx, session_control_rx) =
             mpsc::channel::<SessionControl>(DEFAULT_SESSION_CONTROL_BUFFER_SIZE);
-        let (incoming_tx, incoming_rx) = mpsc::channel(self.0.buffer_size);
         let (outgoing_tx, outgoing_rx) = mpsc::channel(self.0.buffer_size);
         let (link_listener_tx, link_listener_rx) = mpsc::channel(self.0.buffer_size);
 
-        // create session in connection::Engine
-        let outgoing_channel = match connection.allocate_session(incoming_tx).await {
-            Ok(channel) => channel,
-            Err(error) => match error {
-                AllocSessionError::IllegalState => return Err(BeginError::IllegalConnectionState),
-                AllocSessionError::ChannelMaxReached => {
-                    // A peer that receives a channel number outside the supported range MUST close the connection
-                    // with the framing-error error-code
-                    let error = definitions::Error::new(
-                        ConnectionError::FramingError,
-                        "Exceeding channel-max".to_string(),
-                        None,
-                    );
-                    connection
-                        .control
-                        .send(ConnectionControl::Close(Some(error)))
-                        .await
-                        .map_err(|_| BeginError::IllegalConnectionState)?;
+        // If the connection engine pre-allocated the session relay (to handle
+        // pipelined frames), use the pre-created incoming channel and outgoing
+        // channel directly. Otherwise fall back to the original allocation path.
+        let (outgoing_channel, incoming_rx) = match (
+            incoming_session.incoming_rx,
+            incoming_session.outgoing_channel,
+        ) {
+            (Some(rx), Some(ch)) => (ch, rx),
+            _ => {
+                let (incoming_tx, incoming_rx) = mpsc::channel(self.0.buffer_size);
+                let outgoing_channel = match connection.allocate_session(incoming_tx).await {
+                    Ok(channel) => channel,
+                    Err(error) => match error {
+                        AllocSessionError::IllegalState => {
+                            return Err(BeginError::IllegalConnectionState)
+                        }
+                        AllocSessionError::ChannelMaxReached => {
+                            let error = definitions::Error::new(
+                                ConnectionError::FramingError,
+                                "Exceeding channel-max".to_string(),
+                                None,
+                            );
+                            connection
+                                .control
+                                .send(ConnectionControl::Close(Some(error)))
+                                .await
+                                .map_err(|_| BeginError::IllegalConnectionState)?;
 
-                    return Err(BeginError::LocalChannelMaxReached);
-                }
-            },
+                            return Err(BeginError::LocalChannelMaxReached);
+                        }
+                    },
+                };
+                (outgoing_channel, incoming_rx)
+            }
         };
         let mut session = self.0.clone().into_session(outgoing_channel, local_state);
         session.on_incoming_begin(
@@ -266,6 +278,7 @@ impl SessionAcceptor {
         let listener_session = ListenerSession {
             session,
             link_listener: link_listener_tx,
+            pending_link_flows: HashMap::new(),
         };
 
         let (engine_handle, outcome) = self
@@ -343,6 +356,12 @@ where
 pub struct ListenerSession {
     pub(crate) session: session::Session,
     pub(crate) link_listener: mpsc::Sender<Attach>,
+
+    /// Buffer for link-level Flow frames that arrive before the link handle
+    /// is registered (i.e. before `accept_incoming_attach` is called).
+    /// Keyed by the remote's handle (InputHandle). These are replayed when
+    /// `allocate_incoming_link` inserts the relay into `link_by_input_handle`.
+    pub(crate) pending_link_flows: HashMap<InputHandle, Vec<LinkFlow>>,
 }
 
 impl endpoint::Session for ListenerSession {
