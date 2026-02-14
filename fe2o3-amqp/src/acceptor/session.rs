@@ -1,5 +1,6 @@
 //! Session Listener
 
+
 use std::collections::HashMap;
 
 use fe2o3_amqp_types::{
@@ -269,6 +270,7 @@ impl SessionAcceptor {
                 (outgoing_channel, incoming_rx)
             }
         };
+
         let mut session = self.0.clone().into_session(outgoing_channel, local_state);
         session.on_incoming_begin(
             IncomingChannel(incoming_session.channel),
@@ -356,7 +358,6 @@ where
 pub struct ListenerSession {
     pub(crate) session: session::Session,
     pub(crate) link_listener: mpsc::Sender<Attach>,
-
     /// Buffer for link-level Flow frames that arrive before the link handle
     /// is registered (i.e. before `accept_incoming_attach` is called).
     /// Keyed by the remote's handle (InputHandle). These are replayed when
@@ -394,8 +395,41 @@ impl endpoint::Session for ListenerSession {
         link_handle: LinkRelay<()>,
         input_handle: InputHandle,
     ) -> Result<OutputHandle, Self::AllocError> {
-        self.session
-            .allocate_incoming_link(link_name, link_handle, input_handle)
+        let output_handle = self.session
+            .allocate_incoming_link(link_name, link_handle, input_handle.clone())?;
+
+        // Replay any buffered link-level Flow frames that arrived before this
+        // link handle was registered (due to pipelining).
+        if let Some(pending_flows) = self.pending_link_flows.remove(&input_handle) {
+            if let Some(link_relay) = self.session.link_by_input_handle.get_mut(&input_handle) {
+                for flow in pending_flows {
+                    // Replay the flow synchronously.  For a Sender relay the
+                    // Producer wraps Arc<LinkFlowState<SenderMarker>> whose
+                    // on_incoming_flow is a plain RwLock write.  We update
+                    // the state and notify waiters so the sender's Consumer
+                    // unblocks.
+                    match link_relay {
+                        LinkRelay::Sender {
+                            flow_state,
+                            output_handle: ref oh,
+                            ..
+                        } => {
+                            let _echo = flow_state.state.on_incoming_flow(flow, oh.clone());
+                            flow_state.notifier.notify_waiters();
+                        }
+                        LinkRelay::Receiver {
+                            flow_state,
+                            output_handle: ref oh,
+                            ..
+                        } => {
+                            let _echo = flow_state.on_incoming_flow(flow, oh.clone());
+                        }
+                    }
+                }
+            }
+        }
+
+        Ok(output_handle)
     }
 
     fn deallocate_link(&mut self, output_handle: OutputHandle) {
@@ -461,7 +495,36 @@ impl endpoint::Session for ListenerSession {
         &mut self,
         flow: Flow,
     ) -> Result<Option<SessionOutgoingItem>, Self::Error> {
-        self.session.on_incoming_flow(flow).await
+        // Pre-extract the LinkFlow before the inner call consumes the Flow,
+        // so we can buffer it if the handle is not yet registered.
+        let link_flow_backup = LinkFlow::try_from(flow.clone()).ok();
+
+        match self.session.on_incoming_flow(flow).await {
+            Ok(result) => Ok(result),
+            Err(SessionInnerError::UnattachedHandle) => {
+                // When running as a listener/acceptor, the remote peer may
+                // pipeline a Flow frame immediately after Attach, before the
+                // application code has called `accept_incoming_attach`.  In
+                // that case the link handle is not yet registered in
+                // `link_by_input_handle`, causing `UnattachedHandle`.
+                //
+                // The session-level flow-control fields have already been
+                // updated by `on_incoming_flow_inner` before the error was
+                // produced.  Buffer the link-level flow so it can be replayed
+                // when the link is eventually accepted.
+                if let Some(link_flow) = link_flow_backup {
+                    let input_handle = InputHandle::from(link_flow.handle.clone());
+                    self.pending_link_flows
+                        .entry(input_handle)
+                        .or_default()
+                        .push(link_flow);
+                } else {
+                    // Session-level flow with no link handle — nothing to buffer.
+                }
+                Ok(None)
+            }
+            Err(e) => Err(e),
+        }
     }
 
     async fn on_incoming_transfer(
@@ -469,7 +532,16 @@ impl endpoint::Session for ListenerSession {
         transfer: Transfer,
         payload: Payload,
     ) -> Result<Option<Disposition>, Self::Error> {
-        self.session.on_incoming_transfer(transfer, payload).await
+        match self.session.on_incoming_transfer(transfer, payload).await {
+            Ok(result) => Ok(result),
+            Err(SessionInnerError::UnattachedHandle) => {
+                // Same pipelining issue as on_incoming_flow: the remote peer
+                // may send a Transfer before the link has been accepted.
+                // Silently drop the transfer rather than killing the session.
+                Ok(None)
+            }
+            Err(e) => Err(e),
+        }
     }
 
     fn on_incoming_disposition(
