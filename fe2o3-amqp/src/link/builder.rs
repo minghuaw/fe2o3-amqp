@@ -2,7 +2,7 @@
 
 use std::{
     marker::PhantomData,
-    sync::{atomic::AtomicU32, Arc},
+    sync::Arc,
 };
 
 use fe2o3_amqp_types::{
@@ -678,7 +678,7 @@ where
             link,
             buffer_size,
             credit_mode,
-            processed: AtomicU32::new(0),
+            processed: std::sync::Arc::new(std::sync::atomic::AtomicU32::new(0)),
             auto_accept,
             session: session.control.clone(),
             outgoing,

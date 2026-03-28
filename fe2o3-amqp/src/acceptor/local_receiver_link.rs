@@ -44,7 +44,7 @@ where
     pub target_capabilities: Option<Vec<C>>,
 
     /// Whether the receiver will automatically accept all incoming deliveries
-    /// 
+    ///
     /// # Default
     ///
     /// `false`
@@ -249,7 +249,7 @@ where
             link,
             buffer_size: shared.buffer_size,
             credit_mode: self.credit_mode.clone(),
-            processed: AtomicU32::new(0),
+            processed: std::sync::Arc::new(std::sync::atomic::AtomicU32::new(0)),
             auto_accept: self.auto_accept,
             session: control.clone(),
             outgoing,
