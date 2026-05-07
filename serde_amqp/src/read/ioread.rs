@@ -10,6 +10,7 @@ pub struct IoReader<R> {
     // an io reader
     reader: R,
     buf: Vec<u8>,
+    consumed: usize,
 }
 
 impl<R: io::Read> IoReader<R> {
@@ -18,6 +19,7 @@ impl<R: io::Read> IoReader<R> {
         Self {
             reader,
             buf: Vec::new(),
+            consumed: 0,
         }
     }
 
@@ -61,6 +63,10 @@ impl<'de, R: io::Read + 'de> Read<'de> for IoReader<R> {
         }
     }
 
+    fn bytes_consumed(&self) -> usize {
+        self.consumed
+    }
+
     fn peek_bytes(&mut self, n: usize) -> Result<Option<&[u8]>, io::Error> {
         let l = self.buf.len();
         if l < n {
@@ -73,10 +79,14 @@ impl<'de, R: io::Read + 'de> Read<'de> for IoReader<R> {
 
     fn next(&mut self) -> Result<Option<u8>, io::Error> {
         match self.pop_first() {
-            Some(b) => Ok(Some(b)),
+            Some(b) => {
+                self.consumed += 1;
+                Ok(Some(b))
+            }
             None => {
                 let mut buf = [0u8; 1];
                 self.reader.read_exact(&mut buf)?;
+                self.consumed += 1;
                 Ok(Some(buf[0]))
             }
         }
@@ -91,10 +101,14 @@ impl<'de, R: io::Read + 'de> Read<'de> for IoReader<R> {
             let result = self.reader.read_exact(&mut buf[l..]);
             // drain the buffer even if the read fails
             self.buf.drain(..l);
+            if result.is_ok() {
+                self.consumed += n;
+            }
             result
         } else {
             buf.copy_from_slice(&self.buf[..n]);
             self.buf.drain(..n);
+            self.consumed += n;
             Ok(())
         }
     }
@@ -106,6 +120,7 @@ impl<'de, R: io::Read + 'de> Read<'de> for IoReader<R> {
         self.fill_buffer(len)?;
         let result = visitor.visit_bytes(&self.buf[..len]);
         self.buf.drain(..len);
+        self.consumed += len;
         result
     }
 
@@ -125,6 +140,7 @@ impl<'de, R: io::Read + 'de> Read<'de> for IoReader<R> {
         let s = std::str::from_utf8(&self.buf[..len])?;
         let result = visitor.visit_str(s);
         self.buf.drain(..len);
+        self.consumed += len;
         result
     }
 }
