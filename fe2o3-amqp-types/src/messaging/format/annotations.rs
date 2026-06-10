@@ -10,10 +10,10 @@ use serde::{
     Serialize,
 };
 use serde_amqp::{
+    __constants::VALUE,
     format_code::EncodingCodes,
     primitives::{OrderedMap, Symbol, SymbolRef, Ulong},
     Value,
-    __constants::VALUE,
 };
 
 /// 3.2.10 Annotations
@@ -256,15 +256,15 @@ impl<'a> Borrow<dyn AnnotationKey + 'a> for OwnedKey {
     }
 }
 
-impl PartialEq for (dyn AnnotationKey + '_) {
+impl PartialEq for dyn AnnotationKey + '_ {
     fn eq(&self, other: &Self) -> bool {
         self.key().eq(&other.key())
     }
 }
 
-impl Eq for (dyn AnnotationKey + '_) {}
+impl Eq for dyn AnnotationKey + '_ {}
 
-impl PartialOrd for (dyn AnnotationKey + '_) {
+impl PartialOrd for dyn AnnotationKey + '_ {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
         // self.key().partial_cmp(&other.key())
 
@@ -277,13 +277,13 @@ impl PartialOrd for (dyn AnnotationKey + '_) {
     }
 }
 
-impl Ord for (dyn AnnotationKey + '_) {
+impl Ord for dyn AnnotationKey + '_ {
     fn cmp(&self, other: &Self) -> std::cmp::Ordering {
         self.key().cmp(&other.key())
     }
 }
 
-impl Hash for (dyn AnnotationKey + '_) {
+impl Hash for dyn AnnotationKey + '_ {
     fn hash<H: Hasher>(&self, state: &mut H) {
         self.key().hash(state)
     }
