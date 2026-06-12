@@ -1,5 +1,11 @@
 # Change Log
 
+## 0.15.0
+
+1. Bumped version to "0.15.0" to track `fe2o3-amqp` 0.15.0, which drops the
+   forced `ring` crypto provider for `rustls` (issue
+   [#333](https://github.com/minghuaw/fe2o3-amqp/issues/333)).
+
 ## 0.14.0
 
 1. Bumped version to "0.14.0" to match other `fe2o3-amqp` crates
