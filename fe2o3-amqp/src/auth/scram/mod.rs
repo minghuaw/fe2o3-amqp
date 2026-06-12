@@ -7,7 +7,7 @@ use hmac::{
     digest::{Digest, FixedOutput, InvalidLength, KeyInit},
     Hmac, Mac,
 };
-use rand::Rng;
+use rand::RngExt;
 use sha1::Sha1;
 use sha2::{Sha256, Sha512};
 

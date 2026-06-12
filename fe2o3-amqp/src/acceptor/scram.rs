@@ -4,7 +4,7 @@ use fe2o3_amqp_types::{
     primitives::{Array, Binary, Symbol},
     sasl::{SaslChallenge, SaslCode, SaslOutcome},
 };
-use rand::Rng;
+use rand::RngExt;
 
 use crate::auth::{
     error::ServerScramErrorKind,

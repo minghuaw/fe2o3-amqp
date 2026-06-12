@@ -8,6 +8,13 @@
    [#333](https://github.com/minghuaw/fe2o3-amqp/issues/333)). `wasm32` continues to use
    `ring`, since `aws-lc-rs` does not support that target.
 2. Raised the MSRV to `1.85`, the minimum required by `getrandom` 0.4 on `wasm32`.
+3. Fixed the `wasm32` build of the `scram` feature. `scram` pulled a second `getrandom`
+   major (0.3, via `rand` 0.9 -> `rand_core` 0.9) without its `wasm_js` feature enabled, so
+   the `wasm32` check failed to compile (issue
+   [#337](https://github.com/minghuaw/fe2o3-amqp/issues/337)). Bumped `rand` to 0.10 (and
+   the `rand_distr` dev-dependency to 0.6), which use `getrandom` 0.4, the same major this
+   crate already depends on. The duplicate `getrandom` major is gone, so the `wasm_js`
+   feature now applies to the single shared copy.
 
 ## 0.14.0
 
