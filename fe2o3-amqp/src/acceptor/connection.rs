@@ -350,7 +350,7 @@ macro_rules! connect_tls {
             stream.write_all(&buf).await?;
 
             let tls_stream = self.tls_acceptor.accept(stream).await.map_err(|e| {
-                OpenError::Io(io::Error::new(io::ErrorKind::Other, format!("{:?}", e)))
+                OpenError::Io(io::Error::other(format!("{:?}", e)))
             })?;
 
             self.$next_proto_header_handler(tls_stream).await

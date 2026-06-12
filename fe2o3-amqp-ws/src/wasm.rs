@@ -59,8 +59,7 @@ impl WasmWebSocketStream {
     pub async fn connect(addr: impl AsRef<str>) -> Result<Self, Error> {
         let ws = WebSocket::new_with_str(addr.as_ref(), super::SEC_WEBSOCKET_PROTOCOL_AMQP)
             .map_err(|_| {
-                Error::Io(io::Error::new(
-                    io::ErrorKind::Other,
+                Error::Io(io::Error::other(
                     "Failed to create WebSocket with web-sys",
                 ))
             })?;
@@ -81,7 +80,7 @@ impl WasmWebSocketStream {
 
         let result = tokio::select! {
             _ = open_rx => Ok(()),
-            event = err_rx => Err(Error::Io(io::Error::new(io::ErrorKind::Other, format!("Failed to connect to WebSocket: {:?}", event)))),
+            event = err_rx => Err(Error::Io(io::Error::other(format!("Failed to connect to WebSocket: {:?}", event)))),
         };
         ws.set_onopen(None);
         ws.set_onerror(None);
@@ -97,10 +96,10 @@ impl WasmWebSocketStream {
 
         let tx_clone = tx.clone();
         let on_error_callback = Closure::wrap(Box::new(move |event: ErrorEvent| {
-            let _ = tx_clone.send(Err(tungstenite::Error::Io(io::Error::new(
-                io::ErrorKind::Other,
-                format!("WebSocket error: {:?}", event),
-            ))));
+            let _ = tx_clone.send(Err(tungstenite::Error::Io(io::Error::other(format!(
+                "WebSocket error: {:?}",
+                event
+            )))));
         }) as Box<dyn FnMut(ErrorEvent)>);
         ws.set_onerror(Some(on_error_callback.as_ref().unchecked_ref()));
 
@@ -196,8 +195,7 @@ impl Sink<WsMessage> for WasmWebSocketStream {
                 },
                 tungstenite::Message::Ping(_)
                 | tungstenite::Message::Pong(_)
-                | tungstenite::Message::Frame(_) => Err(tungstenite::Error::Io(io::Error::new(
-                    io::ErrorKind::Other,
+                | tungstenite::Message::Frame(_) => Err(tungstenite::Error::Io(io::Error::other(
                     "Sending Ping, Pong and Frame is not supported",
                 ))),
             },

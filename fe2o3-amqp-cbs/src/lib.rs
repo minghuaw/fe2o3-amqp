@@ -23,7 +23,7 @@ pub trait CbsTokenProvider {
         container_id: impl AsRef<str>,
         resource_id: impl AsRef<str>,
         claims: impl IntoIterator<Item = impl AsRef<str>>,
-    ) -> Result<CbsToken, Self::Error>;
+    ) -> Result<CbsToken<'_>, Self::Error>;
 }
 
 /// An async version of `CbsTokenProvider`

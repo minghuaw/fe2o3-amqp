@@ -806,7 +806,7 @@ impl Builder<'_, mode::ConnectorWithId, ()> {
         ) -> Result<ConnectionHandle<()>, OpenError>,
     {
         let connector = libnative_tls::TlsConnector::new()
-            .map_err(|e| OpenError::Io(io::Error::new(io::ErrorKind::Other, format!("{:?}", e))))?;
+            .map_err(|e| OpenError::Io(io::Error::other(format!("{:?}", e))))?;
         let connector = tokio_native_tls::TlsConnector::from(connector);
         let tls_stream =
             Transport::connect_tls_with_native_tls(stream, domain, &connector, self.alt_tls_estab)

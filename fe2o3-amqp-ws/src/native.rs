@@ -58,6 +58,12 @@ where
 {
     type Item = Result<WsMessage, tungstenite::Error>;
 
+    // `tungstenite::Error` is the public error type of this WS API; boxing it to
+    // satisfy clippy's size heuristic would change the trait's associated type.
+    #[allow(
+        clippy::result_large_err,
+        reason = "boxing would change the public trait associated type"
+    )]
     fn poll_next(
         self: std::pin::Pin<&mut Self>,
         cx: &mut std::task::Context<'_>,
@@ -286,6 +292,11 @@ impl WebSocketStream<TokioWebSocketStream<MaybeTlsStream<TcpStream>>> {
     }
 }
 
+// Mirrors `tungstenite`'s own fallible request conversion; the large error is inherent.
+#[allow(
+    clippy::result_large_err,
+    reason = "large error is inherent to tungstenite request conversion"
+)]
 fn map_amqp_websocket_request(req: impl IntoClientRequest) -> Result<Request, tungstenite::Error> {
     let mut request = req.into_client_request()?;
 

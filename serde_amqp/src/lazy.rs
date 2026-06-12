@@ -4,9 +4,9 @@ use bytes::Bytes;
 use serde::{de::Visitor, Deserialize, Serialize};
 
 use crate::{
+    __constants::LAZY_VALUE,
     read::{read_described_bytes, read_primitive_bytes_or_else, Read},
     Error,
-    __constants::LAZY_VALUE,
 };
 
 /// Serialize a value into a [`LazyValue`].

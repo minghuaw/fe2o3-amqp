@@ -1,5 +1,14 @@
 # Change Log
 
+## 0.15.0
+
+1. The `rustls` feature no longer forces the `ring` crypto provider. On non-`wasm32`
+   targets it now uses `aws-lc-rs` (rustls' own default provider), so downstreams that
+   want to avoid `ring` can do so (issue
+   [#333](https://github.com/minghuaw/fe2o3-amqp/issues/333)). `wasm32` continues to use
+   `ring`, since `aws-lc-rs` does not support that target.
+2. Raised the MSRV to `1.85`, the minimum required by `getrandom` 0.4 on `wasm32`.
+
 ## 0.14.0
 
 1. Bumped version to "0.14.0" to match other `fe2o3-amqp` crates

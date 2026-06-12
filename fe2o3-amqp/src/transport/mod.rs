@@ -155,7 +155,7 @@ where
                 }
 
                 connector.connect(domain, stream).await.map_err(|e| {
-                    NegotiationError::Io(io::Error::new(io::ErrorKind::Other, format!("{:?}", e)))
+                    NegotiationError::Io(io::Error::other(format!("{:?}", e)))
                 })
             }
         }
@@ -387,10 +387,10 @@ where
     let mut buf = [0u8; 8];
     stream.read_exact(&mut buf).await?;
     std::convert::TryFrom::try_from(buf).map_err(|buf| {
-        NegotiationError::Io(std::io::Error::new(
-            std::io::ErrorKind::Other,
-            format!("Invalid protocol header {:?}", buf),
-        ))
+        NegotiationError::Io(std::io::Error::other(format!(
+            "Invalid protocol header {:?}",
+            buf
+        )))
     })
 }
 

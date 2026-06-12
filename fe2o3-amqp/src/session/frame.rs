@@ -4,6 +4,12 @@ use crate::Payload;
 
 pub(crate) type SessionIncomingItem = SessionFrame;
 
+// `SingleFrame` is the hot path and is moved through session match arms; boxing it
+// to even out variant sizes would pessimize the common case for no real benefit.
+#[allow(
+    clippy::large_enum_variant,
+    reason = "boxing the hot SingleFrame path pessimizes the common case"
+)]
 pub(crate) enum SessionOutgoingItem {
     SingleFrame(SessionFrame),
     MultipleFrames(Vec<SessionFrame>),

@@ -27,8 +27,7 @@ pub enum IsArrayElement {
     OtherElement,
 }
 
-#[derive(Debug, Clone)]
-#[derive(Default)]
+#[derive(Debug, Clone, Default)]
 pub enum EnumType {
     #[default]
     None,
@@ -37,7 +36,6 @@ pub enum EnumType {
     Value,
 }
 
-
 /// Described type has the descriptor as the first field
 #[derive(Debug)]
 pub(crate) enum FieldRole {
@@ -45,9 +43,8 @@ pub(crate) enum FieldRole {
     Fields,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 #[repr(u8)]
-#[derive(Default)]
 pub enum StructEncoding {
     #[default]
     None,
@@ -55,7 +52,6 @@ pub enum StructEncoding {
     DescribedMap,
     DescribedBasic,
 }
-
 
 #[derive(Debug, PartialEq, Eq)]
 pub(crate) enum PeekTypeCode {
