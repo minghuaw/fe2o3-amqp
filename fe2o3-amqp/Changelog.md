@@ -1,6 +1,6 @@
 # Change Log
 
-## Unreleased
+## 0.15.0
 
 1. The `rustls` feature no longer forces the `ring` crypto provider. On non-`wasm32`
    targets it now uses `aws-lc-rs` (rustls' own default provider), so downstreams that
