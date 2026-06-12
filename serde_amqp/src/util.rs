@@ -28,18 +28,15 @@ pub enum IsArrayElement {
 }
 
 #[derive(Debug, Clone)]
+#[derive(Default)]
 pub enum EnumType {
+    #[default]
     None,
     Array,
     Descriptor,
     Value,
 }
 
-impl Default for EnumType {
-    fn default() -> Self {
-        Self::None
-    }
-}
 
 /// Described type has the descriptor as the first field
 #[derive(Debug)]
@@ -50,18 +47,15 @@ pub(crate) enum FieldRole {
 
 #[derive(Debug, Clone)]
 #[repr(u8)]
+#[derive(Default)]
 pub enum StructEncoding {
+    #[default]
     None,
     DescribedList,
     DescribedMap,
     DescribedBasic,
 }
 
-impl Default for StructEncoding {
-    fn default() -> Self {
-        Self::None
-    }
-}
 
 #[derive(Debug, PartialEq, Eq)]
 pub(crate) enum PeekTypeCode {
