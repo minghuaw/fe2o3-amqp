@@ -22,6 +22,18 @@ use crate::{
     util::{EnumType, NonNativeType, PeekTypeCode, SequenceType, StructEncoding},
 };
 
+/// Maximum number of elements an array, list, or map declared on the wire is
+/// allowed to claim before the deserializer rejects the frame.
+///
+/// AMQP `array8`/`array32`, `list8`/`list32`, and `map8`/`map32` all carry an
+/// element/entry count read directly from the network. Without an upper bound,
+/// a single 39-byte frame can declare `2^31` elements with a zero-width
+/// element format code (e.g. `null`/`boolean-true`/`uint0`) and force the
+/// decoder to iterate or allocate `2^31` times, which is an unauthenticated
+/// DoS. The cap is well above any legitimate AMQP traffic seen in practice —
+/// real-world OPEN/BEGIN/ATTACH frames carry single-digit element counts.
+pub const MAX_ARRAY_COUNT: usize = 65_536;
+
 /// Deserialize an instance of type T from an IO stream
 pub fn from_reader<T: de::DeserializeOwned>(reader: impl std::io::Read) -> Result<T, Error> {
     let reader = IoReader::new(reader);
@@ -870,6 +882,16 @@ where
                     .ok_or_else(|| Error::unexpected_eof("Expecting count"))?
                     as usize;
 
+                // Reject counts that exceed the hard cap or the encoded body
+                // length. Without these checks an attacker could supply a
+                // count larger than the bytes actually present (in particular
+                // with zero-width element format codes such as null/true/
+                // false/uint0/ulong0) and force the visitor to iterate or
+                // allocate far beyond the frame size.
+                if count > MAX_ARRAY_COUNT || count > len {
+                    return Err(Error::InvalidValue);
+                }
+
                 // If count is zero, jump to visitor
                 match count {
                     0 => visitor.visit_seq(ArrayAccess::new(self, len, count)),
@@ -894,6 +916,12 @@ where
 
                 let count_bytes = self.reader.read_const_bytes()?;
                 let count = u32::from_be_bytes(count_bytes) as usize;
+
+                // See `Array8` arm above: cap the count so that a malformed
+                // frame cannot trick the visitor into iterating 2^31 times.
+                if count > MAX_ARRAY_COUNT || count > len {
+                    return Err(Error::InvalidValue);
+                }
 
                 // If count is zero, jump to visitor
                 match count {
@@ -941,6 +969,14 @@ where
                 let count_bytes = self.reader.read_const_bytes()?;
                 let len = u32::from_be_bytes(len_bytes) as usize;
                 let count = u32::from_be_bytes(count_bytes) as usize;
+
+                // Defense in depth: each list element carries its own format
+                // code (>=1 byte), so a valid `list32` is implicitly bounded
+                // by frame size. We still cap `count` to keep allocation and
+                // iteration costs in check for unauthenticated frames.
+                if count > MAX_ARRAY_COUNT {
+                    return Err(Error::InvalidValue);
+                }
 
                 // Account for offset
                 let len = len - OFFSET_LIST32;
@@ -1041,6 +1077,13 @@ where
 
                 let size = u32::from_be_bytes(size_bytes) as usize;
                 let count = u32::from_be_bytes(count_bytes) as usize;
+
+                // Cap the count for the same reasons as in the array path:
+                // a `map32` whose count is larger than any plausible
+                // legitimate frame is treated as malformed.
+                if count > MAX_ARRAY_COUNT {
+                    return Err(Error::InvalidValue);
+                }
 
                 // Account for offset
                 let size = size - OFFSET_MAP32;
@@ -1293,20 +1336,38 @@ where
     }
 }
 
-/// Accessor for array type
+/// Accessor for array type.
+///
+/// Holds the residual budget for an `array8`/`array32` body so iteration can
+/// be bounded both by element count and by bytes consumed. The pre-loop
+/// `count <= len` and `count <= MAX_ARRAY_COUNT` checks in
+/// [`Deserializer::deserialize_seq`] are the primary DoS defense; the
+/// per-element overrun check in [`Self::next_element_seed`] guards against
+/// drift between the encoded body length and what the element visitor
+/// actually reads.
 #[derive(Debug)]
 pub struct ArrayAccess<'a, R> {
     de: &'a mut Deserializer<R>,
-    _size: usize,
+    /// Number of bytes the array body is allowed to span past `start_pos`.
+    /// For `array8`/`array32` bodies this is the size field with the
+    /// `OFFSET_ARRAY*` (count + element format code) header subtracted.
+    size: usize,
+    /// Remaining elements to yield from `next_element_seed`.
     count: usize,
+    /// Snapshot of `Read::bytes_consumed` taken at construction time, i.e.
+    /// the offset of the first element body. Used as the anchor for the
+    /// `consumed > size` overrun check.
+    start_pos: usize,
 }
 
-impl<'a, R> ArrayAccess<'a, R> {
+impl<'a, 'de, R: Read<'de>> ArrayAccess<'a, R> {
     pub(crate) fn new(de: &'a mut Deserializer<R>, size: usize, count: usize) -> Self {
+        let start_pos = de.reader.bytes_consumed();
         Self {
             de,
-            _size: size,
+            size,
             count,
+            start_pos,
         }
     }
 }
@@ -1331,7 +1392,25 @@ impl<'de, R: Read<'de>> de::SeqAccess<'de> for ArrayAccess<'_, R> {
             }
             _ => {
                 self.count -= 1;
-                seed.deserialize(self.as_mut()).map(Some)
+                let result = seed.deserialize(self.as_mut())?;
+                // Defense in depth: bound iteration by bytes consumed, not
+                // just by `count`. The pre-loop `count <= len` /
+                // `count <= MAX_ARRAY_COUNT` checks already reject the known
+                // attack shape (oversized count with zero-width element
+                // codes). This second check fires if a future zero-width
+                // element type is added, or if a visitor's element decoder
+                // ever drifts past the advertised body length. Pure
+                // zero-width iteration consumes 0 bytes/element so this
+                // check stays quiet for the legitimate case.
+                let consumed = self
+                    .de
+                    .reader
+                    .bytes_consumed()
+                    .saturating_sub(self.start_pos);
+                if consumed > self.size {
+                    return Err(Error::InvalidValue);
+                }
+                Ok(Some(result))
             }
         }
     }
@@ -2622,5 +2701,84 @@ mod tests {
         };
         let buf = to_vec(&expected).unwrap();
         assert_eq_from_reader_vs_expected(&buf, expected);
+    }
+
+    // Regression tests for the unauthenticated DoS where an `array8` /
+    // `array32` declares a count that vastly exceeds the encoded body
+    // length. With a zero-width element format code (e.g. `null`/
+    // `boolean-true`) the loop body consumes no bytes per iteration, so
+    // without an upper bound a single 39-byte frame can drive the decoder
+    // to iterate or allocate 2^31 times.
+
+    #[test]
+    fn array32_with_oversized_count_is_rejected() {
+        use crate::error::Error;
+
+        // The exact malicious tail from the original report: an `array32`
+        // claiming 0x7FFFFFFF elements with a single-byte element format
+        // code (Sym8) and a body size of only 9 bytes.
+        let buf: &[u8] = &[0xf0, 0x00, 0x00, 0x00, 0x09, 0x7f, 0xff, 0xff, 0xff, 0xa3];
+
+        let start = std::time::Instant::now();
+        let result: Result<Vec<i32>, _> = from_slice(buf);
+        let elapsed = start.elapsed();
+
+        assert!(matches!(result, Err(Error::InvalidValue)));
+        // A regression here would loop ~2^31 times; a sound implementation
+        // returns immediately. Allow generous slack for slow CI machines.
+        assert!(
+            elapsed < std::time::Duration::from_secs(1),
+            "rejection took too long: {:?}",
+            elapsed
+        );
+    }
+
+    #[test]
+    fn array32_count_exceeding_len_is_rejected() {
+        use crate::error::Error;
+
+        // `array32` with a small count (10) of `null` (0x40) elements,
+        // but a body size that only covers the count + format code
+        // header (5 bytes). Without a `count <= len` check, each null
+        // iteration would consume zero bytes and the loop would still
+        // run 10 times against a 5-byte body — small here, but the same
+        // shape scales up to the DoS pattern.
+        let buf: &[u8] = &[0xf0, 0x00, 0x00, 0x00, 0x05, 0x00, 0x00, 0x00, 0x0a, 0x40];
+
+        let result: Result<Vec<()>, _> = from_slice(buf);
+        assert!(matches!(result, Err(Error::InvalidValue)));
+    }
+
+    #[test]
+    fn array32_at_max_count_succeeds() {
+        use super::MAX_ARRAY_COUNT;
+
+        // Round-trip an array whose count sits exactly on the cap.
+        // Each element is a `ubyte` (1 byte body), so the total
+        // body size is 4 (count) + 1 (elem format code) + COUNT.
+        const COUNT: usize = MAX_ARRAY_COUNT;
+        let body_size = 4 + 1 + COUNT;
+        let mut buf = Vec::with_capacity(5 + body_size);
+        buf.push(0xf0); // Array32
+        buf.extend_from_slice(&(body_size as u32).to_be_bytes());
+        buf.extend_from_slice(&(COUNT as u32).to_be_bytes());
+        buf.push(0x50); // Ubyte format code
+        buf.extend(std::iter::repeat_n(0u8, COUNT));
+
+        let result: Vec<u8> = from_slice(&buf).unwrap();
+        assert_eq!(result.len(), COUNT);
+    }
+
+    #[test]
+    fn array8_with_oversized_count_is_rejected() {
+        use crate::error::Error;
+
+        // `array8` declaring 10 `null` elements with a body length of
+        // only 2 bytes (count + format code, no element bodies). Same
+        // shape as the array32 case but with single-byte fields.
+        let buf: &[u8] = &[0xe0, 0x02, 0x0a, 0x40];
+
+        let result: Result<Vec<()>, _> = from_slice(buf);
+        assert!(matches!(result, Err(Error::InvalidValue)));
     }
 }

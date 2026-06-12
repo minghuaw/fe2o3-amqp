@@ -19,6 +19,18 @@ pub trait Read<'de>: private::Sealed {
     /// Peek the next byte without consuming
     fn peek(&mut self) -> Option<u8>;
 
+    /// Total number of bytes that have been *consumed* (returned to a caller
+    /// via `next` / `read_exact` / `forward_read_*`) since the reader was
+    /// created. Bytes that are only buffered by `peek` / `peek_bytes` do not
+    /// count until they're actually read out.
+    ///
+    /// Monotonically non-decreasing within a single reader. The deserializer
+    /// uses snapshots of this value to bound iteration over compound types
+    /// (see [`crate::de::ArrayAccess`]) and to detect length/count fields
+    /// whose claimed size doesn't match the bytes actually present on the
+    /// wire.
+    fn bytes_consumed(&self) -> usize;
+
     /// Read the next byte
     fn next(&mut self) -> Result<Option<u8>, io::Error>;
 

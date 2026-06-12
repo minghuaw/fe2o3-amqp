@@ -8,12 +8,16 @@ use super::{private, read_described_bytes, read_primitive_bytes_or_else, Read};
 #[derive(Debug)]
 pub struct SliceReader<'s> {
     slice: &'s [u8],
+    initial_len: usize,
 }
 
 impl<'s> SliceReader<'s> {
     /// Creates a new slice reader
     pub fn new(slice: &'s [u8]) -> Self {
-        Self { slice }
+        Self {
+            slice,
+            initial_len: slice.len(),
+        }
     }
 
     /// Return a slice of the given length. If the internal slice doesn't have
@@ -33,6 +37,10 @@ impl private::Sealed for SliceReader<'_> {}
 impl<'s> Read<'s> for SliceReader<'s> {
     fn peek(&mut self) -> Option<u8> {
         self.slice.first().copied()
+    }
+
+    fn bytes_consumed(&self) -> usize {
+        self.initial_len - self.slice.len()
     }
 
     fn peek_bytes(&mut self, n: usize) -> Result<Option<&[u8]>, io::Error> {
