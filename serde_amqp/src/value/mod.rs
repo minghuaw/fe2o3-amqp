@@ -17,6 +17,7 @@ use crate::{
 };
 
 pub(crate) mod de;
+mod display;
 pub(crate) mod ser;
 
 /// Primitive type definitions

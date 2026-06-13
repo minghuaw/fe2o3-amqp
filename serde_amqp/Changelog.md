@@ -1,5 +1,9 @@
 # Change Log
 
+## Unreleased
+
+1. Implemented `Display` for `Value` (issue #82)
+
 ## 0.14.1
 
 1. Bound array element count during deserialization to prevent excessive allocation (https://github.com/minghuaw/fe2o3-amqp/pull/334)
