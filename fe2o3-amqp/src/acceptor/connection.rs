@@ -19,7 +19,8 @@ use tokio_util::codec::{FramedRead, FramedWrite};
 use crate::{
     acceptor::sasl_acceptor::SaslServerFrame,
     connection::{
-        self, engine::ConnectionEngine, ConnectionHandle, OpenError, DEFAULT_CONTROL_CHAN_BUF,
+        self, engine::ConnectionEngine, ConnectionHandle, OpenError,
+        DEFAULT_CONTROL_CHAN_BUF, DEFAULT_OUTGOING_BUFFER_SIZE,
     },
     endpoint::{self, IncomingChannel, OutgoingChannel},
     frames::{
@@ -520,20 +521,37 @@ impl endpoint::Connection for ListenerConnection {
                 relay.send(sframe).await?;
             }
             None => {
-                // If a session is locally initiated, the remote-channel MUST NOT be set. When an endpoint responds
-                // to a remotely initiated session, the remote-channel MUST be set to the channel on which the
-                // remote session sent the begin.
+                // Remotely initiated session.
+                //
+                // Eagerly allocate the session relay and register it for the
+                // incoming channel so that pipelined Attach frames arriving
+                // before the user code accepts the session are buffered
+                // instead of triggering a `NotFound` connection error.
+                let (incoming_tx, incoming_rx) =
+                    mpsc::channel(DEFAULT_OUTGOING_BUFFER_SIZE);
+                let outgoing_channel = self
+                    .connection
+                    .allocate_session(incoming_tx)
+                    .map_err(|_| Self::Error::NotImplemented(None))?;
 
-                // Upon receiving the
-                // begin the partner will check the remote-channel field and find it empty. This indicates that the begin is referring to
-                // remotely initiated session. The partner will therefore allocate an unused outgoing channel for the remotely initiated
-                // session and indicate this by sending its own begin setting the remote-channel field to the incoming channel of the
-                // remotely initiated session
+                // The relay was just inserted into session_by_outgoing_channel
+                // by allocate_session. Clone it into session_by_incoming_channel
+                // so that forward_to_session can route pipelined frames.
+                let relay = self
+                    .connection
+                    .session_by_outgoing_channel
+                    .get(outgoing_channel.0 as usize)
+                    .expect("relay was just allocated")
+                    .clone();
+                self.connection
+                    .session_by_incoming_channel
+                    .insert(channel, relay);
 
-                // Here we will send the begin frame out to get processed
                 let incoming_session = IncomingSession {
                     channel: channel.0,
                     begin,
+                    incoming_rx: Some(incoming_rx),
+                    outgoing_channel: Some(outgoing_channel),
                 };
                 self.session_listener
                     .send(incoming_session)

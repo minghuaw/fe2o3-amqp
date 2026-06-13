@@ -5,7 +5,7 @@ use tokio::sync::Notify;
 #[derive(Debug)]
 pub struct Producer<State> {
     pub notifier: Arc<Notify>,
-    state: State,
+    pub(crate) state: State,
 }
 
 impl<State> Producer<State> {
