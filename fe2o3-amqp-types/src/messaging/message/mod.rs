@@ -617,8 +617,8 @@ mod tests {
 
     use crate::messaging::{
         message::{
-            __private::{Deserializable, Serializable},
             Body,
+            __private::{Deserializable, Serializable},
         },
         AmqpSequence, AmqpValue, ApplicationProperties, Batch, Data, DeliveryAnnotations, Footer,
         Header, MessageAnnotations, Properties,

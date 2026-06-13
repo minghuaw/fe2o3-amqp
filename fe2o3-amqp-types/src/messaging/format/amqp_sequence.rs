@@ -4,8 +4,8 @@ use serde::{de, ser, Serialize};
 use serde_amqp::{DeserializeComposite, SerializeComposite};
 
 use crate::messaging::{
-    __private::BodySection, Batch, DeserializableBody, FromBody, FromEmptyBody, IntoBody,
-    SerializableBody, TransposeOption,
+    Batch, DeserializableBody, FromBody, FromEmptyBody, IntoBody, SerializableBody,
+    TransposeOption, __private::BodySection,
 };
 
 /// 3.2.7 AMQP Sequence

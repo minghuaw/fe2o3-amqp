@@ -925,7 +925,7 @@ where
 mod tests {
     use fe2o3_amqp_types::{
         messaging::{
-            message::{__private::Serializable, Body},
+            message::{Body, __private::Serializable},
             AmqpValue, DeliveryAnnotations, Header, Message, MessageAnnotations,
         },
         primitives::{OrderedMap, Value},

@@ -3,8 +3,8 @@ use std::{borrow::Cow, fmt::Display};
 use serde_amqp::{primitives::Binary, DeserializeComposite, SerializeComposite, Value};
 
 use crate::messaging::{
-    __private::BodySection, Batch, DeserializableBody, FromBody, FromEmptyBody, IntoBody,
-    SerializableBody, TransposeOption,
+    Batch, DeserializableBody, FromBody, FromEmptyBody, IntoBody, SerializableBody,
+    TransposeOption, __private::BodySection,
 };
 
 /// 3.2.6 Data
