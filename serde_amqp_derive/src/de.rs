@@ -465,11 +465,20 @@ fn impl_visit_seq_for_struct(
 ) -> proc_macro2::TokenStream {
     let mut field_impls: Vec<proc_macro2::TokenStream> = vec![];
     for ((id, ty), attr) in field_idents.iter().zip(field_types.iter()).zip(field_attrs) {
-        let token = match attr.default {
-            true => {
+        let token = match (attr.default, attr.multiple) {
+            (true, _) => {
                 quote! { unwrap_or_default!(#id, __seq.next_element::<Option<#ty>>()?.unwrap_or_default(), #ty) }
             }
-            false => {
+            (false, true) => {
+                // A `multiple` field is an `Option<Array<T>>`. Per the AMQP spec a
+                // zero-length array is semantically identical to null, so normalize
+                // an empty array to `None`.
+                quote! {
+                    unwrap_or_none!(#id, __seq.next_element()?, #ty);
+                    let #id = #id.filter(|__arr| !__arr.is_empty());
+                }
+            }
+            (false, false) => {
                 quote! { unwrap_or_none!(#id, __seq.next_element()?, #ty) }
             }
         };
@@ -506,11 +515,19 @@ fn impl_visit_map(
 ) -> proc_macro2::TokenStream {
     let mut field_impls: Vec<proc_macro2::TokenStream> = vec![];
     for ((id, ty), attr) in field_idents.iter().zip(field_types.iter()).zip(field_attrs) {
-        let token = match attr.default {
-            true => {
+        let token = match (attr.default, attr.multiple) {
+            (true, _) => {
                 quote! { unwrap_or_default!(#id, #id, #ty) }
             }
-            false => {
+            (false, true) => {
+                // See the matching note in `impl_visit_seq_for_struct`: a
+                // zero-length `multiple` array is normalized to `None`.
+                quote! {
+                    unwrap_or_none!(#id, #id, #ty);
+                    let #id = #id.filter(|__arr| !__arr.is_empty());
+                }
+            }
+            (false, false) => {
                 quote! { unwrap_or_none!(#id, #id, #ty); }
             }
         };
