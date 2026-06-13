@@ -292,4 +292,15 @@ mod tests {
         let array: Array<String> = from_slice(&buf).unwrap();
         assert_eq!(array, expected);
     }
+
+    #[test]
+    fn test_len_and_is_empty() {
+        let empty: Array<i32> = Array(vec![]);
+        assert_eq!(empty.len(), 0);
+        assert!(empty.is_empty());
+
+        let populated = Array(vec![1i32, 2, 3]);
+        assert_eq!(populated.len(), 3);
+        assert!(!populated.is_empty());
+    }
 }
