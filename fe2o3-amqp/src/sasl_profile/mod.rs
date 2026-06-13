@@ -180,9 +180,12 @@ impl SaslProfile {
                 }
             }
             Frame::Challenge(challenge) => match self {
-                SaslProfile::Anonymous | SaslProfile::Plain { .. } | SaslProfile::External => Err(Error::NotImplemented(
-                    Some("SASL Challenge is not implemented for ANONYMOUS, PLAIN, or EXTERNAL.".to_string()),
-                )),
+                SaslProfile::Anonymous | SaslProfile::Plain { .. } | SaslProfile::External => {
+                    Err(Error::NotImplemented(Some(
+                        "SASL Challenge is not implemented for ANONYMOUS, PLAIN, or EXTERNAL."
+                            .to_string(),
+                    )))
+                }
                 #[cfg(feature = "scram")]
                 SaslProfile::ScramSha1(SaslScramSha1 { client })
                 | SaslProfile::ScramSha256(SaslScramSha256 { client })

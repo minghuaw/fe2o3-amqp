@@ -177,8 +177,8 @@ receiving message in a browser tab can be found
 |`fe2o3-amqp-management`| Experimental implementation of AMQP1.0 management |
 |`fe2o3-amqp-cbs`| Experimental implementation of AMQP1.0 CBS |
 
-## Minimum rust version supported
+## MSRV
 
-1.75.0
+1.85.0
 
 License: MIT/Apache-2.0
