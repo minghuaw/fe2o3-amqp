@@ -1,6 +1,6 @@
 # Change Log
 
-## 0.15.0
+## 0.15.1
 
 1. The `rustls` feature no longer forces the `ring` crypto provider. On non-`wasm32`
    targets it now uses `aws-lc-rs` (rustls' own default provider), so downstreams that
@@ -15,6 +15,12 @@
    the `rand_distr` dev-dependency to 0.6), which use `getrandom` 0.4, the same major this
    crate already depends on. The duplicate `getrandom` major is gone, so the `wasm_js`
    feature now applies to the single shared copy.
+4. Add `ReceiverDisposer` for concurrent disposition of deliveries (https://github.com/minghuaw/fe2o3-amqp/pull/332)
+5. Fix acceptor not properly handling pipelined frames (https://github.com/minghuaw/fe2o3-amqp/pull/330)
+6. Add support for external sasl (https://github.com/minghuaw/fe2o3-amqp/pull/329)
+7. Update doc for `Receiver::credit_mode()` and added `Receiver::credit()` to get the current credit of the link. (https://github.com/minghuaw/fe2o3-amqp/pull/339)
+
+~~## 0.15.0~~
 
 ## 0.14.0
 
