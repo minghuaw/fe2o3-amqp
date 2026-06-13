@@ -1,5 +1,11 @@
 # Change Log
 
+## Unreleased
+
+1. Implemented `Display` for `Value` (issue #82). `Timestamp` renders as a
+   lossless ISO-8601 / RFC-3339 UTC datetime with millisecond precision.
+2. Added a borrowing `as_inner()` accessor to `Dec32`, `Dec64`, and `Dec128`
+
 ## 0.14.1
 
 1. Bound array element count during deserialization to prevent excessive allocation (https://github.com/minghuaw/fe2o3-amqp/pull/334)
