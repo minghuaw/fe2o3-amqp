@@ -59,6 +59,16 @@ impl<T> Array<T> {
     pub fn into_inner(self) -> Vec<T> {
         self.0
     }
+
+    /// Returns the number of elements in the array
+    pub fn len(&self) -> usize {
+        self.0.len()
+    }
+
+    /// Returns `true` if the array contains no elements
+    pub fn is_empty(&self) -> bool {
+        self.0.is_empty()
+    }
 }
 
 impl<T: ser::Serialize> ser::Serialize for Array<T> {
