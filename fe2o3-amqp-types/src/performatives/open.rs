@@ -37,15 +37,19 @@ pub struct Open {
     pub idle_time_out: Option<Milliseconds>,
 
     /// <field name="outgoing-locales" type="ietf-language-tag" multiple="true"/>
+    #[amqp_contract(multiple)]
     pub outgoing_locales: Option<Array<IetfLanguageTag>>,
 
     /// <field name="incoming-locales" type="ietf-language-tag" multiple="true"/>
+    #[amqp_contract(multiple)]
     pub incoming_locales: Option<Array<IetfLanguageTag>>,
 
     /// <field name="offered-capabilities" type="symbol" multiple="true"/>
+    #[amqp_contract(multiple)]
     pub offered_capabilities: Option<Array<Symbol>>,
 
     /// <field name="desired-capabilities" type="symbol" multiple="true"/>
+    #[amqp_contract(multiple)]
     pub desired_capabilities: Option<Array<Symbol>>,
 
     /// <field name="properties" type="fields"/>
@@ -113,5 +117,58 @@ impl From<Ushort> for ChannelMax {
 impl From<ChannelMax> for Ushort {
     fn from(value: ChannelMax) -> Self {
         value.0
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use serde_amqp::{
+        from_slice,
+        primitives::{Array, Symbol},
+        to_vec,
+    };
+
+    use super::Open;
+
+    fn open_with_offered(offered: Option<Array<Symbol>>) -> Open {
+        Open {
+            container_id: String::from("test"),
+            hostname: None,
+            max_frame_size: Default::default(),
+            channel_max: Default::default(),
+            idle_time_out: None,
+            outgoing_locales: None,
+            incoming_locales: None,
+            offered_capabilities: offered,
+            desired_capabilities: None,
+            properties: None,
+        }
+    }
+
+    /// Per AMQP 1.0 Part 1 (Types) section 1.4: for a field with multiplicity
+    /// `multiple`, "a null value and a zero-length array (with a correct type for
+    /// its elements) both describe an absence of a value and MUST be treated as
+    /// semantically identical." A `multiple` field encoded as a zero-length array
+    /// must therefore deserialize the same as one encoded as null, i.e. `None`.
+    #[test]
+    fn zero_length_multiple_field_decodes_as_none() {
+        let open = open_with_offered(Some(Array::from(Vec::<Symbol>::new())));
+        let buf = to_vec(&open).unwrap();
+        let decoded: Open = from_slice(&buf).unwrap();
+
+        // The empty array on the wire is an absence of a value, identical to null.
+        assert_eq!(decoded.offered_capabilities, None);
+    }
+
+    /// The normalization must only collapse the empty case; a `multiple` field
+    /// that actually carries elements has to round-trip unchanged.
+    #[test]
+    fn non_empty_multiple_field_round_trips() {
+        let offered = Array::from(vec![Symbol::from("FOO"), Symbol::from("BAR")]);
+        let open = open_with_offered(Some(offered.clone()));
+        let buf = to_vec(&open).unwrap();
+        let decoded: Open = from_slice(&buf).unwrap();
+
+        assert_eq!(decoded.offered_capabilities, Some(offered));
     }
 }

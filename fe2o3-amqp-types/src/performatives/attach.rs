@@ -104,9 +104,11 @@ pub struct Attach {
     pub max_message_size: Option<Ulong>,
 
     /// <field name="offered-capabilities" type="symbol" multiple="true"/>
+    #[amqp_contract(multiple)]
     pub offered_capabilities: Option<Array<Symbol>>,
 
     /// <field name="desired-capabilities" type="symbol" multiple="true"/>
+    #[amqp_contract(multiple)]
     pub desired_capabilities: Option<Array<Symbol>>,
 
     /// <field name="properties" type="fields"/>

@@ -65,9 +65,11 @@ pub struct Source {
     pub default_outcome: Option<Outcome>,
 
     /// <field name="outcomes" type="symbol" multiple="true"/>
+    #[amqp_contract(multiple)]
     pub outcomes: Option<Array<Symbol>>,
 
     /// <field name="capabilities" type="symbol" multiple="true"/>
+    #[amqp_contract(multiple)]
     pub capabilities: Option<Array<Symbol>>,
 }
 

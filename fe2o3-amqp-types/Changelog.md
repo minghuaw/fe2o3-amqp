@@ -1,5 +1,13 @@
 # Change Log
 
+## Unreleased
+
+1. Marked all `multiple` (`Option<Array<T>>`) fields with
+   `#[amqp_contract(multiple)]` so that a zero-length array deserializes to
+   `None`, identical to null, as required by the AMQP spec (issue
+   [#111](https://github.com/minghuaw/fe2o3-amqp/issues/111)). Affects `Open`,
+   `Begin`, `Attach`, `Source`, `Target`, and `Coordinator`.
+
 ## 0.14.0
 
 1. Added `Described` variant to `SimpleValue` (PR #312)
