@@ -2,9 +2,9 @@
 //!
 //! Unlike the derived [`Debug`], this drops the AMQP type tags and renders the
 //! payload the way a human reads it: bare numbers, quoted strings, hyphenated
-//! UUIDs, hex binary, and recursively formatted lists, maps, arrays, and
-//! described values. The output is intended for logs and diagnostics, not for
-//! round-tripping back into a `Value`.
+//! UUIDs, hex binary, ISO-8601 timestamps, and recursively formatted lists,
+//! maps, arrays, and described values. The output is intended for logs and
+//! diagnostics, not for round-tripping back into a `Value`.
 
 use std::fmt::{self, Display, Formatter, Write};
 
@@ -38,7 +38,7 @@ impl Display for Value {
             // `{:?}` renders a `char` with single quotes (e.g. `'a'`), which keeps
             // it visually distinct from a single-character `String`.
             Value::Char(v) => write!(f, "{:?}", v),
-            Value::Timestamp(v) => Display::fmt(&v.milliseconds(), f),
+            Value::Timestamp(v) => write_timestamp(f, v.milliseconds()),
             Value::Uuid(v) => write_uuid(f, v.as_inner()),
             Value::Binary(v) => write_hex_bytes(f, v),
             // `{:?}` quotes and escapes the string (e.g. `"hello"`).
@@ -103,6 +103,65 @@ fn write_uuid(f: &mut Formatter<'_>, bytes: &[u8; 16]) -> fmt::Result {
     Ok(())
 }
 
+/// Render an AMQP timestamp (`i64` milliseconds since the Unix epoch) as an
+/// ISO-8601 / RFC-3339 UTC datetime with millisecond precision, e.g.
+/// `2024-06-01T00:00:00.000Z`.
+///
+/// The rendering is lossless across the entire `i64` range and does not depend
+/// on any datetime crate: the millisecond fraction is always shown, and years
+/// outside `0000..=9999` use the ISO-8601 expanded form with an explicit sign
+/// and at least six digits (e.g. `+271821-04-20T00:00:00.000Z`).
+fn write_timestamp(f: &mut Formatter<'_>, millis: i64) -> fmt::Result {
+    const MS_PER_DAY: i64 = 86_400_000;
+
+    // Euclidean division so negative timestamps floor correctly: -1 ms is the
+    // last millisecond of 1969-12-31, not a negative time-of-day.
+    let days = millis.div_euclid(MS_PER_DAY);
+    let ms_of_day = millis.rem_euclid(MS_PER_DAY);
+
+    let hour = ms_of_day / 3_600_000;
+    let minute = (ms_of_day / 60_000) % 60;
+    let second = (ms_of_day / 1_000) % 60;
+    let milli = ms_of_day % 1_000;
+
+    let (year, month, day) = civil_from_days(days);
+
+    if (0..=9999).contains(&year) {
+        write!(f, "{:04}", year)?;
+    } else {
+        // ISO-8601 expanded year: explicit sign, zero-padded to six digits.
+        write!(f, "{:+07}", year)?;
+    }
+    write!(
+        f,
+        "-{:02}-{:02}T{:02}:{:02}:{:02}.{:03}Z",
+        month, day, hour, minute, second, milli
+    )
+}
+
+/// Convert a count of days since the Unix epoch (1970-01-01) into a proleptic
+/// Gregorian `(year, month, day)`. Uses astronomical year numbering (year 0
+/// exists), matching ISO-8601, and is exact across the full `i64` range.
+///
+/// This is Howard Hinnant's `civil_from_days` algorithm; see
+/// <http://howardhinnant.github.io/date_algorithms.html#civil_from_days>.
+fn civil_from_days(days: i64) -> (i64, u32, u32) {
+    // Shift the epoch to 0000-03-01 so leap days fall at the end of the cycle.
+    let z = days + 719_468;
+    // `era` is the 400-year cycle; the offset keeps the division flooring for
+    // negative `z` (plain integer division in Rust truncates toward zero).
+    let era = (if z >= 0 { z } else { z - 146_096 }) / 146_097;
+    let doe = z - era * 146_097; // day-of-era, [0, 146096]
+    let yoe = (doe - doe / 1_460 + doe / 36_524 - doe / 146_096) / 365; // [0, 399]
+    let y = yoe + era * 400;
+    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100); // day-of-year (Mar-based), [0, 365]
+    let mp = (5 * doy + 2) / 153; // month, Mar=0..Feb=11
+    let day = doy - (153 * mp + 2) / 5 + 1; // [1, 31]
+    let month = if mp < 10 { mp + 3 } else { mp - 9 }; // [1, 12]
+    let year = y + if month <= 2 { 1 } else { 0 };
+    (year, month as u32, day as u32)
+}
+
 #[cfg(test)]
 mod tests {
     use ordered_float::OrderedFloat;
@@ -123,10 +182,28 @@ mod tests {
         assert_eq!(Value::Long(-7).to_string(), "-7");
         assert_eq!(Value::Double(OrderedFloat(1.5)).to_string(), "1.5");
         assert_eq!(Value::Char('a').to_string(), "'a'");
-        assert_eq!(
-            Value::Timestamp(Timestamp::from_milliseconds(1000)).to_string(),
-            "1000"
-        );
+    }
+
+    #[test]
+    fn display_timestamp_is_lossless_iso8601() {
+        let cases = [
+            (0_i64, "1970-01-01T00:00:00.000Z"),
+            (1000, "1970-01-01T00:00:01.000Z"),
+            // 2024-06-01T00:00:00Z, with a millisecond fraction preserved
+            (1_717_200_000_123, "2024-06-01T00:00:00.123Z"),
+            // negative timestamps floor into the previous day
+            (-1, "1969-12-31T23:59:59.999Z"),
+            (-1000, "1969-12-31T23:59:59.000Z"),
+            // years beyond 9999 use the ISO-8601 expanded form
+            (253_402_300_800_000, "+010000-01-01T00:00:00.000Z"),
+        ];
+        for (millis, expected) in cases {
+            assert_eq!(
+                Value::Timestamp(Timestamp::from_milliseconds(millis)).to_string(),
+                expected,
+                "millis = {millis}"
+            );
+        }
     }
 
     #[test]
