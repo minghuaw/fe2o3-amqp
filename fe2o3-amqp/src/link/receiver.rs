@@ -136,7 +136,7 @@ impl Receiver {
         self.inner.link.max_message_size()
     }
 
-    /// Get the current credit of the link
+    /// Get the configured credit mode of the link
     pub fn credit_mode(&self) -> &CreditMode {
         &self.inner.credit_mode
     }
@@ -146,6 +146,11 @@ impl Receiver {
     /// This will not send a flow to the remote peer even if credits in `CreditMode::Auto` is changed.
     pub fn set_credit_mode(&mut self, credit_mode: CreditMode) {
         self.inner.credit_mode = credit_mode;
+    }
+
+    /// Get the current credit of the link
+    pub fn credit(&self) -> u32 {
+        self.inner.link.flow_state.link_credit()
     }
 
     /// Get the `auto_accept` field of receiver
