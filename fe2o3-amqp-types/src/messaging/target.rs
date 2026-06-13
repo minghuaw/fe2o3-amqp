@@ -196,6 +196,7 @@ pub struct Target {
     pub dynamic_node_properties: Option<NodeProperties>,
 
     /// <field name="capabilities" type="symbol" multiple="true"/>
+    #[amqp_contract(multiple)]
     pub capabilities: Option<Array<Symbol>>,
 }
 

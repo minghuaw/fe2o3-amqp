@@ -59,6 +59,16 @@ impl<T> Array<T> {
     pub fn into_inner(self) -> Vec<T> {
         self.0
     }
+
+    /// Returns the number of elements in the array
+    pub fn len(&self) -> usize {
+        self.0.len()
+    }
+
+    /// Returns `true` if the array contains no elements
+    pub fn is_empty(&self) -> bool {
+        self.0.is_empty()
+    }
 }
 
 impl<T: ser::Serialize> ser::Serialize for Array<T> {
@@ -281,5 +291,16 @@ mod tests {
         let buf = to_vec(&value).unwrap();
         let array: Array<String> = from_slice(&buf).unwrap();
         assert_eq!(array, expected);
+    }
+
+    #[test]
+    fn test_len_and_is_empty() {
+        let empty: Array<i32> = Array(vec![]);
+        assert_eq!(empty.len(), 0);
+        assert!(empty.is_empty());
+
+        let populated = Array(vec![1i32, 2, 3]);
+        assert_eq!(populated.len(), 3);
+        assert!(!populated.is_empty());
     }
 }

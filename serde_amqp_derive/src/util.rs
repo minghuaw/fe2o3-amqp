@@ -118,7 +118,12 @@ pub(crate) fn parse_named_field_attrs<'a>(
                 .iter()
                 .find_map(|a| FieldAttr::from_meta(&a.meta).ok())
         })
-        .map(|o| o.unwrap_or(FieldAttr { default: false }))
+        .map(|o| {
+            o.unwrap_or(FieldAttr {
+                default: false,
+                multiple: false,
+            })
+        })
         .collect()
 }
 
