@@ -1,13 +1,14 @@
 //! Implementation of AMQP1.0 receiver
 
 use std::sync::atomic::{AtomicU32, Ordering};
+use std::sync::Arc;
 
 use fe2o3_amqp_types::{
-    definitions::{self, DeliveryTag, Fields, SequenceNo},
+    definitions::{self, DeliveryTag, Fields, Handle, ReceiverSettleMode, Role, SequenceNo},
     messaging::{
         Accepted, Address, DeliveryState, FromBody, Modified, Rejected, Released, Source, Target,
     },
-    performatives::{Attach, Detach, Transfer},
+    performatives::{Attach, Detach, Disposition, Transfer},
 };
 use tokio::sync::mpsc;
 
@@ -18,7 +19,7 @@ cfg_not_wasm32! {
 
 use crate::{
     control::SessionControl,
-    endpoint::{self, LinkAttach, LinkDetach, LinkExt},
+    endpoint::{self, LinkAttach, LinkDetach, LinkExt, LinkFlow, OutputHandle},
     session::SessionHandle,
     Payload,
 };
@@ -213,7 +214,7 @@ impl Receiver {
     /// |`buffer_size`| `u16::MAX` |
     /// |`role`| `role::Sender` |
     /// |`auto_accept`|`false`|
-    ///  
+    ///
     /// # Example
     ///
     /// ```rust, ignore
@@ -568,6 +569,140 @@ impl Receiver {
             .dispose_all(delivery_infos, None, state.into())
             .await
     }
+
+    /// Returns a [`ReceiverDisposer`] that can settle deliveries received by this
+    /// receiver without holding the receiver itself.
+    ///
+    /// The disposer shares the underlying AMQP link state (unsettled map, flow state,
+    /// outgoing channel) with the receiver. Settlement calls on the disposer are
+    /// lock-free with respect to `recv()` — concurrent disposal and receive are safe.
+    pub fn disposer(&self) -> ReceiverDisposer {
+        ReceiverDisposer {
+            outgoing: self.inner.outgoing.clone(),
+            unsettled: self.inner.link.unsettled.clone(),
+            rcv_settle_mode: self.inner.link.rcv_settle_mode.clone(),
+            flow_state: self.inner.link.flow_state.clone(),
+            output_handle: self.inner.link.output_handle.clone(),
+            processed: Arc::clone(&self.inner.processed),
+            credit_mode: self.inner.credit_mode.clone(),
+        }
+    }
+}
+
+/// A lightweight helper that can settle deliveries previously received on a [`Receiver`].
+///
+/// Obtained via [`Receiver::disposer()`]. Settlement operations on this type do NOT
+/// acquire the mutex guarding `recv()`, so calling them concurrently with an ongoing
+/// receive is fully safe and will not block.
+///
+/// Cloning a `ReceiverDisposer` is cheap: all internal state is reference-counted.
+#[derive(Clone, Debug)]
+pub struct ReceiverDisposer {
+    outgoing: mpsc::Sender<LinkFrame>,
+    unsettled: ArcReceiverUnsettledMap,
+    rcv_settle_mode: ReceiverSettleMode,
+    flow_state: ReceiverFlowState,
+    output_handle: Option<OutputHandle>,
+    processed: Arc<AtomicU32>,
+    credit_mode: CreditMode,
+}
+
+impl ReceiverDisposer {
+    /// Accept the delivery (Accepted disposition).
+    pub async fn accept(
+        &self,
+        delivery_info: impl Into<DeliveryInfo>,
+    ) -> Result<(), DispositionError> {
+        let info = delivery_info.into();
+        self.dispose(info, DeliveryState::Accepted(Accepted {}))
+            .await
+    }
+
+    /// Release the delivery (Released disposition — equivalent to `abandon`).
+    pub async fn release(
+        &self,
+        delivery_info: impl Into<DeliveryInfo>,
+    ) -> Result<(), DispositionError> {
+        let info = delivery_info.into();
+        self.dispose(info, DeliveryState::Released(Released {}))
+            .await
+    }
+
+    async fn dispose(
+        &self,
+        delivery_info: DeliveryInfo,
+        state: DeliveryState,
+    ) -> Result<(), DispositionError> {
+        let settled = match delivery_info
+            .rcv_settle_mode
+            .as_ref()
+            .unwrap_or(&self.rcv_settle_mode)
+        {
+            ReceiverSettleMode::First => true,
+            ReceiverSettleMode::Second => false,
+        };
+
+        let unsettled_state = if settled {
+            let mut lock = self.unsettled.write();
+            lock.as_mut()
+                .and_then(|map| map.swap_remove(&delivery_info.delivery_tag))
+        } else {
+            let mut lock = self.unsettled.write();
+            lock.get_or_insert(Default::default())
+                .insert(delivery_info.delivery_tag.clone(), Some(state.clone()))
+        };
+
+        if unsettled_state.is_some() {
+            let disposition = Disposition {
+                role: Role::Receiver,
+                first: delivery_info.delivery_id,
+                last: None,
+                settled,
+                state: Some(state),
+                batchable: false,
+            };
+            self.outgoing
+                .send(LinkFrame::Disposition(disposition))
+                .await
+                .map_err(|_| DispositionError::IllegalSessionState)?;
+        }
+
+        let prev = self.processed.fetch_add(1, Ordering::Release);
+        self.refresh_credit_if_needed(prev + 1).await
+    }
+
+    async fn refresh_credit_if_needed(&self, processed: u32) -> Result<(), DispositionError> {
+        if let CreditMode::Auto(max_credit) = self.credit_mode {
+            if processed >= max_credit / 2 {
+                self.processed.store(0, Ordering::Release);
+                let handle: Handle = self
+                    .output_handle
+                    .clone()
+                    .ok_or(DispositionError::IllegalSessionState)?
+                    .into();
+                let delivery_count = {
+                    let mut guard = self.flow_state.lock.write();
+                    guard.link_credit = max_credit;
+                    guard.drain = false;
+                    guard.delivery_count
+                };
+                let flow = LinkFlow {
+                    handle,
+                    delivery_count: Some(delivery_count),
+                    link_credit: Some(max_credit),
+                    available: None,
+                    drain: false,
+                    echo: false,
+                    properties: None,
+                };
+                self.outgoing
+                    .send(LinkFrame::Flow(flow))
+                    .await
+                    .map_err(|_| DispositionError::IllegalSessionState)?;
+            }
+        }
+        Ok(())
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -640,7 +775,7 @@ pub(crate) struct ReceiverInner<L: endpoint::ReceiverLink> {
     pub(crate) link: L,
     pub(crate) buffer_size: usize,
     pub(crate) credit_mode: CreditMode,
-    pub(crate) processed: AtomicU32, // SequenceNo,
+    pub(crate) processed: Arc<AtomicU32>, // SequenceNo,
     pub(crate) auto_accept: bool,
 
     // Control sender to the session
@@ -1048,7 +1183,7 @@ where
     /// This is cancel safe as internanlly it only `.await` on sending over `tokio::mpsc::Sender`
     #[inline]
     pub async fn set_credit(&mut self, credit: SequenceNo) -> Result<(), IllegalLinkStateError> {
-        self.processed = AtomicU32::new(0);
+        self.processed.store(0, Ordering::Release);
         if let CreditMode::Auto(_) = self.credit_mode {
             self.credit_mode = CreditMode::Auto(credit)
         }
@@ -1100,7 +1235,7 @@ where
         if let CreditMode::Auto(max_credit) = self.credit_mode {
             if processed >= max_credit / 2 {
                 // Reset link credit
-                self.processed.swap(0, Ordering::Release);
+                self.processed.store(0, Ordering::Release);
                 self.link
                     .send_flow(&self.outgoing, Some(max_credit), Some(false), false, false)
                     .await?; // cancel safe
@@ -1115,7 +1250,7 @@ where
     /// Setting the credit will set the `drain` field to false and stop draining
     #[inline]
     pub async fn drain(&mut self) -> Result<(), DispositionError> {
-        self.processed = AtomicU32::new(0);
+        self.processed.store(0, Ordering::Release);
 
         // Return if already draining
         if self.link.flow_state().drain() {
@@ -1549,5 +1684,253 @@ impl DetachedReceiver {
                 }
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::endpoint::OutputHandle;
+    use crate::link::state::{LinkFlowState, LinkFlowStateInner};
+    use crate::util::Sealed;
+
+    fn make_flow_state(link_credit: u32) -> ReceiverFlowState {
+        Arc::new(LinkFlowState::receiver(LinkFlowStateInner {
+            initial_delivery_count: 0,
+            delivery_count: 0,
+            link_credit,
+            available: 0,
+            drain: false,
+            properties: None,
+        }))
+    }
+
+    fn make_disposer(
+        tx: mpsc::Sender<LinkFrame>,
+        unsettled: ArcReceiverUnsettledMap,
+        credit_mode: CreditMode,
+    ) -> ReceiverDisposer {
+        ReceiverDisposer {
+            outgoing: tx,
+            unsettled,
+            rcv_settle_mode: ReceiverSettleMode::First,
+            flow_state: make_flow_state(200),
+            output_handle: Some(OutputHandle(1)),
+            processed: Arc::new(AtomicU32::new(0)),
+            credit_mode,
+        }
+    }
+
+    fn make_delivery_info(id: u32, tag: Vec<u8>) -> DeliveryInfo {
+        DeliveryInfo {
+            delivery_id: id,
+            delivery_tag: DeliveryTag::from(tag),
+            rcv_settle_mode: None,
+            _sealed: Sealed {},
+        }
+    }
+
+    fn seed_unsettled(map: &ArcReceiverUnsettledMap, tags: &[Vec<u8>]) {
+        let mut lock = map.write();
+        let m = lock.get_or_insert_with(Default::default);
+        for tag in tags {
+            m.insert(DeliveryTag::from(tag.clone()), None);
+        }
+    }
+
+    #[tokio::test]
+    async fn accept_sends_disposition_frame() {
+        let (tx, mut rx) = mpsc::channel::<LinkFrame>(16);
+        let unsettled: ArcReceiverUnsettledMap = Arc::new(parking_lot::RwLock::new(None));
+        seed_unsettled(&unsettled, &[vec![0x01]]);
+
+        let disposer = make_disposer(tx, unsettled, CreditMode::Manual);
+        let info = make_delivery_info(1, vec![0x01]);
+
+        disposer.accept(info).await.unwrap();
+
+        let frame = rx.try_recv().expect("should receive a frame");
+        match frame {
+            LinkFrame::Disposition(d) => {
+                assert_eq!(d.role, Role::Receiver);
+                assert_eq!(d.first, 1);
+                assert!(d.settled);
+                assert!(matches!(d.state, Some(DeliveryState::Accepted(_))));
+            }
+            other => panic!("expected Disposition, got {other:?}"),
+        }
+    }
+
+    #[tokio::test]
+    async fn release_sends_released_disposition() {
+        let (tx, mut rx) = mpsc::channel::<LinkFrame>(16);
+        let unsettled: ArcReceiverUnsettledMap = Arc::new(parking_lot::RwLock::new(None));
+        seed_unsettled(&unsettled, &[vec![0x02]]);
+
+        let disposer = make_disposer(tx, unsettled, CreditMode::Manual);
+        let info = make_delivery_info(2, vec![0x02]);
+
+        disposer.release(info).await.unwrap();
+
+        let frame = rx.try_recv().expect("should receive a frame");
+        match frame {
+            LinkFrame::Disposition(d) => {
+                assert_eq!(d.first, 2);
+                assert!(d.settled);
+                assert!(matches!(d.state, Some(DeliveryState::Released(_))));
+            }
+            other => panic!("expected Disposition, got {other:?}"),
+        }
+    }
+
+    #[tokio::test]
+    async fn accept_removes_from_unsettled_map() {
+        let (tx, _rx) = mpsc::channel::<LinkFrame>(16);
+        let unsettled: ArcReceiverUnsettledMap = Arc::new(parking_lot::RwLock::new(None));
+        seed_unsettled(&unsettled, &[vec![0x0A], vec![0x0B]]);
+
+        let disposer = make_disposer(tx, unsettled.clone(), CreditMode::Manual);
+        let info = make_delivery_info(10, vec![0x0A]);
+
+        disposer.accept(info).await.unwrap();
+
+        let lock = unsettled.read();
+        let map = lock.as_ref().unwrap();
+        assert!(!map.contains_key(&DeliveryTag::from(vec![0x0A])));
+        assert!(map.contains_key(&DeliveryTag::from(vec![0x0B])));
+    }
+
+    #[tokio::test]
+    async fn processed_counter_increments() {
+        let (tx, _rx) = mpsc::channel::<LinkFrame>(16);
+        let unsettled: ArcReceiverUnsettledMap = Arc::new(parking_lot::RwLock::new(None));
+        seed_unsettled(&unsettled, &[vec![1], vec![2], vec![3]]);
+
+        let disposer = make_disposer(tx, unsettled, CreditMode::Manual);
+
+        disposer
+            .accept(make_delivery_info(1, vec![1]))
+            .await
+            .unwrap();
+        disposer
+            .accept(make_delivery_info(2, vec![2]))
+            .await
+            .unwrap();
+        disposer
+            .accept(make_delivery_info(3, vec![3]))
+            .await
+            .unwrap();
+
+        assert_eq!(disposer.processed.load(Ordering::Acquire), 3);
+    }
+
+    #[tokio::test]
+    async fn auto_credit_refresh_sends_flow_frame() {
+        // Auto(10) → triggers refresh after 5 dispositions
+        let max_credit = 10u32;
+        let (tx, mut rx) = mpsc::channel::<LinkFrame>(32);
+        let unsettled: ArcReceiverUnsettledMap = Arc::new(parking_lot::RwLock::new(None));
+        let tags: Vec<Vec<u8>> = (1..=5).map(|i| vec![i]).collect();
+        seed_unsettled(&unsettled, &tags);
+
+        let disposer = make_disposer(tx, unsettled, CreditMode::Auto(max_credit));
+
+        for i in 1..=5u32 {
+            disposer
+                .accept(make_delivery_info(i, vec![i as u8]))
+                .await
+                .unwrap();
+        }
+
+        // Drain all frames: 5 Dispositions + 1 Flow
+        let mut dispositions = 0;
+        let mut flows = 0;
+        while let Ok(frame) = rx.try_recv() {
+            match frame {
+                LinkFrame::Disposition(_) => dispositions += 1,
+                LinkFrame::Flow(f) => {
+                    flows += 1;
+                    assert_eq!(f.link_credit, Some(max_credit));
+                }
+                other => panic!("unexpected frame: {other:?}"),
+            }
+        }
+        assert_eq!(dispositions, 5);
+        assert_eq!(flows, 1, "should send exactly one Flow to refresh credit");
+
+        // processed should have been reset to 0 after the refresh
+        assert_eq!(disposer.processed.load(Ordering::Acquire), 0);
+    }
+
+    #[tokio::test]
+    async fn no_disposition_for_unknown_delivery_tag() {
+        let (tx, mut rx) = mpsc::channel::<LinkFrame>(16);
+        let unsettled: ArcReceiverUnsettledMap = Arc::new(parking_lot::RwLock::new(None));
+        seed_unsettled(&unsettled, &[vec![0x01]]);
+
+        let disposer = make_disposer(tx, unsettled, CreditMode::Manual);
+
+        // Accept a tag that is NOT in the unsettled map
+        let info = make_delivery_info(99, vec![0xFF]);
+        disposer.accept(info).await.unwrap();
+
+        // No Disposition frame should be sent
+        assert!(rx.try_recv().is_err());
+        // But processed still incremented
+        assert_eq!(disposer.processed.load(Ordering::Acquire), 1);
+    }
+
+    #[tokio::test]
+    async fn clone_shares_state() {
+        let (tx, _rx) = mpsc::channel::<LinkFrame>(16);
+        let unsettled: ArcReceiverUnsettledMap = Arc::new(parking_lot::RwLock::new(None));
+        seed_unsettled(&unsettled, &[vec![1], vec![2]]);
+
+        let disposer = make_disposer(tx, unsettled, CreditMode::Manual);
+        let clone = disposer.clone();
+
+        // Accept via the clone
+        clone.accept(make_delivery_info(1, vec![1])).await.unwrap();
+
+        // Original sees the incremented counter
+        assert_eq!(disposer.processed.load(Ordering::Acquire), 1);
+
+        // Unsettled map updated via clone is visible from original
+        let lock = disposer.unsettled.read();
+        let map = lock.as_ref().unwrap();
+        assert!(!map.contains_key(&DeliveryTag::from(vec![1u8])));
+        assert!(map.contains_key(&DeliveryTag::from(vec![2u8])));
+    }
+
+    #[tokio::test]
+    async fn concurrent_accepts_are_safe() {
+        let (tx, mut rx) = mpsc::channel::<LinkFrame>(1024);
+        let unsettled: ArcReceiverUnsettledMap = Arc::new(parking_lot::RwLock::new(None));
+        let tags: Vec<Vec<u8>> = (0..100u8).map(|i| vec![i]).collect();
+        seed_unsettled(&unsettled, &tags);
+
+        let disposer = make_disposer(tx, unsettled, CreditMode::Manual);
+
+        // Spawn 100 concurrent accepts
+        let handles: Vec<_> = (0..100u8)
+            .map(|i| {
+                let d = disposer.clone();
+                tokio::spawn(async move {
+                    d.accept(make_delivery_info(i as u32, vec![i]))
+                        .await
+                        .unwrap();
+                })
+            })
+            .collect();
+
+        futures_util::future::join_all(handles).await;
+
+        assert_eq!(disposer.processed.load(Ordering::Acquire), 100);
+
+        let mut count = 0;
+        while rx.try_recv().is_ok() {
+            count += 1;
+        }
+        assert_eq!(count, 100);
     }
 }

@@ -16,7 +16,7 @@ use fe2o3_amqp_types::{
 pub use error::*;
 
 use parking_lot::RwLock;
-pub use receiver::Receiver;
+pub use receiver::{CreditMode, Receiver, ReceiverDisposer};
 pub use sender::Sender;
 use serde::Serialize;
 use serde_amqp::ser::Serializer;

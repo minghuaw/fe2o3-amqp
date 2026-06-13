@@ -60,23 +60,23 @@
 //!         "connection-1",                     // container id
 //!         "amqp://guest:guest@localhost:5672" // url
 //!     ).await.unwrap();
-//!     
+//!
 //!     let mut session = Session::begin(&mut connection).await.unwrap();
-//!     
+//!
 //!     // Create a sender
 //!     let mut sender = Sender::attach(
 //!         &mut session,           // Session
 //!         "rust-sender-link-1",   // link name
 //!         "q1"                    // target address
 //!     ).await.unwrap();
-//!     
+//!
 //!     // Create a receiver
 //!     let mut receiver = Receiver::attach(
 //!         &mut session,
 //!         "rust-receiver-link-1", // link name
 //!         "q1"                    // source address
 //!     ).await.unwrap();
-//!     
+//!
 //!     // Send a message to the broker and wait for outcome (Disposition)
 //!     let outcome: Outcome = sender.send("hello AMQP").await.unwrap();
 //!     outcome.accepted_or_else(|state| state).unwrap(); // Handle delivery outcome
@@ -214,7 +214,7 @@ pub mod types {
 pub use connection::Connection;
 pub use link::{
     delivery::{Delivery, Sendable},
-    Receiver, Sender,
+    Receiver, ReceiverDisposer, Sender,
 };
 pub use session::Session;
 
