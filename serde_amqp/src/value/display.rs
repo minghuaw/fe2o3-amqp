@@ -32,9 +32,9 @@ impl Display for Value {
             Value::Long(v) => Display::fmt(v, f),
             Value::Float(v) => Display::fmt(&v.0, f),
             Value::Double(v) => Display::fmt(&v.0, f),
-            Value::Decimal32(v) => write_hex_bytes(f, &v.clone().into_inner()),
-            Value::Decimal64(v) => write_hex_bytes(f, &v.clone().into_inner()),
-            Value::Decimal128(v) => write_hex_bytes(f, &v.clone().into_inner()),
+            Value::Decimal32(v) => write_hex_bytes(f, v.as_inner()),
+            Value::Decimal64(v) => write_hex_bytes(f, v.as_inner()),
+            Value::Decimal128(v) => write_hex_bytes(f, v.as_inner()),
             // `{:?}` renders a `char` with single quotes (e.g. `'a'`), which keeps
             // it visually distinct from a single-character `String`.
             Value::Char(v) => write!(f, "{:?}", v),

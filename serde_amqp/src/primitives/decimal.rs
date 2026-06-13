@@ -28,6 +28,11 @@ mod dec32 {
         pub fn into_inner(self) -> [u8; DECIMAL32_WIDTH] {
             self.0
         }
+
+        /// Borrow the inner bytes
+        pub fn as_inner(&self) -> &[u8; DECIMAL32_WIDTH] {
+            &self.0
+        }
     }
 
     impl From<[u8; DECIMAL32_WIDTH]> for Dec32 {
@@ -112,6 +117,11 @@ mod dec64 {
         pub fn into_inner(self) -> [u8; DECIMAL64_WIDTH] {
             self.0
         }
+
+        /// Borrow the inner bytes
+        pub fn as_inner(&self) -> &[u8; DECIMAL64_WIDTH] {
+            &self.0
+        }
     }
 
     impl From<[u8; DECIMAL64_WIDTH]> for Dec64 {
@@ -189,6 +199,11 @@ mod dec128 {
         /// Consumes the wrapper into the inner bytes
         pub fn into_inner(self) -> [u8; DECIMAL128_WIDTH] {
             self.0
+        }
+
+        /// Borrow the inner bytes
+        pub fn as_inner(&self) -> &[u8; DECIMAL128_WIDTH] {
+            &self.0
         }
     }
 
