@@ -36,6 +36,15 @@
 //! AMQP1.0 `null` primitive (`0x40`). During deserialization, an AMQP1.0 `null` primitive or an
 //! empty field will be decoded as the default value of the type.
 //!
+//! Fields with multiplicity `multiple`:
+//!
+//! Fields defined with `multiple="true"` in the specification are represented as
+//! `Option<Array<T>>` and should be marked with `#[amqp_contract(multiple)]`. Per the AMQP1.0 spec
+//! (Part 1 "Types", section 1.4) "a null value and a zero-length array (with a correct type for its
+//! elements) both describe an absence of a value and MUST be treated as semantically identical."
+//! When the attribute is set, a zero-length array is normalized to `None` during deserialization so
+//! that both the AMQP1.0 `null` primitive and an empty array decode to the same value.
+//!
 //! # Example
 //!
 //! The `"list"` encoding will encode the `Attach` struct as a described list (a descriptor followed
@@ -89,10 +98,12 @@
 //!     pub max_message_size: Option<Ulong>,
 //!
 //!     /// <field name="offered-capabilities" type="symbol" multiple="true"/>
-//!     pub offered_capabilities: Option<Vec<Symbol>>,
+//!     #[amqp_contract(multiple)]
+//!     pub offered_capabilities: Option<Array<Symbol>>,
 //!
 //!     /// <field name="desired-capabilities" type="symbol" multiple="true"/>
-//!     pub desired_capabilities: Option<Vec<Symbol>>,
+//!     #[amqp_contract(multiple)]
+//!     pub desired_capabilities: Option<Array<Symbol>>,
 //!
 //!     /// <field name="properties" type="fields"/>
 //!     pub properties: Option<Fields>,
@@ -153,6 +164,16 @@ struct FieldAttr {
     // default: syn::Lit
     #[darling(default)]
     default: bool,
+
+    /// Marks a field with multiplicity `multiple` (an `Option<Array<T>>`).
+    ///
+    /// Per the AMQP 1.0 spec (Part 1 "Types", section 1.4), a null value and a
+    /// zero-length array both describe an absence of a value and MUST be treated
+    /// as semantically identical. When this flag is set, a zero-length array is
+    /// normalized to `None` on deserialization so the two encodings decode to the
+    /// same value.
+    #[darling(default)]
+    multiple: bool,
 }
 
 struct DescribedStructAttr {

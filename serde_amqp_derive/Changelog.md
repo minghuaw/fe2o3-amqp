@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+1. Added a `#[amqp_contract(multiple)]` field attribute. On a `multiple`
+   (`Option<Array<T>>`) field, a zero-length array is normalized to `None` on
+   deserialization so that null and an empty array decode identically, as
+   required by the AMQP spec (issue
+   [#111](https://github.com/minghuaw/fe2o3-amqp/issues/111)).
+
 ## 0.3.0
 
 1. Updated deps

@@ -33,6 +33,7 @@ pub struct Coordinator {
     /// requirements.
     ///
     /// See txn-capability.
+    #[amqp_contract(multiple)]
     pub capabilities: Option<Array<TxnCapability>>,
 }
 

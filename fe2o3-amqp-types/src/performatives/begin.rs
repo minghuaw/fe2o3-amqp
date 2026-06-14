@@ -37,9 +37,11 @@ pub struct Begin {
     pub handle_max: Handle, // default to 4294967295
 
     /// <field name="offered-capabilities" type="symbol" multiple="true"/>
+    #[amqp_contract(multiple)]
     pub offered_capabilities: Option<Array<Symbol>>,
 
     /// <field name="desired-capabilities" type="symbol" multiple="true"/>
+    #[amqp_contract(multiple)]
     pub desired_capabilities: Option<Array<Symbol>>,
 
     /// <field name="properties" type="fields"/>
