@@ -291,13 +291,23 @@ where
                     transport.send(frame).await?;
                 }
                 SaslServerFrame::Outcome(outcome) => {
+                    let code = outcome.code.clone();
+                    let additional_data = outcome.additional_data.clone();
                     let frame = sasl::Frame::Outcome(outcome);
                     #[cfg(feature = "tracing")]
                     tracing::trace!(sending = ?frame);
                     #[cfg(feature = "log")]
                     log::trace!("sending = {:?}", frame);
                     transport.send(frame).await?;
-                    break;
+                    match code {
+                        SaslCode::Ok => break,
+                        code => {
+                            return Err(OpenError::SaslError {
+                                code,
+                                additional_data,
+                            })
+                        }
+                    }
                 }
             }
         }
