@@ -1,5 +1,9 @@
 # Change Log
 
+## 0.15.2
+
+1. Fix SASL acceptor wrongly accepting an Open frame after rejecting invalid SASL credentials [#344](https://github.com/minghuaw/fe2o3-amqp/pull/344)
+
 ## 0.15.1
 
 1. The `rustls` feature no longer forces the `ring` crypto provider. On non-`wasm32`
