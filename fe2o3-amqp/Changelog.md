@@ -1,5 +1,36 @@
 # Change Log
 
+## 0.16.0
+
+1. **Breaking**: This crate no longer depends on `ring` on any target. The `rustls`
+   feature let `ring` back in through the `wasm32` target, so a `cargo tree --target
+   all` still showed it (issue
+   [#333](https://github.com/minghuaw/fe2o3-amqp/issues/333)). The `tokio-rustls` and
+   `librustls` dependencies now keep their default features, so the crypto provider
+   follows the `rustls` default instead of a name in this manifest. That default is
+   `aws-lc-rs`, the same provider that 0.15.1 selected off-`wasm32`. To use a different
+   provider, install it with `rustls::crypto::CryptoProvider::install_default` and
+   supply your own `tokio_rustls::TlsConnector` to the connection builder.
+2. The default features of `rustls` include `prefer-post-quantum`, which the explicit
+   feature lists in 0.15.1 left out. `rustls` puts `X25519MLKEM768` first in
+   `DEFAULT_KX_GROUPS` under that flag, and last without it. A client therefore sends
+   the hybrid key share in the first ClientHello instead of an `X25519` key share. This
+   grows the ClientHello by about 1.2 KB, and a small number of old middleboxes reject
+   it. To get the previous order, build the config with
+   `ClientConfig::builder_with_provider`. Pass a `CryptoProvider` whose `kx_groups`
+   field starts with `X25519`, then supply the resulting
+   `tokio_rustls::TlsConnector` to the connection builder. A plain
+   `ClientConfig::builder()` is not enough, because it takes the key exchange order
+   from the default provider.
+3. **Breaking**: The `rustls` feature does nothing on a `wasm32` target, because
+   `aws-lc-rs` does not support `wasm32-unknown-unknown`. `Builder::rustls_connector`
+   and `Builder::tls_connector` are no longer available there, and an `amqps://` URL
+   returns `OpenError::TlsConnectorNotFound`. A browser cannot open a raw socket, so it
+   terminates TLS itself; use a `wss://` URL with `fe2o3-amqp-ws` instead. The
+   `native-tls` feature already behaved this way.
+4. The `wasm32` feature checks for `rustls` are enabled again in CI. They were disabled
+   because `ring` failed to build for that target.
+
 ## 0.15.2
 
 1. Fix SASL acceptor wrongly accepting an Open frame after rejecting invalid SASL credentials [#344](https://github.com/minghuaw/fe2o3-amqp/pull/344)

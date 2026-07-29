@@ -27,6 +27,26 @@ default = []
 |`"tracing"`| enables logging with `tracing` |
 |`"log"`| enables logging with `log` |
 
+### The crypto provider for `"rustls"`
+
+This crate does not name a crypto provider. It takes the default features of
+`rustls`, so the provider follows the `rustls` default. That default is
+`aws-lc-rs`.
+
+To use a different provider, install it with
+`rustls::crypto::CryptoProvider::install_default` and supply your own
+`tokio_rustls::TlsConnector` to the connection builder.
+
+The default features also include `prefer-post-quantum`. A client therefore sends
+an `X25519MLKEM768` key share in the first ClientHello. To send an `X25519` key
+share instead, build the config with `ClientConfig::builder_with_provider` and pass
+a `CryptoProvider` whose `kx_groups` field starts with `X25519`. A plain
+`ClientConfig::builder()` does not change the order, because it takes the order
+from the default provider.
+
+Neither TLS feature does anything on a `wasm32` target. See [WebAssembly
+support](#webassembly-support).
+
 ## Quick start
 
 1. [Client](#client)
@@ -163,6 +183,11 @@ Experimental support for `wasm32-unknown-unknown` target is added since "0.8.11"
 `fe2o3-amqp-ws` to establish WebSocket connection to the broker. An example of sending and
 receiving message in a browser tab can be found
 [examples/wasm32-in-browser](https://github.com/minghuaw/fe2o3-amqp/tree/main/examples/wasm32-in-browser).
+
+The `"rustls"` and `"native-tls"` features do nothing on a `wasm32` target. A browser
+cannot open a raw socket, so it terminates TLS itself. Use a `wss://` URL with
+`fe2o3-amqp-ws` to get an encrypted connection. If you enable a TLS feature and then
+open an `amqps://` URL on `wasm32`, the call returns `OpenError::TlsConnectorNotFound`.
 
 ## Components
 

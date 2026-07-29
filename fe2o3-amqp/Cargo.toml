@@ -1,6 +1,6 @@
 [package]
 name = "fe2o3-amqp"
-version = "0.15.2"
+version = "0.16.0"
 edition = "2021"
 description = "An implementation of AMQP1.0 protocol based on serde and tokio"
 license = "MIT/Apache-2.0"
@@ -30,7 +30,10 @@ default = [
 transaction = ["fe2o3-amqp-types/transaction", "uuid"]
 
 # TLS related features
-rustls = ["tokio-rustls", "librustls", "webpki-roots", "ring"]
+#
+# Neither feature does anything on `wasm32` targets. A browser cannot open a raw
+# socket, so it terminates TLS itself. Use `wss://` with `fe2o3-amqp-ws` instead.
+rustls = ["tokio-rustls", "librustls", "webpki-roots"]
 native-tls = ["tokio-native-tls", "libnative-tls"]
 
 # Listener implementation
@@ -66,30 +69,23 @@ base64 = { workspace = true, optional = true } # TODO: replace with base64-simd?
 stringprep = { workspace = true, optional = true }
 hmac = { workspace = true, optional = true }
 pbkdf2 = { workspace = true, optional = true }
-webpki-roots = { workspace = true, optional = true }
-# The rustls crypto provider is selected per-target below: aws-lc-rs off-wasm
-# (rustls' own default), ring on wasm32. See issue #333.
-tokio-rustls = { workspace = true, features = ["logging", "tls12"], optional = true }
-librustls = { workspace = true, features = ["logging", "std", "tls12"], optional = true }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 uuid = { workspace = true, features = ["v4"], optional = true }
 tokio = { workspace = true, features = ["sync", "io-util", "net", "rt", "macros", "time"] }
 libnative-tls = { workspace = true, optional = true }
 tokio-native-tls = { workspace = true, optional = true }
-# Off-wasm, rustls uses the aws-lc-rs provider (its own default) rather than ring.
-tokio-rustls = { workspace = true, features = ["aws_lc_rs"], optional = true }
-librustls = { workspace = true, features = ["aws_lc_rs"], optional = true }
+# TLS is off-wasm only. `rustls` keeps its default features, so it selects its own
+# default crypto provider (`aws-lc-rs`). This crate does not pin a provider, and it
+# does not depend on `ring`. See issue #333.
+webpki-roots = { workspace = true, optional = true }
+tokio-rustls = { workspace = true, optional = true }
+librustls = { workspace = true, optional = true }
 tokio-stream = { workspace = true, features = ["time"] }
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 uuid = { workspace = true, features = ["v4", "rng-getrandom"], optional = true }
 tokio = { workspace = true, features = ["sync", "io-util", "rt", "macros"] } # "net" feature doesn't support wasm32
-# aws-lc-rs does not support wasm32, so rustls keeps the ring provider here. The
-# explicit ring dep applies ring's wasm getrandom backend to the copy rustls pulls in.
-tokio-rustls = { workspace = true, features = ["ring"], optional = true }
-librustls = { workspace = true, features = ["ring"], optional = true }
-ring = { workspace = true, default-features = false, features = ["wasm32_unknown_unknown_js"], optional = true }
 getrandom = { workspace = true, features = ["wasm_js"] }
 wasmtimer.workspace = true
 

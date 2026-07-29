@@ -326,8 +326,22 @@ impl<'a, Tls> Builder<'a, mode::ConnectorNoId, Tls> {
 #[allow(clippy::needless_lifetimes)]
 impl<'a, Mode, Tls> Builder<'a, Mode, Tls> {
     /// Alias for [`rustls_connector`](#method.rustls_connector) if only `"rustls"` is enabled
-    #[cfg_attr(docsrs, doc(cfg(all(feature = "rustls", not(feature = "native-tls")))))]
-    #[cfg(any(docsrs, all(feature = "rustls", not(feature = "native-tls"))))]
+    #[cfg_attr(
+        docsrs,
+        doc(cfg(all(
+            feature = "rustls",
+            not(feature = "native-tls"),
+            not(target_arch = "wasm32")
+        )))
+    )]
+    #[cfg(any(
+        docsrs,
+        all(
+            feature = "rustls",
+            not(feature = "native-tls"),
+            not(target_arch = "wasm32")
+        )
+    ))]
     pub fn tls_connector(
         self,
         tls_connector: tokio_rustls::TlsConnector,
@@ -755,7 +769,11 @@ impl<Tls> Builder<'_, mode::ConnectorWithId, Tls> {
 /* -------------------------------------------------------------------------- */
 
 impl Builder<'_, mode::ConnectorWithId, ()> {
-    #[cfg(all(feature = "rustls", not(feature = "native-tls")))]
+    #[cfg(all(
+        feature = "rustls",
+        not(feature = "native-tls"),
+        not(target_arch = "wasm32")
+    ))]
     async fn connect_tls_with_rustls_default<Io, F>(
         self,
         stream: Io,
@@ -1011,33 +1029,10 @@ cfg_wasm32! {
                     };
                     self.connect_with_stream(stream, spawn_engine_fn).await
                 }
-                "amqps" => {
-                    #[cfg(all(feature = "rustls", not(feature = "native-tls")))]
-                    {
-                        let domain = self.domain.ok_or(OpenError::InvalidDomain)?;
-                        let spawn_engine_fn = |engine, control_tx, outgoing_tx| {
-                            spawn_engine_on_current_local_set(engine, control_tx, outgoing_tx)
-                        };
-                        return self
-                            .connect_tls_with_rustls_default(stream, domain, spawn_engine_fn)
-                            .await;
-                    }
-
-                    #[cfg(all(
-                        feature = "native-tls",
-                        not(feature = "rustls"),
-                        not(target_arch = "wasm32")
-                    ))]
-                    {
-                        let domain = self.domain.ok_or_else(|| OpenError::InvalidDomain)?;
-                        return self
-                            .connect_tls_with_native_tls_default(stream, domain, spawn_engine)
-                            .await;
-                    }
-
-                    #[allow(unused)]
-                    Err(OpenError::TlsConnectorNotFound)
-                }
+                // A wasm32 target has no TLS connector. A browser cannot open a raw
+                // socket, so it terminates TLS itself. Use `wss://` with
+                // `fe2o3-amqp-ws` instead.
+                "amqps" => Err(OpenError::TlsConnectorNotFound),
                 _ => Err(OpenError::InvalidScheme),
             }
         }
@@ -1058,33 +1053,10 @@ cfg_wasm32! {
                     };
                     self.connect_with_stream(stream, spawn_engine_fn).await
                 }
-                "amqps" => {
-                    #[cfg(all(feature = "rustls", not(feature = "native-tls")))]
-                    {
-                        let domain = self.domain.ok_or(OpenError::InvalidDomain)?;
-                        let spawn_engine_fn = |engine, control_tx, outgoing_tx| {
-                            spawn_engine_on_local_set(engine, control_tx, outgoing_tx, local_set)
-                        };
-                        return self
-                            .connect_tls_with_rustls_default(stream, domain, spawn_engine_fn)
-                            .await;
-                    }
-
-                    #[cfg(all(
-                        feature = "native-tls",
-                        not(feature = "rustls"),
-                        not(target_arch = "wasm32")
-                    ))]
-                    {
-                        let domain = self.domain.ok_or_else(|| OpenError::InvalidDomain)?;
-                        return self
-                            .connect_tls_with_native_tls_default(stream, domain, spawn_engine)
-                            .await;
-                    }
-
-                    #[allow(unused)]
-                    Err(OpenError::TlsConnectorNotFound)
-                }
+                // A wasm32 target has no TLS connector. A browser cannot open a raw
+                // socket, so it terminates TLS itself. Use `wss://` with
+                // `fe2o3-amqp-ws` instead.
+                "amqps" => Err(OpenError::TlsConnectorNotFound),
                 _ => Err(OpenError::InvalidScheme),
             }
         }

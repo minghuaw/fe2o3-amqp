@@ -1,5 +1,12 @@
 # fe2o3-amqp-ws
 
+## 0.16.0
+
+1. Bumped version to "0.16.0" to track `fe2o3-amqp` 0.16.0, which drops the `ring`
+   dependency entirely (issue
+   [#333](https://github.com/minghuaw/fe2o3-amqp/issues/333)). This crate has no
+   source change.
+
 ## 0.14.0
 
 1. Put wrapped type of `Error::Http(_)` behind `Box` to avoid `clippy::result-large-err` (PR #313)
