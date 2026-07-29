@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.3.1
 
 1. Added a `#[amqp_contract(multiple)]` field attribute. On a `multiple`
    (`Option<Array<T>>`) field, a zero-length array is normalized to `None` on

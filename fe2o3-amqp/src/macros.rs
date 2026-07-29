@@ -62,10 +62,12 @@ macro_rules! cfg_native_tls {
     }
 }
 
+/// TLS with `rustls` is not supported in wasm32 targets
 macro_rules! cfg_rustls {
     ($($item:item)*) => {
         $(
             #[cfg_attr(docsrs, doc(cfg(feature = "rustls")))]
+            #[cfg(not(target_arch = "wasm32"))]
             #[cfg(feature = "rustls")]
             $item
         )*

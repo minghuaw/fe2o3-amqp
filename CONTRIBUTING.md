@@ -49,7 +49,7 @@ Thank you for your interest in contributing to the FE2O3 (Iron Oxide) library.
 
 #### Pre-requisites
 
-`rust` stable toolchain newer than 1.75.0 is required to build the project, and the nightly
+`rust` stable toolchain newer than 1.85.0 is required to build the project, and the nightly
 toolchain is required for building the documentation locally. Please follow the instruction on the
 [Rust website](https://www.rust-lang.org/tools/install) to install the toolchain. `cargo` is
 included in the installation.

@@ -1,8 +1,10 @@
 # Change Log
 
-## Unreleased
+## 0.16.0
 
-1. Marked all `multiple` (`Option<Array<T>>`) fields with
+1. Bumped version to "0.16.0" to match other `fe2o3-amqp` crates, so that a
+   downstream crate does not pull two versions of the family.
+2. Marked all `multiple` (`Option<Array<T>>`) fields with
    `#[amqp_contract(multiple)]` so that a zero-length array deserializes to
    `None`, identical to null, as required by the AMQP spec (issue
    [#111](https://github.com/minghuaw/fe2o3-amqp/issues/111)). Affects `Open`,

@@ -1,11 +1,13 @@
 # Change Log
 
-## Unreleased
+## 0.16.0
 
-1. Implemented `Display` for `Value` (issue #82). `Timestamp` renders as a
+1. Bumped version to "0.16.0" to match other `fe2o3-amqp` crates, so that a
+   downstream crate does not pull two versions of the family.
+2. Implemented `Display` for `Value` (issue #82). `Timestamp` renders as a
    lossless ISO-8601 / RFC-3339 UTC datetime with millisecond precision.
-2. Added a borrowing `as_inner()` accessor to `Dec32`, `Dec64`, and `Dec128`
-3. Added `Array::len` and `Array::is_empty`
+3. Added a borrowing `as_inner()` accessor to `Dec32`, `Dec64`, and `Dec128`
+4. Added `Array::len` and `Array::is_empty`
 
 ## 0.14.1
 

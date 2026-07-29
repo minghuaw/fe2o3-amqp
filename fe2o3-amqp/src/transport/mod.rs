@@ -359,7 +359,10 @@ where
 }
 
 #[allow(unused)]
-#[cfg(any(feature = "rustls", feature = "native-tls"))]
+#[cfg(all(
+    not(target_arch = "wasm32"),
+    any(feature = "rustls", feature = "native-tls")
+))]
 #[cfg_attr(feature = "tracing", tracing::instrument(name = "SEND", skip_all))]
 async fn send_tls_proto_header<Io>(stream: &mut Io) -> Result<(), io::Error>
 where
@@ -373,7 +376,10 @@ where
 }
 
 #[allow(unused)]
-#[cfg(any(feature = "rustls", feature = "native-tls"))]
+#[cfg(all(
+    not(target_arch = "wasm32"),
+    any(feature = "rustls", feature = "native-tls")
+))]
 #[cfg_attr(feature = "tracing", tracing::instrument(name = "RECV", skip_all))]
 pub(crate) async fn recv_tls_proto_header<Io>(
     stream: &mut Io,

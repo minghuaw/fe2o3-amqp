@@ -49,14 +49,14 @@ exclude = [
 
 [workspace.dependencies]
 # Local deps
-fe2o3-amqp = { path = "fe2o3-amqp", version = "0.15" }
-fe2o3-amqp-cbs = { path = "fe2o3-amqp-cbs", version = "0.15" }
-fe2o3-amqp-ext = { path = "fe2o3-amqp-ext", version = "0.14" }
-fe2o3-amqp-management = { path = "fe2o3-amqp-management", version = "0.15" }
-fe2o3-amqp-types = { path = "fe2o3-amqp-types", version = "0.14" }
-fe2o3-amqp-ws = { path = "fe2o3-amqp-ws", version = "0.14" }
-serde_amqp_derive = { path = "serde_amqp_derive", version = "0.3.0" }
-serde_amqp = { path = "serde_amqp", version = "0.14" }
+fe2o3-amqp = { path = "fe2o3-amqp", version = "0.16" }
+fe2o3-amqp-cbs = { path = "fe2o3-amqp-cbs", version = "0.16" }
+fe2o3-amqp-ext = { path = "fe2o3-amqp-ext", version = "0.16" }
+fe2o3-amqp-management = { path = "fe2o3-amqp-management", version = "0.16" }
+fe2o3-amqp-types = { path = "fe2o3-amqp-types", version = "0.16" }
+fe2o3-amqp-ws = { path = "fe2o3-amqp-ws", version = "0.16" }
+serde_amqp_derive = { path = "serde_amqp_derive", version = "0.3.1" }
+serde_amqp = { path = "serde_amqp", version = "0.16" }
 
 # External deps
 bytes = "1"
@@ -84,11 +84,12 @@ stringprep = "0.1"
 hmac = "0.12"
 pbkdf2 = { version = "0.12", default-features = false }
 webpki-roots = "1"
-tokio-rustls = { version = "0.26", default-features = false }
-librustls = { package = "rustls", version = "0.23", default-features = false }
+# Default features are on so that `rustls` selects its own default crypto
+# provider (`aws-lc-rs`). This crate does not pin a provider. See issue #333.
+tokio-rustls = "0.26"
+librustls = { package = "rustls", version = "0.23" }
 libnative-tls = { package = "native-tls", version = "0.2" }
 tokio-native-tls = "0.3"
-ring = { version = "0.17", default-features = false }
 tokio-stream = "0.1"
 tokio-test = "0.4"
 trait-variant = "0.1.1"
