@@ -859,17 +859,8 @@ cfg_not_wasm32! {
         ///
         /// ```rust,ignore
         /// let mut root_cert_store = RootCertStore::empty();
-        /// root_cert_store.add_server_trust_anchors(webpki_roots::TLS_SERVER_ROOTS.0.iter().map(
-        ///     |ta| {
-        ///         OwnedTrustAnchor::from_subject_spki_name_constraints(
-        ///             ta.subject,
-        ///             ta.spki,
-        ///             ta.name_constraints,
-        ///         )
-        ///     },
-        /// ));
+        /// root_cert_store.extend(webpki_roots::TLS_SERVER_ROOTS.iter().cloned());
         /// let config = ClientConfig::builder()
-        ///     .with_safe_defaults()
         ///     .with_root_certificates(root_cert_store)
         ///     .with_no_client_auth();
         /// let connector = TlsConnector::from(Arc::new(config));
@@ -1090,9 +1081,8 @@ cfg_not_wasm32! {
             ///
             /// ```rust, ignore
             /// let config = rustls::ClientConfig::builder()
-            ///     .with_safe_defaults()
             ///     .with_root_certificates(root_cert_store)
-            ///     .with_no_client_auth(); // i guess this was previously the default?
+            ///     .with_no_client_auth();
             /// let connector = TlsConnector::from(Arc::new(config));
             ///
             /// let connection = Connection::builder()
@@ -1229,9 +1219,8 @@ cfg_not_wasm32! {
             ///
             /// ```rust, ignore
             /// let config = rustls::ClientConfig::builder()
-            ///     .with_safe_defaults()
             ///     .with_root_certificates(root_cert_store)
-            ///     .with_no_client_auth(); // i guess this was previously the default?
+            ///     .with_no_client_auth();
             /// let connector = TlsConnector::from(Arc::new(config));
             ///
             /// let connection = Connection::builder()

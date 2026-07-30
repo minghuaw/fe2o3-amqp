@@ -378,7 +378,7 @@ impl Sender {
     ///     .message("hello AMQP")
     ///     .settled(true)
     ///     .build();
-    /// let outcome = sender.send(sendable).await.unwrap():
+    /// let outcome = sender.send(sendable).await.unwrap();
     /// ```
     ///
     /// # Cancel safety
@@ -1006,7 +1006,7 @@ impl SenderInner<SenderLink<Target>> {
 ///
 /// ```rust,ignore
 /// let detached = sender.detach().await.unwrap();
-/// let sender = detached.resume().await.unwrap():
+/// let sender = detached.resume().await.unwrap();
 /// ```
 #[derive(Debug)]
 pub struct DetachedSender {
