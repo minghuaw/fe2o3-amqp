@@ -1,5 +1,16 @@
 # fe2o3-amqp-ws
 
+## Unreleased
+
+1. Updated `tungstenite` and `tokio-tungstenite` from `0.26` to `0.30`.
+
+### Breaking Changes
+
+1. **Re-exports**: Added `pub use tungstenite` and `pub use tokio_tungstenite`.
+2. **`WsMessage` removed**: The `WsMessage` newtype wrapper has been removed. Stream and Sink impls now use `tungstenite::Message` directly (accessible via the re-export `fe2o3_amqp_ws::tungstenite::Message`). Users who accessed `msg.0`, called `.into_inner()`, `.as_inner()`, or relied on the `Deref`/`From` impls should now use `tungstenite::Message` directly.
+3. **Stream/Sink error types**: `TokioWebSocketStream`, `WasmWebSocketStream`, and `WebSocketStream` trait impls now use `crate::Error` instead of `tungstenite::Error`.
+4. **`Error` simplified**: All tungstenite-mirrored variants (`ConnectionClosed`, `Io`, `Tls`, `Capacity`, `Protocol`, `WriteBufferFull`, `Utf8`, `Url`, `Http`, `HttpFormat`, `AttackAttempt`) collapsed into a single `Tungstenite(tungstenite::Error)` variant. Match on `Error::Tungstenite(e)` and then on `e` for tungstenite-specific handling.
+
 ## 0.16.0
 
 1. Bumped version to "0.16.0" to track `fe2o3-amqp` 0.16.0, which drops the `ring`

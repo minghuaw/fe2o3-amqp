@@ -18,8 +18,6 @@ use tungstenite::{
     protocol::WebSocketConfig,
 };
 
-use crate::WsMessage;
-
 use super::{Error, WebSocketStream};
 
 const SEC_WEBSOCKET_PROTOCOL: &str = "Sec-WebSocket-Protocol";
@@ -45,10 +43,7 @@ impl<S> From<TokioWebSocketStream<S>> for WebSocketStream<TokioWebSocketStream<S
 
 impl<S> TokioWebSocketStream<S> {
     fn new(stream: tokio_tungstenite::WebSocketStream<S>, response: Response) -> Self {
-        Self {
-            stream,
-            response,
-        }
+        Self { stream, response }
     }
 }
 
@@ -56,10 +51,8 @@ impl<S> Stream for TokioWebSocketStream<S>
 where
     S: AsyncRead + AsyncWrite + Unpin,
 {
-    type Item = Result<WsMessage, tungstenite::Error>;
+    type Item = Result<tungstenite::Message, Error>;
 
-    // `tungstenite::Error` is the public error type of this WS API; boxing it to
-    // satisfy clippy's size heuristic would change the trait's associated type.
     #[allow(
         clippy::result_large_err,
         reason = "boxing would change the public trait associated type"
@@ -71,34 +64,34 @@ where
         let this = self.project();
         this.stream
             .poll_next(cx)
-            .map(|item| item.map(|item| item.map(WsMessage)))
+            .map(|item| item.map(|item| item.map_err(Error::from)))
     }
 }
 
-impl<S> Sink<WsMessage> for TokioWebSocketStream<S>
+impl<S> Sink<tungstenite::Message> for TokioWebSocketStream<S>
 where
     S: AsyncRead + AsyncWrite + Unpin,
 {
-    type Error = tungstenite::Error;
+    type Error = Error;
 
     fn poll_ready(self: std::pin::Pin<&mut Self>, cx: &mut std::task::Context<'_>) -> std::task::Poll<Result<(), Self::Error>> {
         let this = self.project();
-        this.stream.poll_ready(cx)
+        this.stream.poll_ready(cx).map_err(Error::from)
     }
 
-    fn start_send(self: std::pin::Pin<&mut Self>, item: WsMessage) -> Result<(), Self::Error> {
+    fn start_send(self: std::pin::Pin<&mut Self>, item: tungstenite::Message) -> Result<(), Self::Error> {
         let this = self.project();
-        this.stream.start_send(item.0)
+        this.stream.start_send(item).map_err(Error::from)
     }
 
     fn poll_flush(self: std::pin::Pin<&mut Self>, cx: &mut std::task::Context<'_>) -> std::task::Poll<Result<(), Self::Error>> {
         let this = self.project();
-        this.stream.poll_flush(cx)
+        this.stream.poll_flush(cx).map_err(Error::from)
     }
 
     fn poll_close(self: std::pin::Pin<&mut Self>, cx: &mut std::task::Context<'_>) -> std::task::Poll<Result<(), Self::Error>> {
         let this = self.project();
-        this.stream.poll_close(cx)
+        this.stream.poll_close(cx).map_err(Error::from)
     }
 }
 
@@ -326,7 +319,8 @@ fn verify_response(response: Response) -> Result<Response, Error> {
         .headers()
         .get(SEC_WEBSOCKET_PROTOCOL)
         .map(|val| val.to_str())
-        .ok_or(Error::MissingSecWebSocketProtocol)??
+        .ok_or(Error::MissingSecWebSocketProtocol)?
+        .map_err(|e| Error::Tungstenite(e.into()))?
     {
         "amqp" => Ok(response),
         _ => Err(Error::SecWebSocketProtocolIsNotAmqp),

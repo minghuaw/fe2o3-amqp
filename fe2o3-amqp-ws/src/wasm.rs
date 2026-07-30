@@ -9,7 +9,7 @@ use tungstenite::protocol::CloseFrame;
 use wasm_bindgen::{prelude::Closure, JsCast};
 use web_sys::{CloseEvent, ErrorEvent, MessageEvent, WebSocket};
 
-use crate::{Error, WsMessage};
+use crate::Error;
 
 enum ReadyState {
     Connecting,
@@ -38,7 +38,7 @@ pin_project! {
     pub struct WasmWebSocketStream {
         inner: WebSocket,
         #[pin]
-        receiver: UnboundedReceiver<Result<WsMessage, tungstenite::Error>>,
+        receiver: UnboundedReceiver<Result<tungstenite::Message, Error>>,
         _on_message_callback: Closure<dyn FnMut(MessageEvent)>,
         _on_close_callback: Closure<dyn FnMut(CloseEvent)>,
         _on_error_callback: Closure<dyn FnMut(ErrorEvent)>,
@@ -59,9 +59,9 @@ impl WasmWebSocketStream {
     pub async fn connect(addr: impl AsRef<str>) -> Result<Self, Error> {
         let ws = WebSocket::new_with_str(addr.as_ref(), super::SEC_WEBSOCKET_PROTOCOL_AMQP)
             .map_err(|_| {
-                Error::Io(io::Error::other(
+                Error::Tungstenite(tungstenite::Error::Io(io::Error::other(
                     "Failed to create WebSocket with web-sys",
-                ))
+                )))
             })?;
 
         ws.set_binary_type(web_sys::BinaryType::Arraybuffer);
@@ -80,7 +80,7 @@ impl WasmWebSocketStream {
 
         let result = tokio::select! {
             _ = open_rx => Ok(()),
-            event = err_rx => Err(Error::Io(io::Error::other(format!("Failed to connect to WebSocket: {:?}", event)))),
+            event = err_rx => Err(Error::Tungstenite(tungstenite::Error::Io(io::Error::other(format!("Failed to connect to WebSocket: {:?}", event))))),
         };
         ws.set_onopen(None);
         ws.set_onerror(None);
@@ -89,17 +89,17 @@ impl WasmWebSocketStream {
         let (tx, rx) = tokio::sync::mpsc::unbounded_channel();
         let tx_clone = tx.clone();
         let on_message_callback = Closure::wrap(Box::new(move |event: MessageEvent| {
-            let result = WsMessage::try_from(event);
+            let result = message_from_event(event);
             let _ = tx_clone.send(result);
         }) as Box<dyn FnMut(MessageEvent)>);
         ws.set_onmessage(Some(on_message_callback.as_ref().unchecked_ref()));
 
         let tx_clone = tx.clone();
         let on_error_callback = Closure::wrap(Box::new(move |event: ErrorEvent| {
-            let _ = tx_clone.send(Err(tungstenite::Error::Io(io::Error::other(format!(
+            let _ = tx_clone.send(Err(Error::Tungstenite(tungstenite::Error::Io(io::Error::other(format!(
                 "WebSocket error: {:?}",
                 event
-            )))));
+            ))))));
         }) as Box<dyn FnMut(ErrorEvent)>);
         ws.set_onerror(Some(on_error_callback.as_ref().unchecked_ref()));
 
@@ -108,7 +108,7 @@ impl WasmWebSocketStream {
                 code: event.code().into(),
                 reason: event.reason().into(),
             }));
-            let _ = tx.send(Ok(WsMessage(message)));
+            let _ = tx.send(Ok(message));
         }) as Box<dyn FnMut(CloseEvent)>);
         ws.set_onclose(Some(on_close_callback.as_ref().unchecked_ref()));
 
@@ -130,25 +130,21 @@ impl super::WebSocketStream<WasmWebSocketStream> {
     }
 }
 
-impl TryFrom<MessageEvent> for WsMessage {
-    type Error = tungstenite::Error;
-
-    fn try_from(event: MessageEvent) -> Result<Self, Self::Error> {
-        let data = event.data();
-        let data = data.dyn_into::<js_sys::ArrayBuffer>().map_err(|_| {
-            tungstenite::Error::Io(io::Error::new(
-                io::ErrorKind::InvalidData,
-                "Only Binary data is supported",
-            ))
-        })?;
-        let data = js_sys::Uint8Array::new(&data);
-        let data = data.to_vec();
-        Ok(WsMessage(tungstenite::Message::Binary(data)))
-    }
+fn message_from_event(event: MessageEvent) -> Result<tungstenite::Message, Error> {
+    let data = event.data();
+    let data = data.dyn_into::<js_sys::ArrayBuffer>().map_err(|_| {
+        Error::Tungstenite(tungstenite::Error::Io(io::Error::new(
+            io::ErrorKind::InvalidData,
+            "Only Binary data is supported",
+        )))
+    })?;
+    let data = js_sys::Uint8Array::new(&data);
+    let data = data.to_vec();
+    Ok(tungstenite::Message::binary(data))
 }
 
 impl Stream for WasmWebSocketStream {
-    type Item = Result<WsMessage, tungstenite::Error>;
+    type Item = Result<tungstenite::Message, Error>;
 
     fn poll_next(
         self: std::pin::Pin<&mut Self>,
@@ -159,8 +155,8 @@ impl Stream for WasmWebSocketStream {
     }
 }
 
-impl Sink<WsMessage> for WasmWebSocketStream {
-    type Error = tungstenite::Error;
+impl Sink<tungstenite::Message> for WasmWebSocketStream {
+    type Error = Error;
 
     fn poll_ready(
         self: std::pin::Pin<&mut Self>,
@@ -168,38 +164,38 @@ impl Sink<WsMessage> for WasmWebSocketStream {
     ) -> std::task::Poll<Result<(), Self::Error>> {
         match self.inner.ready_state().try_into() {
             Ok(ReadyState::Open) => std::task::Poll::Ready(Ok(())),
-            _ => std::task::Poll::Ready(Err(tungstenite::Error::ConnectionClosed)),
+            _ => std::task::Poll::Ready(Err(Error::Tungstenite(tungstenite::Error::ConnectionClosed))),
         }
     }
 
-    fn start_send(self: std::pin::Pin<&mut Self>, item: WsMessage) -> Result<(), Self::Error> {
+    fn start_send(self: std::pin::Pin<&mut Self>, item: tungstenite::Message) -> Result<(), Self::Error> {
         match self.inner.ready_state().try_into() {
-            Ok(ReadyState::Open) => match item.0 {
+            Ok(ReadyState::Open) => match item {
                 tungstenite::Message::Text(item) => self
                     .inner
                     .send_with_str(&item)
-                    .map_err(|_| tungstenite::Error::ConnectionClosed),
+                    .map_err(|_| Error::Tungstenite(tungstenite::Error::ConnectionClosed)),
                 tungstenite::Message::Binary(item) => self
                     .inner
                     .send_with_u8_array(&item)
-                    .map_err(|_| tungstenite::Error::ConnectionClosed),
+                    .map_err(|_| Error::Tungstenite(tungstenite::Error::ConnectionClosed)),
                 tungstenite::Message::Close(frame) => match frame {
                     Some(frame) => self
                         .inner
                         .close_with_code_and_reason(frame.code.into(), &frame.reason)
-                        .map_err(|_| tungstenite::Error::ConnectionClosed),
+                        .map_err(|_| Error::Tungstenite(tungstenite::Error::ConnectionClosed)),
                     None => self
                         .inner
                         .close()
-                        .map_err(|_| tungstenite::Error::ConnectionClosed),
+                        .map_err(|_| Error::Tungstenite(tungstenite::Error::ConnectionClosed)),
                 },
                 tungstenite::Message::Ping(_)
                 | tungstenite::Message::Pong(_)
-                | tungstenite::Message::Frame(_) => Err(tungstenite::Error::Io(io::Error::other(
+                | tungstenite::Message::Frame(_) => Err(Error::Tungstenite(tungstenite::Error::Io(io::Error::other(
                     "Sending Ping, Pong and Frame is not supported",
-                ))),
+                )))),
             },
-            _ => Err(tungstenite::Error::ConnectionClosed),
+            _ => Err(Error::Tungstenite(tungstenite::Error::ConnectionClosed)),
         }
     }
 
@@ -216,7 +212,7 @@ impl Sink<WsMessage> for WasmWebSocketStream {
     ) -> std::task::Poll<Result<(), Self::Error>> {
         self.inner
             .close()
-            .map_err(|_| tungstenite::Error::AlreadyClosed)?;
+            .map_err(|_| Error::Tungstenite(tungstenite::Error::AlreadyClosed))?;
         std::task::Poll::Ready(Ok(()))
     }
 }
