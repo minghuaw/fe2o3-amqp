@@ -4,6 +4,7 @@
 
 1. Fixed link builder dropping `properties` in `name()`, `sender()`, `receiver()`,
    `target()`, and `coordinator()` methods.
+2. Updated outdated rustls API and fixed syntax errors in doc examples.
 
 ## 0.16.0
 
