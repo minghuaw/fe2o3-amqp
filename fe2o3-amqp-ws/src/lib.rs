@@ -271,9 +271,7 @@ fn map_stream_error(error: Error) -> io::Error {
                 io::ErrorKind::NotConnected.into()
             }
             tungstenite::Error::Io(err) => err,
-            tungstenite::Error::Capacity(err) => {
-                io::Error::new(io::ErrorKind::InvalidData, err)
-            }
+            tungstenite::Error::Capacity(err) => io::Error::new(io::ErrorKind::InvalidData, err),
             other => io::Error::other(other),
         },
         other => io::Error::other(other),
