@@ -81,7 +81,6 @@ tokio-native-tls = { workspace = true, optional = true }
 webpki-roots = { workspace = true, optional = true }
 tokio-rustls = { workspace = true, optional = true }
 librustls = { workspace = true, optional = true }
-tokio-stream = { workspace = true, features = ["time"] }
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 uuid = { workspace = true, features = ["v4", "rng-getrandom"], optional = true }

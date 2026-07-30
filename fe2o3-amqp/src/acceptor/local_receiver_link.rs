@@ -2,7 +2,7 @@
 
 use std::{
     marker::PhantomData,
-    sync::{atomic::AtomicU32, Arc},
+    sync::Arc,
 };
 
 use fe2o3_amqp_types::{
