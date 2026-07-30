@@ -90,7 +90,6 @@ tokio-rustls = "0.26"
 librustls = { package = "rustls", version = "0.23" }
 libnative-tls = { package = "native-tls", version = "0.2" }
 tokio-native-tls = "0.3"
-tokio-stream = "0.1"
 tokio-test = "0.4"
 trait-variant = "0.1.1"
 serde_repr = "0.1"
