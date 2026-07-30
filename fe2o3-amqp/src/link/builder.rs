@@ -192,7 +192,7 @@ impl<Role, T, NameState, SS, TS> Builder<Role, T, NameState, SS, TS> {
             desired_capabilities: self.desired_capabilities,
             buffer_size: self.buffer_size,
             credit_mode: self.credit_mode,
-            properties: Default::default(),
+            properties: self.properties,
 
             role: self.role,
             name_state: PhantomData,
@@ -219,7 +219,7 @@ impl<Role, T, NameState, SS, TS> Builder<Role, T, NameState, SS, TS> {
             desired_capabilities: self.desired_capabilities,
             buffer_size: self.buffer_size,
             credit_mode: self.credit_mode,
-            properties: Default::default(),
+            properties: self.properties,
 
             role: PhantomData,
             name_state: self.name_state,
@@ -246,7 +246,7 @@ impl<Role, T, NameState, SS, TS> Builder<Role, T, NameState, SS, TS> {
             desired_capabilities: self.desired_capabilities,
             buffer_size: self.buffer_size,
             credit_mode: self.credit_mode,
-            properties: Default::default(),
+            properties: self.properties,
 
             role: PhantomData,
             name_state: self.name_state,
@@ -315,7 +315,7 @@ impl<Role, T, NameState, SS, TS> Builder<Role, T, NameState, SS, TS> {
             desired_capabilities: self.desired_capabilities,
             buffer_size: self.buffer_size,
             credit_mode: self.credit_mode,
-            properties: Default::default(),
+            properties: self.properties,
 
             role: self.role,
             name_state: self.name_state,
@@ -346,7 +346,7 @@ impl<Role, T, NameState, SS, TS> Builder<Role, T, NameState, SS, TS> {
                 desired_capabilities: self.desired_capabilities,
                 buffer_size: self.buffer_size,
                 credit_mode: self.credit_mode,
-                properties: Default::default(),
+                properties: self.properties,
 
                 role: self.role,
                 name_state: self.name_state,

@@ -1,5 +1,10 @@
 # Change Log
 
+## Unreleased
+
+1. Fixed link builder dropping `properties` in `name()`, `sender()`, `receiver()`,
+   `target()`, and `coordinator()` methods.
+
 ## 0.16.0
 
 1. **Breaking**: This crate no longer depends on `ring` on any target. The `rustls`
