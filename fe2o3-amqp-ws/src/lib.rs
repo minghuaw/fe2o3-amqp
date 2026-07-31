@@ -8,7 +8,17 @@
 //!
 //! The wrapper type [`WebSocketStream`] could also be used for non-AMQP applications; however, the
 //! user should establish websocket stream with raw `tokio_tungstenite` API and then wrap the stream
-//! with the wrapper by `fe2o3_amqp_ws::WebSocketStream::from(ws_stream)`.
+//! with the wrapper by `fe2o3_amqp_ws::WebSocketStream::new(ws_stream, response)`.
+//!
+//! # Re-exports
+//!
+//! This crate re-exports `tungstenite` and `tokio_tungstenite` so that downstream
+//! users can reference the same versions used internally:
+//!
+//! ```rust
+//! use fe2o3_amqp_ws::tungstenite;
+//! use fe2o3_amqp_ws::tokio_tungstenite;
+//! ```
 //!
 //! # Feature flags
 //!
@@ -85,6 +95,11 @@ use tokio::io::{AsyncRead, AsyncWrite};
 mod error;
 pub use error::Error;
 
+pub use tungstenite;
+
+#[cfg(not(target_arch = "wasm32"))]
+pub use tokio_tungstenite;
+
 #[macro_use]
 mod macros;
 
@@ -97,10 +112,6 @@ cfg_wasm32! {
 }
 
 const SEC_WEBSOCKET_PROTOCOL_AMQP: &str = "amqp";
-
-/// This a wrapper around `tungstenite::Message`
-#[derive(Debug, Eq, PartialEq, Clone)]
-pub struct WsMessage(pub tungstenite::Message);
 
 pin_project! {
     /// A wrapper over [`tokio_tungstenite::WebSoccketStream`] that implements
@@ -159,7 +170,7 @@ pin_project! {
 // - `ws_stream_tungstenite`
 impl<S> AsyncRead for WebSocketStream<S>
 where
-    S: Stream<Item = Result<WsMessage, tungstenite::Error>>,
+    S: Stream<Item = Result<tungstenite::Message, Error>>,
 {
     fn poll_read(
         self: std::pin::Pin<&mut Self>,
@@ -180,11 +191,11 @@ where
 
             let msg = match ready!(inner.as_mut().poll_next(cx)) {
                 Some(Ok(msg)) => msg,
-                Some(Err(err)) => return Poll::Ready(Err(map_tungstenite_error(err))),
+                Some(Err(err)) => return Poll::Ready(Err(map_stream_error(err))),
                 None => return Poll::Ready(Ok(())), // EOF
             };
 
-            match msg.0 {
+            match msg {
                 tungstenite::Message::Text(_) => {
                     return Poll::Ready(Err(io::Error::new(
                         io::ErrorKind::InvalidData,
@@ -218,7 +229,7 @@ where
 
 impl<S> AsyncWrite for WebSocketStream<S>
 where
-    S: Sink<WsMessage, Error = tungstenite::Error>,
+    S: Sink<tungstenite::Message, Error = Error>,
 {
     fn poll_write(
         self: std::pin::Pin<&mut Self>,
@@ -226,14 +237,13 @@ where
         buf: &[u8],
     ) -> std::task::Poll<Result<usize, std::io::Error>> {
         let mut this = self.project();
-        ready!(this.inner.as_mut().poll_ready(cx)).map_err(map_tungstenite_error)?;
+        ready!(this.inner.as_mut().poll_ready(cx)).map_err(map_stream_error)?;
         let n = buf.len();
         let bin = Bytes::copy_from_slice(buf);
         let item = tungstenite::Message::binary(bin);
-        let item = WsMessage(item);
         match this.inner.start_send(item) {
             Ok(_) => Poll::Ready(Ok(n)),
-            Err(error) => Poll::Ready(Err(map_tungstenite_error(error))),
+            Err(error) => Poll::Ready(Err(map_stream_error(error))),
         }
     }
 
@@ -242,7 +252,7 @@ where
         cx: &mut std::task::Context<'_>,
     ) -> std::task::Poll<Result<(), std::io::Error>> {
         let this = self.project();
-        this.inner.poll_flush(cx).map_err(map_tungstenite_error)
+        this.inner.poll_flush(cx).map_err(map_stream_error)
     }
 
     fn poll_shutdown(
@@ -250,17 +260,20 @@ where
         cx: &mut std::task::Context<'_>,
     ) -> std::task::Poll<Result<(), std::io::Error>> {
         let this = self.project();
-        this.inner.poll_close(cx).map_err(map_tungstenite_error)
+        this.inner.poll_close(cx).map_err(map_stream_error)
     }
 }
 
-fn map_tungstenite_error(error: tungstenite::Error) -> io::Error {
+fn map_stream_error(error: Error) -> io::Error {
     match error {
-        tungstenite::Error::ConnectionClosed | tungstenite::Error::AlreadyClosed => {
-            io::ErrorKind::NotConnected.into()
-        }
-        tungstenite::Error::Io(err) => err,
-        tungstenite::Error::Capacity(err) => io::Error::new(io::ErrorKind::InvalidData, err),
-        _ => io::Error::other(error),
+        Error::Tungstenite(e) => match e {
+            tungstenite::Error::ConnectionClosed | tungstenite::Error::AlreadyClosed => {
+                io::ErrorKind::NotConnected.into()
+            }
+            tungstenite::Error::Io(err) => err,
+            tungstenite::Error::Capacity(err) => io::Error::new(io::ErrorKind::InvalidData, err),
+            other => io::Error::other(other),
+        },
+        other => io::Error::other(other),
     }
 }
