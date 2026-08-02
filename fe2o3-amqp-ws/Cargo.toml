@@ -53,5 +53,12 @@ web-sys = { workspace = true, features = [
 fe2o3-amqp = { workspace = true }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
-tokio = { workspace = true, features = ["net", "rt-multi-thread"] }
+tokio = { workspace = true, features = ["macros", "net", "rt-multi-thread"] }
+
+# This dev-dependency reproduces Cargo feature unification in the test build: it turns on a TLS
+# feature of `tokio-tungstenite` while this crate itself has no TLS feature enabled. The tests in
+# `tests/connector_api.rs` then guard that a `wss://` address still fails instead of connecting
+# with a TLS stack that this crate never asked for. See issue #356. It uses `rustls` rather than
+# `native-tls`, because `rustls` is pure Rust and needs no system library.
+tokio-tungstenite = { workspace = true, features = ["rustls-tls-webpki-roots"] }
 

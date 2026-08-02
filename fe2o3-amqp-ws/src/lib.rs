@@ -6,9 +6,12 @@
 //! This provides a thin wrapper over `tokio_tungstenite::WebSocketStream`, and the wrapper performs
 //! the WebSocket handshake with the "Sec-WebSocket-Protocol" HTTP header set to "amqp".
 //!
-//! The wrapper type [`WebSocketStream`] could also be used for non-AMQP applications; however, the
-//! user should establish websocket stream with raw `tokio_tungstenite` API and then wrap the stream
-//! with the wrapper by `fe2o3_amqp_ws::WebSocketStream::new(ws_stream, response)`.
+//! Every public constructor of [`WebSocketStream`] sets the "Sec-WebSocket-Protocol" header to
+//! "amqp" and rejects a handshake response that does not return the same value. To do the
+//! handshake over a stream that you open yourself, use `WebSocketStream::connect_with_stream` or
+//! `WebSocketStream::connect_with_stream_and_config`. This crate has no public constructor that
+//! wraps a `tokio_tungstenite::WebSocketStream` that you built with the raw `tokio_tungstenite`
+//! API.
 //!
 //! # Re-exports
 //!
@@ -32,6 +35,33 @@
 //! | `native-tls-vendored` | Enables "tokio-tungstenite/native-tls-vendored" |
 //! | `rustls-tls-native-roots` | Enables "tokio-tungstenite/rustls-tls-native-roots" |
 //! | `rustls-tls-webpki-roots` | Enables "tokio-tungstenite/rustls-tls-webpki-roots" |
+//!
+//! # TLS
+//!
+//! These three connect functions are not feature gated:
+//! `WebSocketStream::connect_tls_with_config`, `WebSocketStream::connect_tls_with_stream_and_config`,
+//! and `WebSocketStream::connect_tls_with_stream`. The first two take a TLS `connector`. The third
+//! is a shorthand that supplies no connector. A library crate can depend on `fe2o3-amqp-ws` with
+//! `default-features = false`, call these functions, and let the application that builds the final
+//! binary select the TLS stack.
+//!
+//! The four features above select which TLS stack `tokio-tungstenite` links. They do not control
+//! whether the connect functions exist. Enable the feature on `fe2o3-amqp-ws` itself. A TLS
+//! feature that another crate enables on `tokio-tungstenite` does not enable the TLS code path of
+//! this crate, because a crate cannot read the features of its dependency.
+//!
+//! With none of the four features enabled, these three functions have no TLS stack. A `ws://`
+//! address connects in plaintext. A `wss://` address returns
+//! `Error::Tungstenite(tungstenite::Error::Url(tungstenite::error::UrlError::TlsFeatureNotEnabled))`
+//! before a socket is opened, for every value of `connector`. A `wss://` address is never
+//! downgraded to a plaintext connection.
+//!
+//! `WebSocketStream::connect` and `WebSocketStream::connect_with_config` behave differently. They
+//! take no connector and pass `None` to `tokio-tungstenite`, which then selects the TLS stack from
+//! its own enabled features. Cargo unifies features over the whole dependency graph, so another
+//! crate can change that selection. These two functions can therefore make a TLS connection when
+//! `fe2o3-amqp-ws` has no TLS feature enabled. Call `WebSocketStream::connect_tls_with_config` with
+//! `Some(connector)` for a deterministic TLS stack.
 //!
 //! # Example
 //!

@@ -93,6 +93,16 @@ cd fe2o3-amqp
 cargo make feature_check
 ```
 
+`fe2o3-amqp-ws` has no `Makefile.toml`. Its TLS features must not gate the connect functions, so
+CI also runs the commands below from the repository root. Run them after a change to that crate:
+
+```bash
+cargo test -p fe2o3-amqp-ws --no-default-features
+cargo check -p fe2o3-amqp-ws --no-default-features --features native-tls --all-targets
+cargo check -p fe2o3-amqp-ws --no-default-features --features rustls-tls-native-roots --all-targets
+cargo check -p fe2o3-amqp-ws --no-default-features --features rustls-tls-webpki-roots --all-targets
+```
+
 Run the following to check if all examples build:
 
 ```bash

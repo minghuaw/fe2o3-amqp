@@ -3,6 +3,8 @@
 ## Unreleased
 
 1. Updated `tungstenite` and `tokio-tungstenite` from `0.26` to `0.30`.
+2. Removed the TLS feature gate from `WebSocketStream::connect_tls_with_config`, `WebSocketStream::connect_tls_with_stream`, and `WebSocketStream::connect_tls_with_stream_and_config` (issue [#356](https://github.com/minghuaw/fe2o3-amqp/issues/356)). The three functions now exist in every feature build, so a library crate can depend on `fe2o3-amqp-ws` with no TLS feature and let the application select the TLS stack. With a TLS feature enabled, their behavior does not change. With no TLS feature enabled, a `ws://` address connects in plaintext, and a `wss://` address returns `tungstenite::error::UrlError::TlsFeatureNotEnabled` before this crate opens a socket. This crate never downgrades a `wss://` address to a plaintext connection. `WebSocketStream::connect` and `WebSocketStream::connect_with_config` keep their current behavior, because they take no connector.
+3. Relaxed the bound on `impl WebSocketStream<TokioWebSocketStream<MaybeTlsStream<S>>>` and dropped `Sync`, which `tokio_tungstenite::client_async_tls_with_config` never required.
 
 ### Breaking Changes
 
