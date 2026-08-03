@@ -119,9 +119,9 @@ impl WebSocketStream<TokioWebSocketStream<MaybeTlsStream<TcpStream>>> {
 
     /// Calls [`tokio_tungstenite::connect_async_with_config`] internally with
     /// `"Sec-WebSocket-Protocol"` HTTP header of the `req` set to `"amqp"`
-    /// 
-    /// `disable_nagle` specifies if the Nagle’s algorithm must be disabled,
-    /// i.e. `set_nodelay(true)`. If you don’t know what the Nagle’s algorithm is,
+    ///
+    /// `disable_nagle` specifies if the Nagle's algorithm must be disabled,
+    /// i.e. `set_nodelay(true)`. If you don't know what the Nagle's algorithm is,
     /// better leave it set to `false`.
     ///
     /// This function takes no TLS connector. For a `wss://` address, `tokio_tungstenite` selects
