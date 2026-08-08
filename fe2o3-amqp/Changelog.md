@@ -1,6 +1,6 @@
 # Change Log
 
-## Unreleased
+## 0.16.1
 
 1. Fixed link builder dropping `properties` in `name()`, `sender()`, `receiver()`,
    `target()`, and `coordinator()` methods.
