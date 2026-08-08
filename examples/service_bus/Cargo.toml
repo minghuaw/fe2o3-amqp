@@ -27,8 +27,8 @@ uuid = { version = "1", features = ["v4"] }
 serde_amqp = { path = "../../serde_amqp" }
 
 urlencoding = { version = "2.1.2", optional = true }
-sha2 = { version = "0.10.6", optional = true }
-hmac = { version = "0.12.1", optional = true }
+sha2 = { version = "0.11", optional = true }
+hmac = { version = "0.13", optional = true }
 base64 = { version = "0.22.1", optional = true }
 fe2o3-amqp-cbs = { path = "../../fe2o3-amqp-cbs", optional = true }
 fe2o3-amqp-management = { path = "../../fe2o3-amqp-management", optional = true }
