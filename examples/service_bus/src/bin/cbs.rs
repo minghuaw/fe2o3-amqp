@@ -60,7 +60,7 @@ async fn put_token(
 }
 
 fn mac<M: Mac + KeyInit>(key: &[u8], input: &[u8]) -> Result<impl AsRef<[u8]>, InvalidLength> {
-    let mut mac = <M as Mac>::new_from_slice(key)?;
+    let mut mac = M::new_from_slice(key)?;
     mac.update(input);
     Ok(mac.finalize().into_bytes())
 }
