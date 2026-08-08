@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.3.2
+## Unreleased
 
 1. Updated `darling` to `0.24` and `syn` to `3`
 
