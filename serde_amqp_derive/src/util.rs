@@ -85,7 +85,7 @@ pub(crate) fn convert_to_case(
         "PascalCase" => source.to_case(Case::Pascal),
         "camelCase" => source.to_case(Case::Camel),
         "snake_case" => source.to_case(Case::Snake),
-        "SCREAMING_SNAKE_CASE" => source.to_case(Case::ScreamingSnake),
+        "SCREAMING_SNAKE_CASE" => source.to_case(Case::UpperSnake),
         "kebab-case" => source.to_case(Case::Kebab),
         e => {
             let span = get_span_of("rename_all", ctx);

@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+1. Updated `convert_case` to `0.11`
+
 ## 0.3.1
 
 1. Added a `#[amqp_contract(multiple)]` field attribute. On a `multiple`
