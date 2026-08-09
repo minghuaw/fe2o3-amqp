@@ -77,12 +77,12 @@ getrandom = "0.4"
 parking_lot = "0.12"
 slab = "0.4"
 url = "2"
-sha-1 = "0.10"
-sha2 = "0.10"
+sha1 = "0.11"
+sha2 = "0.11"
 base64 = "0.22"
 stringprep = "0.1"
-hmac = "0.12"
-pbkdf2 = { version = "0.12", default-features = false }
+hmac = "0.13"
+pbkdf2 = { version = "0.13", default-features = false }
 webpki-roots = "1"
 # Default features are on so that `rustls` selects its own default crypto
 # provider (`aws-lc-rs`). This crate does not pin a provider. See issue #333.
