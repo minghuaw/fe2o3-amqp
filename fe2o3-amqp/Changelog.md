@@ -1,6 +1,6 @@
 # Change Log
 
-## Unreleased
+## 0.16.2
 
 1. Updated `sha2` to `0.11`, `hmac` and `pbkdf2` to `0.13`, and replaced the deprecated
    `sha-1` crate with `sha1` `0.11` for SCRAM-SHA-1.
