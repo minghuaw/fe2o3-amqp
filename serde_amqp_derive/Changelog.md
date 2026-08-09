@@ -3,6 +3,7 @@
 ## Unreleased
 
 1. Updated `convert_case` to `0.11`
+2. Updated `darling` to `0.24` and `syn` to `3`
 
 ## 0.3.1
 
