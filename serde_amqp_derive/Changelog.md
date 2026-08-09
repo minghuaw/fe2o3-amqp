@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+1. Updated `darling` to `0.24` and `syn` to `3`
+
 ## 0.3.1
 
 1. Added a `#[amqp_contract(multiple)]` field attribute. On a `multiple`
