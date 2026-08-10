@@ -71,9 +71,8 @@ use tokio::sync::{mpsc::error::TryRecvError, oneshot};
 mod owned;
 pub use owned::*;
 
-pub(crate) mod control_link_frame;
-
 cfg_acceptor! {
+    pub(crate) mod control_link_frame;
     pub mod coordinator;
     pub mod frame;
     pub mod manager;
