@@ -124,7 +124,7 @@ mod tests {
         let value = Box::new(vec![1i32, 2]);
         let described = Described { descriptor, value };
         let buf = to_vec(&described).unwrap();
-        println!("{:?}", &buf);
+        println!("{:?}", buf);
         let recovered: Described<Vec<i32>> = from_slice(&buf).unwrap();
         println!("{:?}", recovered);
     }
@@ -150,9 +150,9 @@ mod tests {
             a: 0,
         };
         let serialized = to_vec(&foo).unwrap();
-        println!("{:?}", &serialized);
+        println!("{:?}", serialized);
         let deserialized: Foo = from_slice(&serialized).unwrap();
-        println!("{:?}", &deserialized);
+        println!("{:?}", deserialized);
         assert_eq!(foo, deserialized);
     }
 
@@ -171,9 +171,9 @@ mod tests {
             b: true,
         };
         let serialized = to_vec(&test).unwrap();
-        println!("{:?}", &serialized);
+        println!("{:?}", serialized);
         let deserialized: Test = from_slice(&serialized).unwrap();
-        println!("{:?}", &deserialized);
+        println!("{:?}", deserialized);
         assert_eq!(test, deserialized);
     }
 }

@@ -93,7 +93,7 @@ impl ScramVersion {
             .and_then(|s| s.strip_prefix(NONCE_KEY))
             .ok_or(ServerScramErrorKind::CannotParseClientFinalMessage)?;
         if nonce.as_bytes() != client_server_nonce {
-            return Err(ServerScramErrorKind::IncorrectClientFinalNonce)?;
+            return Err(ServerScramErrorKind::IncorrectClientFinalNonce);
         }
 
         let client_proof = parts

@@ -26,7 +26,7 @@ mod tests {
     fn test_serde_end() {
         let end = End { error: None };
         let buf = to_vec(&end).unwrap();
-        println!("{:x?}", &buf);
+        println!("{:x?}", buf);
         let end2: End = from_slice(&buf).unwrap();
         println!("{:?}", end2);
     }
