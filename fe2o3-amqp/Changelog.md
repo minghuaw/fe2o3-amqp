@@ -18,6 +18,11 @@
    leave it `false`. Previously `Transaction`'s batchable variants passed `false`,
    and `OwnedTransaction`'s `post` duplicated the send logic while `Transaction`'s
    `post` delegated to `post_batchable`.
+5. Implemented `From<IllegalLinkStateError>` for [`OwnedDischargeError`], which
+   enables [`TxnAcquisition`]'s `commit` and `rollback` methods with
+   [`OwnedTransaction`].
+6. [`OwnedTransaction`] is now rolled back when dropped without being discharged,
+   matching the behavior of [`Transaction`].
 
 ## 0.16.2
 

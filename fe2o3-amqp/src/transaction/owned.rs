@@ -3,15 +3,23 @@
 
 use fe2o3_amqp_types::transaction::{Declared, TransactionId};
 
-use crate::{link::DispositionError, session::SessionHandle};
+use crate::{
+    link::{shared_inner::LinkEndpointInnerDetach, DispositionError},
+    session::SessionHandle,
+};
 
 use super::{
-    Controller, ControllerSendError, OwnedDeclareError, OwnedDischargeError, TransactionAcquisition,
-    TransactionBase, TransactionDischarge, TransactionExt, TransactionPosting,
-    TransactionRetirement,
+    rollback_on_drop, Controller, ControllerSendError, OwnedDeclareError,
+    OwnedDischargeError, TransactionAcquisition, TransactionBase, TransactionDischarge,
+    TransactionExt, TransactionPosting, TransactionRetirement,
 };
 
 /// An owned transaction that has exclusive access to its own control link.
+///
+/// If the transaction is dropped without being discharged (i.e. without calling
+/// [`commit`](TransactionDischarge::commit) or
+/// [`rollback`](TransactionDischarge::rollback)), it is rolled back as a best-effort
+/// operation.
 ///
 /// # Examples
 ///
@@ -108,13 +116,13 @@ impl TransactionDischarge for OwnedTransaction {
 
     async fn rollback(mut self) -> Result<(), Self::Error> {
         self.discharge(true).await?;
-        self.controller.close().await?;
+        self.controller.inner.get_mut().close_with_error(None).await?;
         Ok(())
     }
 
     async fn commit(mut self) -> Result<(), Self::Error> {
         self.discharge(false).await?;
-        self.controller.close().await?;
+        self.controller.inner.get_mut().close_with_error(None).await?;
         Ok(())
     }
 }
@@ -162,3 +170,11 @@ impl TransactionPosting for OwnedTransaction {}
 impl TransactionAcquisition for OwnedTransaction {}
 
 impl TransactionExt for OwnedTransaction {}
+
+impl Drop for OwnedTransaction {
+    fn drop(&mut self) {
+        if !self.is_discharged {
+            rollback_on_drop(&self.controller.inner, &self.declared.txn_id);
+        }
+    }
+}

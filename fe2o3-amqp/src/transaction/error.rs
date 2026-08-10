@@ -187,6 +187,12 @@ impl From<DetachError> for OwnedDischargeError {
     }
 }
 
+impl From<IllegalLinkStateError> for OwnedDischargeError {
+    fn from(value: IllegalLinkStateError) -> Self {
+        Self::ControllerSendError(value.into())
+    }
+}
+
 /// Error associated with sending a txn message
 ///
 /// It is similar to [`SendError`] but differs in how transactional states

@@ -36,6 +36,7 @@ use crate::{
     endpoint::ReceiverLink,
     link::{
         delivery::{DeliveryFut, DeliveryInfo, UnsettledMessage},
+        sender::SenderInner,
         DispositionError, FlowError, LinkFrame,
     },
     util::TryConsume,
@@ -66,7 +67,9 @@ use serde_amqp::{ser::Serializer, Value};
 
 mod acquisition;
 pub use acquisition::*;
-use tokio::sync::{mpsc::error::TryRecvError, oneshot};
+use tokio::sync::{mpsc::error::TryRecvError, oneshot, Mutex};
+
+use controller::ControlLink;
 
 mod owned;
 pub use owned::*;
@@ -572,172 +575,172 @@ impl TransactionExt for Transaction<'_> {}
 impl<'t> Drop for Transaction<'t> {
     #[cfg_attr(feature = "tracing", tracing::instrument)]
     fn drop(&mut self) {
-        const TRIALS_BEFORE_GIVE_UP: u64 = 20;
-
         if !self.is_discharged {
-            // rollback
-            let discharge = Discharge {
-                txn_id: self.declared.txn_id.clone(),
-                fail: Some(true),
-            };
-            // As with the declare message, it is an error if the sender sends the transfer pre-settled.
-            let message = Message::builder().value(discharge).build();
-            let mut payload = BytesMut::new();
-            let mut serializer = Serializer::from((&mut payload).writer());
-            if let Err(_error) = Serializable(message).serialize(&mut serializer) {
+            rollback_on_drop(&self.controller.inner, &self.declared.txn_id);
+        }
+    }
+}
+
+/// Roll back an undischarged transaction when it is dropped.
+///
+/// This is a best-effort synchronous operation: the discharge transfer is serialized and
+/// sent over the control link without `.await` (which is not possible in `Drop`), retrying
+/// the lock acquisition and the outcome wait for a limited number of trials.
+pub(crate) fn rollback_on_drop(
+    controller: &Mutex<SenderInner<ControlLink>>,
+    txn_id: &TransactionId,
+) {
+    const TRIALS_BEFORE_GIVE_UP: u64 = 20;
+
+    let discharge = Discharge {
+        txn_id: txn_id.clone(),
+        fail: Some(true),
+    };
+    // As with the declare message, it is an error if the sender sends the transfer pre-settled.
+    let message = Message::builder().value(discharge).build();
+    let mut payload = BytesMut::new();
+    let mut serializer = Serializer::from((&mut payload).writer());
+    if let Err(_error) = Serializable(message).serialize(&mut serializer) {
+        #[cfg(feature = "tracing")]
+        tracing::error!(error = ?_error);
+        #[cfg(feature = "log")]
+        log::error!("error = {:?}", _error);
+        return;
+    }
+    let payload = payload.freeze();
+    let payload_copy = payload.clone();
+
+    // TODO: what if lock fails
+    let mut counter = 0;
+    let mut inner = loop {
+        if counter > TRIALS_BEFORE_GIVE_UP {
+            return;
+        }
+        counter += 1;
+
+        match controller.try_lock() {
+            Ok(inner) => break inner,
+            Err(_error) => {
                 #[cfg(feature = "tracing")]
                 tracing::error!(error = ?_error);
                 #[cfg(feature = "log")]
                 log::error!("error = {:?}", _error);
-                return;
+
+                std::thread::sleep(std::time::Duration::from_millis(10 * counter + 1))
             }
-            // let payload = BytesMut::from(payload);
-            let payload = payload.freeze();
-            let payload_copy = payload.clone();
+        }
+    };
 
-            // let mut inner = self.controller.inner.blocking_lock();
-            // TODO: what if lock fails
-            let mut counter = 0;
-            let mut inner = loop {
-                if counter > TRIALS_BEFORE_GIVE_UP {
-                    return;
-                }
-                counter += 1;
-
-                match self.controller.inner.try_lock() {
-                    Ok(inner) => break inner,
-                    Err(_error) => {
-                        #[cfg(feature = "tracing")]
-                        tracing::error!(error = ?_error);
-                        #[cfg(feature = "log")]
-                        log::error!("error = {:?}", _error);
-
-                        std::thread::sleep(std::time::Duration::from_millis(10 * counter + 1))
-                    }
-                }
-            };
-
-            match inner.link.flow_state.try_consume(1) {
-                Ok(_) => {
-                    let input_handle = match inner
-                        .link
-                        .input_handle
-                        .clone()
-                        .ok_or(AmqpError::IllegalState)
-                    {
-                        Ok(handle) => handle,
-                        Err(_error) => {
-                            #[cfg(feature = "tracing")]
-                            tracing::error!(error = ?_error);
-                            #[cfg(feature = "log")]
-                            log::error!("error = {:?}", _error);
-                            return;
-                        }
-                    };
-                    let handle = match inner.link.output_handle.clone() {
-                        Some(handle) => handle.into(),
-                        None => return,
-                    };
-                    // let tag = self.flow_state.state().delivery_count().await.to_be_bytes();
-                    let tag = match inner.link.flow_state.state().lock.try_read() {
-                        Some(inner) => inner.delivery_count.to_be_bytes(),
-                        None => return,
-                    };
-                    let delivery_tag = DeliveryTag::from(tag);
-
-                    let transfer = Transfer {
-                        handle,
-                        delivery_id: None,
-                        delivery_tag: Some(delivery_tag.clone()),
-                        message_format: Some(MESSAGE_FORMAT),
-                        settled: Some(false),
-                        more: false, // This message should be small enough
-                        rcv_settle_mode: None,
-                        state: None,
-                        resume: false,
-                        aborted: false,
-                        batchable: false,
-                    };
-
-                    // try receive in case of detach
-                    match inner.incoming.try_recv() {
-                        Ok(_) => {
-                            // The only frames that are relayed is detach
-                            return;
-                        }
-                        Err(error) => match error {
-                            TryRecvError::Empty => {}
-                            TryRecvError::Disconnected => return,
-                        },
-                    }
-
-                    // Send out Rollback
-                    let frame = LinkFrame::Transfer {
-                        input_handle,
-                        performative: transfer,
-                        payload,
-                    };
-                    if inner.outgoing.try_send(frame).is_err() {
-                        // Channel is already closed
-                        return;
-                    }
-
-                    // TODO: Wait for accept or not?
-                    // The transfer is sent unsettled and will be
-                    // inserted into
-                    let (tx, mut rx) = oneshot::channel();
-                    let unsettled = UnsettledMessage::new(payload_copy, None, MESSAGE_FORMAT, tx);
-                    {
-                        let mut guard = match inner.link.unsettled.try_write() {
-                            Some(guard) => guard,
-                            None => return,
-                        };
-                        guard
-                            .get_or_insert(OrderedMap::new())
-                            .insert(delivery_tag, unsettled);
-                    }
-                    let mut counter = 0;
-                    loop {
-                        // TODO:: limits?
-                        if counter > TRIALS_BEFORE_GIVE_UP {
-                            return;
-                        }
-                        counter += 1;
-
-                        match rx.try_recv() {
-                            Ok(Some(state)) => match state {
-                                DeliveryState::Accepted(_) => break,
-                                _ => {
-                                    #[cfg(feature = "tracing")]
-                                    tracing::error!(error = ?state);
-                                    #[cfg(feature = "log")]
-                                    log::error!("error = {:?}", state);
-                                    break;
-                                }
-                            },
-                            Ok(None) => {
-                                // #[cfg(feature = "tracing")]
-                                // tracing::error!(error = ?ControllerSendError::IllegalDeliveryState);
-                                // #[cfg(feature = "log")]
-                                // log::error!("error = {:?}", ControllerSendError::IllegalDeliveryState);
-                                std::thread::sleep(std::time::Duration::from_millis(10 * counter + 1));
-                            }
-                            Err(_error) => {
-                                #[cfg(feature = "tracing")]
-                                tracing::error!(error = ?_error);
-                                #[cfg(feature = "log")]
-                                log::error!("error = {:?}", _error);
-                            }
-                        };
-                    }
-                }
+    match inner.link.flow_state.try_consume(1) {
+        Ok(_) => {
+            let input_handle = match inner.link.input_handle.clone().ok_or(AmqpError::IllegalState)
+            {
+                Ok(handle) => handle,
                 Err(_error) => {
                     #[cfg(feature = "tracing")]
                     tracing::error!(error = ?_error);
                     #[cfg(feature = "log")]
                     log::error!("error = {:?}", _error);
+                    return;
                 }
+            };
+            let handle = match inner.link.output_handle.clone() {
+                Some(handle) => handle.into(),
+                None => return,
+            };
+            let tag = match inner.link.flow_state.state().lock.try_read() {
+                Some(inner) => inner.delivery_count.to_be_bytes(),
+                None => return,
+            };
+            let delivery_tag = DeliveryTag::from(tag);
+
+            let transfer = Transfer {
+                handle,
+                delivery_id: None,
+                delivery_tag: Some(delivery_tag.clone()),
+                message_format: Some(MESSAGE_FORMAT),
+                settled: Some(false),
+                more: false, // This message should be small enough
+                rcv_settle_mode: None,
+                state: None,
+                resume: false,
+                aborted: false,
+                batchable: false,
+            };
+
+            // try receive in case of detach
+            match inner.incoming.try_recv() {
+                Ok(_) => {
+                    // The only frames that are relayed is detach
+                    return;
+                }
+                Err(error) => match error {
+                    TryRecvError::Empty => {}
+                    TryRecvError::Disconnected => return,
+                },
             }
+
+            // Send out Rollback
+            let frame = LinkFrame::Transfer {
+                input_handle,
+                performative: transfer,
+                payload,
+            };
+            if inner.outgoing.try_send(frame).is_err() {
+                // Channel is already closed
+                return;
+            }
+
+            // TODO: Wait for accept or not?
+            // The transfer is sent unsettled and will be
+            // inserted into
+            let (tx, mut rx) = oneshot::channel();
+            let unsettled = UnsettledMessage::new(payload_copy, None, MESSAGE_FORMAT, tx);
+            {
+                let mut guard = match inner.link.unsettled.try_write() {
+                    Some(guard) => guard,
+                    None => return,
+                };
+                guard
+                    .get_or_insert(OrderedMap::new())
+                    .insert(delivery_tag, unsettled);
+            }
+            let mut counter = 0;
+            loop {
+                // TODO:: limits?
+                if counter > TRIALS_BEFORE_GIVE_UP {
+                    return;
+                }
+                counter += 1;
+
+                match rx.try_recv() {
+                    Ok(Some(state)) => match state {
+                        DeliveryState::Accepted(_) => break,
+                        _ => {
+                            #[cfg(feature = "tracing")]
+                            tracing::error!(error = ?state);
+                            #[cfg(feature = "log")]
+                            log::error!("error = {:?}", state);
+                            break;
+                        }
+                    },
+                    Ok(None) => {
+                        std::thread::sleep(std::time::Duration::from_millis(10 * counter + 1));
+                    }
+                    Err(_error) => {
+                        #[cfg(feature = "tracing")]
+                        tracing::error!(error = ?_error);
+                        #[cfg(feature = "log")]
+                        log::error!("error = {:?}", _error);
+                    }
+                };
+            }
+        }
+        Err(_error) => {
+            #[cfg(feature = "tracing")]
+            tracing::error!(error = ?_error);
+            #[cfg(feature = "log")]
+            log::error!("error = {:?}", _error);
         }
     }
 }
