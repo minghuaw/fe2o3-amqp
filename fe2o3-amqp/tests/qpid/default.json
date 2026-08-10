@@ -1,0 +1,20 @@
+{
+  "name" : "default",
+  "modelVersion" : "9.1",
+  "type" : "BDB",
+  "storePath" : "/qpid-broker-j/work/messages",
+  "storeUnderfullSize" : "0",
+  "storeOverfullSize" : "0",
+  "context" : {
+    "qpid.broker.bdbCommiterNotifyThreshold" : "8",
+    "qpid.broker.bdbCommiterWaitTimeout" : "500",
+    "queue.defaultMaximumQueueDepthMessages" : "1000",
+    "queue.defaultMaximumQueueDepthBytes" : "1048576"
+  },
+  "nodeAutoCreationPolicies" : [ {
+    "pattern" : ".*",
+    "createdOnPublish" : true,
+    "createdOnConsume" : true,
+    "nodeType" : "queue"
+  } ]
+}
