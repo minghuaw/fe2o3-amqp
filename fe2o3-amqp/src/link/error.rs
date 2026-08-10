@@ -72,19 +72,25 @@ pub enum SenderAttachError {
     #[error("Control link is not implemented without enabling the `transaction` feature")]
     CoordinatorIsNotImplemented,
 
-    /// When set at the sender this indicates the actual settlement mode in use.
+    /// The sender requested a definite settlement mode (`settled` or `unsettled`)
+    /// that conflicts with the receiver's declared *desired* settlement mode in
+    /// the attach response.
     ///
-    /// The sender SHOULD respect the receiver’s desired settlement mode ***if
-    /// the receiver initiates*** the attach exchange and the sender supports the desired mode
-    #[error("When set at the sender this indicates the actual settlement mode in use")]
+    /// The `snd-settle-mode` field in the attach response from the receiver only
+    /// expresses the receiver's desired settlement mode for the sender. When the
+    /// sender initiates the attach, the sender's own choice is the settlement
+    /// mode in use, and the receiver SHOULD respect it. A response of `mixed` is
+    /// tolerated regardless of the sender's choice, so this error is only
+    /// produced when neither side declares `mixed` and the two definite values
+    /// differ, e.g. the sender requests `settled` while the receiver responds
+    /// `unsettled` (or vice versa). Such a conflict signals a receiver that
+    /// expects settlement behavior the sender will not provide, so the attach
+    /// is rejected with this error instead of risking broken settlement at
+    /// delivery time.
+    #[error(
+        "The requested snd-settle-mode conflicts with the remote peer's desired settlement mode"
+    )]
     SndSettleModeNotSupported,
-
-    /// "When set at the receiver this indicates the actual settlement mode in use"
-    ///
-    /// The receiver SHOULD respect the sender’s desired settlement mode ***if
-    /// the sender initiates*** the attach exchange and the receiver supports the desired mode
-    #[error("The desried ReceiverSettleMode is not supported by the remote peer")]
-    RcvSettleModeNotSupported,
 
     /// When set to true by the receiving link endpoint this field indicates creation of a
     /// dynamically created node. In this case the address field will contain the address of the
@@ -233,13 +239,6 @@ pub enum ReceiverAttachError {
     // /// the receiver initiates*** the attach exchange and the sender supports the desired mode
     // #[error("When set at the sender this indicates the actual settlement mode in use")]
     // SndSettleModeNotSupported,
-    /// "When set at the receiver this indicates the actual settlement mode in use"
-    ///
-    /// The receiver SHOULD respect the sender’s desired settlement mode ***if
-    /// the sender initiates*** the attach exchange and the receiver supports the desired mode
-    #[error("The desried ReceiverSettleMode is not supported by the remote peer")]
-    RcvSettleModeNotSupported,
-
     /// When dynamic is set to true by the sending link endpoint, this field constitutes a request
     /// for the receiving peer to dynamically create a node at the target. In this case the address
     /// field MUST NOT be set.

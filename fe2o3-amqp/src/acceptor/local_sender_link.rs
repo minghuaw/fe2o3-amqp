@@ -173,8 +173,7 @@ where
                 // Complete attach then detach should any error happen
                 link.send_attach(&outgoing, &session.control, false).await?;
                 match attach_error {
-                    SenderAttachError::SndSettleModeNotSupported
-                    | SenderAttachError::RcvSettleModeNotSupported => {
+                    SenderAttachError::SndSettleModeNotSupported => {
                         // FIXME: The initiating side is responsible for checking whether the desired modes are supported?
                     }
                     _ => {

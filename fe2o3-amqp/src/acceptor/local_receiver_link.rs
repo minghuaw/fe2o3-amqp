@@ -225,22 +225,14 @@ where
             (Some(attach_error), _) | (_, Err(attach_error)) => {
                 // Complete attach anyway
                 link.send_attach(&outgoing, &control, false).await?;
-                match attach_error {
-                    // ReceiverAttachError::SndSettleModeNotSupported
-                    ReceiverAttachError::RcvSettleModeNotSupported => {
-                        // FIXME: Ths initiating end should be responsible for checking whether the mode is supported
-                    }
-                    _ => {
-                        return Err(link
-                            .handle_attach_error(
-                                attach_error,
-                                &outgoing,
-                                &mut incoming_rx,
-                                &control,
-                            )
-                            .await)
-                    }
-                }
+                return Err(link
+                    .handle_attach_error(
+                        attach_error,
+                        &outgoing,
+                        &mut incoming_rx,
+                        &control,
+                    )
+                    .await)
             }
             _ => link.send_attach(&outgoing, &control, false).await?,
         }
