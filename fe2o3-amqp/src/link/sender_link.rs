@@ -18,7 +18,7 @@ where
     ///
     /// This is cancel safe because all internal `.await` are cancel safe
     pub(crate) async fn send_transfer_without_modifying_unsettled_map(
-        &mut self,
+        &self,
         writer: &mpsc::Sender<LinkFrame>,
         mut transfer: Transfer,
         mut payload: Payload,
@@ -213,7 +213,7 @@ where
     ///
     /// This is cancel safe because all internal `.await` are cancel safe
     async fn send_payload_with_transfer(
-        &mut self,
+        &self,
         writer: &mpsc::Sender<LinkFrame>,
         message_format: MessageFormat,
         transfer: Transfer,
