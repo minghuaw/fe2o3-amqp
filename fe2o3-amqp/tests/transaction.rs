@@ -15,7 +15,9 @@ cfg_not_wasm32! {
     use fe2o3_amqp::{
         connection::Connection,
         session::Session,
-        transaction::{Controller, Transaction, TransactionDischarge},
+        transaction::{
+            Controller, Transaction, TransactionDischarge, TransactionalPosting,
+        },
         Receiver, Sender,
     };
     use fe2o3_amqp_types::messaging::Message;

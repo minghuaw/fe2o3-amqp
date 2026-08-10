@@ -2,26 +2,20 @@
 
 
 use fe2o3_amqp_types::{
-    definitions::{Fields, SequenceNo},
-    messaging::{DeliveryState, Outcome, SerializableBody},
-    primitives::Symbol,
+    messaging::{DeliveryState, Outcome},
     transaction::{Declared, TransactionId, TransactionalState},
 };
-use serde_amqp::Value;
 
 use crate::{
-    endpoint::ReceiverLink,
-    link::{
-        delivery::{DeliveryFut, DeliveryInfo},
-        DispositionError, FlowError,
-    },
+    link::{delivery::DeliveryInfo, DispositionError},
     session::SessionHandle,
-    Receiver, Sendable, Sender,
+    Receiver,
 };
 
 use super::{
-    Controller, ControllerSendError, OwnedDeclareError, OwnedDischargeError, PostError,
-    TransactionDischarge, TransactionExt, TransactionalRetirement, TxnAcquisition, TXN_ID_KEY,
+    Controller, ControllerSendError, OwnedDeclareError, OwnedDischargeError,
+    TransactionDischarge, TransactionExt, TransactionalAcquisition, TransactionalPosting,
+    TransactionalRetirement,
 };
 
 /// An owned transaction that has exclusive access to its own control link.
@@ -33,6 +27,10 @@ use super::{
 /// ## Transactional posting
 ///
 /// ```rust,ignore
+/// use fe2o3_amqp::transaction::{
+///     OwnedTransaction, TransactionDischarge, TransactionalPosting,
+/// };
+///
 /// let mut sender = Sender::attach(&mut session, "rust-sender-link-1", "q1")
 ///     .await
 ///     .unwrap();
@@ -52,6 +50,10 @@ use super::{
 /// ## Transactional retirement
 ///
 /// ```rust,ignore
+/// use fe2o3_amqp::transaction::{
+///     OwnedTransaction, TransactionDischarge, TransactionalRetirement,
+/// };
+///
 /// let mut receiver = Receiver::attach(&mut session, "rust-recver-1", "q1")
 ///     .await
 ///     .unwrap();
@@ -69,11 +71,15 @@ use super::{
 /// Please note that this is not supported on the resource side yet.
 ///
 /// ```rust,ignore
+/// use fe2o3_amqp::transaction::{
+///     OwnedTransaction, TransactionalAcquisition, TransactionalRetirement,
+/// };
+///
 /// let mut receiver = Receiver::attach(&mut session, "rust-recver-1", "q1")
 ///     .await
 ///     .unwrap();
 ///
-/// // Transactionally retiring
+/// // Transactionally acquiring
 /// let mut txn = OwnedTransaction::declare(&mut session, "owned-controller", None).await.unwrap();
 /// let mut txn_acq = txn.acquire(&mut receiver, 2).await.unwrap();
 /// let delivery1: Delivery<Value> = txn_acq.recv().await.unwrap();
@@ -179,143 +185,8 @@ impl OwnedTransaction {
             is_discharged: false,
         })
     }
-
-    /// Post a ref of transactional work and wait for the acknowledgement.
-    pub async fn post_batchable_ref<T: SerializableBody>(
-        &self,
-        sender: &mut Sender,
-        sendable: &Sendable<T>,
-    ) -> Result<DeliveryFut<Result<Outcome, PostError>>, PostError> {
-        let state = TransactionalState {
-            txn_id: self.declared.txn_id.clone(),
-            outcome: None,
-        };
-        let state = DeliveryState::TransactionalState(state);
-        let settlement = sender
-            .inner
-            .send_ref_with_state::<T, PostError>(sendable, Some(state), false)
-            .await?;
-
-        Ok(DeliveryFut::from(settlement))
-    }
-
-    /// Post a ref of transactional work
-    pub async fn post_ref<T: SerializableBody>(
-        &self,
-        sender: &mut Sender,
-        sendable: &Sendable<T>,
-    ) -> Result<Outcome, PostError> {
-        let fut = self.post_batchable_ref(sender, sendable).await?;
-        fut.await
-    }
-
-    /// Post a transactional work without waiting for the acknowledgement.
-    pub async fn post_batchable<T>(
-        &self,
-        sender: &mut Sender,
-        sendable: impl Into<Sendable<T>>,
-    ) -> Result<DeliveryFut<Result<Outcome, PostError>>, PostError>
-    where
-        T: SerializableBody,
-    {
-        // If the transaction controller wishes to associate an outgoing transfer with a
-        // transaction, it MUST set the state of the transfer with a transactional-state carrying
-        // the appropriate transaction identifier
-
-        // Note that if delivery is split across several transfer frames then all frames MUST be
-        // explicitly associated with the same transaction.
-        let sendable = sendable.into();
-        let state = TransactionalState {
-            txn_id: self.declared.txn_id.clone(),
-            outcome: None,
-        };
-        let state = DeliveryState::TransactionalState(state);
-        let settlement = sender
-            .inner
-            .send_with_state::<T, PostError>(sendable, Some(state), true)
-            .await?;
-
-        Ok(DeliveryFut::from(settlement))
-    }
-
-    /// Post a transactional work
-    pub async fn post<T>(
-        &self,
-        sender: &mut Sender,
-        sendable: impl Into<Sendable<T>>,
-    ) -> Result<Outcome, PostError>
-    where
-        T: SerializableBody,
-    {
-        // If the transaction controller wishes to associate an outgoing transfer with a
-        // transaction, it MUST set the state of the transfer with a transactional-state carrying
-        // the appropriate transaction identifier
-
-        // Note that if delivery is split across several transfer frames then all frames MUST be
-        // explicitly associated with the same transaction.
-        let sendable = sendable.into();
-        let state = TransactionalState {
-            txn_id: self.declared.txn_id.clone(),
-            outcome: None,
-        };
-        let state = DeliveryState::TransactionalState(state);
-        let settlement = sender
-            .inner
-            .send_with_state::<T, PostError>(sendable, Some(state), false)
-            .await?;
-
-        let fut = DeliveryFut::from(settlement);
-
-        // On receiving a non-settled delivery associated with a live transaction, the transactional
-        // resource MUST inform the controller of the presumptive terminal outcome before it can
-        // successfully discharge the transaction. That is, the resource MUST send a disposition
-        // performative which covers the posted transfer with the state of the delivery being a
-        // transactional-state with the correct transaction identified, and a terminal outcome. This
-        // informs the controller of the outcome that will be in effect at the point that the
-        // transaction is successfully discharged.
-        fut.await
-    }
-
-    /// Acquire a transactional work
-    ///
-    /// This will send
-    pub async fn acquire(
-        self,
-        recver: &mut Receiver,
-        credit: SequenceNo,
-    ) -> Result<TxnAcquisition<'_, OwnedTransaction>, FlowError> {
-        {
-            let mut writer = recver.inner.link.flow_state.lock.write();
-            let value = Value::Binary(self.declared.txn_id.clone());
-            match &mut writer.properties {
-                Some(fields) => {
-                    if fields.contains_key(TXN_ID_KEY) {
-                        return Err(FlowError::IllegalState);
-                    }
-
-                    fields.insert(Symbol::from(TXN_ID_KEY), value);
-                }
-                None => {
-                    let mut fields = Fields::new();
-                    fields.insert(Symbol::from(TXN_ID_KEY), value);
-                }
-            }
-        }
-
-        match recver
-            .inner
-            .link
-            .send_flow(&recver.inner.outgoing, Some(credit), None, false, false)
-            .await
-        {
-            Ok(_) => Ok(TxnAcquisition { txn: self, recver }),
-            Err(error) => {
-                let mut writer = recver.inner.link.flow_state.lock.write();
-                if let Some(fields) = &mut writer.properties {
-                    fields.swap_remove(TXN_ID_KEY);
-                }
-                Err(error)
-            }
-        }
-    }
 }
+
+impl TransactionalPosting for OwnedTransaction {}
+
+impl TransactionalAcquisition for OwnedTransaction {}
