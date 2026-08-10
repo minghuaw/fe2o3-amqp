@@ -1,9 +1,10 @@
 extend = "../Makefile.toml"
 
-# Override the built-in `test` task so that the transaction integration tests,
-# which are gated behind the `transaction` feature, also run in CI.
+# Override the built-in `test` task so that all feature-gated tests (including the
+# transaction integration tests, which are gated behind the `transaction` feature)
+# run in CI.
 [tasks.test]
-args = ["test", "--features", "transaction"]
+args = ["test", "--all-features"]
 
 [tasks.feature_check]
 dependencies = [
