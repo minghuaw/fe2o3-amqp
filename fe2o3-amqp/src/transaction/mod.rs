@@ -436,7 +436,7 @@ pub trait TransactionAcquisition:
 ///
 /// ## Transactional posting
 ///
-/// ```rust,no_run
+/// ```rust,ignore
 /// use fe2o3_amqp::transaction::{
 ///     Controller, Transaction, TransactionDischarge, TransactionPosting,
 /// };
@@ -463,7 +463,7 @@ pub trait TransactionAcquisition:
 ///
 /// ## Transactional retirement
 ///
-/// ```rust,no_run
+/// ```rust,ignore
 /// use fe2o3_amqp::transaction::{
 ///     Controller, Transaction, TransactionDischarge, TransactionRetirement,
 /// };
@@ -488,7 +488,7 @@ pub trait TransactionAcquisition:
 ///
 /// Please note that this is not supported on the resource side yet.
 ///
-/// ```rust,no_run
+/// ```rust,ignore
 /// use fe2o3_amqp::transaction::{
 ///     Controller, Transaction, TransactionAcquisition, TransactionRetirement,
 /// };
