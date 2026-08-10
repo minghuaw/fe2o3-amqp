@@ -79,7 +79,7 @@ slab = "0.4"
 url = "2"
 sha1 = "0.11"
 sha2 = "0.11"
-base64 = "0.22"
+base64 = "0.23"
 stringprep = "0.1"
 hmac = "0.13"
 pbkdf2 = { version = "0.13", default-features = false }
