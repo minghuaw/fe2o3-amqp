@@ -16,11 +16,14 @@ cfg_not_wasm32! {
         connection::Connection,
         session::Session,
         transaction::{
-            Controller, Transaction, TransactionDischarge, TransactionPosting,
+            Controller, OwnedTransaction, Transaction, TransactionDischarge,
+            TransactionPosting,
         },
         Receiver, Sender,
     };
     use fe2o3_amqp_types::messaging::Message;
+
+    use std::fmt::Debug;
 
     mod common;
 
@@ -33,16 +36,41 @@ cfg_not_wasm32! {
     async fn activemq_artemis_post_commit() {
         let (_node, port) = common::setup_activemq_artemis(None, None).await;
         let url = format!("amqp://localhost:{}", port);
-        transactional_posting_commit(&url).await;
+        transaction_posting_commit(&url).await;
+        owned_transaction_posting_commit(&url).await;
     }
 
     async fn qpid_broker_j_post_commit() {
         let (_node, port) = common::setup_qpid_broker_j(None, None).await;
         let url = format!("amqp://admin:admin@localhost:{}", port);
-        transactional_posting_commit(&url).await;
+        transaction_posting_commit(&url).await;
+        owned_transaction_posting_commit(&url).await;
     }
 
-    async fn transactional_posting_commit(url: &str) {
+    async fn post_commit_and_verify<T>(
+        txn: T,
+        sender: &mut Sender,
+        receiver: &mut Receiver,
+    ) where
+        T: TransactionPosting + TransactionDischarge + Send + Sync,
+        <T as TransactionDischarge>::Error: Debug,
+    {
+        let outcome = txn.post(sender, Message::from("hello")).await.unwrap();
+        outcome.accepted_or("Not accepted").unwrap();
+        let outcome = txn.post(sender, Message::from("world")).await.unwrap();
+        outcome.accepted_or("Not accepted").unwrap();
+        txn.commit().await.unwrap();
+
+        let received = receiver.recv::<String>().await.unwrap();
+        receiver.accept(&received).await.unwrap();
+        assert_eq!(received.body(), "hello");
+
+        let received = receiver.recv::<String>().await.unwrap();
+        receiver.accept(&received).await.unwrap();
+        assert_eq!(received.body(), "world");
+    }
+
+    async fn transaction_posting_commit(url: &str) {
         let mut connection = Connection::open("test-connection", url).await.unwrap();
         let mut session = Session::begin(&mut connection).await.unwrap();
         let controller = Controller::attach(&mut session, "test-controller")
@@ -56,27 +84,30 @@ cfg_not_wasm32! {
             .unwrap();
 
         let txn = Transaction::declare(&controller, None).await.unwrap();
-        let outcome = txn
-            .post(&mut sender, Message::from("hello"))
-            .await
-            .unwrap();
-        outcome.accepted_or("Not accepted").unwrap();
-        let outcome = txn
-            .post(&mut sender, Message::from("world"))
-            .await
-            .unwrap();
-        outcome.accepted_or("Not accepted").unwrap();
-        txn.commit().await.unwrap();
-
-        let received = receiver.recv::<String>().await.unwrap();
-        receiver.accept(&received).await.unwrap();
-        assert_eq!(received.body(), "hello");
-
-        let received = receiver.recv::<String>().await.unwrap();
-        receiver.accept(&received).await.unwrap();
-        assert_eq!(received.body(), "world");
+        post_commit_and_verify(txn, &mut sender, &mut receiver).await;
 
         controller.close().await.unwrap();
+        sender.close().await.unwrap();
+        receiver.close().await.unwrap();
+        session.close().await.unwrap();
+        connection.close().await.unwrap();
+    }
+
+    async fn owned_transaction_posting_commit(url: &str) {
+        let mut connection = Connection::open("test-connection", url).await.unwrap();
+        let mut session = Session::begin(&mut connection).await.unwrap();
+        let mut sender = Sender::attach(&mut session, "test-sender", "test-queue")
+            .await
+            .unwrap();
+        let mut receiver = Receiver::attach(&mut session, "test-receiver", "test-queue")
+            .await
+            .unwrap();
+
+        let txn = OwnedTransaction::declare(&mut session, "test-owned-controller", None)
+            .await
+            .unwrap();
+        post_commit_and_verify(txn, &mut sender, &mut receiver).await;
+
         sender.close().await.unwrap();
         receiver.close().await.unwrap();
         session.close().await.unwrap();
