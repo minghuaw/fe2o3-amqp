@@ -557,15 +557,18 @@ where
         }
         self.target = target;
 
-        // The sender SHOULD respect the receiver’s desired settlement mode if the receiver
+        // The sender SHOULD respect the receiver's desired settlement mode if the receiver
         // initiates the attach exchange and the sender supports the desired mode
         if self.rcv_settle_mode != remote_attach.rcv_settle_mode {
             return Err(SenderAttachError::RcvSettleModeNotSupported);
         }
 
-        if self.snd_settle_mode != remote_attach.snd_settle_mode {
-            return Err(SenderAttachError::SndSettleModeNotSupported);
-        }
+        // The `snd-settle-mode` field in the attach response from the receiver only
+        // expresses the receiver's *desired* settlement mode for the sender. When the
+        // sender initiates the attach, the sender's own choice is the settlement mode in
+        // use and the receiver SHOULD respect it, failing the attach if it cannot. Some
+        // brokers (e.g. Qpid Broker-J and ActiveMQ Artemis) always respond with their
+        // default `mixed` regardless, so a differing value is not treated as an error here.
 
         self.max_message_size =
             get_max_message_size(self.max_message_size, remote_attach.max_message_size);
