@@ -18,15 +18,6 @@ cfg_not_wasm32! {
     mod common;
 
     #[tokio::test]
-    async fn test_send_receive_compat() {
-        activemq_artemis_send_receive().await;
-        activemq_artemis_send_receive_large_content().await;
-        qpid_broker_j_send_receive().await;
-        qpid_broker_j_send_receive_large_content().await;
-        rabbitmq_amqp10_send_receive().await;
-        rabbitmq_amqp10_send_receive_large_content().await;
-    }
-
     async fn activemq_artemis_send_receive() {
         let (_node, port) = common::setup_activemq_artemis(None, None).await;
 
@@ -54,6 +45,7 @@ cfg_not_wasm32! {
         connection.close().await.unwrap();
     }
 
+    #[tokio::test]
     async fn activemq_artemis_send_receive_large_content() {
         let (_node, port) = common::setup_activemq_artemis(None, None).await;
 
@@ -81,6 +73,7 @@ cfg_not_wasm32! {
         connection.close().await.unwrap();
     }
 
+    #[tokio::test]
     async fn qpid_broker_j_send_receive() {
         let (_node, port) = common::setup_qpid_broker_j(None, None).await;
 
@@ -108,6 +101,7 @@ cfg_not_wasm32! {
         connection.close().await.unwrap();
     }
 
+    #[tokio::test]
     async fn qpid_broker_j_send_receive_large_content() {
         let (_node, port) = common::setup_qpid_broker_j(None, None).await;
 
@@ -135,6 +129,7 @@ cfg_not_wasm32! {
         connection.close().await.unwrap();
     }
 
+    #[tokio::test]
     async fn rabbitmq_amqp10_send_receive() {
         let (_node, port) = common::setup_rabbitmq_amqp10(None, None).await;
 
@@ -163,6 +158,7 @@ cfg_not_wasm32! {
         connection.close().await.unwrap();
     }
 
+    #[tokio::test]
     async fn rabbitmq_amqp10_send_receive_large_content() {
         let (_node, port) = common::setup_rabbitmq_amqp10(None, None).await;
 
