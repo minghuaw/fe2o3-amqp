@@ -111,7 +111,7 @@ impl ScramVersion {
         bytes.put_slice(nonce);
 
         let client_first_message = bytes.freeze();
-        let gs2_header_len = GS2_HEADER.as_bytes().len();
+        let gs2_header_len = GS2_HEADER.len();
         let client_first_message_bare = client_first_message.slice(gs2_header_len..);
         (client_first_message, client_first_message_bare)
     }
@@ -432,7 +432,7 @@ mod tests {
             &self.scram_version
         }
 
-        fn get_stored_password(&self, username: &str) -> Option<StoredPassword> {
+        fn get_stored_password(&self, username: &str) -> Option<StoredPassword<'_>> {
             if username == self.username {
                 Some(StoredPassword {
                     salt: &self.salt,

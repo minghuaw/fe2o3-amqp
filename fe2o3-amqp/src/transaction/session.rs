@@ -73,7 +73,7 @@ pub(crate) async fn commit_transaction(
         .map_err(Into::into)
 }
 
-///
+/// A session wrapper that handles transactional work on the resource side.
 #[derive(Debug)]
 pub(crate) struct TxnSession<S>
 where

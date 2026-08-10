@@ -78,7 +78,6 @@ cfg_acceptor! {
 }
 
 /// Trait for generics for TxnAcquisition
-
 pub trait TransactionDischarge: Sized {
     /// Errors with discharging
     type Error: Send;
@@ -117,7 +116,6 @@ pub trait TransactionDischarge: Sized {
 }
 
 /// Retiring a transaction
-
 pub trait TransactionalRetirement {
     /// Error with retirement
     type RetireError: Send;

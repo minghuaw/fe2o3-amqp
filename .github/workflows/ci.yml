@@ -35,7 +35,7 @@ jobs:
       - uses: actions-rs/cargo@v1
         with:
           command: clippy
-          args: --all -- --deny warnings
+          args: --all --all-features --all-targets -- --deny warnings
 
   # run tests in each crate with cargo-make
   feature_check_and_test:

@@ -12,6 +12,7 @@ use serde_amqp::{DeserializeComposite, SerializeComposite};
 )]
 struct Single<T>(T);
 
+#[allow(dead_code)] // only used to check that the serde derives compile
 #[derive(Debug, Serialize, Deserialize)]
 struct CustomStruct {
     a: u8,

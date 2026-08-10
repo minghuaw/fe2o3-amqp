@@ -578,12 +578,11 @@ where
         // A definite conflict (neither side is `mixed`) is still treated as an error
         // because it signals a receiver that expects a settlement behavior the sender
         // will not provide; a `mixed` response is tolerated either way.
-        match (&self.snd_settle_mode, &remote_attach.snd_settle_mode) {
-            (SenderSettleMode::Settled, SenderSettleMode::Unsettled)
-            | (SenderSettleMode::Unsettled, SenderSettleMode::Settled) => {
-                return Err(SenderAttachError::SndSettleModeNotSupported);
-            }
-            _ => {}
+        if let (SenderSettleMode::Settled, SenderSettleMode::Unsettled)
+        | (SenderSettleMode::Unsettled, SenderSettleMode::Settled) =
+            (&self.snd_settle_mode, &remote_attach.snd_settle_mode)
+        {
+            return Err(SenderAttachError::SndSettleModeNotSupported);
         }
 
         self.max_message_size =

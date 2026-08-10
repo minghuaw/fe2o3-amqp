@@ -104,7 +104,7 @@ impl ScramVersion {
         let without_proof_message_len =
             client_final.len() - (client_proof.len() + PROOF_KEY.len() + 1);
         let client_final_message_without_proof =
-            &client_final[0..without_proof_message_len].as_bytes();
+            &client_final.as_bytes()[0..without_proof_message_len];
 
         let auth_message = auth_message(
             client_first_message_bare,
