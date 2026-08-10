@@ -1,5 +1,5 @@
 use fe2o3_amqp::{
-    transaction::{OwnedTransaction, TransactionDischarge, TransactionalRetirement},
+    transaction::{OwnedTransaction, TransactionDischarge, TransactionRetirement},
     types::{definitions::ReceiverSettleMode, messaging::Body, primitives::Value},
     Connection, Delivery, Receiver, Session,
 };

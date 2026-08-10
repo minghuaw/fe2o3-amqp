@@ -1,21 +1,14 @@
 //! Implements OwnedTransaction
 
 
-use fe2o3_amqp_types::{
-    messaging::{DeliveryState, Outcome},
-    transaction::{Declared, TransactionId, TransactionalState},
-};
+use fe2o3_amqp_types::transaction::{Declared, TransactionId};
 
-use crate::{
-    link::{delivery::DeliveryInfo, DispositionError},
-    session::SessionHandle,
-    Receiver,
-};
+use crate::{link::DispositionError, session::SessionHandle};
 
 use super::{
-    Controller, ControllerSendError, OwnedDeclareError, OwnedDischargeError,
-    TransactionDischarge, TransactionExt, TransactionalAcquisition, TransactionalPosting,
-    TransactionalRetirement,
+    Controller, ControllerSendError, OwnedDeclareError, OwnedDischargeError, TransactionAcquisition,
+    TransactionBase, TransactionDischarge, TransactionExt, TransactionPosting,
+    TransactionRetirement,
 };
 
 /// An owned transaction that has exclusive access to its own control link.
@@ -28,7 +21,7 @@ use super::{
 ///
 /// ```rust,ignore
 /// use fe2o3_amqp::transaction::{
-///     OwnedTransaction, TransactionDischarge, TransactionalPosting,
+///     OwnedTransaction, TransactionDischarge, TransactionPosting,
 /// };
 ///
 /// let mut sender = Sender::attach(&mut session, "rust-sender-link-1", "q1")
@@ -51,7 +44,7 @@ use super::{
 ///
 /// ```rust,ignore
 /// use fe2o3_amqp::transaction::{
-///     OwnedTransaction, TransactionDischarge, TransactionalRetirement,
+///     OwnedTransaction, TransactionDischarge, TransactionRetirement,
 /// };
 ///
 /// let mut receiver = Receiver::attach(&mut session, "rust-recver-1", "q1")
@@ -72,7 +65,7 @@ use super::{
 ///
 /// ```rust,ignore
 /// use fe2o3_amqp::transaction::{
-///     OwnedTransaction, TransactionalAcquisition, TransactionalRetirement,
+///     OwnedTransaction, TransactionAcquisition, TransactionRetirement,
 /// };
 ///
 /// let mut receiver = Receiver::attach(&mut session, "rust-recver-1", "q1")
@@ -127,34 +120,11 @@ impl TransactionDischarge for OwnedTransaction {
 }
 
 
-impl TransactionalRetirement for OwnedTransaction {
+impl TransactionRetirement for OwnedTransaction {
     type RetireError = DispositionError;
-
-    /// Associate an outcome with a transaction
-    ///
-    /// The delivery itself need not be associated with the same transaction as the outcome, or
-    /// indeed with any transaction at all. However, the delivery MUST NOT be associated with a
-    /// different non-discharged transaction than the outcome. If this happens then the control link
-    /// MUST be terminated with a transaction-rollback error.
-    async fn retire<T>(
-        &self,
-        recver: &mut Receiver,
-        delivery: T,
-        outcome: Outcome,
-    ) -> Result<(), Self::RetireError>
-    where
-        T: Into<DeliveryInfo> + Send,
-    {
-        let txn_state = TransactionalState {
-            txn_id: self.declared.txn_id.clone(),
-            outcome: Some(outcome),
-        };
-        let state = DeliveryState::TransactionalState(txn_state);
-        recver.inner.dispose(delivery, None, state).await
-    }
 }
 
-impl TransactionExt for OwnedTransaction {
+impl TransactionBase for OwnedTransaction {
     fn txn_id(&self) -> &TransactionId {
         &self.declared.txn_id
     }
@@ -187,6 +157,8 @@ impl OwnedTransaction {
     }
 }
 
-impl TransactionalPosting for OwnedTransaction {}
+impl TransactionPosting for OwnedTransaction {}
 
-impl TransactionalAcquisition for OwnedTransaction {}
+impl TransactionAcquisition for OwnedTransaction {}
+
+impl TransactionExt for OwnedTransaction {}

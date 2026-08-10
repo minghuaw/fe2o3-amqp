@@ -12,7 +12,7 @@ use crate::{
     Delivery, Receiver,
 };
 
-use super::{TransactionDischarge, TransactionExt, TransactionalRetirement, TXN_ID_KEY};
+use super::{TransactionBase, TransactionDischarge, TransactionRetirement, TXN_ID_KEY};
 
 /// 4.4.3 Transactional Acquisition
 ///
@@ -23,7 +23,7 @@ use super::{TransactionDischarge, TransactionExt, TransactionalRetirement, TXN_I
 #[derive(Debug)]
 pub struct TxnAcquisition<'r, Txn>
 where
-    Txn: TransactionExt,
+    Txn: TransactionBase + TransactionDischarge + TransactionRetirement,
 {
     /// The transaction context of this acquisition
     pub(super) txn: Txn,
@@ -34,11 +34,7 @@ where
 
 impl<'r, Txn> TxnAcquisition<'r, Txn>
 where
-    Txn: TransactionExt
-        + TransactionDischarge
-        + TransactionalRetirement
-        + Send
-        + Sync,
+    Txn: TransactionBase + TransactionDischarge + TransactionRetirement + Send + Sync,
     <Txn as TransactionDischarge>::Error: From<FlowError>,
 {
     /// Get an immutable reference to the underlying transaction
@@ -104,7 +100,7 @@ where
     }
 
     /// Accept the message
-    pub async fn accept<T>(&mut self, delivery: &Delivery<T>) -> Result<(), <Txn as TransactionalRetirement>::RetireError>
+    pub async fn accept<T>(&mut self, delivery: &Delivery<T>) -> Result<(), <Txn as TransactionRetirement>::RetireError>
     where
         T: Send + Sync,
     {
@@ -116,7 +112,7 @@ where
         &mut self,
         delivery: &Delivery<T>,
         error: impl Into<Option<definitions::Error>>,
-    ) -> Result<(), <Txn as TransactionalRetirement>::RetireError>
+    ) -> Result<(), <Txn as TransactionRetirement>::RetireError>
     where
         T: Send + Sync,
     {
@@ -124,7 +120,7 @@ where
     }
 
     /// Release the message
-    pub async fn release<T>(&mut self, delivery: &Delivery<T>) -> Result<(), <Txn as TransactionalRetirement>::RetireError>
+    pub async fn release<T>(&mut self, delivery: &Delivery<T>) -> Result<(), <Txn as TransactionRetirement>::RetireError>
     where
         T: Send + Sync,
     {
@@ -136,7 +132,7 @@ where
         &mut self,
         delivery: &Delivery<T>,
         modified: Modified,
-    ) -> Result<(), <Txn as TransactionalRetirement>::RetireError>
+    ) -> Result<(), <Txn as TransactionRetirement>::RetireError>
     where
         T: Send + Sync,
     {
@@ -146,7 +142,7 @@ where
 
 impl<'r, T> Drop for TxnAcquisition<'r, T>
 where
-    T: TransactionExt,
+    T: TransactionBase + TransactionDischarge + TransactionRetirement,
 {
     fn drop(&mut self) {
         if !self.txn.is_discharged() {

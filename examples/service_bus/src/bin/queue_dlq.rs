@@ -3,7 +3,7 @@
 use dotenv::dotenv;
 use fe2o3_amqp::connection::ConnectionHandle;
 use fe2o3_amqp::transaction::TransactionDischarge;
-use fe2o3_amqp::transaction::TransactionalRetirement;
+use fe2o3_amqp::transaction::TransactionRetirement;
 use fe2o3_amqp::transaction::{Controller, Transaction};
 use fe2o3_amqp::types::messaging::Body;
 use fe2o3_amqp::types::messaging::Message;

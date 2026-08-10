@@ -7,8 +7,9 @@
 //! # Controller side
 //!
 //! Please see [`Controller`], [`Transaction`], and [`OwnedTransaction`], as well as the
-//! [`TransactionDischarge`], [`TransactionalPosting`], [`TransactionalRetirement`], and
-//! [`TransactionalAcquisition`] traits that define the transactional operations.
+//! [`TransactionBase`], [`TransactionDischarge`], [`TransactionPosting`],
+//! [`TransactionRetirement`], and [`TransactionAcquisition`] traits that define the
+//! transactional operations.
 //!
 //! # Resource side
 //!
@@ -79,6 +80,15 @@ cfg_acceptor! {
     pub mod session;
 }
 
+/// The base trait for transactions, providing access to the transaction identifier.
+///
+/// All other transaction traits extend this trait so that they can access the `txn-id`
+/// of the transaction they operate on.
+pub trait TransactionBase {
+    /// Get the `txn-id` of the transaction
+    fn txn_id(&self) -> &TransactionId;
+}
+
 /// Trait for generics for TxnAcquisition
 pub trait TransactionDischarge: Sized {
     /// Errors with discharging
@@ -118,9 +128,9 @@ pub trait TransactionDischarge: Sized {
 }
 
 /// Retiring a transaction
-pub trait TransactionalRetirement {
+pub trait TransactionRetirement: TransactionBase {
     /// Error with retirement
-    type RetireError: Send;
+    type RetireError: Send + From<DispositionError>;
 
     /// Associate an outcome with a transaction
     ///
@@ -135,7 +145,19 @@ pub trait TransactionalRetirement {
         outcome: Outcome,
     ) -> impl Future<Output = Result<(), Self::RetireError>> + Send
     where
-        T: Into<DeliveryInfo> + Send;
+        T: Into<DeliveryInfo> + Send,
+        Self: Sync,
+    {
+        async move {
+            let txn_state = TransactionalState {
+                txn_id: self.txn_id().clone(),
+                outcome: Some(outcome),
+            };
+            let state = DeliveryState::TransactionalState(txn_state);
+            recver.inner.dispose(delivery, None, state).await?;
+            Ok(())
+        }
+    }
 
     /// Associate an Accepted outcome with a transaction
     fn accept<T>(
@@ -204,10 +226,17 @@ pub trait TransactionalRetirement {
     }
 }
 
-/// Extension trait that also act as a trait bound for TxnAcquisition
-pub trait TransactionExt: TransactionDischarge + TransactionalRetirement {
-    /// Get the `txn-id` of the transaction
-    fn txn_id(&self) -> &TransactionId;
+/// The aggregate trait for all transactional operations.
+///
+/// A type that implements this trait supports transactional posting, retirement, acquisition,
+/// and discharging.
+pub trait TransactionExt:
+    TransactionBase
+        + TransactionDischarge
+        + TransactionPosting
+        + TransactionAcquisition
+        + TransactionRetirement
+{
 }
 
 /// Transactional posting (AMQP 1.0 §4.4.4)
@@ -215,7 +244,7 @@ pub trait TransactionExt: TransactionDischarge + TransactionalRetirement {
 /// Posting transactional work associates an outgoing transfer with a transaction by setting the
 /// state of the transfer to a `transactional-state` carrying the transaction identifier. The
 /// resource will route the message upon the successful discharge (commit) of the transaction.
-pub trait TransactionalPosting: TransactionExt {
+pub trait TransactionPosting: TransactionBase {
     /// Post a ref of transactional work and wait for the acknowledgement.
     fn post_batchable_ref<T: SerializableBody + Sync>(
         &self,
@@ -344,8 +373,8 @@ where
 /// transactionally, i.e. the deliveries are tagged with a `transactional-state` carrying the
 /// transaction identifier, and are only retired from the resource upon the successful discharge
 /// of the transaction.
-pub trait TransactionalAcquisition:
-    Sized + TransactionExt + TransactionDischarge + TransactionalRetirement + Send + Sync
+pub trait TransactionAcquisition:
+    Sized + TransactionBase + TransactionDischarge + TransactionRetirement + Send + Sync
 {
     /// Acquire a transactional work
     ///
@@ -409,7 +438,7 @@ pub trait TransactionalAcquisition:
 ///
 /// ```rust,no_run
 /// use fe2o3_amqp::transaction::{
-///     Controller, Transaction, TransactionDischarge, TransactionalPosting,
+///     Controller, Transaction, TransactionDischarge, TransactionPosting,
 /// };
 ///
 /// let controller = Controller::attach(&mut session, "controller").await.unwrap();
@@ -436,7 +465,7 @@ pub trait TransactionalAcquisition:
 ///
 /// ```rust,no_run
 /// use fe2o3_amqp::transaction::{
-///     Controller, Transaction, TransactionDischarge, TransactionalRetirement,
+///     Controller, Transaction, TransactionDischarge, TransactionRetirement,
 /// };
 ///
 /// let controller = Controller::attach(&mut session, "controller").await.unwrap();
@@ -461,7 +490,7 @@ pub trait TransactionalAcquisition:
 ///
 /// ```rust,no_run
 /// use fe2o3_amqp::transaction::{
-///     Controller, Transaction, TransactionalAcquisition, TransactionalRetirement,
+///     Controller, Transaction, TransactionAcquisition, TransactionRetirement,
 /// };
 ///
 /// let controller = Controller::attach(&mut session, "controller").await.unwrap();
@@ -508,37 +537,14 @@ impl<'t> TransactionDischarge for Transaction<'t> {
 }
 
 
-impl<'t> TransactionalRetirement for Transaction<'t> {
-    type RetireError = DispositionError;
-
-    /// Associate an outcome with a transaction
-    ///
-    /// The delivery itself need not be associated with the same transaction as the outcome, or
-    /// indeed with any transaction at all. However, the delivery MUST NOT be associated with a
-    /// different non-discharged transaction than the outcome. If this happens then the control link
-    /// MUST be terminated with a transaction-rollback error.
-    async fn retire<T>(
-        &self,
-        recver: &mut Receiver,
-        delivery: T,
-        outcome: Outcome,
-    ) -> Result<(), Self::RetireError>
-    where
-        T: Into<DeliveryInfo> + Send,
-    {
-        let txn_state = TransactionalState {
-            txn_id: self.declared.txn_id.clone(),
-            outcome: Some(outcome),
-        };
-        let state = DeliveryState::TransactionalState(txn_state);
-        recver.inner.dispose(delivery, None, state).await
-    }
-}
-
-impl<'t> TransactionExt for Transaction<'t> {
+impl TransactionBase for Transaction<'_> {
     fn txn_id(&self) -> &TransactionId {
         &self.declared.txn_id
     }
+}
+
+impl TransactionRetirement for Transaction<'_> {
+    type RetireError = DispositionError;
 }
 
 impl<'t> Transaction<'t> {
@@ -558,9 +564,11 @@ impl<'t> Transaction<'t> {
     }
 }
 
-impl TransactionalPosting for Transaction<'_> {}
+impl TransactionPosting for Transaction<'_> {}
 
-impl TransactionalAcquisition for Transaction<'_> {}
+impl TransactionAcquisition for Transaction<'_> {}
+
+impl TransactionExt for Transaction<'_> {}
 
 impl<'t> Drop for Transaction<'t> {
     #[cfg_attr(feature = "tracing", tracing::instrument)]

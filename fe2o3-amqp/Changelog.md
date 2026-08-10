@@ -2,14 +2,22 @@
 
 ## Unreleased
 
-1. **Breaking**: The `post*` and `acquire` methods of [`Transaction`] and
-   [`OwnedTransaction`] moved from inherent methods onto the new
-   [`TransactionalPosting`] and [`TransactionalAcquisition`] traits, which must now
-   be imported to call them. The `batchable` field of the `Transfer` performative is
-   now set consistently: `post_batchable`/`post_batchable_ref` set it to `true`,
-   while `post`/`post_ref` leave it `false`. Previously `Transaction`'s batchable
-   variants passed `false`, and `OwnedTransaction`'s `post` duplicated the send logic
-   while `Transaction`'s `post` delegated to `post_batchable`.
+1. **Breaking**: Added the [`TransactionBase`] trait, which provides the `txn_id()`
+   accessor for transactions.
+2. **Breaking**: Renamed [`TransactionalPosting`] to [`TransactionPosting`],
+   [`TransactionalRetirement`] to [`TransactionRetirement`], and
+   [`TransactionalAcquisition`] to [`TransactionAcquisition`] for consistent naming.
+   All three now extend [`TransactionBase`] and provide default implementations for
+   the `post*`, `retire`, and `acquire` methods of both [`Transaction`] and
+   [`OwnedTransaction`].
+3. **Breaking**: [`TransactionExt`] is now the aggregate trait of all transaction
+   traits ([`TransactionBase`], [`TransactionDischarge`], [`TransactionPosting`],
+   [`TransactionAcquisition`], and [`TransactionRetirement`]).
+4. The `batchable` field of the `Transfer` performative is now set consistently:
+   `post_batchable`/`post_batchable_ref` set it to `true`, while `post`/`post_ref`
+   leave it `false`. Previously `Transaction`'s batchable variants passed `false`,
+   and `OwnedTransaction`'s `post` duplicated the send logic while `Transaction`'s
+   `post` delegated to `post_batchable`.
 
 ## 0.16.2
 

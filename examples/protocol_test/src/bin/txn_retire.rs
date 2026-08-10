@@ -1,6 +1,6 @@
 use fe2o3_amqp::{
     sasl_profile::SaslProfile,
-    transaction::{Controller, Transaction, TransactionDischarge, TransactionalRetirement},
+    transaction::{Controller, Transaction, TransactionDischarge, TransactionRetirement},
     types::{messaging::Body, primitives::Value},
     Connection, Delivery, Receiver, Session,
 };

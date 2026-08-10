@@ -16,7 +16,7 @@ cfg_not_wasm32! {
         connection::Connection,
         session::Session,
         transaction::{
-            Controller, Transaction, TransactionDischarge, TransactionalPosting,
+            Controller, Transaction, TransactionDischarge, TransactionPosting,
         },
         Receiver, Sender,
     };
