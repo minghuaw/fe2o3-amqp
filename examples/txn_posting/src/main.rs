@@ -1,5 +1,5 @@
 use fe2o3_amqp::{
-    transaction::{Controller, Transaction, TransactionDischarge},
+    transaction::{Controller, Transaction, TransactionDischarge, TransactionPosting},
     Connection, Sender, Session,
 };
 
