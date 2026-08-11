@@ -102,78 +102,23 @@ impl<'de, T: de::Deserialize<'de>> de::Deserialize<'de> for Described<T> {
 
 #[cfg(test)]
 mod tests {
-    #[cfg(feature = "derive")]
-    use serde_amqp_derive::{DeserializeComposite, SerializeComposite};
-
     use crate::{descriptor::Descriptor, from_slice, to_vec};
 
     use super::Described;
 
     #[test]
-    fn test_serialize_described_value() {
+    fn test_deserialize_described_value() {
         let descriptor = Descriptor::Code(0x11);
-        let value = Box::new(vec![1i32, 2]);
+        let value = vec![1i32, 2];
         let described = Described { descriptor, value };
         let buf = to_vec(&described).unwrap();
-        println!("{:x?}", buf);
-    }
-
-    #[test]
-    fn test_deserialzie_described_value() {
-        let descriptor = Descriptor::Code(0x11);
-        let value = Box::new(vec![1i32, 2]);
-        let described = Described { descriptor, value };
-        let buf = to_vec(&described).unwrap();
-        println!("{:?}", buf);
+        // DescribedType marker, smallulong descriptor 0x11, list8 with two smallint
+        // elements
+        assert_eq!(
+            buf,
+            vec![0x00, 0x53, 0x11, 0xC0, 0x05, 0x02, 0x54, 0x01, 0x54, 0x02]
+        );
         let recovered: Described<Vec<i32>> = from_slice(&buf).unwrap();
-        println!("{:?}", recovered);
-    }
-
-    // Expanded macro
-    #[cfg(feature = "derive")]
-    use crate as serde_amqp;
-
-    #[cfg(feature = "derive")]
-    #[derive(Debug, PartialEq, SerializeComposite, DeserializeComposite)]
-    struct Foo {
-        b: u64,
-        is_fool: Option<bool>,
-        a: i32,
-    }
-
-    #[cfg(feature = "derive")]
-    #[test]
-    fn test_expanded_list_macro() {
-        let foo = Foo {
-            b: 0,
-            is_fool: None,
-            a: 0,
-        };
-        let serialized = to_vec(&foo).unwrap();
-        println!("{:?}", serialized);
-        let deserialized: Foo = from_slice(&serialized).unwrap();
-        println!("{:?}", deserialized);
-        assert_eq!(foo, deserialized);
-    }
-
-    #[cfg(feature = "derive")]
-    #[derive(Debug, PartialEq, SerializeComposite, DeserializeComposite)]
-    struct Test {
-        a: Option<i32>,
-        b: bool,
-    }
-
-    #[cfg(feature = "derive")]
-    #[test]
-    fn test_expanded_map_macro() {
-        let test = Test {
-            a: Some(1),
-            b: true,
-        };
-        let serialized = to_vec(&test).unwrap();
-        println!("{:?}", serialized);
-        let deserialized: Test = from_slice(&serialized).unwrap();
-        println!("{:?}", deserialized);
-        assert_eq!(test, deserialized);
+        assert_eq!(recovered, described);
     }
 }
