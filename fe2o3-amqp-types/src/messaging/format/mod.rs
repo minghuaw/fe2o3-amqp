@@ -322,7 +322,7 @@ pub const MESSAGE_FORMAT: u32 = 0; // FIXME: type of message format?
 
 #[cfg(test)]
 mod tests {
-    use serde_amqp::{primitives::Binary, to_vec};
+    use serde_amqp::{de::from_slice, to_vec};
 
     use super::{AmqpSequence, Header, Priority};
 
@@ -336,18 +336,13 @@ mod tests {
             delivery_count: 0,
         };
         let serialized = to_vec(&header).unwrap();
-        println!("{:x?}", serialized);
-    }
-
-    #[test]
-    fn test_display_data() {
-        let b = Binary::from(vec![1u8, 2]);
-        println!("{}", b.len());
+        let deserialized: Header = from_slice(&serialized).unwrap();
+        assert_eq!(header, deserialized);
     }
 
     #[test]
     fn test_display_amqp_sequence() {
         let seq = AmqpSequence(vec![0, 1, 2, 3]);
-        println!("{}", seq);
+        assert_eq!(seq.to_string(), "AmqpSequence([0, 1, 2, 3])");
     }
 }
