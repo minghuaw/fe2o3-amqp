@@ -750,11 +750,11 @@ impl endpoint::Session for Session {
                 // close handshake (e.g. a `Sender`/`Receiver` that was simply dropped).
                 // In that case the frame cannot be forwarded and the detach reply is
                 // discarded; this must not tear down the session.
-                if let Err(error) = link.on_incoming_detach(detach).await {
+                if let Err(_error) = link.on_incoming_detach(detach).await {
                     #[cfg(feature = "tracing")]
-                    tracing::error!(error = ?error);
+                    tracing::error!(error = ?_error);
                     #[cfg(feature = "log")]
-                    log::error!("error = {:?}", error);
+                    log::error!("error = {:?}", _error);
                 }
                 Ok(())
             }
