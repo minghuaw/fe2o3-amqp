@@ -632,14 +632,13 @@ impl LinkRelay<OutputHandle> {
                 #[cfg(feature = "transaction")]
                 {
                     use serde_amqp::Value;
-                    match flow.properties.as_ref().and_then(|m| m.get(TXN_ID_KEY)) {
-                        Some(Value::Binary(txn_id)) => {
-                            let frame = LinkFrame::Acquisition(txn_id.clone());
-                            tx.send(frame)
-                                .await
-                                .map_err(|_| LinkRelayError::UnattachedHandle)?;
-                        }
-                        Some(_) | None => {}
+                    if let Some(Value::Binary(txn_id)) =
+                        flow.properties.as_ref().and_then(|m| m.get(TXN_ID_KEY))
+                    {
+                        let frame = LinkFrame::Acquisition(txn_id.clone());
+                        tx.send(frame)
+                            .await
+                            .map_err(|_| LinkRelayError::UnattachedHandle)?;
                     }
                 }
 

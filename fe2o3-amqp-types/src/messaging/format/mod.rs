@@ -336,7 +336,7 @@ mod tests {
             delivery_count: 0,
         };
         let serialized = to_vec(&header).unwrap();
-        println!("{:x?}", &serialized);
+        println!("{:x?}", serialized);
     }
 
     #[test]

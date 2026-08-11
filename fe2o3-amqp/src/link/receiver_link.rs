@@ -678,10 +678,12 @@ where
         // delivery is settled
         self.snd_settle_mode = remote_attach.snd_settle_mode;
 
-        // When set at the receiver this indicates the actual settlement mode in use
-        if self.rcv_settle_mode != remote_attach.rcv_settle_mode {
-            return Err(ReceiverAttachError::RcvSettleModeNotSupported);
-        }
+        // The `rcv-settle-mode` field in the attach response from the sender only
+        // expresses the sender's *desired* settlement mode for the receiver ("when set
+        // at the sender this indicates the desired value for the settlement mode at the
+        // receiver"). Since the receiver initiated the attach, its own choice governs,
+        // so no validation is performed here; the local `rcv_settle_mode` is used at
+        // delivery time (falling back to the per-transfer value set by the sender).
 
         // The delivery-count is initialized by the sender when a link endpoint is
         // created, and is incremented whenever a message is sent
@@ -869,8 +871,7 @@ where
             }
 
             // ReceiverAttachError::SndSettleModeNotSupported
-            ReceiverAttachError::RcvSettleModeNotSupported
-            | ReceiverAttachError::IncomingSourceIsNone => {
+            ReceiverAttachError::IncomingSourceIsNone => {
                 // Just send detach immediately
                 let err = self
                     .send_detach(writer, true, None)

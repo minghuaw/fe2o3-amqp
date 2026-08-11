@@ -1,9 +1,10 @@
 #![allow(clippy::all)]
 
-use criterion::{black_box, criterion_group, criterion_main, Criterion};
-use rand::{distr::SampleString, Rng, RngCore};
+use criterion::{criterion_group, criterion_main, Criterion};
+use rand::{distr::SampleString, Rng};
 use rand_distr::Alphanumeric;
 use serde_amqp::primitives::{Binary, Dec128, Dec32, Dec64, Timestamp};
+use std::hint::black_box;
 
 fn criterion_benchmark(c: &mut Criterion) {
     let value = ();
@@ -177,42 +178,42 @@ fn criterion_benchmark(c: &mut Criterion) {
 
     // 16 bytes of u64
     let mut value = vec![0u64; 16 / std::mem::size_of::<u64>()];
-    rand::rng().fill(&mut value[..]);
+    rand::fill(&mut value[..]);
     c.bench_function("serialize List<u64> 16B", |b| {
         b.iter(|| serde_amqp::to_vec(black_box(&value)).unwrap())
     });
 
     // 64 bytes of u64
     let mut value = vec![0u64; 64 / std::mem::size_of::<u64>()];
-    rand::rng().fill(&mut value[..]);
+    rand::fill(&mut value[..]);
     c.bench_function("serialize List<u64> 64B", |b| {
         b.iter(|| serde_amqp::to_vec(black_box(&value)).unwrap())
     });
 
     // 256 bytes of u64
     let mut value = vec![0u64; 256 / std::mem::size_of::<u64>()];
-    rand::rng().fill(&mut value[..]);
+    rand::fill(&mut value[..]);
     c.bench_function("serialize List<u64> 256B", |b| {
         b.iter(|| serde_amqp::to_vec(black_box(&value)).unwrap())
     });
 
     // 1kB of u64
     let mut value = vec![0u64; 1024 / std::mem::size_of::<u64>()];
-    rand::rng().fill(&mut value[..]);
+    rand::fill(&mut value[..]);
     c.bench_function("serialize List<u64> 1kB", |b| {
         b.iter(|| serde_amqp::to_vec(black_box(&value)).unwrap())
     });
 
     // 1MB of u64
     let mut value = vec![0u64; 1024 * 1024 / std::mem::size_of::<u64>()];
-    rand::rng().fill(&mut value[..]);
+    rand::fill(&mut value[..]);
     c.bench_function("serialize List<u64> 1MB", |b| {
         b.iter(|| serde_amqp::to_vec(black_box(&value)).unwrap())
     });
 
     // 10MB of u64
     let mut value = vec![0u64; 10 * 1024 * 1024 / std::mem::size_of::<u64>()];
-    rand::rng().fill(&mut value[..]);
+    rand::fill(&mut value[..]);
     c.bench_function("serialize List<u64> 10MB", |b| {
         b.iter(|| serde_amqp::to_vec(black_box(&value)).unwrap())
     });

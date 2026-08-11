@@ -103,7 +103,7 @@ mod tests {
     #[test]
     fn test_recover_key_from_txn_id() {
         let uuid = Uuid::new_v4();
-        let txn_id = TransactionId::from(uuid.clone().into_bytes());
+        let txn_id = TransactionId::from(uuid.into_bytes());
         let uuid2 = Uuid::from_slice(txn_id.as_ref()).unwrap();
         assert_eq!(uuid, uuid2);
     }

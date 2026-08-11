@@ -18,7 +18,7 @@ where
     ///
     /// This is cancel safe because all internal `.await` are cancel safe
     pub(crate) async fn send_transfer_without_modifying_unsettled_map(
-        &mut self,
+        &self,
         writer: &mpsc::Sender<LinkFrame>,
         mut transfer: Transfer,
         mut payload: Payload,
@@ -213,7 +213,7 @@ where
     ///
     /// This is cancel safe because all internal `.await` are cancel safe
     async fn send_payload_with_transfer(
-        &mut self,
+        &self,
         writer: &mpsc::Sender<LinkFrame>,
         message_format: MessageFormat,
         transfer: Transfer,
@@ -557,13 +557,31 @@ where
         }
         self.target = target;
 
-        // The sender SHOULD respect the receiver’s desired settlement mode if the receiver
-        // initiates the attach exchange and the sender supports the desired mode
-        if self.rcv_settle_mode != remote_attach.rcv_settle_mode {
-            return Err(SenderAttachError::RcvSettleModeNotSupported);
-        }
+        // The `rcv-settle-mode` field in the attach response from the receiver is the
+        // receiver's *actual* settlement mode in use ("when set at the receiver this
+        // indicates the actual settlement mode in use"). The sender must adapt its
+        // settlement handshake accordingly: with `second`, the receiver settles only
+        // after receiving the sender's confirming disposition. The session already
+        // propagates the actual mode to the link relay (`SessionInner::on_incoming_attach`),
+        // which drives the confirming echo at delivery time, so no strict validation
+        // is needed here. The local value is still updated with the receiver's actual
+        // mode so that it reflects the negotiated state (e.g. on reattach and through
+        // the `rcv_settle_mode` accessor), mirroring how the receiver side records the
+        // sender's actual `snd-settle-mode`.
+        self.rcv_settle_mode = remote_attach.rcv_settle_mode;
 
-        if self.snd_settle_mode != remote_attach.snd_settle_mode {
+        // The `snd-settle-mode` field in the attach response from the receiver only
+        // expresses the receiver's *desired* settlement mode for the sender. When the
+        // sender initiates the attach, the sender's own choice is the settlement mode in
+        // use and the receiver SHOULD respect it, failing the attach if it cannot.
+        //
+        // A definite conflict (neither side is `mixed`) is still treated as an error
+        // because it signals a receiver that expects a settlement behavior the sender
+        // will not provide; a `mixed` response is tolerated either way.
+        if let (SenderSettleMode::Settled, SenderSettleMode::Unsettled)
+        | (SenderSettleMode::Unsettled, SenderSettleMode::Settled) =
+            (&self.snd_settle_mode, &remote_attach.snd_settle_mode)
+        {
             return Err(SenderAttachError::SndSettleModeNotSupported);
         }
 
@@ -716,7 +734,6 @@ where
             }
 
             SenderAttachError::SndSettleModeNotSupported
-            | SenderAttachError::RcvSettleModeNotSupported
             | SenderAttachError::IncomingTargetIsNone => {
                 // Just send detach immediately
                 let err = self

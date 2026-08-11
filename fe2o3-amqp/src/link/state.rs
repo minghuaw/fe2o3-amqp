@@ -312,7 +312,7 @@ impl Consume for SenderFlowState {
     /// `Notify` itself is not cancel safe in the way that it would lose its place in the queue.
     /// However, since there can be only one consumer for a producer, losing the place in the queue
     /// does not have any effect. Thus, this IS cancel safe.
-    async fn consume(&mut self, item: Self::Item) -> Self::Outcome {
+    async fn consume(&self, item: Self::Item) -> Self::Outcome {
         loop {
             match consume_link_credit(&self.state().lock, item) {
                 Ok(outcome) => return outcome,
@@ -326,7 +326,7 @@ cfg_transaction! {
     impl crate::util::TryConsume for SenderFlowState {
         type Error = super::error::SenderTryConsumeError;
 
-        fn try_consume(&mut self, item: Self::Item) -> Result<Self::Outcome, Self::Error> {
+        fn try_consume(&self, item: Self::Item) -> Result<Self::Outcome, Self::Error> {
             let mut state = self
                 .state()
                 .lock
@@ -414,7 +414,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_sender_flow_state_producer_and_consumer() {
-        let (mut producer, mut consumer) = create_sender_flow_state_producer_and_consumer();
+        let (mut producer, consumer) = create_sender_flow_state_producer_and_consumer();
 
         // .await on notify
         assert_pending!(consumer.consume(1));
@@ -440,7 +440,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_spawned_flow_state_producer_and_consumer() {
-        let (mut producer, mut consumer) = create_sender_flow_state_producer_and_consumer();
+        let (mut producer, consumer) = create_sender_flow_state_producer_and_consumer();
 
         let handle = tokio::spawn(async move { consumer.consume(1).await });
         let mut fut = Box::pin(handle);
@@ -460,7 +460,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_drop_consume_fut_before_produce() {
-        let (mut producer, mut consumer) = create_sender_flow_state_producer_and_consumer();
+        let (mut producer, consumer) = create_sender_flow_state_producer_and_consumer();
 
         // Drop before notify
         let fut = consumer.consume(1);
@@ -486,7 +486,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_drop_consume_fut_after_produce() {
-        let (mut producer, mut consumer) = create_sender_flow_state_producer_and_consumer();
+        let (mut producer, consumer) = create_sender_flow_state_producer_and_consumer();
 
         // Drop before notify
         let fut = consumer.consume(1);

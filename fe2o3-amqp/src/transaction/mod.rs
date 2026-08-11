@@ -6,7 +6,10 @@
 //!
 //! # Controller side
 //!
-//! Please see [`Controller`], [`Transaction`], and [`OwnedTransaction`]
+//! Please see [`Controller`], [`Transaction`], and [`OwnedTransaction`], as well as the
+//! [`TransactionBase`], [`TransactionDischarge`], [`TransactionPosting`],
+//! [`TransactionRetirement`], and [`TransactionAcquisition`] traits that define the
+//! transactional operations.
 //!
 //! # Resource side
 //!
@@ -33,6 +36,7 @@ use crate::{
     endpoint::ReceiverLink,
     link::{
         delivery::{DeliveryFut, DeliveryInfo, UnsettledMessage},
+        sender::SenderInner,
         DispositionError, FlowError, LinkFrame,
     },
     util::TryConsume,
@@ -63,22 +67,31 @@ use serde_amqp::{ser::Serializer, Value};
 
 mod acquisition;
 pub use acquisition::*;
-use tokio::sync::{mpsc::error::TryRecvError, oneshot};
+use tokio::sync::{mpsc::error::TryRecvError, oneshot, Mutex};
+
+use controller::ControlLink;
 
 mod owned;
 pub use owned::*;
 
-pub(crate) mod control_link_frame;
-
 cfg_acceptor! {
+    pub(crate) mod control_link_frame;
     pub mod coordinator;
     pub mod frame;
     pub mod manager;
     pub mod session;
 }
 
-/// Trait for generics for TxnAcquisition
+/// The base trait for transactions, providing access to the transaction identifier.
+///
+/// All other transaction traits extend this trait so that they can access the `txn-id`
+/// of the transaction they operate on.
+pub trait TransactionBase {
+    /// Get the `txn-id` of the transaction
+    fn txn_id(&self) -> &TransactionId;
+}
 
+/// Trait for generics for TxnAcquisition
 pub trait TransactionDischarge: Sized {
     /// Errors with discharging
     type Error: Send;
@@ -117,10 +130,9 @@ pub trait TransactionDischarge: Sized {
 }
 
 /// Retiring a transaction
-
-pub trait TransactionalRetirement {
+pub trait TransactionRetirement: TransactionBase {
     /// Error with retirement
-    type RetireError: Send;
+    type RetireError: Send + From<DispositionError>;
 
     /// Associate an outcome with a transaction
     ///
@@ -135,7 +147,19 @@ pub trait TransactionalRetirement {
         outcome: Outcome,
     ) -> impl Future<Output = Result<(), Self::RetireError>> + Send
     where
-        T: Into<DeliveryInfo> + Send;
+        T: Into<DeliveryInfo> + Send,
+        Self: Sync,
+    {
+        async move {
+            let txn_state = TransactionalState {
+                txn_id: self.txn_id().clone(),
+                outcome: Some(outcome),
+            };
+            let state = DeliveryState::TransactionalState(txn_state);
+            recver.inner.dispose(delivery, None, state).await?;
+            Ok(())
+        }
+    }
 
     /// Associate an Accepted outcome with a transaction
     fn accept<T>(
@@ -204,10 +228,202 @@ pub trait TransactionalRetirement {
     }
 }
 
-/// Extension trait that also act as a trait bound for TxnAcquisition
-pub trait TransactionExt: TransactionDischarge + TransactionalRetirement {
-    /// Get the `txn-id` of the transaction
-    fn txn_id(&self) -> &TransactionId;
+/// The aggregate trait for all transactional operations.
+///
+/// A type that implements this trait supports transactional posting, retirement, acquisition,
+/// and discharging.
+pub trait TransactionExt:
+    TransactionBase
+        + TransactionDischarge
+        + TransactionPosting
+        + TransactionAcquisition
+        + TransactionRetirement
+{
+}
+
+/// Transactional posting (AMQP 1.0 §4.4.4)
+///
+/// Posting transactional work associates an outgoing transfer with a transaction by setting the
+/// state of the transfer to a `transactional-state` carrying the transaction identifier. The
+/// resource will route the message upon the successful discharge (commit) of the transaction.
+pub trait TransactionPosting: TransactionBase {
+    /// Post a ref of transactional work and wait for the acknowledgement.
+    fn post_batchable_ref<T: SerializableBody + Sync>(
+        &self,
+        sender: &mut Sender,
+        sendable: &Sendable<T>,
+    ) -> impl Future<Output = Result<DeliveryFut<Result<Outcome, PostError>>, PostError>> + Send
+    where
+        Self: Sync,
+    {
+        async move { post_ref_inner(self.txn_id(), sender, sendable, true).await }
+    }
+
+    /// Post a ref of transactional work
+    fn post_ref<T: SerializableBody + Sync>(
+        &self,
+        sender: &mut Sender,
+        sendable: &Sendable<T>,
+    ) -> impl Future<Output = Result<Outcome, PostError>> + Send
+    where
+        Self: Sync,
+    {
+        async move { post_ref_inner(self.txn_id(), sender, sendable, false).await?.await }
+    }
+
+    /// Post a transactional work without waiting for the acknowledgement.
+    ///
+    /// This will set the `batchable` field of the `Transfer` performative to true.
+    fn post_batchable<T: SerializableBody + Send>(
+        &self,
+        sender: &mut Sender,
+        sendable: impl Into<Sendable<T>>,
+    ) -> impl Future<Output = Result<DeliveryFut<Result<Outcome, PostError>>, PostError>> + Send
+    where
+        Self: Sync,
+    {
+        let sendable = sendable.into();
+        async move { post_inner(self.txn_id(), sender, sendable, true).await }
+    }
+
+    /// Post a transactional work
+    fn post<T: SerializableBody + Send>(
+        &self,
+        sender: &mut Sender,
+        sendable: impl Into<Sendable<T>>,
+    ) -> impl Future<Output = Result<Outcome, PostError>> + Send
+    where
+        Self: Sync,
+    {
+        let sendable = sendable.into();
+        async move {
+            let fut = post_inner(self.txn_id(), sender, sendable, false).await?;
+
+            // On receiving a non-settled delivery associated with a live transaction, the
+            // transactional resource MUST inform the controller of the presumptive terminal
+            // outcome before it can successfully discharge the transaction. That is, the resource
+            // MUST send a disposition performative which covers the posted transfer with the state
+            // of the delivery being a transactional-state with the correct transaction identified,
+            // and a terminal outcome. This informs the controller of the outcome that will be in
+            // effect at the point that the transaction is successfully discharged.
+            fut.await
+        }
+    }
+}
+
+/// Send a transactional posting with the given `batchable` flag.
+///
+/// If the transaction controller wishes to associate an outgoing transfer with a transaction, it
+/// MUST set the state of the transfer with a transactional-state carrying the appropriate
+/// transaction identifier. Note that if the delivery is split across several transfer frames then
+/// all frames MUST be explicitly associated with the same transaction.
+#[inline]
+async fn post_inner<T>(
+    txn_id: &TransactionId,
+    sender: &mut Sender,
+    sendable: Sendable<T>,
+    batchable: bool,
+) -> Result<DeliveryFut<Result<Outcome, PostError>>, PostError>
+where
+    T: SerializableBody + Send,
+{
+    let state = TransactionalState {
+        txn_id: txn_id.clone(),
+        outcome: None,
+    };
+    let state = DeliveryState::TransactionalState(state);
+    let settlement = sender
+        .inner
+        .send_with_state::<T, PostError>(sendable, Some(state), batchable)
+        .await?;
+
+    Ok(DeliveryFut::from(settlement))
+}
+
+/// Send a ref of transactional posting with the given `batchable` flag.
+///
+/// If the transaction controller wishes to associate an outgoing transfer with a transaction, it
+/// MUST set the state of the transfer with a transactional-state carrying the appropriate
+/// transaction identifier. Note that if the delivery is split across several transfer frames then
+/// all frames MUST be explicitly associated with the same transaction.
+#[inline]
+async fn post_ref_inner<T>(
+    txn_id: &TransactionId,
+    sender: &mut Sender,
+    sendable: &Sendable<T>,
+    batchable: bool,
+) -> Result<DeliveryFut<Result<Outcome, PostError>>, PostError>
+where
+    T: SerializableBody + Sync,
+{
+    let state = TransactionalState {
+        txn_id: txn_id.clone(),
+        outcome: None,
+    };
+    let state = DeliveryState::TransactionalState(state);
+    let settlement = sender
+        .inner
+        .send_ref_with_state::<T, PostError>(sendable, Some(state), batchable)
+        .await?;
+
+    Ok(DeliveryFut::from(settlement))
+}
+
+/// Transactional acquisition (AMQP 1.0 §4.4.3)
+///
+/// Transactionally acquiring work causes the resource to acquire (deliver) messages
+/// transactionally, i.e. the deliveries are tagged with a `transactional-state` carrying the
+/// transaction identifier, and are only retired from the resource upon the successful discharge
+/// of the transaction.
+pub trait TransactionAcquisition:
+    Sized + TransactionBase + TransactionDischarge + TransactionRetirement + Send + Sync
+{
+    /// Acquire a transactional work
+    ///
+    /// This will set the `txn-id` property in the link's flow and send a flow frame with the
+    /// given credit. The returned [`TxnAcquisition`] can be used to receive and retire the
+    /// acquired deliveries.
+    fn acquire<'r>(
+        self,
+        recver: &'r mut Receiver,
+        credit: SequenceNo,
+    ) -> impl Future<Output = Result<TxnAcquisition<'r, Self>, FlowError>> + Send {
+        async move {
+            let value = Value::Binary(self.txn_id().clone());
+            {
+                let mut writer = recver.inner.link.flow_state.lock.write();
+                match &mut writer.properties {
+                    Some(fields) => {
+                        if fields.contains_key(TXN_ID_KEY) {
+                            return Err(FlowError::IllegalState);
+                        }
+
+                        fields.insert(Symbol::from(TXN_ID_KEY), value);
+                    }
+                    None => {
+                        let mut fields = Fields::new();
+                        fields.insert(Symbol::from(TXN_ID_KEY), value);
+                    }
+                }
+            }
+
+            match recver
+                .inner
+                .link
+                .send_flow(&recver.inner.outgoing, Some(credit), None, false, false)
+                .await
+            {
+                Ok(_) => Ok(TxnAcquisition { txn: self, recver }),
+                Err(error) => {
+                    let mut writer = recver.inner.link.flow_state.lock.write();
+                    if let Some(fields) = &mut writer.properties {
+                        fields.swap_remove(TXN_ID_KEY);
+                    }
+                    Err(error)
+                }
+            }
+        }
+    }
 }
 
 /// A transaction scope for the client side
@@ -223,6 +439,10 @@ pub trait TransactionExt: TransactionDischarge + TransactionalRetirement {
 /// ## Transactional posting
 ///
 /// ```rust,ignore
+/// use fe2o3_amqp::transaction::{
+///     Controller, Transaction, TransactionDischarge, TransactionPosting,
+/// };
+///
 /// let controller = Controller::attach(&mut session, "controller").await.unwrap();
 /// let mut sender = Sender::attach(&mut session, "rust-sender-link-1", "q1")
 ///     .await
@@ -246,6 +466,10 @@ pub trait TransactionExt: TransactionDischarge + TransactionalRetirement {
 /// ## Transactional retirement
 ///
 /// ```rust,ignore
+/// use fe2o3_amqp::transaction::{
+///     Controller, Transaction, TransactionDischarge, TransactionRetirement,
+/// };
+///
 /// let controller = Controller::attach(&mut session, "controller").await.unwrap();
 /// let mut receiver = Receiver::attach(&mut session, "rust-recver-1", "q1")
 ///     .await
@@ -267,12 +491,16 @@ pub trait TransactionExt: TransactionDischarge + TransactionalRetirement {
 /// Please note that this is not supported on the resource side yet.
 ///
 /// ```rust,ignore
+/// use fe2o3_amqp::transaction::{
+///     Controller, Transaction, TransactionAcquisition, TransactionRetirement,
+/// };
+///
 /// let controller = Controller::attach(&mut session, "controller").await.unwrap();
 /// let mut receiver = Receiver::attach(&mut session, "rust-recver-1", "q1")
 ///     .await
 ///     .unwrap();
 ///
-/// // Transactionally retiring
+/// // Transactionally acquiring
 /// let mut txn = Transaction::declare(&controller, None).await.unwrap();
 /// let mut txn_acq = txn.acquire(&mut receiver, 2).await.unwrap();
 /// let delivery1: Delivery<Value> = txn_acq.recv().await.unwrap();
@@ -311,37 +539,14 @@ impl<'t> TransactionDischarge for Transaction<'t> {
 }
 
 
-impl<'t> TransactionalRetirement for Transaction<'t> {
-    type RetireError = DispositionError;
-
-    /// Associate an outcome with a transaction
-    ///
-    /// The delivery itself need not be associated with the same transaction as the outcome, or
-    /// indeed with any transaction at all. However, the delivery MUST NOT be associated with a
-    /// different non-discharged transaction than the outcome. If this happens then the control link
-    /// MUST be terminated with a transaction-rollback error.
-    async fn retire<T>(
-        &self,
-        recver: &mut Receiver,
-        delivery: T,
-        outcome: Outcome,
-    ) -> Result<(), Self::RetireError>
-    where
-        T: Into<DeliveryInfo> + Send,
-    {
-        let txn_state = TransactionalState {
-            txn_id: self.declared.txn_id.clone(),
-            outcome: Some(outcome),
-        };
-        let state = DeliveryState::TransactionalState(txn_state);
-        recver.inner.dispose(delivery, None, state).await
-    }
-}
-
-impl<'t> TransactionExt for Transaction<'t> {
+impl TransactionBase for Transaction<'_> {
     fn txn_id(&self) -> &TransactionId {
         &self.declared.txn_id
     }
+}
+
+impl TransactionRetirement for Transaction<'_> {
+    type RetireError = DispositionError;
 }
 
 impl<'t> Transaction<'t> {
@@ -359,305 +564,183 @@ impl<'t> Transaction<'t> {
             is_discharged: false,
         })
     }
-
-    /// Post a ref of transactional work and wait for the acknowledgement.
-    pub async fn post_batchable_ref<T: SerializableBody>(
-        &self,
-        sender: &mut Sender,
-        sendable: &Sendable<T>,
-    ) -> Result<DeliveryFut<Result<Outcome, PostError>>, PostError> {
-        let state = TransactionalState {
-            txn_id: self.declared.txn_id.clone(),
-            outcome: None,
-        };
-        let state = DeliveryState::TransactionalState(state);
-        let settlement = sender
-            .inner
-            .send_ref_with_state::<T, PostError>(sendable, Some(state), false)
-            .await?;
-
-        Ok(DeliveryFut::from(settlement))
-    }
-
-    /// Post a ref of transactional work
-    pub async fn post_ref<T: SerializableBody>(
-        &self,
-        sender: &mut Sender,
-        sendable: &Sendable<T>,
-    ) -> Result<Outcome, PostError> {
-        let fut = self.post_batchable_ref(sender, sendable).await?;
-        fut.await
-    }
-
-    /// Post a transactional work without waiting for the acknowledgement.
-    pub async fn post_batchable<T>(
-        &self,
-        sender: &mut Sender,
-        sendable: impl Into<Sendable<T>>,
-    ) -> Result<DeliveryFut<Result<Outcome, PostError>>, PostError>
-    where
-        T: SerializableBody,
-    {
-        // If the transaction controller wishes to associate an outgoing transfer with a
-        // transaction, it MUST set the state of the transfer with a transactional-state carrying
-        // the appropriate transaction identifier
-
-        // Note that if delivery is split across several transfer frames then all frames MUST be
-        // explicitly associated with the same transaction.
-        let sendable = sendable.into();
-        let state = TransactionalState {
-            txn_id: self.declared.txn_id.clone(),
-            outcome: None,
-        };
-        let state = DeliveryState::TransactionalState(state);
-        let settlement = sender
-            .inner
-            .send_with_state::<T, PostError>(sendable, Some(state), false)
-            .await?;
-
-        Ok(DeliveryFut::from(settlement))
-    }
-
-    /// Post a transactional work
-    pub async fn post<T>(
-        &self,
-        sender: &mut Sender,
-        sendable: impl Into<Sendable<T>>,
-    ) -> Result<Outcome, PostError>
-    where
-        T: SerializableBody,
-    {
-        // If the transaction controller wishes to associate an outgoing transfer with a
-        // transaction, it MUST set the state of the transfer with a transactional-state carrying
-        // the appropriate transaction identifier
-
-        // Note that if delivery is split across several transfer frames then all frames MUST be
-        // explicitly associated with the same transaction.
-        let fut = self.post_batchable(sender, sendable).await?;
-
-        // On receiving a non-settled delivery associated with a live transaction, the transactional
-        // resource MUST inform the controller of the presumptive terminal outcome before it can
-        // successfully discharge the transaction. That is, the resource MUST send a disposition
-        // performative which covers the posted transfer with the state of the delivery being a
-        // transactional-state with the correct transaction identified, and a terminal outcome. This
-        // informs the controller of the outcome that will be in effect at the point that the
-        // transaction is successfully discharged.
-        fut.await
-    }
-
-    /// Acquire a transactional work
-    ///
-    /// This will send
-    pub async fn acquire<'r>(
-        self,
-        recver: &'r mut Receiver,
-        credit: SequenceNo,
-    ) -> Result<TxnAcquisition<'r, Transaction<'t>>, FlowError> {
-        let value = Value::Binary(self.declared.txn_id.clone());
-        {
-            let mut writer = recver.inner.link.flow_state.lock.write();
-            match &mut writer.properties {
-                Some(fields) => {
-                    if fields.contains_key(TXN_ID_KEY) {
-                        return Err(FlowError::IllegalState);
-                    }
-
-                    fields.insert(Symbol::from(TXN_ID_KEY), value);
-                }
-                None => {
-                    let mut fields = Fields::new();
-                    fields.insert(Symbol::from(TXN_ID_KEY), value);
-                }
-            }
-        }
-
-        match recver
-            .inner
-            .link
-            .send_flow(&recver.inner.outgoing, Some(credit), None, false, false)
-            .await
-        {
-            Ok(_) => Ok(TxnAcquisition { txn: self, recver }),
-            Err(error) => {
-                let mut writer = recver.inner.link.flow_state.lock.write();
-                if let Some(fields) = &mut writer.properties {
-                    fields.swap_remove(TXN_ID_KEY);
-                }
-                Err(error)
-            }
-        }
-    }
 }
+
+impl TransactionPosting for Transaction<'_> {}
+
+impl TransactionAcquisition for Transaction<'_> {}
+
+impl TransactionExt for Transaction<'_> {}
 
 impl<'t> Drop for Transaction<'t> {
     #[cfg_attr(feature = "tracing", tracing::instrument)]
     fn drop(&mut self) {
-        const TRIALS_BEFORE_GIVE_UP: u64 = 20;
-
         if !self.is_discharged {
-            // rollback
-            let discharge = Discharge {
-                txn_id: self.declared.txn_id.clone(),
-                fail: Some(true),
-            };
-            // As with the declare message, it is an error if the sender sends the transfer pre-settled.
-            let message = Message::builder().value(discharge).build();
-            let mut payload = BytesMut::new();
-            let mut serializer = Serializer::from((&mut payload).writer());
-            if let Err(_error) = Serializable(message).serialize(&mut serializer) {
+            rollback_on_drop(&self.controller.inner, &self.declared.txn_id);
+        }
+    }
+}
+
+/// Roll back an undischarged transaction when it is dropped.
+///
+/// This is a best-effort synchronous operation: the discharge transfer is serialized and
+/// sent over the control link without `.await` (which is not possible in `Drop`), retrying
+/// the lock acquisition and the outcome wait for a limited number of trials.
+pub(crate) fn rollback_on_drop(
+    controller: &Mutex<SenderInner<ControlLink>>,
+    txn_id: &TransactionId,
+) {
+    const TRIALS_BEFORE_GIVE_UP: u64 = 20;
+
+    let discharge = Discharge {
+        txn_id: txn_id.clone(),
+        fail: Some(true),
+    };
+    // As with the declare message, it is an error if the sender sends the transfer pre-settled.
+    let message = Message::builder().value(discharge).build();
+    let mut payload = BytesMut::new();
+    let mut serializer = Serializer::from((&mut payload).writer());
+    if let Err(_error) = Serializable(message).serialize(&mut serializer) {
+        #[cfg(feature = "tracing")]
+        tracing::error!(error = ?_error);
+        #[cfg(feature = "log")]
+        log::error!("error = {:?}", _error);
+        return;
+    }
+    let payload = payload.freeze();
+    let payload_copy = payload.clone();
+
+    // TODO: what if lock fails
+    let mut counter = 0;
+    let mut inner = loop {
+        if counter > TRIALS_BEFORE_GIVE_UP {
+            return;
+        }
+        counter += 1;
+
+        match controller.try_lock() {
+            Ok(inner) => break inner,
+            Err(_error) => {
                 #[cfg(feature = "tracing")]
                 tracing::error!(error = ?_error);
                 #[cfg(feature = "log")]
                 log::error!("error = {:?}", _error);
-                return;
+
+                std::thread::sleep(std::time::Duration::from_millis(10 * counter + 1))
             }
-            // let payload = BytesMut::from(payload);
-            let payload = payload.freeze();
-            let payload_copy = payload.clone();
+        }
+    };
 
-            // let mut inner = self.controller.inner.blocking_lock();
-            // TODO: what if lock fails
-            let mut counter = 0;
-            let mut inner = loop {
-                if counter > TRIALS_BEFORE_GIVE_UP {
-                    return;
-                }
-                counter += 1;
-
-                match self.controller.inner.try_lock() {
-                    Ok(inner) => break inner,
-                    Err(_error) => {
-                        #[cfg(feature = "tracing")]
-                        tracing::error!(error = ?_error);
-                        #[cfg(feature = "log")]
-                        log::error!("error = {:?}", _error);
-
-                        std::thread::sleep(std::time::Duration::from_millis(10 * counter + 1))
-                    }
-                }
-            };
-
-            match inner.link.flow_state.try_consume(1) {
-                Ok(_) => {
-                    let input_handle = match inner
-                        .link
-                        .input_handle
-                        .clone()
-                        .ok_or(AmqpError::IllegalState)
-                    {
-                        Ok(handle) => handle,
-                        Err(_error) => {
-                            #[cfg(feature = "tracing")]
-                            tracing::error!(error = ?_error);
-                            #[cfg(feature = "log")]
-                            log::error!("error = {:?}", _error);
-                            return;
-                        }
-                    };
-                    let handle = match inner.link.output_handle.clone() {
-                        Some(handle) => handle.into(),
-                        None => return,
-                    };
-                    // let tag = self.flow_state.state().delivery_count().await.to_be_bytes();
-                    let tag = match inner.link.flow_state.state().lock.try_read() {
-                        Some(inner) => inner.delivery_count.to_be_bytes(),
-                        None => return,
-                    };
-                    let delivery_tag = DeliveryTag::from(tag);
-
-                    let transfer = Transfer {
-                        handle,
-                        delivery_id: None,
-                        delivery_tag: Some(delivery_tag.clone()),
-                        message_format: Some(MESSAGE_FORMAT),
-                        settled: Some(false),
-                        more: false, // This message should be small enough
-                        rcv_settle_mode: None,
-                        state: None,
-                        resume: false,
-                        aborted: false,
-                        batchable: false,
-                    };
-
-                    // try receive in case of detach
-                    match inner.incoming.try_recv() {
-                        Ok(_) => {
-                            // The only frames that are relayed is detach
-                            return;
-                        }
-                        Err(error) => match error {
-                            TryRecvError::Empty => {}
-                            TryRecvError::Disconnected => return,
-                        },
-                    }
-
-                    // Send out Rollback
-                    let frame = LinkFrame::Transfer {
-                        input_handle,
-                        performative: transfer,
-                        payload,
-                    };
-                    if inner.outgoing.try_send(frame).is_err() {
-                        // Channel is already closed
-                        return;
-                    }
-
-                    // TODO: Wait for accept or not?
-                    // The transfer is sent unsettled and will be
-                    // inserted into
-                    let (tx, mut rx) = oneshot::channel();
-                    let unsettled = UnsettledMessage::new(payload_copy, None, MESSAGE_FORMAT, tx);
-                    {
-                        let mut guard = match inner.link.unsettled.try_write() {
-                            Some(guard) => guard,
-                            None => return,
-                        };
-                        guard
-                            .get_or_insert(OrderedMap::new())
-                            .insert(delivery_tag, unsettled);
-                    }
-                    let mut counter = 0;
-                    loop {
-                        // TODO:: limits?
-                        if counter > TRIALS_BEFORE_GIVE_UP {
-                            return;
-                        }
-                        counter += 1;
-
-                        match rx.try_recv() {
-                            Ok(Some(state)) => match state {
-                                DeliveryState::Accepted(_) => break,
-                                _ => {
-                                    #[cfg(feature = "tracing")]
-                                    tracing::error!(error = ?state);
-                                    #[cfg(feature = "log")]
-                                    log::error!("error = {:?}", state);
-                                    break;
-                                }
-                            },
-                            Ok(None) => {
-                                // #[cfg(feature = "tracing")]
-                                // tracing::error!(error = ?ControllerSendError::IllegalDeliveryState);
-                                // #[cfg(feature = "log")]
-                                // log::error!("error = {:?}", ControllerSendError::IllegalDeliveryState);
-                                std::thread::sleep(std::time::Duration::from_millis(10 * counter + 1));
-                            }
-                            Err(_error) => {
-                                #[cfg(feature = "tracing")]
-                                tracing::error!(error = ?_error);
-                                #[cfg(feature = "log")]
-                                log::error!("error = {:?}", _error);
-                            }
-                        };
-                    }
-                }
+    match inner.link.flow_state.try_consume(1) {
+        Ok(_) => {
+            let input_handle = match inner.link.input_handle.clone().ok_or(AmqpError::IllegalState)
+            {
+                Ok(handle) => handle,
                 Err(_error) => {
                     #[cfg(feature = "tracing")]
                     tracing::error!(error = ?_error);
                     #[cfg(feature = "log")]
                     log::error!("error = {:?}", _error);
+                    return;
                 }
+            };
+            let handle = match inner.link.output_handle.clone() {
+                Some(handle) => handle.into(),
+                None => return,
+            };
+            let tag = match inner.link.flow_state.state().lock.try_read() {
+                Some(inner) => inner.delivery_count.to_be_bytes(),
+                None => return,
+            };
+            let delivery_tag = DeliveryTag::from(tag);
+
+            let transfer = Transfer {
+                handle,
+                delivery_id: None,
+                delivery_tag: Some(delivery_tag.clone()),
+                message_format: Some(MESSAGE_FORMAT),
+                settled: Some(false),
+                more: false, // This message should be small enough
+                rcv_settle_mode: None,
+                state: None,
+                resume: false,
+                aborted: false,
+                batchable: false,
+            };
+
+            // try receive in case of detach
+            match inner.incoming.try_recv() {
+                Ok(_) => {
+                    // The only frames that are relayed is detach
+                    return;
+                }
+                Err(error) => match error {
+                    TryRecvError::Empty => {}
+                    TryRecvError::Disconnected => return,
+                },
             }
+
+            // Send out Rollback
+            let frame = LinkFrame::Transfer {
+                input_handle,
+                performative: transfer,
+                payload,
+            };
+            if inner.outgoing.try_send(frame).is_err() {
+                // Channel is already closed
+                return;
+            }
+
+            // TODO: Wait for accept or not?
+            // The transfer is sent unsettled and will be
+            // inserted into
+            let (tx, mut rx) = oneshot::channel();
+            let unsettled = UnsettledMessage::new(payload_copy, None, MESSAGE_FORMAT, tx);
+            {
+                let mut guard = match inner.link.unsettled.try_write() {
+                    Some(guard) => guard,
+                    None => return,
+                };
+                guard
+                    .get_or_insert(OrderedMap::new())
+                    .insert(delivery_tag, unsettled);
+            }
+            let mut counter = 0;
+            loop {
+                // TODO:: limits?
+                if counter > TRIALS_BEFORE_GIVE_UP {
+                    return;
+                }
+                counter += 1;
+
+                match rx.try_recv() {
+                    Ok(Some(state)) => match state {
+                        DeliveryState::Accepted(_) => break,
+                        _ => {
+                            #[cfg(feature = "tracing")]
+                            tracing::error!(error = ?state);
+                            #[cfg(feature = "log")]
+                            log::error!("error = {:?}", state);
+                            break;
+                        }
+                    },
+                    Ok(None) => {
+                        std::thread::sleep(std::time::Duration::from_millis(10 * counter + 1));
+                    }
+                    Err(_error) => {
+                        #[cfg(feature = "tracing")]
+                        tracing::error!(error = ?_error);
+                        #[cfg(feature = "log")]
+                        log::error!("error = {:?}", _error);
+                    }
+                };
+            }
+        }
+        Err(_error) => {
+            #[cfg(feature = "tracing")]
+            tracing::error!(error = ?_error);
+            #[cfg(feature = "log")]
+            log::error!("error = {:?}", _error);
         }
     }
 }

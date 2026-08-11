@@ -123,7 +123,7 @@ pub(crate) trait SenderLink: Link + LinkExt {
 
     /// Send message with delivery tag that is obtained by consuming a link credit
     async fn send_payload_with_transfer(
-        &mut self,
+        &self,
         writer: &mpsc::Sender<LinkFrame>,
         message_format: MessageFormat,
         transfer: Transfer,

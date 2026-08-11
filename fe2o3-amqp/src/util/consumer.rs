@@ -36,13 +36,13 @@ pub trait Consume {
     type Item: Send;
     type Outcome: Send;
 
-    async fn consume(&mut self, item: Self::Item) -> Self::Outcome;
+    async fn consume(&self, item: Self::Item) -> Self::Outcome;
 }
 
 cfg_transaction! {
     pub trait TryConsume: Consume {
         type Error;
 
-        fn try_consume(&mut self, item: Self::Item) -> Result<Self::Outcome, Self::Error>;
+        fn try_consume(&self, item: Self::Item) -> Result<Self::Outcome, Self::Error>;
     }
 }

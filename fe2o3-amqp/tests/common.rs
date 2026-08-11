@@ -72,6 +72,7 @@ pub async fn setup_qpid_broker_j(
 }
 
 // TODO: disable default user and add a new user
+#[allow(dead_code)] // not used by all test binaries
 pub async fn setup_rabbitmq_amqp10(
     username: Option<&str>,
     password: Option<&str>,

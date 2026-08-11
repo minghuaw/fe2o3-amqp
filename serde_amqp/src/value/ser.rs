@@ -815,7 +815,7 @@ impl ser::SerializeStructVariant for VariantSerializer<'_> {
 
 #[cfg(test)]
 mod tests {
-    use serde::{Deserialize, Serialize};
+    use serde::Serialize;
 
     #[cfg(feature = "derive")]
     use serde_amqp_derive::{DeserializeComposite, SerializeComposite};

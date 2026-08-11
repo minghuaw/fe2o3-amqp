@@ -4,6 +4,9 @@
 #[cfg(feature = "derive")]
 use serde_amqp::{DeserializeComposite, SerializeComposite};
 
+// This file only serves as a test and macro expansion for the derive macro, so
+// the structs here are intentionally never constructed at runtime.
+#[allow(dead_code)]
 #[cfg(feature = "derive")]
 #[derive(SerializeComposite, DeserializeComposite)]
 #[amqp_contract(

@@ -2096,11 +2096,7 @@ mod test {
         assert_eq_on_serialized_vs_expected(descriptor, &expected);
     }
 
-    #[cfg(feature = "derive")]
-    use serde::Deserialize;
     use serde::Serialize;
-    #[cfg(feature = "derive")]
-    use serde_amqp_derive::{DeserializeComposite, SerializeComposite};
 
     #[derive(Serialize)]
     struct Foo {
@@ -2563,6 +2559,7 @@ mod test {
     pub struct NewType<T>(T);
 
     #[derive(Debug, Serialize)]
+    #[allow(dead_code)] // only used to check that the derive compiles
     pub struct AnotherNewType<T>(T);
 
     #[test]

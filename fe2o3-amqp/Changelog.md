@@ -1,5 +1,29 @@
 # Change Log
 
+## Unreleased
+
+1. **Breaking**: Added the [`TransactionBase`] trait, which provides the `txn_id()`
+   accessor for transactions.
+2. **Breaking**: Renamed [`TransactionalPosting`] to [`TransactionPosting`],
+   [`TransactionalRetirement`] to [`TransactionRetirement`], and
+   [`TransactionalAcquisition`] to [`TransactionAcquisition`] for consistent naming.
+   All three now extend [`TransactionBase`] and provide default implementations for
+   the `post*`, `retire`, and `acquire` methods of both [`Transaction`] and
+   [`OwnedTransaction`].
+3. **Breaking**: [`TransactionExt`] is now the aggregate trait of all transaction
+   traits ([`TransactionBase`], [`TransactionDischarge`], [`TransactionPosting`],
+   [`TransactionAcquisition`], and [`TransactionRetirement`]).
+4. The `batchable` field of the `Transfer` performative is now set consistently:
+   `post_batchable`/`post_batchable_ref` set it to `true`, while `post`/`post_ref`
+   leave it `false`. Previously `Transaction`'s batchable variants passed `false`,
+   and `OwnedTransaction`'s `post` duplicated the send logic while `Transaction`'s
+   `post` delegated to `post_batchable`.
+5. Implemented `From<IllegalLinkStateError>` for [`OwnedDischargeError`], which
+   enables [`TxnAcquisition`]'s `commit` and `rollback` methods with
+   [`OwnedTransaction`].
+6. [`OwnedTransaction`] is now rolled back when dropped without being discharged,
+   matching the behavior of [`Transaction`].
+
 ## 0.16.2
 
 1. Updated `sha2` to `0.11`, `hmac` and `pbkdf2` to `0.13`, and replaced the deprecated

@@ -745,10 +745,19 @@ impl endpoint::Session for Session {
             .link_by_input_handle
             .remove(&InputHandle::from(detach.handle.clone()))
         {
-            Some(mut link) => link
-                .on_incoming_detach(detach)
-                .await
-                .map_err(|_| SessionInnerError::UnattachedHandle),
+            Some(mut link) => {
+                // The link endpoint may already have been dropped without an explicit
+                // close handshake (e.g. a `Sender`/`Receiver` that was simply dropped).
+                // In that case the frame cannot be forwarded and the detach reply is
+                // discarded; this must not tear down the session.
+                if let Err(error) = link.on_incoming_detach(detach).await {
+                    #[cfg(feature = "tracing")]
+                    tracing::error!(error = ?error);
+                    #[cfg(feature = "log")]
+                    log::error!("error = {:?}", error);
+                }
+                Ok(())
+            }
             None => Err(SessionInnerError::UnattachedHandle),
         }
     }
