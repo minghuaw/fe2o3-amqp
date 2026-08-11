@@ -15,7 +15,7 @@ use super::{
 /// <type name="source" class="composite" source="list" provides="source">
 ///     <descriptor name="amqp:source:list" code="0x00000000:0x00000028"/>
 /// </type>
-#[derive(Debug, Clone, Default, DeserializeComposite, SerializeComposite)]
+#[derive(Debug, Clone, PartialEq, Eq, Default, DeserializeComposite, SerializeComposite)]
 #[amqp_contract(
     name = "amqp:source:list",
     code = "0x0000_0000:0x0000_0028",

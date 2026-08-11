@@ -108,10 +108,11 @@ mod tests {
     use super::ConnectionError;
 
     #[test]
-    fn test_serialize_connection_error() {
+    fn test_serialize_deserialize_connection_error() {
         let val = ConnectionError::ConnectionForced;
         let buf = to_vec(&val).unwrap();
-        println!("{:x?}", buf);
+        let recovered: ConnectionError = from_slice(&buf).unwrap();
+        assert_eq!(recovered, val);
     }
 
     #[test]
@@ -120,6 +121,6 @@ mod tests {
         let mut val = vec![EncodingCodes::Sym8 as u8, sym_buf.len() as u8];
         val.append(&mut sym_buf);
         let recovered: ConnectionError = from_slice(&val).unwrap();
-        println!("{:?}", recovered);
+        assert_eq!(recovered, ConnectionError::Redirect);
     }
 }

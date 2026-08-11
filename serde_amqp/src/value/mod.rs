@@ -659,12 +659,6 @@ mod tests {
     }
 
     #[test]
-    fn mem_size_of_value() {
-        let size = std::mem::size_of::<Value>();
-        println!("{:?}", size);
-    }
-
-    #[test]
     fn test_value_null() {
         let expected = Value::Null;
         let buf = to_vec(&expected).unwrap();
@@ -901,6 +895,8 @@ mod tests {
     #[test]
     fn test_deserialize_described_value() {
         use crate as serde_amqp;
+        use crate::described::Described;
+        use crate::descriptor::Descriptor;
         use crate::from_slice;
         use crate::macros::SerializeComposite;
 
@@ -915,8 +911,11 @@ mod tests {
             a: 9,
         };
         let buf = to_vec(&foo).unwrap();
-        println!("{:x?}", buf);
         let value: Value = from_slice(&buf).unwrap();
-        println!("{:?}", value);
+        let expected = Value::Described(Box::new(Described {
+            descriptor: Descriptor::Code(0x13),
+            value: Value::List(vec![Value::Bool(true), Value::Int(9)]),
+        }));
+        assert_eq!(value, expected);
     }
 }

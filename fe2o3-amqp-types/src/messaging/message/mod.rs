@@ -626,13 +626,6 @@ mod tests {
 
     use super::Message;
 
-    // NOTE: Messave<Value> mem size is only 8 bytes larger than Message<()>
-    // fn print_message_size() {
-    //     println!("Value: {:?}", std::mem::size_of::<Value>());
-    //     println!("Message<Value>: {:?}", std::mem::size_of::<Message<Value>>());
-    //     println!("Message<()>: {:?}", std::mem::size_of::<Message<()>>());
-    // }
-
     #[test]
     fn test_convert_data_into_message() {
         let data = Data(Binary::from("hello AMQP"));
@@ -661,10 +654,9 @@ mod tests {
     fn test_serialize_deserialize_null() {
         let body = AmqpValue(Value::Null);
         let buf = to_vec(&body).unwrap();
-        println!("{:#x?}", buf);
 
         let body2: AmqpValue<Value> = from_slice(&buf).unwrap();
-        println!("{:?}", body2.0)
+        assert_eq!(body2.0, body.0);
     }
 
     #[test]
@@ -682,21 +674,18 @@ mod tests {
         let data = Data(ByteBuf::from(data));
         let body = Body::<Value>::Data(vec![data].into());
         let serialized = to_vec(&body).unwrap();
-        println!("{:x?}", serialized);
         let field: Body<Value> = from_slice(&serialized).unwrap();
-        println!("{:?}", field);
+        assert_eq!(field, body);
 
         let body = Body::Sequence(vec![AmqpSequence(vec![Value::Bool(true)])].into());
         let serialized = to_vec(&body).unwrap();
-        println!("{:x?}", serialized);
         let field: Body<Value> = from_slice(&serialized).unwrap();
-        println!("{:?}", field);
+        assert_eq!(field, body);
 
         let body = Body::Value(AmqpValue(Value::Bool(true)));
         let serialized = to_vec(&body).unwrap();
-        println!("{:x?}", serialized);
         let field: Body<Value> = from_slice(&serialized).unwrap();
-        println!("{:?}", field);
+        assert_eq!(field, body);
     }
 
     #[test]
@@ -717,7 +706,6 @@ mod tests {
         let mut buf = Vec::new();
         let mut serializer = serde_amqp::ser::Serializer::new(&mut buf);
         message.serialize(&mut serializer).unwrap();
-        println!("{:x?}", buf);
     }
 
     #[test]

@@ -13,7 +13,7 @@ use crate::{
 /// <type name="disposition" class="composite" source="list" provides="frame">
 ///     <descriptor name="amqp:disposition:list" code="0x00000000:0x00000015"/>
 /// </type>
-#[derive(Debug, Clone, DeserializeComposite, SerializeComposite)]
+#[derive(Debug, Clone, PartialEq, Eq, DeserializeComposite, SerializeComposite)]
 // #[serde(rename_all = "kebab-case")]
 #[amqp_contract(
     name = "amqp:disposition:list",
@@ -72,7 +72,7 @@ mod tests {
     }
 
     #[allow(dead_code)]
-    #[derive(Debug, Clone)]
+    #[derive(Debug, Clone, PartialEq, Eq)]
     pub struct Disposition {
         /// <field name="role" type="role" mandatory="true"/>
         pub role: Role,
@@ -359,6 +359,14 @@ mod tests {
             0x0u8, 0x53, 0x15, 0xc0, 0x9, 0x5, 0x41, 0x43, 0x40, 0x41, 0x0, 0x53, 0x24, 0x45,
         ];
         let deserialized: Disposition = from_slice(&buf[..]).unwrap();
-        println!("{:?}", deserialized);
+        let expected = Disposition {
+            role: Role::Receiver,
+            first: 0,
+            last: None,
+            settled: true,
+            state: Some(DeliveryState::Accepted(Accepted {})),
+            batchable: false,
+        };
+        assert_eq!(deserialized, expected);
     }
 }

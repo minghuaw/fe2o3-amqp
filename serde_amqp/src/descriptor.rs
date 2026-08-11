@@ -197,7 +197,6 @@ mod tests {
         // let descriptor = Descriptor::Name(Symbol::from("amqp"));
         let descriptor = Descriptor::Code(113);
         let buf = to_vec(&descriptor).unwrap();
-        println!("{:x?}", buf);
         let deserialized: Descriptor = from_slice(&buf).unwrap();
         assert_eq!(deserialized, descriptor)
     }

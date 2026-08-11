@@ -1,5 +1,15 @@
 # Change Log
 
+## Unreleased
+
+1. Derived `PartialEq` and `Eq` on the performatives (`Open`, `Begin`, `Attach`,
+   `Flow`, `Transfer`, `Disposition`, `Detach`, `End`, `Close`, and `Performative`),
+   the messaging types (`Source`, `Target`, `TargetArchetype`, `DeliveryState`,
+   `Outcome`, `Accepted`, `Rejected`, `Released`, `Modified`, `Received`,
+   `LifetimePolicy` and its `DeleteOn*` variants, `DistributionMode`), and the
+   transaction types (`Coordinator`, `Declare`, `Discharge`, `Declared`,
+   `TransactionalState`).
+
 ## 0.16.0
 
 1. Bumped version to "0.16.0" to match other `fe2o3-amqp` crates, so that a

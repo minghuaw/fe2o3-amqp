@@ -11,7 +11,7 @@ mod tests {
 
     #[test]
     fn test_macro_integration() {
-        #[derive(Debug, SerializeComposite, DeserializeComposite)]
+        #[derive(Debug, PartialEq, SerializeComposite, DeserializeComposite)]
         #[amqp_contract(name = "a", encoding = "list")]
         struct Test {
             a: i32,
@@ -20,6 +20,7 @@ mod tests {
 
         let value = Test { a: 7, b: true };
         let buf = to_vec(&value).unwrap();
-        println!("{:x?}", buf);
+        let deserialized: Test = crate::de::from_slice(&buf).unwrap();
+        assert_eq!(deserialized, value);
     }
 }

@@ -2096,7 +2096,7 @@ mod test {
         assert_eq_on_serialized_vs_expected(descriptor, &expected);
     }
 
-    use serde::Serialize;
+    use serde::{Deserialize, Serialize};
 
     #[derive(Serialize)]
     struct Foo {
@@ -2555,7 +2555,7 @@ mod test {
         assert_eq_on_serialized_vs_expected(val, &expected);
     }
 
-    #[derive(Debug, Serialize)]
+    #[derive(Debug, Serialize, Deserialize, PartialEq)]
     pub struct NewType<T>(T);
 
     #[derive(Debug, Serialize)]
@@ -2563,9 +2563,14 @@ mod test {
     pub struct AnotherNewType<T>(T);
 
     #[test]
-    fn test_serialize_vec_of_tuple() {
+    fn test_serialize_deserialize_vec_of_tuple() {
         let data = vec![(&NewType(NewType(1i32)), &false, "amqp")];
         let buf = to_vec(&data).unwrap();
-        println!("{:#x?}", buf);
+        let deserialized: Vec<(NewType<NewType<i32>>, bool, String)> =
+            crate::de::from_slice(&buf).unwrap();
+        assert_eq!(
+            deserialized,
+            vec![(NewType(NewType(1i32)), false, "amqp".to_string())]
+        );
     }
 }

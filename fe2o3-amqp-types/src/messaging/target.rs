@@ -16,7 +16,7 @@ use crate::transaction::Coordinator;
 ///
 /// For details, please see part 1.3, 3.5.4, and 4.5.1 in the core
 /// specification.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum TargetArchetype {
     /// 3.5.4 Target
     Target(Target),
@@ -155,7 +155,7 @@ mod target_archetype_serde_impl {
 /// <type name="target" class="composite" source="list" provides="target">
 ///     <descriptor name="amqp:target:list" code="0x00000000:0x00000029"/>
 /// </type>
-#[derive(Debug, Clone, Default, DeserializeComposite, SerializeComposite)]
+#[derive(Debug, Clone, PartialEq, Eq, Default, DeserializeComposite, SerializeComposite)]
 #[amqp_contract(
     name = "amqp:target:list",
     code = "0x0000_0000:0x0000_0029",
@@ -395,9 +395,7 @@ mod tests {
         let target = Target::default();
         let buf = to_vec(&target).unwrap();
         let archetype: TargetArchetype = from_slice(&buf).unwrap();
-        println!("{:?}", archetype);
-
-        // println!("{:?}", std::mem::size_of::<Target>());
+        assert_eq!(archetype, TargetArchetype::Target(target));
     }
 
     #[cfg(feature = "transaction")]
@@ -407,8 +405,6 @@ mod tests {
         let coordinator = Coordinator::new(None);
         let buf = to_vec(&coordinator).unwrap();
         let archetype: TargetArchetype = from_slice(&buf).unwrap();
-        println!("{:?}", archetype);
-
-        // println!("{:?}", std::mem::size_of::<Coordinator>());
+        assert_eq!(archetype, TargetArchetype::Coordinator(coordinator));
     }
 }

@@ -11,7 +11,7 @@ use serde_amqp::primitives::Symbol;
 /// <type name="std-dist-mode" class="restricted" source="symbol" provides="distribution-mode">
 /// </type>
 ///
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum DistributionMode {
     /// <choice name="move" value="move"/>
     Move,

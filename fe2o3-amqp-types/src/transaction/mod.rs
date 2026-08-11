@@ -16,7 +16,7 @@ use serde_amqp::{
 ///     <field name="capabilities" type="symbol" requires="txn-capability" multiple="true"/>
 /// </type>
 /// The coordinator type defines a special target used for establishing a link with a transaction coordinator.
-#[derive(Debug, Clone, SerializeComposite, DeserializeComposite)]
+#[derive(Debug, Clone, PartialEq, Eq, SerializeComposite, DeserializeComposite)]
 #[amqp_contract(
     name = "amqp:coordinator:list",
     code = "0x0000_0000:0x0000_0030",
@@ -87,7 +87,7 @@ impl Coordinator {
 /// The txn-id allocated for this transaction is chosen by the transaction controller and identified
 /// in the declared resulting outcome.
 ///
-#[derive(Debug, Clone, SerializeComposite, DeserializeComposite)]
+#[derive(Debug, Clone, PartialEq, Eq, SerializeComposite, DeserializeComposite)]
 #[amqp_contract(
     name = "amqp:declare:list",
     code = "0x0000_0000:0x0000_0031",
@@ -127,7 +127,7 @@ impl Declare {
 /// The discharge type defines the message body sent to the coordinator to indicate that the txn-id
 /// is no longer in use. If the transaction is not associated with a global-id, then this also
 /// indicates the disposition of the local transaction.
-#[derive(Debug, Clone, SerializeComposite, DeserializeComposite)]
+#[derive(Debug, Clone, PartialEq, Eq, SerializeComposite, DeserializeComposite)]
 #[amqp_contract(
     name = "amqp:discharge:list",
     code = "0x0000_0000:0x0000_0032",
@@ -162,7 +162,7 @@ pub type TransactionId = Binary;
 ///
 /// Indicates that a transaction identifier has successfully been allocated in response to a declare
 /// message sent to a transaction coordinator.
-#[derive(Debug, Clone, SerializeComposite, DeserializeComposite)]
+#[derive(Debug, Clone, PartialEq, Eq, SerializeComposite, DeserializeComposite)]
 #[amqp_contract(
     name = "amqp:declared:list",
     code = "0x0000_0000:0x0000_0033",
@@ -183,7 +183,7 @@ pub struct Declared {
 /// </type>
 /// The transactional-state type defines a delivery-state that is used to associate a delivery with
 /// a transaction as well as to indicate which outcome is to be applied if the transaction commits.
-#[derive(Debug, Clone, SerializeComposite, DeserializeComposite)]
+#[derive(Debug, Clone, PartialEq, Eq, SerializeComposite, DeserializeComposite)]
 #[amqp_contract(
     name = "amqp:transactional-state:list",
     code = "0x0000_0000:0x0000_0034",

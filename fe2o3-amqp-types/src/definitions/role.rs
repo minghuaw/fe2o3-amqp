@@ -84,8 +84,7 @@ mod tests {
     fn test_role() {
         let role = Role::Sender;
         let buf = to_vec(&role).unwrap();
-        println!("{:x?}", buf);
         let role2: Role = from_slice(&buf).unwrap();
-        println!("{:?}", role2);
+        assert_eq!(role2, role);
     }
 }

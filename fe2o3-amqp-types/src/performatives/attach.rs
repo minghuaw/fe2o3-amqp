@@ -29,7 +29,7 @@ use crate::{
 ///     <field name="desired-capabilities" type="symbol" multiple="true"/>
 ///     <field name="properties" type="fields"/>
 /// </type>
-#[derive(Debug, Clone, DeserializeComposite, SerializeComposite)]
+#[derive(Debug, Clone, PartialEq, Eq, DeserializeComposite, SerializeComposite)]
 #[amqp_contract(
     name = "amqp:attach:list",
     code = "0x0000_0000:0x0000_0012",
@@ -142,10 +142,8 @@ mod tests {
             properties: None,
         };
         let buf = to_vec(&attach).unwrap();
-        println!("buf len: {:?}", buf.len());
-        println!("{:#x?}", buf);
         let deserialized: Attach = from_slice(&buf).unwrap();
-        println!("{:?}", deserialized);
+        assert_eq!(deserialized, attach);
     }
 
     #[test]
@@ -166,54 +164,5 @@ mod tests {
 
         let result: Result<Attach, _> = from_slice(buf);
         assert!(result.is_ok());
-    }
-
-    #[test]
-    fn test_size_of_attach() {
-        use super::*;
-        let s = std::mem::size_of::<Attach>();
-        println!("Attach {:?}", s);
-
-        let s = std::mem::size_of::<String>();
-        println!("name {:?}", s);
-
-        let s = std::mem::size_of::<Handle>();
-        println!("handle {:?}", s);
-
-        let s = std::mem::size_of::<Role>();
-        println!("role {:?}", s);
-
-        let s = std::mem::size_of::<SenderSettleMode>();
-        println!("snd_settle_mode {:?}", s);
-
-        let s = std::mem::size_of::<ReceiverSettleMode>();
-        println!("rcv_settle_mode {:?}", s);
-
-        let s = std::mem::size_of::<Option<Box<Source>>>();
-        println!("source {:?}", s);
-
-        let s = std::mem::size_of::<Option<Box<TargetArchetype>>>();
-        println!("target {:?}", s);
-
-        let s = std::mem::size_of::<Option<OrderedMap<DeliveryTag, DeliveryState>>>();
-        println!("unsettled {:?}", s);
-
-        let s = std::mem::size_of::<Boolean>();
-        println!("incomplete_unsettled {:?}", s);
-
-        let s = std::mem::size_of::<Option<SequenceNo>>();
-        println!("initial_delivery_count {:?}", s);
-
-        let s = std::mem::size_of::<Option<Ulong>>();
-        println!("max_message_size {:?}", s);
-
-        let s = std::mem::size_of::<Option<Vec<Symbol>>>();
-        println!("offered_capabilities {:?}", s);
-
-        let s = std::mem::size_of::<Option<Vec<Symbol>>>();
-        println!("desired_capabilities {:?}", s);
-
-        let s = std::mem::size_of::<Option<Fields>>();
-        println!("properties {:?}", s);
     }
 }
