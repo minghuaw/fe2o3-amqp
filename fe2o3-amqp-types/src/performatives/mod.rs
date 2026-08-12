@@ -21,7 +21,7 @@ pub use open::*;
 pub use transfer::*;
 
 /// AMQP 1.0 Performatives
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Performative {
     /// Open
     Open(Open),
@@ -242,25 +242,7 @@ mod tests {
     fn test_untagged_serde() {
         let end = Performative::End(End { error: None });
         let buf = to_vec(&end).unwrap();
-        let end2: Result<Performative, _> = from_slice(&buf);
-        println!("{:x?}", buf);
-        println!("{:?}", end2);
-    }
-
-    #[test]
-    fn test_size_of_variants() {
-        use super::*;
-        use std::mem::size_of;
-
-        println!("Performative {:?}", size_of::<Performative>());
-        println!("Open {:?}", size_of::<Open>());
-        println!("Begin {:?}", size_of::<Begin>());
-        println!("Attach {:?}", size_of::<Attach>());
-        println!("Flow {:?}", size_of::<Flow>());
-        println!("Transfer {:?}", size_of::<Transfer>());
-        println!("Disposition {:?}", size_of::<Disposition>());
-        println!("Detach {:?}", size_of::<Detach>());
-        println!("End {:?}", size_of::<End>());
-        println!("Close {:?}", size_of::<Close>());
+        let end2: Performative = from_slice(&buf).unwrap();
+        assert_eq!(end2, end);
     }
 }

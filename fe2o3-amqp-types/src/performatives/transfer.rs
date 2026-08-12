@@ -13,7 +13,7 @@ use crate::{
 /// <type name="transfer" class="composite" source="list" provides="frame">
 ///     <descriptor name="amqp:transfer:list" code="0x00000000:0x00000014"/>
 /// </type>
-#[derive(Debug, Clone, DeserializeComposite, SerializeComposite)]
+#[derive(Debug, Clone, PartialEq, Eq, DeserializeComposite, SerializeComposite)]
 // #[serde(rename_all = "kebab-case")]
 #[amqp_contract(
     name = "amqp:transfer:list",
@@ -173,7 +173,7 @@ pub struct Transfer {
 
 #[cfg(test)]
 mod tests {
-    use serde_amqp::to_vec;
+    use serde_amqp::{de::from_slice, to_vec};
     use serde_bytes::ByteBuf;
 
     use crate::definitions::Handle;
@@ -181,7 +181,7 @@ mod tests {
     use super::Transfer;
 
     #[test]
-    fn test_serialize_transfer() {
+    fn test_serialize_deserialize_transfer() {
         let transfer = Transfer {
             handle: Handle(0),
             delivery_id: Some(0),
@@ -196,11 +196,12 @@ mod tests {
             batchable: false,
         };
         let serialized = to_vec(&transfer).unwrap();
-        println!("{0:x?}", serialized);
+        let deserialized: Transfer = from_slice(&serialized).unwrap();
+        assert_eq!(deserialized, transfer);
     }
 
     #[test]
-    fn test_serialize_transfer_with_custom_message_format() {
+    fn test_serialize_deserialize_transfer_with_custom_message_format() {
         let transfer = Transfer {
             handle: Handle(0),
             delivery_id: Some(0),
@@ -215,6 +216,7 @@ mod tests {
             batchable: true,
         };
         let serialized = to_vec(&transfer).unwrap();
-        println!("{0:x?}", serialized);
+        let deserialized: Transfer = from_slice(&serialized).unwrap();
+        assert_eq!(deserialized, transfer);
     }
 }

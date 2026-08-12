@@ -1934,7 +1934,6 @@ mod tests {
     fn test_deserialize_i32() {
         let expected = -1i32;
         let buf = crate::to_vec(&expected).unwrap();
-        println!("{:?}", buf);
         let deserialized: i32 = from_slice(&buf).unwrap();
         assert_eq!(expected, deserialized);
 

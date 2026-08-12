@@ -6,7 +6,7 @@ use super::Binary;
 
 /// A wrapper over [`&[u8]`] that allows serialize as an AMQP Binary type and provide custom
 /// implementation for `LowerHex` and `UpperHex`
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 pub struct BinaryRef<'a>(pub &'a [u8]);
 
 impl<'a> From<&'a Binary> for BinaryRef<'a> {

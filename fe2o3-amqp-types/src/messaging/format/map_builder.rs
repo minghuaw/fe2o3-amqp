@@ -77,7 +77,9 @@ impl MapBuilder<String, SimpleValue, ApplicationProperties> {
 
 #[cfg(test)]
 mod tests {
-    use crate::messaging::{ApplicationProperties, MessageAnnotations};
+    use serde_amqp::Value;
+
+    use crate::messaging::{annotations::OwnedKey, ApplicationProperties, MessageAnnotations};
 
     #[test]
     fn test_message_annotation_builder() {
@@ -85,7 +87,10 @@ mod tests {
             .insert("key", "value")
             .insert("key2", 1)
             .build();
-        println!("{:?}", message_annotation);
+        let mut expected = MessageAnnotations::default();
+        expected.insert(OwnedKey::from("key"), Value::from("value"));
+        expected.insert(OwnedKey::from("key2"), Value::from(1));
+        assert_eq!(message_annotation, expected);
     }
 
     #[test]
@@ -94,6 +99,9 @@ mod tests {
             .insert("key", "value")
             .insert("key2", 1i32)
             .build();
-        println!("{:?}", application_props);
+        let mut expected = ApplicationProperties::default();
+        expected.insert("key".to_string(), "value".into());
+        expected.insert("key2".to_string(), 1i32.into());
+        assert_eq!(application_props, expected);
     }
 }

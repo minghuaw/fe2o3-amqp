@@ -870,7 +870,6 @@ mod tests {
             Value::Int(3),
             Value::Int(4),
         ]));
-        println!("{:?}", val);
         assert_eq_on_value_vs_expected(val, expected);
     }
 
@@ -993,7 +992,7 @@ mod tests {
     }
 
     #[test]
-    fn test_serialize_vec_of_tuple() {
+    fn test_serialize_deserialize_vec_of_tuple() {
         // let data = vec![(&AnotherNewType{ inner: NewType(1i32) }, &NewType(false), &NewType("amqp"))];
         let data = AnotherNewType {
             inner: NewType(3i32),
@@ -1001,7 +1000,10 @@ mod tests {
         let data = (data,);
 
         let buf = to_value(&data).unwrap();
-        println!("{:?}", buf);
+        // The produced value must round-trip through its serialized form
+        let bytes = to_vec(&buf).unwrap();
+        let round_tripped: Value = crate::from_slice(&bytes).unwrap();
+        assert_eq!(buf, round_tripped);
     }
 
     #[cfg(feature = "derive")]

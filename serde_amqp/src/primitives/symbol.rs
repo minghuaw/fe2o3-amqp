@@ -270,7 +270,7 @@ mod tests {
         let buf = to_vec(&symbol).unwrap();
 
         let deserialized: SymbolRef = from_slice(&buf).unwrap();
-        println!("{:?}", deserialized);
+        assert_eq!(deserialized, SymbolRef::from(val));
     }
 
     #[test]

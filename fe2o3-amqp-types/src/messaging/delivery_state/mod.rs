@@ -11,7 +11,7 @@ use crate::transaction::Declared;
 use crate::transaction::TransactionalState;
 
 /// 3.4 Delivery State
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum DeliveryState {
     /// 3.4.1 Received
     Received(Received),
@@ -272,7 +272,7 @@ impl AsMut<DeliveryState> for DeliveryState {
 mod delivery_state_impl;
 
 /// A terminal delivery state is also referred to as Outcome
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Outcome {
     /// 3.4.2 Accepted
     Accepted(Accepted),
@@ -511,7 +511,7 @@ impl From<Received> for DeliveryState {
 /// <type name="accepted" class="composite" source="list" provides="delivery-state, outcome">
 ///     <descriptor name="amqp:accepted:list" code="0x00000000:0x00000024"/>
 /// </type>
-#[derive(Debug, Clone, DeserializeComposite, SerializeComposite)]
+#[derive(Debug, Clone, PartialEq, Eq, DeserializeComposite, SerializeComposite)]
 #[amqp_contract(
     name = "amqp:accepted:list",
     code = "0x0000_0000:0x0000_0024",
@@ -538,7 +538,7 @@ impl From<Accepted> for Outcome {
 /// <type name="rejected" class="composite" source="list" provides="delivery-state, outcome">
 ///     <descriptor name="amqp:rejected:list" code="0x00000000:0x00000025"/>
 /// </type>
-#[derive(Debug, Clone, DeserializeComposite, SerializeComposite)]
+#[derive(Debug, Clone, PartialEq, Eq, DeserializeComposite, SerializeComposite)]
 #[amqp_contract(
     name = "amqp:rejected:list",
     code = "0x0000_0000:0x0000_0025",
@@ -567,7 +567,7 @@ impl From<Rejected> for Outcome {
 /// <type name="released" class="composite" source="list" provides="delivery-state, outcome">
 ///     <descriptor name="amqp:released:list" code="0x00000000:0x00000026"/>
 /// </type>
-#[derive(Debug, Clone, DeserializeComposite, SerializeComposite)]
+#[derive(Debug, Clone, PartialEq, Eq, DeserializeComposite, SerializeComposite)]
 #[amqp_contract(
     name = "amqp:released:list",
     code = "0x000_0000:0x0000_0026",
@@ -593,7 +593,7 @@ impl From<Released> for Outcome {
 /// <type name="modified" class="composite" source="list" provides="delivery-state, outcome">
 ///     <descriptor name="amqp:modified:list" code="0x00000000:0x00000027"/>
 /// </type>
-#[derive(Debug, Clone, DeserializeComposite, SerializeComposite)]
+#[derive(Debug, Clone, PartialEq, Eq, DeserializeComposite, SerializeComposite)]
 #[amqp_contract(
     name = "amqp:modified:list",
     code = "0x0000_0000:0x0000_0027",
@@ -714,8 +714,7 @@ mod tests {
         };
         let buf = to_vec(&modified).unwrap();
         let modified2: Modified = from_slice(&buf).unwrap();
-        println!("{:?}", buf);
-        println!("{:?}", modified2);
+        assert_eq!(modified2, modified);
     }
 
     /* ------------------------------ test Received ----------------------------- */
@@ -727,7 +726,7 @@ mod tests {
         };
         let buf = to_vec(&received).unwrap();
         let received2: Received = from_slice(&buf).unwrap();
-        println!("{:?}", received2);
+        assert_eq!(received2, received);
     }
 
     /* --------------------------- test DeliveryState --------------------------- */
@@ -768,7 +767,6 @@ mod tests {
             message_annotations: None,
         });
         let buf = to_vec(&state).unwrap();
-        println!("{:?}", buf);
         let state2: DeliveryState = from_slice(&buf).unwrap();
         assert_delivery_state!(state2, DeliveryState::Modified);
         if let DeliveryState::Modified(m) = state2 {
@@ -800,9 +798,8 @@ mod tests {
         // });
         let state = DeliveryState::Accepted(Accepted {});
         let buf = to_vec(&state).unwrap();
-        println!("{:#x?}", buf);
         let modified: DeliveryState = from_reader(&buf[..]).unwrap();
-        println!("{:?}", modified);
+        assert_eq!(modified, state);
     }
 
     #[test]

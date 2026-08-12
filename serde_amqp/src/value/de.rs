@@ -1412,9 +1412,8 @@ mod tests {
     fn test_json_vec() {
         let value = Value::List(vec![Value::Bool(true), Value::Bool(false)]);
         let json = serde_json::to_string(&value).unwrap();
-        println!("{:?}", json);
         let value2: Vec<Value> = serde_json::from_str(&json).unwrap();
-        println!("{:?}", value2);
+        assert_eq!(value2, vec![Value::Bool(true), Value::Bool(false)]);
     }
 
     #[cfg(feature = "json")]
@@ -1424,8 +1423,7 @@ mod tests {
 
         let value = Value::Array(Array(vec![Value::Bool(true), Value::Bool(false)]));
         let json = serde_json::to_string(&value).unwrap();
-        println!("{:?}", json);
         let value2: Array<Value> = serde_json::from_str(&json).unwrap();
-        println!("{:?}", value2);
+        assert_eq!(value2, Array(vec![Value::Bool(true), Value::Bool(false)]));
     }
 }
