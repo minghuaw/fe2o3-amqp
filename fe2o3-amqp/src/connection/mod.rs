@@ -81,7 +81,21 @@ impl<R> std::fmt::Debug for ConnectionHandle<R> {
 
 impl<R> Drop for ConnectionHandle<R> {
     fn drop(&mut self) {
-        let _ = self.control.try_send(ConnectionControl::Close(None));
+        if let Err(_error) = self.control.try_send(ConnectionControl::Close(None)) {
+            #[cfg(any(feature = "log", feature = "tracing"))]
+            {
+                let reason = match &_error {
+                    tokio::sync::mpsc::error::TrySendError::Full(_) => "control channel is full",
+                    tokio::sync::mpsc::error::TrySendError::Closed(_) => {
+                        "control channel is closed"
+                    }
+                };
+                #[cfg(feature = "tracing")]
+                tracing::warn!(reason, "Failed to enqueue Close frame on connection drop");
+                #[cfg(feature = "log")]
+                log::warn!("Failed to enqueue Close frame on connection drop: {reason}");
+            }
+        }
     }
 }
 

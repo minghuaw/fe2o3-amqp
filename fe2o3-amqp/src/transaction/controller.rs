@@ -64,6 +64,63 @@ where
     }
 }
 
+/// Send a declare message on the control link to obtain a transaction identifier.
+pub(crate) async fn declare_on_link(
+    inner: &mut SenderInner<ControlLink>,
+    global_id: Option<TransactionId>,
+) -> Result<Declared, ControllerSendError> {
+    // To begin transactional work, the transaction controller needs to obtain a transaction
+    // identifier from the resource. It does this by sending a message to the coordinator whose
+    // body consists of the declare type in a single amqp-value section. Other standard message
+    // sections such as the header section SHOULD be ignored.
+    let declare = Declare { global_id };
+    let message = Message::builder().value(declare).build();
+    // This message MUST NOT be sent settled as the sender is REQUIRED to receive and interpret
+    // the outcome of the declare from the receiver
+    let sendable = Sendable::builder().message(message).settled(false).build();
+
+    send_on_control_link(inner, sendable)
+        .await?
+        .await
+        .map_err(|_| LinkStateError::IllegalSessionState)?
+        .ok_or(ControllerSendError::NonTerminalDeliveryState)?
+        .declared_or_else(|state| {
+            if let DeliveryState::Rejected(rejected) = state {
+                ControllerSendError::Rejected(rejected)
+            } else {
+                ControllerSendError::IllegalDeliveryState
+            }
+        })
+}
+
+/// Send a discharge message on the control link.
+pub(crate) async fn discharge_on_link(
+    inner: &mut SenderInner<ControlLink>,
+    txn_id: TransactionId,
+    fail: impl Into<Option<bool>>,
+) -> Result<Accepted, ControllerSendError> {
+    let discharge = Discharge {
+        txn_id,
+        fail: fail.into(),
+    };
+    // As with the declare message, it is an error if the sender sends the transfer pre-settled.
+    let message = Message::builder().value(discharge).build();
+    let sendable = Sendable::builder().message(message).settled(false).build();
+
+    send_on_control_link(inner, sendable)
+        .await?
+        .await
+        .map_err(|_| LinkStateError::IllegalSessionState)?
+        .ok_or(ControllerSendError::NonTerminalDeliveryState)?
+        .accepted_or_else(|state| {
+            if let DeliveryState::Rejected(rejected) = state {
+                ControllerSendError::Rejected(rejected)
+            } else {
+                ControllerSendError::IllegalDeliveryState
+            }
+        })
+}
+
 impl Controller {
     /// Creates a new builder for controller
     pub fn builder() -> link::builder::Builder<
@@ -117,60 +174,11 @@ impl Controller {
             .await
     }
 
-    pub(crate) async fn declare_inner(
-        &self,
-        global_id: Option<TransactionId>,
-    ) -> Result<Declared, ControllerSendError> {
-        // To begin transactional work, the transaction controller needs to obtain a transaction
-        // identifier from the resource. It does this by sending a message to the coordinator whose
-        // body consists of the declare type in a single amqp-value section. Other standard message
-        // sections such as the header section SHOULD be ignored.
-        let declare = Declare { global_id };
-        let message = Message::builder().value(declare).build();
-        // This message MUST NOT be sent settled as the sender is REQUIRED to receive and interpret
-        // the outcome of the declare from the receiver
-        let sendable = Sendable::builder().message(message).settled(false).build();
-
-        send_on_control_link(&mut *self.inner.lock().await, sendable)
-            .await?
-            .await
-            .map_err(|_| LinkStateError::IllegalSessionState)?
-            .ok_or(ControllerSendError::NonTerminalDeliveryState)?
-            .declared_or_else(|state| {
-                if let DeliveryState::Rejected(rejected) = state {
-                    ControllerSendError::Rejected(rejected)
-                } else {
-                    ControllerSendError::IllegalDeliveryState
-                }
-            })
-    }
-
-    /// Discharge
-    pub(crate) async fn discharge(
-        &self,
-        txn_id: TransactionId,
-        fail: impl Into<Option<bool>>,
-    ) -> Result<Accepted, ControllerSendError> {
-        let discharge = Discharge {
-            txn_id,
-            fail: fail.into(),
-        };
-        // As with the declare message, it is an error if the sender sends the transfer pre-settled.
-        let message = Message::builder().value(discharge).build();
-        let sendable = Sendable::builder().message(message).settled(false).build();
-
-        send_on_control_link(&mut *self.inner.lock().await, sendable)
-            .await?
-            .await
-            .map_err(|_| LinkStateError::IllegalSessionState)?
-            .ok_or(ControllerSendError::NonTerminalDeliveryState)?
-            .accepted_or_else(|state| {
-                if let DeliveryState::Rejected(rejected) = state {
-                    ControllerSendError::Rejected(rejected)
-                } else {
-                    ControllerSendError::IllegalDeliveryState
-                }
-            })
+    /// Consume the controller and return the underlying control link.
+    ///
+    /// The controller must not be shared with any borrowed [`Transaction`] at this point.
+    pub(crate) fn into_inner(self) -> SenderInner<ControlLink> {
+        self.inner.into_inner()
     }
 }
 

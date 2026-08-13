@@ -79,7 +79,21 @@ impl<R> std::fmt::Debug for SessionHandle<R> {
 
 impl<R> Drop for SessionHandle<R> {
     fn drop(&mut self) {
-        let _ = self.control.try_send(SessionControl::End(None));
+        if let Err(_error) = self.control.try_send(SessionControl::End(None)) {
+            #[cfg(any(feature = "log", feature = "tracing"))]
+            {
+                let reason = match &_error {
+                    tokio::sync::mpsc::error::TrySendError::Full(_) => "control channel is full",
+                    tokio::sync::mpsc::error::TrySendError::Closed(_) => {
+                        "control channel is closed"
+                    }
+                };
+                #[cfg(feature = "tracing")]
+                tracing::warn!(reason, "Failed to enqueue End frame on session drop");
+                #[cfg(feature = "log")]
+                log::warn!("Failed to enqueue End frame on session drop: {reason}");
+            }
+        }
     }
 }
 
