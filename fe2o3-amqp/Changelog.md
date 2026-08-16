@@ -36,22 +36,26 @@
     `SendAttachErrorKind`, `SenderAttachError`, `ReceiverAttachError`, and
     [`AcceptorAttachError`]. The new public [`SessionStopReason`] tells whether the session
     or its connection stopped first and whether it carried an error, so callers can decide
-    whether to retry at the session or connection level. `SenderAttachError`,
-    `ReceiverAttachError`, and `AllocLinkError` also gain a `SessionNotMapped` variant for
-    sessions that were never begun; link allocation on an ending or stopped session reports
-    `SessionStopped(reason)` instead (the reason is recorded on the [`Session`] itself).
+    whether to retry at the session or connection level.
 10. **Breaking**: `FromOneshotRecvError` is renamed to `FromDeliveryFailure` and gains a
     required `from_session_stop_reason` method.
-11. A session now ends cleanly (with a warning logged) when its connection stops first,
+11. **Breaking**: `SenderAttachError`, `ReceiverAttachError`, and `AllocLinkError` gain a
+    `SessionNotMapped` variant for sessions that were never begun; link allocation on an
+    ending or stopped session reports `SessionStopped(reason)` instead.
+12. A session now ends cleanly (with a warning logged) when its connection stops first,
     instead of reporting `IllegalConnectionState`; connection-level errors stay on the
-    [`ConnectionHandle`], while interrupted link operations surface the stop reason. The
-    stop-reason cell is owned by the [`Session`] and shared with its handle and links —
-    including links created by the listener acceptors and the transaction control link —
-    so the real reason (`ConnectionClosed(..)` vs `Ended`/`EndedWithError`) is observed.
-    `AcceptorAttachError` no longer hoists session stops out of local attach errors. The
-    cells are renamed `session_stop_reason`/`connection_stop_reason`, and the sender/
-    receiver inner no longer keep a copy of the session stop reason (read from the link
-    via the internal `LinkExt` trait).
+    [`ConnectionHandle`]. Interrupted link operations surface the real stop reason
+    (`ConnectionClosed(..)` vs `Ended`/`EndedWithError`) — including on links created by
+    the listener acceptors and the transaction control link.
+13. [`AcceptorAttachError`] no longer hoists a session stop out of the local
+    sender/receiver attach errors; it stays wrapped in `LocalSender`/`LocalReceiver`.
+14. **Breaking**: `IllegalConnectionState` is replaced by
+    `ConnectionStopped(ConnectionStopReason)` on [`BeginError`] and `Error` (and the
+    internal session error types). The new public [`ConnectionStopReason`] (`Closed` /
+    `ClosedWithError`) mirrors `SessionStopped(..)` at the connection level.
+15. **Breaking**: [`BeginError`] gains a `ConnectionNotOpened` variant: beginning a session
+    on a connection that has not been opened yet reports `ConnectionNotOpened`, while one
+    on a stopped connection reports `ConnectionStopped(reason)`.
 
 ## 0.16.2
 

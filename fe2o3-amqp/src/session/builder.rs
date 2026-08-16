@@ -9,7 +9,7 @@ use slab::Slab;
 use tokio::sync::mpsc;
 
 use crate::{
-    connection::{AllocSessionError, ConnectionHandle},
+    connection::{AllocSessionError, ConnectionHandle, ConnectionStopReason},
     control::SessionControl,
     endpoint::OutgoingChannel,
     link::SessionStopReason,
@@ -83,6 +83,7 @@ cfg_transaction! {
         };
 
         impl Builder {
+            #[allow(clippy::too_many_arguments)]
             pub(crate) fn into_txn_session(
                 self,
                 control: mpsc::Sender<SessionControl>,
@@ -91,12 +92,14 @@ cfg_transaction! {
                 control_link_acceptor: ControlLinkAcceptor,
                 local_state: SessionState,
                 session_stop_reason: Arc<OnceLock<SessionStopReason>>,
+                connection_stop_reason: Arc<OnceLock<ConnectionStopReason>>,
             ) -> TxnSession<Session> {
                 let txn_manager = TransactionManager::new(outgoing, control_link_acceptor);
                 let session = Session {
                     // control,
                     outgoing_channel,
                     session_stop_reason,
+                    connection_stop_reason,
                     local_state,
                     initial_outgoing_id: Constant::new(self.next_outgoing_id),
                     next_outgoing_id: self.next_outgoing_id,
@@ -140,10 +143,12 @@ impl Builder {
         outgoing_channel: OutgoingChannel,
         local_state: SessionState,
         session_stop_reason: Arc<OnceLock<SessionStopReason>>,
+        connection_stop_reason: Arc<OnceLock<ConnectionStopReason>>,
     ) -> Session {
         Session {
             outgoing_channel,
             session_stop_reason,
+            connection_stop_reason,
             local_state,
             initial_outgoing_id: Constant::new(self.next_outgoing_id),
             next_outgoing_id: self.next_outgoing_id,
@@ -266,18 +271,17 @@ impl Builder {
                 mpsc::channel::<SessionControl>(DEFAULT_SESSION_CONTROL_BUFFER_SIZE);
             let (incoming_tx, incoming_rx) = mpsc::channel(self.buffer_size);
             let (outgoing_tx, outgoing_rx) = mpsc::channel(self.buffer_size);
-            let conn_stop = connection.connection_stop_reason.clone();
             let session_stop_reason = Arc::new(OnceLock::new());
 
             // create session in connection::Engine
             let outgoing_channel = match connection.allocate_session(incoming_tx).await {
                 Ok(channel) => channel,
                 Err(alloc_error) => match alloc_error {
-                    AllocSessionError::IllegalState => return Err(BeginError::IllegalConnectionState),
                     AllocSessionError::ChannelMaxReached => {
                         // Locally initiating session exceeded channel max
                         return Err(BeginError::LocalChannelMaxReached);
                     }
+                    other => return Err(other.into()),
                 },
             };
 
@@ -287,6 +291,7 @@ impl Builder {
                     outgoing_channel,
                     local_state,
                     session_stop_reason.clone(),
+                    connection.connection_stop_reason.clone(),
                 );
                 let engine = SessionEngine::begin_client_session(
                     connection.control.clone(),
@@ -295,7 +300,6 @@ impl Builder {
                     incoming_rx,
                     connection.outgoing.clone(),
                     outgoing_rx,
-                    conn_stop.clone(),
                 )
                 .await?;
                 engine.spawn()
@@ -313,6 +317,7 @@ impl Builder {
                             control_link_acceptor,
                             local_state,
                             session_stop_reason.clone(),
+                            connection.connection_stop_reason.clone(),
                         );
                         let engine = SessionEngine::begin_client_session(
                             connection.control.clone(),
@@ -321,7 +326,6 @@ impl Builder {
                             incoming_rx,
                             connection.outgoing.clone(),
                             outgoing_rx,
-                            conn_stop.clone(),
                         )
                         .await?;
                         engine.spawn()
@@ -331,6 +335,7 @@ impl Builder {
                             outgoing_channel,
                             local_state,
                             session_stop_reason.clone(),
+                            connection.connection_stop_reason.clone(),
                         );
                         let engine = SessionEngine::begin_client_session(
                             connection.control.clone(),
@@ -339,7 +344,6 @@ impl Builder {
                             incoming_rx,
                             connection.outgoing.clone(),
                             outgoing_rx,
-                            conn_stop.clone(),
                         )
                         .await?;
                         engine.spawn()
@@ -382,18 +386,17 @@ impl Builder {
                 mpsc::channel::<SessionControl>(DEFAULT_SESSION_CONTROL_BUFFER_SIZE);
             let (incoming_tx, incoming_rx) = mpsc::channel(self.buffer_size);
             let (outgoing_tx, outgoing_rx) = mpsc::channel(self.buffer_size);
-            let conn_stop = connection.connection_stop_reason.clone();
             let session_stop_reason = Arc::new(OnceLock::new());
 
             // create session in connection::Engine
             let outgoing_channel = match connection.allocate_session(incoming_tx).await {
                 Ok(channel) => channel,
                 Err(alloc_error) => match alloc_error {
-                    AllocSessionError::IllegalState => return Err(BeginError::IllegalConnectionState),
                     AllocSessionError::ChannelMaxReached => {
                         // Locally initiating session exceeded channel max
                         return Err(BeginError::LocalChannelMaxReached);
                     }
+                    other => return Err(other.into()),
                 },
             };
 
@@ -402,6 +405,7 @@ impl Builder {
                     outgoing_channel,
                     local_state,
                     session_stop_reason.clone(),
+                    connection.connection_stop_reason.clone(),
                 );
                 let engine = SessionEngine::begin_client_session(
                     connection.control.clone(),
@@ -410,7 +414,6 @@ impl Builder {
                     incoming_rx,
                     connection.outgoing.clone(),
                     outgoing_rx,
-                    conn_stop.clone(),
                 )
                 .await?;
                 engine.spawn_on_local_set(local_set)
@@ -450,18 +453,17 @@ impl Builder {
                 mpsc::channel::<SessionControl>(DEFAULT_SESSION_CONTROL_BUFFER_SIZE);
             let (incoming_tx, incoming_rx) = mpsc::channel(self.buffer_size);
             let (outgoing_tx, outgoing_rx) = mpsc::channel(self.buffer_size);
-            let conn_stop = connection.connection_stop_reason.clone();
             let session_stop_reason = Arc::new(OnceLock::new());
 
             // create session in connection::Engine
             let outgoing_channel = match connection.allocate_session(incoming_tx).await {
                 Ok(channel) => channel,
                 Err(alloc_error) => match alloc_error {
-                    AllocSessionError::IllegalState => return Err(BeginError::IllegalConnectionState),
                     AllocSessionError::ChannelMaxReached => {
                         // Locally initiating session exceeded channel max
                         return Err(BeginError::LocalChannelMaxReached);
                     }
+                    other => return Err(other.into()),
                 },
             };
 
@@ -470,6 +472,7 @@ impl Builder {
                     outgoing_channel,
                     local_state,
                     session_stop_reason.clone(),
+                    connection.connection_stop_reason.clone(),
                 );
                 let engine = SessionEngine::begin_client_session(
                     connection.control.clone(),
@@ -478,7 +481,6 @@ impl Builder {
                     incoming_rx,
                     connection.outgoing.clone(),
                     outgoing_rx,
-                    conn_stop.clone(),
                 )
                 .await?;
                 engine.spawn_local()

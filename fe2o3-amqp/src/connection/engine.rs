@@ -32,7 +32,17 @@ pub(crate) struct ConnectionEngine<Io, C> {
     control: Receiver<ConnectionControl>,
     outgoing_session_frames: Receiver<SessionFrame>,
     heartbeat: HeartBeat,
-    pub(crate) connection_stop_reason: Arc<OnceLock<ConnectionStopReason>>,
+}
+
+impl<Io, C> ConnectionEngine<Io, C>
+where
+    C: endpoint::Connection,
+{
+    /// The shared cell holding why the connection stopped, on the connection
+    /// object and shared with the sessions and the handle
+    pub(crate) fn connection_stop_reason(&self) -> &Arc<OnceLock<ConnectionStopReason>> {
+        self.connection.connection_stop_reason()
+    }
 }
 
 cfg_not_wasm32! {
@@ -225,7 +235,6 @@ where
             control,
             outgoing_session_frames,
             heartbeat: HeartBeat::never(),
-            connection_stop_reason: Arc::new(OnceLock::new()),
         };
 
         match engine.open_inner().await {
@@ -627,20 +636,12 @@ where
         //
         // When the Receiver is dropped, it is possible for unprocessed messages to remain
         // in the channel. Instead, it is usually desirable to perform a “clean” shutdown.
-        // To do this, the receiver first calls close, which will prevent any further messages
-        // to be sent into the channel. Then, the receiver consumes the channel to completion,
-        // at which point the receiver can be dropped.
-        self.control.close();
-        self.outgoing_session_frames.close();
+        // To do this, the receiver first closes the channels, which will prevent any
+        // further messages to be sent into them.
         let close = self.transport.close().await.map_err(Into::into);
-
-        #[cfg(feature = "tracing")]
-        tracing::debug!("Stopped");
-        #[cfg(feature = "log")]
-        log::debug!("Stopped");
-
         let result = outcome.and(close).map_err(Into::into);
-        // Publish the stop reason before the session relays are dropped, so every
+
+        // Publish the stop reason before the channels are closed, so every
         // session that wakes on the channel closure sees it.
         let connection_stop_reason = match &result {
             Err(Error::RemoteClosedWithError(error)) => {
@@ -648,7 +649,17 @@ where
             }
             _ => ConnectionStopReason::Closed,
         };
-        let _ = self.connection_stop_reason.set(connection_stop_reason);
+        self.connection
+            .set_connection_stop_reason(connection_stop_reason);
+
+        self.control.close();
+        self.outgoing_session_frames.close();
+
+        #[cfg(feature = "tracing")]
+        tracing::debug!("Stopped");
+        #[cfg(feature = "log")]
+        log::debug!("Stopped");
+
         let _ = tx.send(result);
     }
 }

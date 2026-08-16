@@ -19,7 +19,9 @@ use crate::{
 };
 
 use super::{
-    error::{AllocLinkError, BeginError, Error, SessionInnerError},
+    error::{
+        connection_stop_reason_or_closed, AllocLinkError, BeginError, Error, SessionInnerError,
+    },
     frame::{SessionIncomingItem, SessionOutgoingItem},
     SessionFrame, SessionFrameBody, SessionState,
 };
@@ -27,6 +29,7 @@ use super::{
 async fn send_outgoing_item(
     outgoing: &mpsc::Sender<SessionFrame>,
     outgoing_item: SessionOutgoingItem,
+    conn_stop: &Arc<OnceLock<ConnectionStopReason>>,
 ) -> Result<(), SessionInnerError> {
     match outgoing_item {
         SessionOutgoingItem::SingleFrame(frame) => {
@@ -34,8 +37,12 @@ async fn send_outgoing_item(
                 .send(frame)
                 .await
                 // The receiving half must have dropped, and thus the `Connection`
-                // event loop has stopped. It should be treated as an io error
-                .map_err(|_| SessionInnerError::IllegalConnectionState)?;
+                // event loop has stopped.
+                .map_err(|_| {
+                    SessionInnerError::ConnectionStopped(connection_stop_reason_or_closed(
+                        conn_stop,
+                    ))
+                })?;
         }
         SessionOutgoingItem::MultipleFrames(frames) => {
             for frame in frames {
@@ -43,8 +50,12 @@ async fn send_outgoing_item(
                     .send(frame)
                     .await
                     // The receiving half must have dropped, and thus the `Connection`
-                    // event loop has stopped. It should be treated as an io error
-                    .map_err(|_| SessionInnerError::IllegalConnectionState)?;
+                    // event loop has stopped.
+                    .map_err(|_| {
+                        SessionInnerError::ConnectionStopped(connection_stop_reason_or_closed(
+                            conn_stop,
+                        ))
+                    })?;
             }
         }
     }
@@ -59,8 +70,6 @@ pub(crate) struct SessionEngine<S: Session> {
     pub outgoing: mpsc::Sender<SessionFrame>,
 
     pub outgoing_link_frames: mpsc::Receiver<LinkFrame>,
-    /// Why the connection stopped, read at our own stop to derive the reason links observe
-    pub conn_stop: Arc<OnceLock<ConnectionStopReason>>,
 }
 
 impl<S> SessionEngine<S>
@@ -68,7 +77,6 @@ where
     S: endpoint::Session,
     BeginError: From<S::BeginError>,
 {
-    #[allow(clippy::too_many_arguments)]
     pub(crate) async fn begin_client_session(
         conn_control: mpsc::Sender<ConnectionControl>,
         session: S,
@@ -76,7 +84,6 @@ where
         incoming: mpsc::Receiver<SessionIncomingItem>,
         outgoing: mpsc::Sender<SessionFrame>,
         outgoing_link_frames: mpsc::Receiver<LinkFrame>,
-        conn_stop: Arc<OnceLock<ConnectionStopReason>>,
     ) -> Result<Self, BeginError> {
         let mut engine = Self {
             conn_control,
@@ -85,7 +92,6 @@ where
             incoming,
             outgoing,
             outgoing_link_frames,
-            conn_stop,
         };
 
         // send a begin
@@ -95,7 +101,9 @@ where
             Some(frame) => frame,
             None => {
                 // Connection sender must have dropped
-                return Err(BeginError::IllegalConnectionState);
+                return Err(BeginError::ConnectionStopped(
+                    connection_stop_reason_or_closed(engine.session.connection_stop_reason()),
+                ));
             }
         };
         let SessionFrame { channel, body } = frame;
@@ -172,7 +180,12 @@ where
             }
             SessionFrameBody::Flow(flow) => {
                 if let Some(outgoing_item) = self.session.on_incoming_flow(flow).await? {
-                    send_outgoing_item(&self.outgoing, outgoing_item).await?;
+                    send_outgoing_item(
+                        &self.outgoing,
+                        outgoing_item,
+                        self.session.connection_stop_reason(),
+                    )
+                    .await?;
                 }
             }
             SessionFrameBody::Transfer {
@@ -192,7 +205,13 @@ where
                             .await
                             // The receiving half must have dropped, and thus the `Connection`
                             // event loop has stopped. It should be treated as an io error
-                            .map_err(|_| SessionInnerError::IllegalConnectionState)?;
+                            .map_err(|_| {
+                                SessionInnerError::ConnectionStopped(
+                                    connection_stop_reason_or_closed(
+                                        self.session.connection_stop_reason(),
+                                    ),
+                                )
+                            })?;
                     }
                 }
             }
@@ -230,11 +249,8 @@ where
     /// The session stop reason derived from the connection's recorded stop;
     /// `Ended` when the connection has not stopped.
     fn session_stop_reason_from_connection(&self) -> SessionStopReason {
-        match self.conn_stop.get() {
-            Some(ConnectionStopReason::Closed) => SessionStopReason::ConnectionClosed,
-            Some(ConnectionStopReason::ClosedWithError(error)) => {
-                SessionStopReason::ConnectionClosedWithError(error.clone())
-            }
+        match self.session.connection_stop_reason().get() {
+            Some(reason) => SessionStopReason::from(reason.clone()),
             None => SessionStopReason::Ended,
         }
     }
@@ -297,21 +313,30 @@ where
                     .await
                     // The receiving half must have dropped, and thus the `Connection`
                     // event loop has stopped. It should be treated as an io error
-                    .map_err(|_| SessionInnerError::IllegalConnectionState)?;
+                    .map_err(|_| {
+                        SessionInnerError::ConnectionStopped(connection_stop_reason_or_closed(
+                            self.session.connection_stop_reason(),
+                        ))
+                    })?;
             }
             SessionControl::CloseConnectionWithError((condition, description)) => {
                 let error = definitions::Error::new(condition, description, None);
                 let control = ConnectionControl::Close(Some(error));
-                self.conn_control
-                    .send(control)
-                    .await
-                    .map_err(|_| SessionInnerError::IllegalConnectionState)?;
+                self.conn_control.send(control).await.map_err(|_| {
+                    SessionInnerError::ConnectionStopped(connection_stop_reason_or_closed(
+                        self.session.connection_stop_reason(),
+                    ))
+                })?;
             }
             SessionControl::GetMaxFrameSize(resp) => {
                 self.conn_control
                     .send(ConnectionControl::GetMaxFrameSize(resp))
                     .await
-                    .map_err(|_| SessionInnerError::IllegalConnectionState)?;
+                    .map_err(|_| {
+                        SessionInnerError::ConnectionStopped(connection_stop_reason_or_closed(
+                            self.session.connection_stop_reason(),
+                        ))
+                    })?;
             }
 
             #[cfg(feature = "transaction")]
@@ -389,7 +414,12 @@ where
         };
 
         if let Some(outgoing_item) = outgoing_item {
-            send_outgoing_item(&self.outgoing, outgoing_item).await?;
+            send_outgoing_item(
+                &self.outgoing,
+                outgoing_item,
+                self.session.connection_stop_reason(),
+            )
+            .await?;
         }
 
         match self.session.local_state() {
@@ -427,7 +457,17 @@ where
                 let error = Error::new(AmqpError::IllegalState, None, None);
                 self.end_session(Some(error)).await
             }
-            SessionInnerError::IllegalConnectionState => Ok(Running::Stop),
+            SessionInnerError::ConnectionStopped(reason) => {
+                // The session cannot handle a connection stop; it ends with the
+                // connection. The outcome is sanitized before it reaches the
+                // handle, so connection-level errors are reported through the
+                // `ConnectionHandle` instead.
+                #[cfg(feature = "tracing")]
+                tracing::warn!("Connection stopped before the session ended; ending the session");
+                #[cfg(feature = "log")]
+                log::warn!("Connection stopped before the session ended; ending the session");
+                Err(SessionInnerError::ConnectionStopped(reason.clone()))
+            }
             SessionInnerError::TransferFrameToSender => {
                 let error = Error::new(
                     AmqpError::NotAllowed,
@@ -459,7 +499,11 @@ where
                 self.session
                     .send_end(&self.outgoing, error)
                     .await
-                    .map_err(|_| SessionInnerError::IllegalConnectionState)?;
+                    .map_err(|_| {
+                        SessionInnerError::ConnectionStopped(connection_stop_reason_or_closed(
+                            self.session.connection_stop_reason(),
+                        ))
+                    })?;
                 let (channel, end) = self.wait_for_remote_end(false).await?;
                 self.session.on_incoming_end(channel, end)?;
             }
@@ -470,7 +514,11 @@ where
                 self.session
                     .send_end(&self.outgoing, error)
                     .await
-                    .map_err(|_| SessionInnerError::IllegalConnectionState)?;
+                    .map_err(|_| {
+                        SessionInnerError::ConnectionStopped(connection_stop_reason_or_closed(
+                            self.session.connection_stop_reason(),
+                        ))
+                    })?;
             }
             SessionState::Discarding => {
                 // The DISCARDING state is a variant of the CLOSE SENT state where the close is triggered
@@ -492,7 +540,9 @@ where
                 .incoming
                 .recv()
                 .await
-                .ok_or(SessionInnerError::IllegalConnectionState)?;
+                .ok_or(SessionInnerError::ConnectionStopped(
+                    connection_stop_reason_or_closed(self.session.connection_stop_reason()),
+                ))?;
             match frame.body {
                 SessionFrameBody::End(end) => return Ok((IncomingChannel(frame.channel), end)),
                 _ => {
@@ -519,9 +569,6 @@ where
     #[cfg_attr(feature = "tracing", tracing::instrument(name = "Session::event_loop", skip(self), fields(outgoing_channel = %self.session.outgoing_channel().0)))]
     async fn event_loop(mut self, tx: oneshot::Sender<Result<(), Error>>) {
         let mut outcome = Ok(());
-        // Set when the connection stopped before the session ended; the
-        // connection's stop reason cell may not be recorded yet at that point.
-        let mut connection_stopped_first = false;
         loop {
             let result = tokio::select! {
                 incoming = self.incoming.recv() => {
@@ -531,15 +578,15 @@ where
                             // Check local state
                             match self.continue_or_stop_by_state() {
                                 Running::Continue => {
-                                    connection_stopped_first = true;
                                     // The connection stopped before the session ended;
-                                    // the session ends with it. Connection-level errors
-                                    // are reported through the `ConnectionHandle`.
-                                    #[cfg(feature = "tracing")]
-                                    tracing::warn!("Connection stopped before the session ended; ending the session");
-                                    #[cfg(feature = "log")]
-                                    log::warn!("Connection stopped before the session ended; ending the session");
-                                    Ok(Running::Stop)
+                                    // yield the stop as an error so it flows through the
+                                    // generic error path. Connection-level errors are
+                                    // reported through the `ConnectionHandle`.
+                                    Err(SessionInnerError::ConnectionStopped(
+                                        connection_stop_reason_or_closed(
+                                            self.session.connection_stop_reason(),
+                                        ),
+                                    ))
                                 },
                                 Running::Stop => Ok(Running::Stop),
                             }
@@ -603,35 +650,23 @@ where
             let running = match result {
                 Ok(running) => running,
                 Err(error) => {
-                    if matches!(error, SessionInnerError::IllegalConnectionState) {
-                        connection_stopped_first = true;
-                        // The connection stopped before the session ended; the session
-                        // ends with it. Connection-level errors are reported through
-                        // the `ConnectionHandle`.
-                        #[cfg(feature = "tracing")]
-                        tracing::warn!(
-                            "Connection stopped before the session ended; ending the session"
-                        );
-                        #[cfg(feature = "log")]
-                        log::warn!(
-                            "Connection stopped before the session ended; ending the session"
-                        );
-                        Running::Stop
-                    } else {
+                    // A connection stop is logged as a warning (the session ends
+                    // with the connection) rather than as an unexpected error.
+                    if !matches!(error, SessionInnerError::ConnectionStopped(_)) {
                         #[cfg(feature = "tracing")]
                         tracing::error!("{:?}", error);
                         #[cfg(feature = "log")]
                         log::error!("{:?}", error);
-                        match self.on_error(&error).await {
-                            Ok(running) => {
-                                outcome = Err(error);
-                                running
-                            }
-                            Err(error) => {
-                                // Stop the session if error cannot be handled
-                                outcome = Err(error);
-                                Running::Stop
-                            }
+                    }
+                    match self.on_error(&error).await {
+                        Ok(running) => {
+                            outcome = Err(error);
+                            running
+                        }
+                        Err(error) => {
+                            // Stop the session if error cannot be handled
+                            outcome = Err(error);
+                            Running::Stop
                         }
                     }
                 }
@@ -649,28 +684,26 @@ where
         log::debug!("Stopped");
         // Publish the stop reason before the link relays and unsettled maps are dropped,
         // so every link that wakes on the channel closures sees it.
-        let session_stop_reason = match self.conn_stop.get() {
-            Some(ConnectionStopReason::Closed) => SessionStopReason::ConnectionClosed,
-            Some(ConnectionStopReason::ClosedWithError(error)) => {
-                SessionStopReason::ConnectionClosedWithError(error.clone())
+        let session_stop_reason = match &outcome {
+            Err(SessionInnerError::ConnectionStopped(reason)) => {
+                SessionStopReason::from(reason.clone())
             }
-            None if connection_stopped_first => {
-                // The connection stopped before the session ended but has not
-                // recorded its own stop reason yet.
-                SessionStopReason::ConnectionClosed
+            Err(SessionInnerError::RemoteEndedWithError(error)) => {
+                SessionStopReason::EndedWithError(error.clone())
             }
-            None => match &outcome {
-                Err(SessionInnerError::RemoteEndedWithError(error)) => {
-                    SessionStopReason::EndedWithError(error.clone())
-                }
-                _ => SessionStopReason::Ended,
-            },
+            _ => SessionStopReason::Ended,
         };
         self.session.set_session_stop_reason(session_stop_reason);
         let _ =
             connection::deallocate_session(&mut self.conn_control, self.session.outgoing_channel())
                 .await;
-        let result = outcome.map_err(Into::into);
+        // The session ends with the connection; sanitize the connection stop
+        // so the handle observes a clean end. Connection-level errors are
+        // reported through the `ConnectionHandle`.
+        let result = match outcome {
+            Err(SessionInnerError::ConnectionStopped(_)) => Ok(()),
+            other => other.map_err(Into::into),
+        };
         let _ = tx.send(result);
     }
 }

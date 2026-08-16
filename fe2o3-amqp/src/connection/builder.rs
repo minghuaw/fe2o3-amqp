@@ -1338,7 +1338,7 @@ cfg_not_wasm32! {
     where
         Io: AsyncRead + AsyncWrite + std::fmt::Debug + Send + Unpin + 'static,
     {
-        let connection_stop_reason = engine.connection_stop_reason.clone();
+        let connection_stop_reason = engine.connection_stop_reason().clone();
         let (handle, outcome) = engine.spawn();
 
         let connection_handle = ConnectionHandle {
@@ -1365,7 +1365,7 @@ cfg_wasm32! {
     where
         Io: AsyncRead + AsyncWrite + std::fmt::Debug + Unpin + 'static,
     {
-        let connection_stop_reason = engine.connection_stop_reason.clone();
+        let connection_stop_reason = engine.connection_stop_reason().clone();
         let (handle, outcome) = engine.spawn_on_local_set(local_set);
 
         let connection_handle = ConnectionHandle {
@@ -1389,7 +1389,7 @@ cfg_wasm32! {
     where
         Io: AsyncRead + AsyncWrite + std::fmt::Debug + Unpin + 'static,
     {
-        let connection_stop_reason = engine.connection_stop_reason.clone();
+        let connection_stop_reason = engine.connection_stop_reason().clone();
         let (handle, outcome) = engine.spawn_local();
 
         let connection_handle = ConnectionHandle {

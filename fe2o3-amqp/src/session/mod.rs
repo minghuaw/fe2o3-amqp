@@ -23,6 +23,7 @@ use tokio::{
 };
 
 use crate::{
+    connection::ConnectionStopReason,
     control::SessionControl,
     endpoint::{self, IncomingChannel, InputHandle, LinkFlow, OutgoingChannel, OutputHandle},
     link::{LinkFrame, LinkRelay, SessionStopReason},
@@ -43,7 +44,9 @@ pub(crate) mod engine;
 pub(crate) mod frame;
 
 pub mod error;
-use error::{AllocLinkError, SessionInnerError, SessionStateError};
+use error::{
+    connection_stop_reason_or_closed, AllocLinkError, SessionInnerError, SessionStateError,
+};
 pub use error::{BeginError, Error, TryEndError};
 
 mod builder;
@@ -310,6 +313,10 @@ pub struct Session {
     /// and the session handle
     pub(crate) session_stop_reason: Arc<OnceLock<SessionStopReason>>,
 
+    /// Why the connection stopped, shared with the connection engine and the
+    /// connection handle
+    pub(crate) connection_stop_reason: Arc<OnceLock<ConnectionStopReason>>,
+
     // local amqp states
     pub(crate) local_state: SessionState,
     pub(crate) initial_outgoing_id: Constant<TransferNumber>,
@@ -553,6 +560,10 @@ impl endpoint::Session for Session {
 
     fn session_stop_reason(&self) -> &Arc<OnceLock<SessionStopReason>> {
         &self.session_stop_reason
+    }
+
+    fn connection_stop_reason(&self) -> &Arc<OnceLock<ConnectionStopReason>> {
+        &self.connection_stop_reason
     }
 
     fn outgoing_channel(&self) -> OutgoingChannel {
@@ -905,15 +916,20 @@ impl endpoint::Session for Session {
                     .send(frame)
                     .await
                     // The receiving half must have dropped, and thus the `Connection`
-                    // event loop has stopped. It should be treated as an io error
-                    .map_err(|_| SessionStateError::IllegalConnectionState)?;
+                    // event loop has stopped.
+                    .map_err(|_| {
+                        SessionStateError::ConnectionStopped(connection_stop_reason_or_closed(
+                            &self.connection_stop_reason,
+                        ))
+                    })?;
                 self.local_state = SessionState::BeginSent;
             }
             SessionState::BeginReceived => {
-                writer
-                    .send(frame)
-                    .await
-                    .map_err(|_| SessionStateError::IllegalConnectionState)?;
+                writer.send(frame).await.map_err(|_| {
+                    SessionStateError::ConnectionStopped(connection_stop_reason_or_closed(
+                        &self.connection_stop_reason,
+                    ))
+                })?;
                 self.local_state = SessionState::Mapped;
             }
             _ => return Err(SessionStateError::IllegalState),
@@ -941,8 +957,12 @@ impl endpoint::Session for Session {
             .send(frame)
             .await
             // The receiving half must have dropped, and thus the `Connection`
-            // event loop has stopped. It should be treated as an io error
-            .map_err(|_| SessionStateError::IllegalConnectionState)?;
+            // event loop has stopped.
+            .map_err(|_| {
+                SessionStateError::ConnectionStopped(connection_stop_reason_or_closed(
+                    &self.connection_stop_reason,
+                ))
+            })?;
         Ok(())
     }
 

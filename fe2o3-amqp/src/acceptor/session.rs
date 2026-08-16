@@ -23,7 +23,10 @@ use crate::{
         self,
         engine::SessionEngine,
         frame::{SessionFrame, SessionIncomingItem, SessionOutgoingItem},
-        error::{AllocLinkError, BeginError, Error, SessionInnerError}, SessionHandle, 
+        error::{
+            connection_stop_reason_or_closed, AllocLinkError, BeginError, Error, SessionInnerError,
+        },
+        SessionHandle,
         DEFAULT_SESSION_CONTROL_BUFFER_SIZE,
     },
     util::Initialized,
@@ -162,7 +165,6 @@ impl SessionAcceptor {
     }
 
     cfg_not_transaction! {
-        #[allow(clippy::too_many_arguments)]
         async fn launch_listener_session_engine<R>(
             &self,
             listener_session: ListenerSession,
@@ -172,7 +174,6 @@ impl SessionAcceptor {
             session_control_rx: mpsc::Receiver<SessionControl>,
             incoming: mpsc::Receiver<SessionFrame>,
             outgoing_link_frames: mpsc::Receiver<LinkFrame>,
-            conn_stop: Arc<OnceLock<ConnectionStopReason>>,
         ) -> Result<(JoinHandle<()>, oneshot::Receiver<Result<(), Error>>), BeginError> {
             let engine = SessionEngine::begin_listener_session(
                 connection.control.clone(),
@@ -181,7 +182,6 @@ impl SessionAcceptor {
                 incoming,
                 connection.outgoing.clone(),
                 outgoing_link_frames,
-                conn_stop,
             )
             .await?;
             Ok(engine.spawn())
@@ -199,7 +199,6 @@ impl SessionAcceptor {
             session_control_rx: mpsc::Receiver<SessionControl>,
             incoming: mpsc::Receiver<SessionFrame>,
             outgoing_link_frames: mpsc::Receiver<LinkFrame>,
-            conn_stop: Arc<OnceLock<ConnectionStopReason>>,
         ) -> Result<(JoinHandle<()>, oneshot::Receiver<Result<(), Error>>), BeginError> {
             match self.0.control_link_acceptor.clone() {
                 Some(control_link_acceptor) => {
@@ -218,7 +217,6 @@ impl SessionAcceptor {
                         incoming,
                         connection.outgoing.clone(),
                         outgoing_link_frames,
-                        conn_stop,
                     )
                     .await?;
                     Ok(engine.spawn())
@@ -231,7 +229,6 @@ impl SessionAcceptor {
                         incoming,
                         connection.outgoing.clone(),
                         outgoing_link_frames,
-                        conn_stop,
                     )
                     .await?;
                     Ok(engine.spawn())
@@ -265,9 +262,6 @@ impl SessionAcceptor {
                 let outgoing_channel = match connection.allocate_session(incoming_tx).await {
                     Ok(channel) => channel,
                     Err(error) => match error {
-                        AllocSessionError::IllegalState => {
-                            return Err(BeginError::IllegalConnectionState)
-                        }
                         AllocSessionError::ChannelMaxReached => {
                             let error = definitions::Error::new(
                                 ConnectionError::FramingError,
@@ -278,10 +272,15 @@ impl SessionAcceptor {
                                 .control
                                 .send(ConnectionControl::Close(Some(error)))
                                 .await
-                                .map_err(|_| BeginError::IllegalConnectionState)?;
+                                .map_err(|_| {
+                                    BeginError::ConnectionStopped(connection_stop_reason_or_closed(
+                                        &connection.connection_stop_reason,
+                                    ))
+                                })?;
 
                             return Err(BeginError::LocalChannelMaxReached);
                         }
+                        other => return Err(other.into()),
                     },
                 };
                 (outgoing_channel, incoming_rx)
@@ -292,13 +291,14 @@ impl SessionAcceptor {
         // engine, and the handle share them: the engine publishes the reason on
         // the session at exit, and the handle (and the links attached through
         // it) can read it.
-        let conn_stop = connection.connection_stop_reason.clone();
         let session_stop_reason = Arc::new(OnceLock::new());
 
-        let mut session = self
-            .0
-            .clone()
-            .into_session(outgoing_channel, local_state, session_stop_reason.clone());
+        let mut session = self.0.clone().into_session(
+            outgoing_channel,
+            local_state,
+            session_stop_reason.clone(),
+            connection.connection_stop_reason.clone(),
+        );
         session.on_incoming_begin(
             IncomingChannel(incoming_session.channel),
             incoming_session.begin,
@@ -319,7 +319,6 @@ impl SessionAcceptor {
                 session_control_rx,
                 incoming_rx,
                 outgoing_rx,
-                conn_stop,
             )
             .await?;
 
@@ -344,7 +343,9 @@ impl SessionAcceptor {
         let incoming_session = connection
             .next_incoming_session()
             .await
-            .ok_or(BeginError::IllegalConnectionState)?;
+            .ok_or(BeginError::ConnectionStopped(connection_stop_reason_or_closed(
+                &connection.connection_stop_reason,
+            )))?;
         self.accept_incoming_session(incoming_session, connection)
             .await
     }
@@ -363,7 +364,6 @@ where
         incoming: mpsc::Receiver<SessionIncomingItem>,
         outgoing: mpsc::Sender<SessionFrame>,
         outgoing_link_frames: mpsc::Receiver<LinkFrame>,
-        conn_stop: Arc<OnceLock<ConnectionStopReason>>,
     ) -> Result<Self, BeginError> {
         #[cfg(feature = "tracing")]
         tracing::trace!("Instantiating session engine");
@@ -376,7 +376,6 @@ where
             incoming,
             outgoing,
             outgoing_link_frames,
-            conn_stop,
         };
 
         // send a begin
@@ -415,6 +414,10 @@ impl endpoint::Session for ListenerSession {
 
     fn session_stop_reason(&self) -> &Arc<OnceLock<SessionStopReason>> {
         self.session.session_stop_reason()
+    }
+
+    fn connection_stop_reason(&self) -> &Arc<OnceLock<ConnectionStopReason>> {
+        self.session.connection_stop_reason()
     }
 
     fn outgoing_channel(&self) -> OutgoingChannel {

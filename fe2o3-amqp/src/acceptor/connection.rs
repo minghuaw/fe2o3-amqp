@@ -19,7 +19,7 @@ use tokio_util::codec::{FramedRead, FramedWrite};
 use crate::{
     acceptor::sasl_acceptor::SaslServerFrame,
     connection::{
-        self, engine::ConnectionEngine, ConnectionHandle, OpenError,
+        self, engine::ConnectionEngine, ConnectionHandle, ConnectionStopReason, OpenError,
         DEFAULT_CONTROL_CHAN_BUF, DEFAULT_OUTGOING_BUFFER_SIZE,
     },
     endpoint::{self, IncomingChannel, OutgoingChannel},
@@ -207,7 +207,7 @@ impl<Tls, Sasl> ConnectionAcceptor<Tls, Sasl> {
 
         let engine = ConnectionEngine::open(transport, listener_connection, control_rx, outgoing_rx)
             .await?;
-        let connection_stop_reason = engine.connection_stop_reason.clone();
+        let connection_stop_reason = engine.connection_stop_reason().clone();
         let (handle, outcome) = engine.spawn();
 
         let connection_handle = ConnectionHandle {
@@ -495,6 +495,16 @@ impl endpoint::Connection for ListenerConnection {
     #[inline]
     fn local_open(&self) -> &fe2o3_amqp_types::performatives::Open {
         self.connection.local_open()
+    }
+
+    #[inline]
+    fn connection_stop_reason(&self) -> &std::sync::Arc<std::sync::OnceLock<ConnectionStopReason>> {
+        self.connection.connection_stop_reason()
+    }
+
+    #[inline]
+    fn set_connection_stop_reason(&mut self, reason: ConnectionStopReason) {
+        self.connection.set_connection_stop_reason(reason)
     }
 
     #[inline]
