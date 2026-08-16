@@ -2,7 +2,7 @@
 
 use std::{
     marker::PhantomData,
-    sync::Arc,
+    sync::{Arc, OnceLock},
 };
 
 use fe2o3_amqp_types::{
@@ -21,6 +21,7 @@ use crate::{
         state::{LinkFlowState, LinkFlowStateInner, LinkState},
         target_archetype::TargetArchetypeExt,
         LinkFrame, LinkIncomingItem, LinkRelay, ReceiverAttachError, ReceiverLink,
+        SessionStopReason,
     },
     session::SessionHandle,
     Receiver,
@@ -92,6 +93,7 @@ where
             remote_attach,
             session.control.clone(),
             session.outgoing.clone(),
+            session.session_stop_reason().clone(),
         )
         .await
         .map(|inner| Receiver { inner })
@@ -110,6 +112,7 @@ where
         remote_attach: Attach,
         control: mpsc::Sender<SessionControl>,
         outgoing: mpsc::Sender<LinkFrame>,
+        session_stop_reason: Arc<OnceLock<SessionStopReason>>,
     ) -> Result<ReceiverInner<ReceiverLink<T>>, ReceiverAttachError>
     where
         T: Into<TargetArchetype>
@@ -172,6 +175,7 @@ where
             remote_attach.name.clone(),
             link_handle,
             input_handle,
+            &session_stop_reason,
         )
         .await?;
 
@@ -216,6 +220,7 @@ where
             desired_capabilities: shared.desired_capabilities.clone(),
             flow_state: flow_state_consumer,
             unsettled,
+            session_stop_reason,
             verify_incoming_source: self.verify_incoming_source,
             verify_incoming_target: self.verify_incoming_target,
         };

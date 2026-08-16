@@ -207,8 +207,12 @@ impl From<SessionStateError> for Error {
 
 #[derive(Debug, thiserror::Error)]
 pub(crate) enum AllocLinkError {
-    #[error("Illegal session state")]
-    IllegalSessionState,
+    /// The session is not in the `Mapped` state (e.g. not begun, or ending)
+    #[error("The session is not in a state that permits link allocation")]
+    SessionNotMapped,
+
+    #[error("The session stopped before the link was attached: {:?}", .0)]
+    SessionStopped(crate::link::SessionStopReason),
 
     #[error("Link name must be unique")]
     DuplicatedLinkName,

@@ -1,3 +1,5 @@
+use std::sync::{Arc, OnceLock};
+
 use fe2o3_amqp_types::{definitions, performatives::Detach};
 use tokio::sync::mpsc;
 
@@ -7,7 +9,7 @@ use crate::{
     session::{self, error::AllocLinkError},
 };
 
-use super::{state::LinkState, DetachError, LinkFrame, LinkRelay};
+use super::{state::LinkState, DetachError, LinkFrame, LinkRelay, SessionStopReason};
 
 pub(crate) trait LinkEndpointInner
 where
@@ -27,6 +29,9 @@ where
     fn as_new_link_relay(&self, tx: mpsc::Sender<LinkFrame>) -> LinkRelay<()>;
 
     fn session_control(&self) -> &mpsc::Sender<SessionControl>;
+
+    /// The shared cell holding why the session (or its connection) stopped
+    fn session_stop_reason(&self) -> &Arc<OnceLock<SessionStopReason>>;
 
     async fn exchange_attach(
         &mut self,
@@ -55,7 +60,13 @@ where
         let link_relay = self.as_new_link_relay(tx);
         *self.reader_mut() = incoming;
         let link_name = self.link().name().to_string();
-        let handle = session::allocate_link(self.session_control(), link_name, link_relay).await?; // FIXME: cancel safe?
+        let handle = session::allocate_link(
+            self.session_control(),
+            link_name,
+            link_relay,
+            self.session_stop_reason(),
+        )
+        .await?; // FIXME: cancel safe?
         *self.link_mut().output_handle_mut() = Some(handle);
         Ok(())
     }
@@ -193,7 +204,7 @@ where
                 // The sender will be dropped after close
                 self.send_detach(true, error)
                     .await // cancel safe
-                    .map_err(|_| DetachError::IllegalSessionState)?;
+                    .map_err(|_| detach_error_from_stop_reason(self))?;
 
                 // Wait for remote detach
                 let remote_detach = recv_remote_detach(self).await?; // cancel safe
@@ -215,7 +226,7 @@ where
             LinkState::DetachReceived => self
                 .send_detach(true, error)
                 .await // cancel safe
-                .map_err(|_| DetachError::IllegalSessionState),
+                .map_err(|_| detach_error_from_stop_reason(self)),
             LinkState::Detached => reattach_and_then_close(self).await, // FIXME: cancel safe? if oneshot channel is cancel safe
             LinkState::CloseSent => {
                 // Wait for remote detach
@@ -229,7 +240,7 @@ where
             LinkState::CloseReceived => self
                 .send_detach(true, error)
                 .await // cancel safe
-                .map_err(|_| DetachError::IllegalSessionState),
+                .map_err(|_| detach_error_from_stop_reason(self)),
             LinkState::Closed => Ok(()),
         }
     }
@@ -265,6 +276,18 @@ where
     Ok(())
 }
 
+/// The `DetachError` for a link operation that failed because the session (or its
+/// connection) stopped; `IllegalState` when no stop reason was recorded (defensive).
+fn detach_error_from_stop_reason<T>(inner: &T) -> DetachError
+where
+    T: LinkEndpointInner + ?Sized,
+{
+    match inner.session_stop_reason().get() {
+        Some(reason) => DetachError::SessionStopped(reason.clone()),
+        None => DetachError::IllegalState, // defensive: no stop reason recorded; failure is link-local
+    }
+}
+
 /// # Cancel safety
 ///
 /// This is cancel safe because it only `.await` on `recv()` from a `tokio::mpsc::Receiver`
@@ -279,7 +302,7 @@ where
             .reader_mut()
             .recv()
             .await // cancel safe
-            .ok_or(DetachError::IllegalSessionState)?
+            .ok_or_else(|| detach_error_from_stop_reason(link_inner))?
         {
             LinkFrame::Detach(detach) => return Ok(detach),
             _frame => {

@@ -31,6 +31,27 @@
    `TxnCoordinator` now logs a warning when the teardown message cannot be enqueued,
    instead of silently discarding the failure. Rollback-on-drop failures log errors as
    well. Gated behind the `log` and `tracing` features.
+9. **Breaking**: `IllegalSessionState` is replaced by `SessionStopped(SessionStopReason)` on
+    [`LinkStateError`], `IllegalLinkStateError`, `DetachError`, `AllocLinkError`,
+    `SendAttachErrorKind`, `SenderAttachError`, `ReceiverAttachError`, and
+    [`AcceptorAttachError`]. The new public [`SessionStopReason`] tells whether the session
+    or its connection stopped first and whether it carried an error, so callers can decide
+    whether to retry at the session or connection level. `SenderAttachError`,
+    `ReceiverAttachError`, and `AllocLinkError` also gain a `SessionNotMapped` variant for
+    sessions that were never begun; link allocation on an ending or stopped session reports
+    `SessionStopped(reason)` instead (the reason is recorded on the [`Session`] itself).
+10. **Breaking**: `FromOneshotRecvError` is renamed to `FromDeliveryFailure` and gains a
+    required `from_session_stop_reason` method.
+11. A session now ends cleanly (with a warning logged) when its connection stops first,
+    instead of reporting `IllegalConnectionState`; connection-level errors stay on the
+    [`ConnectionHandle`], while interrupted link operations surface the stop reason. The
+    stop-reason cell is owned by the [`Session`] and shared with its handle and links —
+    including links created by the listener acceptors and the transaction control link —
+    so the real reason (`ConnectionClosed(..)` vs `Ended`/`EndedWithError`) is observed.
+    `AcceptorAttachError` no longer hoists session stops out of local attach errors. The
+    cells are renamed `session_stop_reason`/`connection_stop_reason`, and the sender/
+    receiver inner no longer keep a copy of the session stop reason (read from the link
+    via the internal `LinkExt` trait).
 
 ## 0.16.2
 

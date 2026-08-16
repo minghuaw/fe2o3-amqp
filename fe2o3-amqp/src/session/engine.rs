@@ -1,3 +1,5 @@
+use std::sync::{Arc, OnceLock};
+
 use fe2o3_amqp_types::{
     definitions::{self, AmqpError, SessionError},
     performatives::End,
@@ -8,10 +10,10 @@ use tokio::{
 };
 
 use crate::{
-    connection::{self},
+    connection::{self, ConnectionStopReason},
     control::{ConnectionControl, SessionControl},
     endpoint::{self, IncomingChannel, Session},
-    link::LinkFrame,
+    link::{LinkFrame, SessionStopReason},
     util::Running,
     SendBound,
 };
@@ -57,6 +59,8 @@ pub(crate) struct SessionEngine<S: Session> {
     pub outgoing: mpsc::Sender<SessionFrame>,
 
     pub outgoing_link_frames: mpsc::Receiver<LinkFrame>,
+    /// Why the connection stopped, read at our own stop to derive the reason links observe
+    pub conn_stop: Arc<OnceLock<ConnectionStopReason>>,
 }
 
 impl<S> SessionEngine<S>
@@ -64,6 +68,7 @@ where
     S: endpoint::Session,
     BeginError: From<S::BeginError>,
 {
+    #[allow(clippy::too_many_arguments)]
     pub(crate) async fn begin_client_session(
         conn_control: mpsc::Sender<ConnectionControl>,
         session: S,
@@ -71,6 +76,7 @@ where
         incoming: mpsc::Receiver<SessionIncomingItem>,
         outgoing: mpsc::Sender<SessionFrame>,
         outgoing_link_frames: mpsc::Receiver<LinkFrame>,
+        conn_stop: Arc<OnceLock<ConnectionStopReason>>,
     ) -> Result<Self, BeginError> {
         let mut engine = Self {
             conn_control,
@@ -79,6 +85,7 @@ where
             incoming,
             outgoing,
             outgoing_link_frames,
+            conn_stop,
         };
 
         // send a begin
@@ -496,8 +503,14 @@ where
                             // Check local state
                             match self.continue_or_stop_by_state() {
                                 Running::Continue => {
-                                    // The connection must have already stopped before session negotiated ending
-                                    Err(SessionInnerError::IllegalConnectionState)
+                                    // The connection stopped before the session ended;
+                                    // the session ends with it. Connection-level errors
+                                    // are reported through the `ConnectionHandle`.
+                                    #[cfg(feature = "tracing")]
+                                    tracing::warn!("Connection stopped before the session ended; ending the session");
+                                    #[cfg(feature = "log")]
+                                    log::warn!("Connection stopped before the session ended; ending the session");
+                                    Ok(Running::Stop)
                                 },
                                 Running::Stop => Ok(Running::Stop),
                             }
@@ -561,19 +574,34 @@ where
             let running = match result {
                 Ok(running) => running,
                 Err(error) => {
-                    #[cfg(feature = "tracing")]
-                    tracing::error!("{:?}", error);
-                    #[cfg(feature = "log")]
-                    log::error!("{:?}", error);
-                    match self.on_error(&error).await {
-                        Ok(running) => {
-                            outcome = Err(error);
-                            running
-                        }
-                        Err(error) => {
-                            // Stop the session if error cannot be handled
-                            outcome = Err(error);
-                            Running::Stop
+                    if matches!(error, SessionInnerError::IllegalConnectionState) {
+                        // The connection stopped before the session ended; the session
+                        // ends with it. Connection-level errors are reported through
+                        // the `ConnectionHandle`.
+                        #[cfg(feature = "tracing")]
+                        tracing::warn!(
+                            "Connection stopped before the session ended; ending the session"
+                        );
+                        #[cfg(feature = "log")]
+                        log::warn!(
+                            "Connection stopped before the session ended; ending the session"
+                        );
+                        Running::Stop
+                    } else {
+                        #[cfg(feature = "tracing")]
+                        tracing::error!("{:?}", error);
+                        #[cfg(feature = "log")]
+                        log::error!("{:?}", error);
+                        match self.on_error(&error).await {
+                            Ok(running) => {
+                                outcome = Err(error);
+                                running
+                            }
+                            Err(error) => {
+                                // Stop the session if error cannot be handled
+                                outcome = Err(error);
+                                Running::Stop
+                            }
                         }
                     }
                 }
@@ -589,6 +617,21 @@ where
         tracing::debug!("Stopped");
         #[cfg(feature = "log")]
         log::debug!("Stopped");
+        // Publish the stop reason before the link relays and unsettled maps are dropped,
+        // so every link that wakes on the channel closures sees it.
+        let session_stop_reason = match self.conn_stop.get() {
+            Some(ConnectionStopReason::Closed) => SessionStopReason::ConnectionClosed,
+            Some(ConnectionStopReason::ClosedWithError(error)) => {
+                SessionStopReason::ConnectionClosedWithError(error.clone())
+            }
+            None => match &outcome {
+                Err(SessionInnerError::RemoteEndedWithError(error)) => {
+                    SessionStopReason::EndedWithError(error.clone())
+                }
+                _ => SessionStopReason::Ended,
+            },
+        };
+        self.session.set_session_stop_reason(session_stop_reason);
         let _ =
             connection::deallocate_session(&mut self.conn_control, self.session.outgoing_channel())
                 .await;

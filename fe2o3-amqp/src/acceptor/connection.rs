@@ -205,8 +205,9 @@ impl<Tls, Sasl> ConnectionAcceptor<Tls, Sasl> {
             session_listener: begin_tx,
         };
 
-        let engine =
-            ConnectionEngine::open(transport, listener_connection, control_rx, outgoing_rx).await?;
+        let engine = ConnectionEngine::open(transport, listener_connection, control_rx, outgoing_rx)
+            .await?;
+        let connection_stop_reason = engine.connection_stop_reason.clone();
         let (handle, outcome) = engine.spawn();
 
         let connection_handle = ConnectionHandle {
@@ -215,6 +216,7 @@ impl<Tls, Sasl> ConnectionAcceptor<Tls, Sasl> {
             handle,
             outcome,
             outgoing: outgoing_tx,
+            connection_stop_reason,
             session_listener: begin_rx,
         };
         Ok(connection_handle)

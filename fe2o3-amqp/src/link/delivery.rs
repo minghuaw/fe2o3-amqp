@@ -7,7 +7,12 @@ use fe2o3_amqp_types::{
 };
 use futures_util::FutureExt;
 use pin_project_lite::pin_project;
-use std::{future::Future, marker::PhantomData, task::Poll};
+use std::{
+    future::Future,
+    marker::PhantomData,
+    sync::{Arc, OnceLock},
+    task::Poll,
+};
 use tokio::sync::oneshot::{self, error::RecvError};
 
 use crate::{
@@ -16,7 +21,7 @@ use crate::{
 };
 use crate::{util::AsDeliveryState, Payload};
 
-use super::{LinkStateError, SendError};
+use super::{LinkStateError, SendError, SessionStopReason};
 
 /// Delivery information that is needed for disposing a message
 #[derive(Clone)]
@@ -341,11 +346,26 @@ pin_project! {
         #[pin]
         // Reserved for future use on actively sending disposition from Sender
         settlement: Settlement,
-        outcome_marker: PhantomData<O>
+        outcome_marker: PhantomData<O>,
+        // Why the session (or its connection) stopped, consulted when the
+        // settlement oneshot dies
+        session_stop_reason: Arc<OnceLock<SessionStopReason>>,
     }
 }
 
 impl<O> DeliveryFut<O> {
+    /// Create a new delivery future with the shared stop-reason cell
+    pub(crate) fn new(
+        settlement: Settlement,
+        session_stop_reason: Arc<OnceLock<SessionStopReason>>,
+    ) -> Self {
+        Self {
+            settlement,
+            outcome_marker: PhantomData,
+            session_stop_reason,
+        }
+    }
+
     /// Get the delivery tag
     pub fn delivery_tag(&self) -> &DeliveryTag {
         match &self.settlement {
@@ -354,15 +374,6 @@ impl<O> DeliveryFut<O> {
                 delivery_tag,
                 outcome: _,
             } => delivery_tag,
-        }
-    }
-}
-
-impl<O> From<Settlement> for DeliveryFut<O> {
-    fn from(settlement: Settlement) -> Self {
-        Self {
-            settlement,
-            outcome_marker: PhantomData,
         }
     }
 }
@@ -387,16 +398,26 @@ pub trait FromDeliveryState {
 }
 
 /// This trait defines how to interprete `tokio::sync::oneshot::error::RecvError`
+/// and a session-stop reason when the settlement channel dies
 ///
 /// This is public for compatibility with rust versions <= 1.58.0
-pub trait FromOneshotRecvError {
+pub trait FromDeliveryFailure {
     /// how to interprete `tokio::sync::oneshot::error::RecvError`
     fn from_oneshot_recv_error(err: RecvError) -> Self;
+
+    /// how to interprete a "the session (or its connection) stopped" failure
+    fn from_session_stop_reason(reason: SessionStopReason) -> Self;
 }
 
-impl FromOneshotRecvError for SendResult {
+impl FromDeliveryFailure for SendResult {
     fn from_oneshot_recv_error(_: RecvError) -> Self {
-        Err(LinkStateError::IllegalSessionState.into())
+        // The settlement channel died without the session recording a stop,
+        // e.g. the link was torn down with the delivery still pending.
+        Err(LinkStateError::IllegalState.into())
+    }
+
+    fn from_session_stop_reason(reason: SessionStopReason) -> Self {
+        Err(LinkStateError::SessionStopped(reason).into())
     }
 }
 
@@ -434,7 +455,7 @@ impl FromDeliveryState for SendResult {
 
 impl<O> Future for DeliveryFut<O>
 where
-    O: FromPreSettled + FromDeliveryState + FromOneshotRecvError,
+    O: FromPreSettled + FromDeliveryState + FromDeliveryFailure,
 {
     type Output = O;
 
@@ -459,8 +480,14 @@ where
                             Ok(None) => Poll::Ready(O::from_none()),
                             Err(err) => {
                                 // If the sender is dropped, there is likely issues with the connection
-                                // or the session, and thus the error should propagate to the user
-                                Poll::Ready(O::from_oneshot_recv_error(err))
+                                // or the session, and thus the error should propagate to the user.
+                                // When the session (or its connection) stopped, the shared cell
+                                // holds the reason; otherwise the link was torn down first.
+                                if let Some(reason) = this.session_stop_reason.get() {
+                                    Poll::Ready(O::from_session_stop_reason(reason.clone()))
+                                } else {
+                                    Poll::Ready(O::from_oneshot_recv_error(err))
+                                }
                             }
                         }
                     }
@@ -472,12 +499,18 @@ where
 
 #[cfg(test)]
 mod tests {
+    use std::sync::{Arc, OnceLock};
+
     use fe2o3_amqp_types::{
+        definitions::{self, ConnectionError, DeliveryTag},
         messaging::{AmqpValue, Body, Data, Message},
         primitives::Binary,
     };
 
     use crate::Sendable;
+
+    use super::{DeliveryFut, FromDeliveryFailure, SendResult, SessionStopReason};
+    use crate::link::{LinkStateError, SendError};
 
     struct Foo {}
 
@@ -517,5 +550,65 @@ mod tests {
         let value = Foo {};
         let sendable = Sendable::from(value);
         assert_eq!(sendable.message.body, Data(Binary::from("Foo")));
+    }
+
+    #[test]
+    fn test_send_result_from_session_stop_reason() {
+        let reason = SessionStopReason::ConnectionClosedWithError(definitions::Error::new(
+            ConnectionError::ConnectionForced,
+            None,
+            None,
+        ));
+        let result = <SendResult as FromDeliveryFailure>::from_session_stop_reason(reason.clone());
+        match result {
+            Err(SendError::LinkStateError(LinkStateError::SessionStopped(actual))) => {
+                assert_eq!(actual, reason);
+            }
+            other => panic!("unexpected result: {:?}", other),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_delivery_fut_uses_session_stop_reason() {
+        use crate::endpoint::Settlement;
+        use tokio::sync::oneshot;
+
+        let (tx, rx) = oneshot::channel();
+        let settlement = Settlement::Unsettled {
+            delivery_tag: DeliveryTag::from(b"tag".to_vec()),
+            outcome: rx,
+        };
+        let session_stop_reason = Arc::new(OnceLock::new());
+        session_stop_reason
+            .set(SessionStopReason::ConnectionClosed)
+            .unwrap();
+        let fut = DeliveryFut::new(settlement, session_stop_reason);
+        drop(tx);
+
+        match fut.await {
+            Err(SendError::LinkStateError(LinkStateError::SessionStopped(
+                SessionStopReason::ConnectionClosed,
+            ))) => {}
+            other => panic!("unexpected result: {:?}", other),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_delivery_fut_falls_back_without_stop_reason() {
+        use crate::endpoint::Settlement;
+        use tokio::sync::oneshot;
+
+        let (tx, rx) = oneshot::channel();
+        let settlement = Settlement::Unsettled {
+            delivery_tag: DeliveryTag::from(b"tag".to_vec()),
+            outcome: rx,
+        };
+        let fut = DeliveryFut::new(settlement, Arc::new(OnceLock::new()));
+        drop(tx);
+
+        match fut.await {
+            Err(SendError::LinkStateError(LinkStateError::IllegalState)) => {}
+            other => panic!("unexpected result: {:?}", other),
+        }
     }
 }

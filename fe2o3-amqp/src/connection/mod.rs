@@ -1,6 +1,10 @@
 //! Implements AMQP1.0 Connection
 
-use std::{cmp::min, collections::HashMap, sync::Arc};
+use std::{
+    cmp::min,
+    collections::HashMap,
+    sync::{Arc, OnceLock},
+};
 
 use fe2o3_amqp_types::{
     definitions::{self},
@@ -53,6 +57,16 @@ pub const DEFAULT_CHANNEL_MAX: u16 = 255;
 
 type SessionRelay = Arc<Sender<SessionIncomingItem>>;
 
+/// Why the connection stopped, shared with the sessions so they can derive
+/// the reason their links observe.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum ConnectionStopReason {
+    /// The connection closed cleanly
+    Closed,
+    /// The connection closed with an error
+    ClosedWithError(definitions::Error),
+}
+
 /// A handle to the [`Connection`] event loop.
 ///
 /// Dropping the handle will also stop the [`Connection`] event loop.
@@ -70,6 +84,8 @@ pub struct ConnectionHandle<R> {
 
     // outgoing channel for session
     pub(crate) outgoing: Sender<SessionFrame>,
+    /// Why the connection stopped, shared with the sessions
+    pub(crate) connection_stop_reason: Arc<OnceLock<ConnectionStopReason>>,
     pub(crate) session_listener: R,
 }
 
@@ -138,6 +154,10 @@ impl<R> ConnectionHandle<R> {
 
     cfg_not_wasm32! {
         /// Close the connection
+        ///
+        /// Closing the connection implicitly ends its sessions (the AMQP model); there is
+        /// no need to end the sessions first. If the peer closed the connection with an
+        /// error, the error is reported through this method.
         ///
         /// An `Error::IllegalState` will be returned if this is called after executing any of
         /// [`close`](#method.close), [`close_with_error`](#method.close_with_error) or

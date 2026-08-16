@@ -2,6 +2,8 @@
 
 use std::future::Future;
 
+use std::sync::{Arc, OnceLock};
+
 use fe2o3_amqp_types::{
     definitions::Error,
     performatives::{Attach, Begin, Detach, Disposition, End, Flow, Transfer},
@@ -10,7 +12,7 @@ use fe2o3_amqp_types::{
 use tokio::sync::mpsc;
 
 use crate::{
-    link::LinkRelay,
+    link::{LinkRelay, SessionStopReason},
     session::frame::{SessionFrame, SessionOutgoingItem},
     Payload, SendBound,
 };
@@ -25,6 +27,12 @@ pub(crate) trait Session {
     type State;
 
     fn local_state(&self) -> &Self::State;
+
+    /// Record why the session (or its connection) stopped
+    fn set_session_stop_reason(&mut self, reason: SessionStopReason);
+
+    /// The shared cell holding why the session (or its connection) stopped
+    fn session_stop_reason(&self) -> &Arc<OnceLock<SessionStopReason>>;
 
     fn outgoing_channel(&self) -> OutgoingChannel;
 

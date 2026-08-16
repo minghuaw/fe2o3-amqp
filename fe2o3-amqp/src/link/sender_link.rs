@@ -1,3 +1,5 @@
+use std::sync::{Arc, OnceLock};
+
 use fe2o3_amqp_types::{definitions::Fields, messaging::MESSAGE_FORMAT};
 use futures_util::Future;
 
@@ -38,13 +40,27 @@ where
         let more = (self.max_message_size != 0) && (payload.len() as u64 > self.max_message_size);
         if !more {
             transfer.more = false;
-            send_transfer(writer, input_handle, transfer, payload.clone()).await?;
+            send_transfer(
+                writer,
+                input_handle,
+                transfer,
+                payload.clone(),
+                &self.session_stop_reason,
+            )
+            .await?;
         // cancel safe
         } else {
             // Send the first frame
             let partial = payload.split_to(self.max_message_size as usize);
             transfer.more = true;
-            send_transfer(writer, input_handle.clone(), transfer.clone(), partial).await?; // cancel safe
+            send_transfer(
+                writer,
+                input_handle.clone(),
+                transfer.clone(),
+                partial,
+                &self.session_stop_reason,
+            )
+            .await?; // cancel safe
 
             // Send the transfers in the middle
             while payload.len() > self.max_message_size as usize {
@@ -52,7 +68,14 @@ where
                 transfer.delivery_tag = None;
                 transfer.message_format = None;
                 transfer.settled = None;
-                send_transfer(writer, input_handle.clone(), transfer.clone(), partial).await?;
+                send_transfer(
+                    writer,
+                    input_handle.clone(),
+                    transfer.clone(),
+                    partial,
+                    &self.session_stop_reason,
+                )
+                .await?;
                 // cancel safe
             }
 
@@ -61,7 +84,15 @@ where
             // data MAY be trans- ferred in additional transfer frames by setting the more flag on
             // all but the last transfer frame
             transfer.more = false;
-            send_transfer(writer, input_handle, transfer, payload).await?; // cancel safe
+            send_transfer(
+                writer,
+                input_handle,
+                transfer,
+                payload,
+                &self.session_stop_reason,
+            )
+            .await?;
+            // cancel safe
         }
 
         Ok(settled)
@@ -275,7 +306,16 @@ where
             }
         }
 
-        send_disposition(writer, delivery_id, None, settled, Some(state), batchable).await
+        send_disposition(
+            writer,
+            delivery_id,
+            None,
+            settled,
+            Some(state),
+            batchable,
+            &self.session_stop_reason,
+        )
+        .await
     }
 
     async fn batch_dispose(
@@ -323,6 +363,7 @@ where
                             settled,
                             Some(state.clone()),
                             batchable,
+                            &self.session_stop_reason,
                         )
                         .await?;
                     }
@@ -339,6 +380,7 @@ where
                             settled,
                             Some(state.clone()),
                             batchable,
+                            &self.session_stop_reason,
                         )
                         .await?;
                     }
@@ -349,7 +391,16 @@ where
 
         // if there is only one message to dispose
         if let (Some(first_id), None) = (first, last) {
-            send_disposition(writer, first_id, None, settled, Some(state), batchable).await?;
+            send_disposition(
+                writer,
+                first_id,
+                None,
+                settled,
+                Some(state),
+                batchable,
+                &self.session_stop_reason,
+            )
+            .await?;
         }
         Ok(())
     }
@@ -364,6 +415,7 @@ async fn send_transfer(
     input_handle: InputHandle,
     transfer: Transfer,
     payload: Payload,
+    session_stop_reason: &OnceLock<SessionStopReason>,
 ) -> Result<(), LinkStateError> {
     let frame = LinkFrame::Transfer {
         input_handle,
@@ -373,7 +425,10 @@ async fn send_transfer(
     writer
         .send(frame)
         .await // cancel safe
-        .map_err(|_| LinkStateError::IllegalSessionState)
+        .map_err(|_| match session_stop_reason.get() {
+            Some(reason) => LinkStateError::SessionStopped(reason.clone()),
+            None => LinkStateError::IllegalState, // defensive: no stop reason recorded; failure is link-local
+        })
 }
 
 #[inline]
@@ -384,6 +439,7 @@ async fn send_disposition(
     settled: bool,
     state: Option<DeliveryState>,
     batchable: bool,
+    session_stop_reason: &OnceLock<SessionStopReason>,
 ) -> Result<(), IllegalLinkStateError> {
     let disposition = Disposition {
         role: Role::Sender,
@@ -397,7 +453,10 @@ async fn send_disposition(
     writer
         .send(frame)
         .await
-        .map_err(|_| IllegalLinkStateError::IllegalSessionState)
+        .map_err(|_| match session_stop_reason.get() {
+            Some(reason) => IllegalLinkStateError::SessionStopped(reason.clone()),
+            None => IllegalLinkStateError::IllegalState, // defensive: no stop reason recorded; failure is link-local
+        })
 }
 
 impl<T> SenderLink<T> {
@@ -647,6 +706,10 @@ where
         &mut self.output_handle
     }
 
+    fn session_stop_reason(&self) -> &Arc<OnceLock<SessionStopReason>> {
+        &self.session_stop_reason
+    }
+
     fn flow_state(&self) -> &Self::FlowState {
         &self.flow_state
     }
@@ -693,14 +756,17 @@ where
         self.send_attach(writer, session, is_reattaching).await?;
 
         // Wait for remote attach
-        let remote_attach = match reader
-            .recv()
-            .await
-            .ok_or(SenderAttachError::IllegalSessionState)?
-        {
-            LinkFrame::Attach(attach) => attach,
-            _ => return Err(SenderAttachError::NonAttachFrameReceived),
-        };
+        let remote_attach =
+            match reader
+                .recv()
+                .await
+                .ok_or_else(|| match self.session_stop_reason.get() {
+                    Some(reason) => SenderAttachError::SessionStopped(reason.clone()),
+                    None => SenderAttachError::IllegalState, // defensive: no stop reason recorded; failure is link-local
+                })? {
+                LinkFrame::Attach(attach) => attach,
+                _ => return Err(SenderAttachError::NonAttachFrameReceived),
+            };
 
         self.on_incoming_attach(remote_attach)
     }
@@ -714,7 +780,8 @@ where
         session: &mpsc::Sender<SessionControl>,
     ) -> SenderAttachError {
         match attach_error {
-            SenderAttachError::IllegalSessionState
+            SenderAttachError::SessionStopped(_)
+            | SenderAttachError::SessionNotMapped
             | SenderAttachError::IllegalState
             | SenderAttachError::NonAttachFrameReceived
             | SenderAttachError::ExpectImmediateDetach
@@ -730,7 +797,10 @@ where
                     .send(SessionControl::End(Some(error)))
                     .await
                     .map(|_| attach_error)
-                    .unwrap_or(SenderAttachError::IllegalSessionState)
+                    .unwrap_or(match self.session_stop_reason.get() {
+                        Some(reason) => SenderAttachError::SessionStopped(reason.clone()),
+                        None => SenderAttachError::IllegalState, // defensive: no stop reason recorded; failure is link-local
+                    })
             }
 
             SenderAttachError::SndSettleModeNotSupported
@@ -740,7 +810,10 @@ where
                     .send_detach(writer, true, None)
                     .await
                     .map(|_| attach_error)
-                    .unwrap_or(SenderAttachError::IllegalSessionState);
+                    .unwrap_or(match self.session_stop_reason.get() {
+                        Some(reason) => SenderAttachError::SessionStopped(reason.clone()),
+                        None => SenderAttachError::IllegalState, // defensive: no stop reason recorded; failure is link-local
+                    });
                 recv_detach(self, reader, err).await
             }
 
@@ -758,14 +831,19 @@ where
     }
 }
 
-async fn try_detach_with_error<L>(
-    link: &mut L,
+async fn try_detach_with_error<T>(
+    link: &mut SenderLink<T>,
     attach_error: SenderAttachError,
     writer: &mpsc::Sender<LinkFrame>,
     reader: &mut mpsc::Receiver<LinkFrame>,
 ) -> SenderAttachError
 where
-    L: LinkDetach,
+    T: Into<TargetArchetype>
+        + TryFrom<TargetArchetype>
+        + VerifyTargetArchetype
+        + Clone
+        + Send
+        + Sync,
 {
     match (&attach_error).try_into() {
         Ok(err) => {
@@ -776,9 +854,15 @@ where
                         attach_error
                     }
                     Some(_) => SenderAttachError::NonAttachFrameReceived,
-                    None => SenderAttachError::IllegalSessionState,
+                    None => match link.session_stop_reason().get() {
+                        Some(reason) => SenderAttachError::SessionStopped(reason.clone()),
+                        None => SenderAttachError::IllegalState, // defensive: no stop reason recorded; failure is link-local
+                    },
                 },
-                Err(_) => SenderAttachError::IllegalSessionState,
+                Err(_) => match link.session_stop_reason().get() {
+                    Some(reason) => SenderAttachError::SessionStopped(reason.clone()),
+                    None => SenderAttachError::IllegalState, // defensive: no stop reason recorded; failure is link-local
+                },
             }
         }
         Err(_) => attach_error,
@@ -804,6 +888,9 @@ where
             Err(detach_error) => detach_error.try_into().unwrap_or(err),
         },
         Some(_) => SenderAttachError::NonAttachFrameReceived,
-        None => SenderAttachError::IllegalSessionState,
+        None => match link.session_stop_reason.get() {
+            Some(reason) => SenderAttachError::SessionStopped(reason.clone()),
+            None => SenderAttachError::IllegalState, // defensive: no stop reason recorded; failure is link-local
+        },
     }
 }

@@ -1,7 +1,7 @@
 //! Implementation of AMQP1.0 receiver
 
 use std::sync::atomic::{AtomicU32, Ordering};
-use std::sync::Arc;
+use std::sync::{Arc, OnceLock};
 
 use fe2o3_amqp_types::{
     definitions::{self, DeliveryTag, Fields, Handle, ReceiverSettleMode, Role, SequenceNo},
@@ -35,7 +35,7 @@ use super::{
     ArcReceiverUnsettledMap, DetachThenResumeReceiverError, DispositionError, FlowError,
     IllegalLinkStateError, LinkFrame, LinkRelay, LinkStateError, ReceiverAttachError,
     ReceiverAttachExchange, ReceiverFlowState, ReceiverLink, ReceiverResumeError,
-    ReceiverResumeErrorKind, ReceiverTransferError, RecvError, DEFAULT_CREDIT,
+    ReceiverResumeErrorKind, ReceiverTransferError, RecvError, SessionStopReason, DEFAULT_CREDIT,
 };
 
 cfg_transaction! {
@@ -590,6 +590,7 @@ impl Receiver {
             output_handle: self.inner.link.output_handle.clone(),
             processed: Arc::clone(&self.inner.processed),
             credit_mode: self.inner.credit_mode.clone(),
+            session_stop_reason: self.inner.link.session_stop_reason.clone(),
         }
     }
 }
@@ -610,6 +611,7 @@ pub struct ReceiverDisposer {
     output_handle: Option<OutputHandle>,
     processed: Arc<AtomicU32>,
     credit_mode: CreditMode,
+    session_stop_reason: Arc<OnceLock<SessionStopReason>>,
 }
 
 impl ReceiverDisposer {
@@ -669,7 +671,10 @@ impl ReceiverDisposer {
             self.outgoing
                 .send(LinkFrame::Disposition(disposition))
                 .await
-                .map_err(|_| DispositionError::IllegalSessionState)?;
+                .map_err(|_| match self.session_stop_reason.get() {
+                    Some(reason) => DispositionError::SessionStopped(reason.clone()),
+                    None => DispositionError::IllegalState, // defensive: no stop reason recorded; failure is link-local
+                })?;
         }
 
         let prev = self.processed.fetch_add(1, Ordering::Release);
@@ -683,7 +688,7 @@ impl ReceiverDisposer {
                 let handle: Handle = self
                     .output_handle
                     .clone()
-                    .ok_or(DispositionError::IllegalSessionState)?
+                    .ok_or(DispositionError::IllegalState)?
                     .into();
                 let delivery_count = {
                     let mut guard = self.flow_state.lock.write();
@@ -703,7 +708,10 @@ impl ReceiverDisposer {
                 self.outgoing
                     .send(LinkFrame::Flow(flow))
                     .await
-                    .map_err(|_| DispositionError::IllegalSessionState)?;
+                    .map_err(|_| match self.session_stop_reason.get() {
+                        Some(reason) => DispositionError::SessionStopped(reason.clone()),
+                        None => DispositionError::IllegalState, // defensive: no stop reason recorded; failure is link-local
+                    })?;
             }
         }
         Ok(())
@@ -866,6 +874,10 @@ where
         &self.session
     }
 
+    fn session_stop_reason(&self) -> &Arc<OnceLock<SessionStopReason>> {
+        self.link().session_stop_reason()
+    }
+
     async fn exchange_attach(
         &mut self,
         is_reattaching: bool,
@@ -960,11 +972,22 @@ where
     where
         for<'de> T: FromBody<'de> + Send,
     {
-        let frame = self
-            .incoming
-            .recv()
-            .await // cancel safe
-            .ok_or(LinkStateError::IllegalSessionState)?;
+        // When the session or the connection stops, the channel closes and this
+        // returns `RecvError::LinkStateError(SessionStopped(reason))` with the
+        // stop reason observed by the link.
+        let frame = match self.incoming.recv().await {
+            // cancel safe
+            Some(frame) => frame,
+            None => {
+                return Err(match self.link().session_stop_reason().get() {
+                    Some(reason) => {
+                        RecvError::LinkStateError(LinkStateError::SessionStopped(reason.clone()))
+                    }
+                    // defensive: no stop reason recorded; failure is link-local
+                    None => RecvError::LinkStateError(LinkStateError::IllegalState),
+                });
+            }
+        };
 
         match frame {
             LinkFrame::Detach(detach) => {
@@ -1739,6 +1762,7 @@ mod tests {
             output_handle: Some(OutputHandle(1)),
             processed: Arc::new(AtomicU32::new(0)),
             credit_mode,
+            session_stop_reason: Arc::new(OnceLock::new()),
         }
     }
 

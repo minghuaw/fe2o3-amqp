@@ -8,6 +8,22 @@ use fe2o3_amqp_types::transaction::Coordinator;
 
 use super::{delivery::DeliveryInfo, receiver::DetachedReceiver, sender::DetachedSender};
 
+/// Why the link's session (or its connection) stopped before the link was
+/// detached or closed. From a link's perspective, a parent stopping earlier
+/// is always an error for the link's operations; the variants here describe
+/// the parent's state so the caller can decide how to recover.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum SessionStopReason {
+    /// The session ended cleanly
+    Ended,
+    /// The session ended with an error
+    EndedWithError(definitions::Error),
+    /// The connection stopped first, cleanly
+    ConnectionClosed,
+    /// The connection stopped first, with an error
+    ConnectionClosedWithError(definitions::Error),
+}
+
 /// Error associated with detaching
 #[derive(Debug, thiserror::Error)]
 pub enum DetachError {
@@ -15,9 +31,9 @@ pub enum DetachError {
     #[error("Illegal local state")]
     IllegalState,
 
-    /// Session has dropped
-    #[error("Session has dropped")]
-    IllegalSessionState,
+    /// The session (or its connection) stopped before the link was detached
+    #[error("The session stopped before the link was detached: {:?}", .0)]
+    SessionStopped(SessionStopReason),
 
     // /// Expecting a detach but found other frame
     // #[error("Expecting a Detach")]
@@ -42,17 +58,20 @@ pub enum DetachError {
 /// Errors associated with attaching a link as sender
 #[derive(Debug, thiserror::Error)]
 pub enum SenderAttachError {
-    // Illegal session state
-    /// Session stopped
-    #[error("Illegal session state. Session might have stopped.")]
-    IllegalSessionState,
+    /// The session (or its connection) stopped before the attach completed
+    #[error("The session stopped before the link was attached: {:?}", .0)]
+    SessionStopped(SessionStopReason),
+
+    /// The session is not in the `Mapped` state (e.g. not begun, or ending)
+    #[error("The session is not in a state that permits link attachment")]
+    SessionNotMapped,
 
     /// Link name duplicated
     #[error("Link name is not unique.")]
     DuplicatedLinkName,
 
     /// Illegal link state
-    #[error("Illegal session state")]
+    #[error("Illegal link state")]
     IllegalState,
 
     /// The local terminus is expecting an Attach from the remote peer
@@ -198,17 +217,20 @@ impl std::error::Error for DesiredFilterNotSupported {}
 /// Errors associated with attaching a link as receiver
 #[derive(Debug, thiserror::Error)]
 pub enum ReceiverAttachError {
-    // Errors that should end the session
-    /// The associated session has dropped
-    #[error("Illegal session state. Session might have stopped.")]
-    IllegalSessionState,
+    /// The session (or its connection) stopped before the attach completed
+    #[error("The session stopped before the link was attached: {:?}", .0)]
+    SessionStopped(SessionStopReason),
+
+    /// The session is not in the `Mapped` state (e.g. not begun, or ending)
+    #[error("The session is not in a state that permits link attachment")]
+    SessionNotMapped,
 
     /// Link name is already in use
     #[error("Link name is not unique.")]
     DuplicatedLinkName,
 
     /// Illegal link state
-    #[error("Illegal session state")]
+    #[error("Illegal link state")]
     IllegalState,
 
     /// The local terminus is expecting an Attach from the remote peer
@@ -266,7 +288,8 @@ pub enum ReceiverAttachError {
 impl From<AllocLinkError> for ReceiverAttachError {
     fn from(value: AllocLinkError) -> Self {
         match value {
-            AllocLinkError::IllegalSessionState => Self::IllegalSessionState,
+            AllocLinkError::SessionNotMapped => Self::SessionNotMapped,
+            AllocLinkError::SessionStopped(reason) => Self::SessionStopped(reason),
             AllocLinkError::DuplicatedLinkName => Self::DuplicatedLinkName,
         }
     }
@@ -277,7 +300,7 @@ impl<'a> TryFrom<&'a ReceiverAttachError> for definitions::Error {
 
     fn try_from(value: &'a ReceiverAttachError) -> Result<Self, Self::Error> {
         let condition: ErrorCondition = match value {
-            ReceiverAttachError::IllegalSessionState => AmqpError::IllegalState.into(),
+            ReceiverAttachError::SessionStopped(_) => AmqpError::IllegalState.into(),
             ReceiverAttachError::DuplicatedLinkName => SessionError::HandleInUse.into(),
             ReceiverAttachError::IllegalState => AmqpError::IllegalState.into(),
             ReceiverAttachError::NonAttachFrameReceived => AmqpError::NotAllowed.into(),
@@ -303,7 +326,8 @@ impl<'a> TryFrom<&'a ReceiverAttachError> for definitions::Error {
 impl From<AllocLinkError> for SenderAttachError {
     fn from(value: AllocLinkError) -> Self {
         match value {
-            AllocLinkError::IllegalSessionState => Self::IllegalSessionState,
+            AllocLinkError::SessionNotMapped => Self::SessionNotMapped,
+            AllocLinkError::SessionStopped(reason) => Self::SessionStopped(reason),
             AllocLinkError::DuplicatedLinkName => Self::DuplicatedLinkName,
         }
     }
@@ -315,7 +339,7 @@ impl TryFrom<DetachError> for SenderAttachError {
     fn try_from(value: DetachError) -> Result<Self, Self::Error> {
         match value {
             DetachError::IllegalState => Ok(Self::IllegalState),
-            DetachError::IllegalSessionState => Ok(Self::IllegalSessionState),
+            DetachError::SessionStopped(reason) => Ok(Self::SessionStopped(reason)),
             DetachError::RemoteDetachedWithError(error)
             | DetachError::RemoteClosedWithError(error) => {
                 // A closing detach is used for errors during attach anyway
@@ -333,7 +357,7 @@ impl TryFrom<DetachError> for ReceiverAttachError {
     fn try_from(value: DetachError) -> Result<Self, Self::Error> {
         match value {
             DetachError::IllegalState => Ok(Self::IllegalState),
-            DetachError::IllegalSessionState => Ok(Self::IllegalSessionState),
+            DetachError::SessionStopped(reason) => Ok(Self::SessionStopped(reason)),
             DetachError::RemoteDetachedWithError(error)
             | DetachError::RemoteClosedWithError(error) => {
                 // A closing detach is used for errors during attach anyway
@@ -350,7 +374,7 @@ impl<'a> TryFrom<&'a SenderAttachError> for definitions::Error {
 
     fn try_from(value: &'a SenderAttachError) -> Result<Self, Self::Error> {
         let condition: ErrorCondition = match value {
-            SenderAttachError::IllegalSessionState => AmqpError::IllegalState.into(),
+            SenderAttachError::SessionStopped(_) => AmqpError::IllegalState.into(),
             SenderAttachError::DuplicatedLinkName => SessionError::HandleInUse.into(),
             SenderAttachError::IllegalState => AmqpError::IllegalState.into(),
             SenderAttachError::NonAttachFrameReceived => AmqpError::NotAllowed.into(),
@@ -376,33 +400,6 @@ impl<'a> TryFrom<&'a SenderAttachError> for definitions::Error {
     }
 }
 
-/// Errors with sending attach
-pub(crate) enum SendAttachErrorKind {
-    /// Illegal link state
-    IllegalState,
-
-    /// Illegal session state
-    IllegalSessionState,
-}
-
-impl From<SendAttachErrorKind> for SenderAttachError {
-    fn from(value: SendAttachErrorKind) -> Self {
-        match value {
-            SendAttachErrorKind::IllegalState => Self::IllegalState,
-            SendAttachErrorKind::IllegalSessionState => Self::IllegalSessionState,
-        }
-    }
-}
-
-impl From<SendAttachErrorKind> for ReceiverAttachError {
-    fn from(value: SendAttachErrorKind) -> Self {
-        match value {
-            SendAttachErrorKind::IllegalState => Self::IllegalState,
-            SendAttachErrorKind::IllegalSessionState => Self::IllegalSessionState,
-        }
-    }
-}
-
 /// Errors associated with link state
 #[derive(Debug, thiserror::Error)]
 pub enum LinkStateError {
@@ -410,9 +407,9 @@ pub enum LinkStateError {
     #[error("Illegal local state")]
     IllegalState,
 
-    /// Session has dropped
-    #[error("Session has dropped")]
-    IllegalSessionState,
+    /// The session (or its connection) stopped before the link was detached or closed
+    #[error("The session stopped before the link was detached or closed: {:?}", .0)]
+    SessionStopped(SessionStopReason),
 
     /// Remote peer detached
     #[error("Remote detached")]
@@ -440,12 +437,11 @@ impl From<DetachError> for LinkStateError {
     fn from(value: DetachError) -> Self {
         match value {
             DetachError::IllegalState => Self::IllegalState,
-            DetachError::IllegalSessionState => Self::IllegalSessionState,
+            DetachError::SessionStopped(reason) => Self::SessionStopped(reason),
             DetachError::RemoteDetachedWithError(error) => Self::RemoteDetachedWithError(error),
             DetachError::ClosedByRemote => Self::RemoteClosed,
             DetachError::DetachedByRemote => Self::RemoteDetached,
             DetachError::RemoteClosedWithError(error) => Self::RemoteClosedWithError(error),
-            // DetachError::NonDetachFrameReceived => Self::ExpectImmediateDetach,
         }
     }
 }
@@ -571,16 +567,18 @@ pub enum IllegalLinkStateError {
     #[error("Illegal local state")]
     IllegalState,
 
-    /// Session has dropped
-    #[error("Session has dropped")]
-    IllegalSessionState,
+    /// The session (or its connection) stopped before the link was detached or closed
+    #[error("The session stopped before the link was detached or closed: {:?}", .0)]
+    SessionStopped(SessionStopReason),
 }
+
+pub(crate) type SendAttachErrorKind = IllegalLinkStateError;
 
 impl From<IllegalLinkStateError> for LinkStateError {
     fn from(value: IllegalLinkStateError) -> Self {
         match value {
             IllegalLinkStateError::IllegalState => LinkStateError::IllegalState,
-            IllegalLinkStateError::IllegalSessionState => LinkStateError::IllegalSessionState,
+            IllegalLinkStateError::SessionStopped(reason) => LinkStateError::SessionStopped(reason),
         }
     }
 }
@@ -589,7 +587,9 @@ impl From<IllegalLinkStateError> for ReceiverAttachError {
     fn from(value: IllegalLinkStateError) -> Self {
         match value {
             IllegalLinkStateError::IllegalState => ReceiverAttachError::IllegalState,
-            IllegalLinkStateError::IllegalSessionState => ReceiverAttachError::IllegalSessionState,
+            IllegalLinkStateError::SessionStopped(reason) => {
+                ReceiverAttachError::SessionStopped(reason)
+            }
         }
     }
 }
@@ -598,7 +598,9 @@ impl From<IllegalLinkStateError> for SenderAttachError {
     fn from(value: IllegalLinkStateError) -> Self {
         match value {
             IllegalLinkStateError::IllegalState => SenderAttachError::IllegalState,
-            IllegalLinkStateError::IllegalSessionState => SenderAttachError::IllegalSessionState,
+            IllegalLinkStateError::SessionStopped(reason) => {
+                SenderAttachError::SessionStopped(reason)
+            }
         }
     }
 }
@@ -607,8 +609,8 @@ impl From<IllegalLinkStateError> for SendError {
     fn from(value: IllegalLinkStateError) -> Self {
         match value {
             IllegalLinkStateError::IllegalState => LinkStateError::IllegalState.into(),
-            IllegalLinkStateError::IllegalSessionState => {
-                LinkStateError::IllegalSessionState.into()
+            IllegalLinkStateError::SessionStopped(reason) => {
+                LinkStateError::SessionStopped(reason).into()
             }
         }
     }
@@ -618,7 +620,7 @@ impl From<IllegalLinkStateError> for DetachError {
     fn from(value: IllegalLinkStateError) -> Self {
         match value {
             IllegalLinkStateError::IllegalState => Self::IllegalState,
-            IllegalLinkStateError::IllegalSessionState => Self::IllegalSessionState,
+            IllegalLinkStateError::SessionStopped(reason) => Self::SessionStopped(reason),
         }
     }
 }
@@ -631,38 +633,6 @@ where
         Self::LinkStateError(value.into())
     }
 }
-
-// /// Error trying to unwrap the body section
-// #[derive(Debug, thiserror::Error)]
-// pub enum BodyError {
-//     /// Attempting to unwrap the body as either sequence or data but body is value
-//     #[error("Body is Value")]
-//     IsValue,
-
-//     /// Attempting to unwrap the body as either sequence or value but body is Data
-//     #[error("Body is Data")]
-//     IsData,
-
-//     /// Attempting to unwrap the body as either value or data but body is sequence
-//     #[error("Body is Sequence")]
-//     IsSequence,
-
-//     /// Attempting to unwrap the body as either sequence or value but body is DataBatch
-//     ///
-//     /// Added since `"0.6.0"`
-//     #[error("Body is DataBatch")]
-//     IsDataBatch,
-
-//     /// Attempting to unwrap the body as either sequence or value but body is SequenceBatch
-//     ///
-//     /// Added since `"0.6.0"`
-//     #[error("Body is SequenceBatch")]
-//     IsSequenceBatch,
-
-//     /// Attempting to unwrap the body but no body section is found
-//     #[error("Body is nothing")]
-//     IsEmpty,
-// }
 
 /// Errors associated with resuming a sender link endpoint
 #[derive(Debug, thiserror::Error)]

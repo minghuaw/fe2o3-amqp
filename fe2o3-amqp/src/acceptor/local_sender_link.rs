@@ -127,6 +127,7 @@ where
             remote_attach.name.clone(),
             link_handle,
             input_handle,
+            session.session_stop_reason(),
         )
         .await?;
 
@@ -161,6 +162,7 @@ where
             desired_capabilities: shared.desired_capabilities.clone(),
             flow_state: flow_state_consumer,
             unsettled,
+            session_stop_reason: session.session_stop_reason().clone(),
             verify_incoming_source: self.verify_incoming_source,
             verify_incoming_target: self.verify_incoming_target,
         };

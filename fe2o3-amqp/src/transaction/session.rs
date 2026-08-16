@@ -1,6 +1,8 @@
 //! Implements session that can handle transaction
 
 
+use std::sync::{Arc, OnceLock};
+
 use fe2o3_amqp_types::{
     definitions::{self},
     messaging::{Accepted, DeliveryState},
@@ -13,7 +15,7 @@ use uuid::Uuid;
 use crate::{
     control::SessionControl,
     endpoint::{self, IncomingChannel, InputHandle, LinkFlow, OutgoingChannel, OutputHandle},
-    link::{target_archetype::VariantOfTargetArchetype, LinkRelay},
+    link::{target_archetype::VariantOfTargetArchetype, LinkRelay, SessionStopReason},
     session::{
         self,
         frame::{SessionFrame, SessionOutgoingItem},
@@ -102,11 +104,12 @@ where
         let acceptor = self.txn_manager.control_link_acceptor.clone();
         let control = self.control.clone();
         let outgoing = self.txn_manager.control_link_outgoing.clone();
+        let session_stop_reason = self.session.session_stop_reason().clone();
 
         tokio::spawn(async move {
             // Error accepting new control link is handled by acceptor
             if let Ok(coordinator) = acceptor
-                .accept_incoming_attach(remote_attach, control, outgoing)
+                .accept_incoming_attach(remote_attach, control, outgoing, session_stop_reason)
                 .await
             {
                 coordinator.event_loop().await
@@ -222,6 +225,14 @@ where
 
     fn local_state(&self) -> &Self::State {
         self.session.local_state()
+    }
+
+    fn set_session_stop_reason(&mut self, reason: SessionStopReason) {
+        self.session.set_session_stop_reason(reason)
+    }
+
+    fn session_stop_reason(&self) -> &Arc<OnceLock<SessionStopReason>> {
+        self.session.session_stop_reason()
     }
 
     fn outgoing_channel(&self) -> OutgoingChannel {

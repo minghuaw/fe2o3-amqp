@@ -1,6 +1,7 @@
 //! Control link coordinator
 
 use std::collections::HashSet;
+use std::sync::{Arc, OnceLock};
 
 use fe2o3_amqp_types::{
     definitions::{self, AmqpError, LinkError},
@@ -20,6 +21,7 @@ use crate::{
         receiver::ReceiverInner,
         shared_inner::{LinkEndpointInner, LinkEndpointInnerDetach},
         IllegalLinkStateError, LinkFrame, ReceiverAttachError, ReceiverLink, RecvError,
+        SessionStopReason,
     },
     util::{Initialized, Running},
     Delivery,
@@ -71,9 +73,16 @@ impl ControlLinkAcceptor {
         remote_attach: Attach,
         control: mpsc::Sender<SessionControl>,
         outgoing: mpsc::Sender<LinkFrame>,
+        session_stop_reason: Arc<OnceLock<SessionStopReason>>,
     ) -> Result<TxnCoordinator, ReceiverAttachError> {
         self.inner
-            .accept_incoming_attach_inner(&self.shared, remote_attach, control, outgoing)
+            .accept_incoming_attach_inner(
+                &self.shared,
+                remote_attach,
+                control,
+                outgoing,
+                session_stop_reason,
+            )
             .await
             .map(|inner| TxnCoordinator {
                 inner,
@@ -178,7 +187,7 @@ impl TxnCoordinator {
                     let _ = self.inner.close_with_error(Some(error)).await;
                     Running::Stop
                 }
-                crate::link::LinkStateError::IllegalSessionState => {
+                crate::link::LinkStateError::SessionStopped(_) => {
                     #[cfg(feature = "tracing")]
                     tracing::error!(?error);
                     #[cfg(feature = "log")]
@@ -288,7 +297,7 @@ impl TxnCoordinator {
                     let _ = self.inner.close_with_error(Some(error)).await;
                     Running::Stop
                 }
-                IllegalLinkStateError::IllegalSessionState => {
+                IllegalLinkStateError::SessionStopped(_) => {
                     // Session must have already dropped
                     Running::Stop
                 }

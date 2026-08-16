@@ -2,6 +2,7 @@
 
 
 use std::collections::HashMap;
+use std::sync::{Arc, OnceLock};
 
 use fe2o3_amqp_types::{
     definitions::{self, ConnectionError},
@@ -12,12 +13,12 @@ use tokio::sync::{mpsc, oneshot};
 use tokio::task::JoinHandle;
 
 use crate::{
-    connection::AllocSessionError,
+    connection::{AllocSessionError, ConnectionStopReason},
     control::{ConnectionControl, SessionControl},
     endpoint::{
         self, IncomingChannel, InputHandle, LinkFlow, OutgoingChannel, OutputHandle, Session,
     },
-    link::{LinkFrame, LinkRelay},
+    link::{LinkFrame, LinkRelay, SessionStopReason},
     session::{
         self,
         engine::SessionEngine,
@@ -64,8 +65,26 @@ pub(crate) async fn allocate_incoming_link(
     link_name: String,
     link_relay: LinkRelay<()>,
     input_handle: InputHandle,
+    session_stop_reason: &Arc<OnceLock<SessionStopReason>>,
 ) -> Result<OutputHandle, AllocLinkError> {
     let (responder, resp_rx) = oneshot::channel();
+
+    let reason = || match session_stop_reason.get() {
+        Some(reason) => reason.clone(),
+        None => {
+            // The session engine should always record a stop reason before
+            // its channels close; an unset cell here is a defensive fallback.
+            #[cfg(feature = "tracing")]
+            tracing::warn!(
+                "allocate_incoming_link: session stop reason not recorded; reporting SessionStopped(Ended)"
+            );
+            #[cfg(feature = "log")]
+            log::warn!(
+                "allocate_incoming_link: session stop reason not recorded; reporting SessionStopped(Ended)"
+            );
+            SessionStopReason::Ended
+        }
+    };
 
     control
         .send(SessionControl::AllocateIncomingLink {
@@ -75,17 +94,10 @@ pub(crate) async fn allocate_incoming_link(
             responder,
         })
         .await
-        // The `SendError` could only happen when the receiving half is
-        // dropped, meaning the `SessionEngine::event_loop` has stopped.
-        // This would also mean the `Session` is Unmapped, and thus it
-        // may be treated as illegal state
-        .map_err(|_| AllocLinkError::IllegalSessionState)?;
+        .map_err(|_| AllocLinkError::SessionStopped(reason()))?;
     resp_rx
         .await
-        // The error could only occur when the sending half is dropped,
-        // indicating the `SessionEngine::even_loop` has stopped or
-        // unmapped. Thus it could be considered as illegal state
-        .map_err(|_| AllocLinkError::IllegalSessionState)?
+        .map_err(|_| AllocLinkError::SessionStopped(reason()))?
 }
 
 /// An acceptor for incoming session
@@ -160,6 +172,7 @@ impl SessionAcceptor {
             session_control_rx: mpsc::Receiver<SessionControl>,
             incoming: mpsc::Receiver<SessionFrame>,
             outgoing_link_frames: mpsc::Receiver<LinkFrame>,
+            conn_stop: Arc<OnceLock<ConnectionStopReason>>,
         ) -> Result<(JoinHandle<()>, oneshot::Receiver<Result<(), Error>>), BeginError> {
             let engine = SessionEngine::begin_listener_session(
                 connection.control.clone(),
@@ -168,6 +181,7 @@ impl SessionAcceptor {
                 incoming,
                 connection.outgoing.clone(),
                 outgoing_link_frames,
+                conn_stop,
             )
             .await?;
             Ok(engine.spawn())
@@ -185,6 +199,7 @@ impl SessionAcceptor {
             session_control_rx: mpsc::Receiver<SessionControl>,
             incoming: mpsc::Receiver<SessionFrame>,
             outgoing_link_frames: mpsc::Receiver<LinkFrame>,
+            conn_stop: Arc<OnceLock<ConnectionStopReason>>,
         ) -> Result<(JoinHandle<()>, oneshot::Receiver<Result<(), Error>>), BeginError> {
             match self.0.control_link_acceptor.clone() {
                 Some(control_link_acceptor) => {
@@ -203,6 +218,7 @@ impl SessionAcceptor {
                         incoming,
                         connection.outgoing.clone(),
                         outgoing_link_frames,
+                        conn_stop,
                     )
                     .await?;
                     Ok(engine.spawn())
@@ -215,6 +231,7 @@ impl SessionAcceptor {
                         incoming,
                         connection.outgoing.clone(),
                         outgoing_link_frames,
+                        conn_stop,
                     )
                     .await?;
                     Ok(engine.spawn())
@@ -271,7 +288,17 @@ impl SessionAcceptor {
             }
         };
 
-        let mut session = self.0.clone().into_session(outgoing_channel, local_state);
+        // The stop reason cells are created here so that the session object, the
+        // engine, and the handle share them: the engine publishes the reason on
+        // the session at exit, and the handle (and the links attached through
+        // it) can read it.
+        let conn_stop = connection.connection_stop_reason.clone();
+        let session_stop_reason = Arc::new(OnceLock::new());
+
+        let mut session = self
+            .0
+            .clone()
+            .into_session(outgoing_channel, local_state, session_stop_reason.clone());
         session.on_incoming_begin(
             IncomingChannel(incoming_session.channel),
             incoming_session.begin,
@@ -292,6 +319,7 @@ impl SessionAcceptor {
                 session_control_rx,
                 incoming_rx,
                 outgoing_rx,
+                conn_stop,
             )
             .await?;
 
@@ -301,6 +329,7 @@ impl SessionAcceptor {
             engine_handle,
             outcome,
             outgoing: outgoing_tx,
+            session_stop_reason,
             link_listener: link_listener_rx,
         };
         Ok(handle)
@@ -326,6 +355,7 @@ where
     S: ListenerSessionEndpoint + endpoint::SessionEndpoint,
     BeginError: From<S::BeginError>,
 {
+    #[allow(clippy::too_many_arguments)]
     pub async fn begin_listener_session(
         conn_control: mpsc::Sender<ConnectionControl>,
         session: S,
@@ -333,6 +363,7 @@ where
         incoming: mpsc::Receiver<SessionIncomingItem>,
         outgoing: mpsc::Sender<SessionFrame>,
         outgoing_link_frames: mpsc::Receiver<LinkFrame>,
+        conn_stop: Arc<OnceLock<ConnectionStopReason>>,
     ) -> Result<Self, BeginError> {
         #[cfg(feature = "tracing")]
         tracing::trace!("Instantiating session engine");
@@ -345,6 +376,7 @@ where
             incoming,
             outgoing,
             outgoing_link_frames,
+            conn_stop,
         };
 
         // send a begin
@@ -375,6 +407,14 @@ impl endpoint::Session for ListenerSession {
 
     fn local_state(&self) -> &Self::State {
         self.session.local_state()
+    }
+
+    fn set_session_stop_reason(&mut self, reason: SessionStopReason) {
+        self.session.set_session_stop_reason(reason)
+    }
+
+    fn session_stop_reason(&self) -> &Arc<OnceLock<SessionStopReason>> {
+        self.session.session_stop_reason()
     }
 
     fn outgoing_channel(&self) -> OutgoingChannel {

@@ -2,6 +2,7 @@
 //! transferring frames/messages over channels
 
 use std::io;
+use std::sync::{Arc, OnceLock};
 use std::time::Duration;
 
 use fe2o3_amqp_types::definitions::{self, AmqpError};
@@ -20,6 +21,7 @@ use crate::transport::Transport;
 use crate::util::Running;
 use crate::{endpoint, transport, SendBound};
 
+use super::ConnectionStopReason;
 use super::{heartbeat::HeartBeat, ConnectionState};
 use super::{AllocSessionError, ConnectionInnerError, ConnectionStateError, Error, OpenError};
 
@@ -30,6 +32,7 @@ pub(crate) struct ConnectionEngine<Io, C> {
     control: Receiver<ConnectionControl>,
     outgoing_session_frames: Receiver<SessionFrame>,
     heartbeat: HeartBeat,
+    pub(crate) connection_stop_reason: Arc<OnceLock<ConnectionStopReason>>,
 }
 
 cfg_not_wasm32! {
@@ -222,6 +225,7 @@ where
             control,
             outgoing_session_frames,
             heartbeat: HeartBeat::never(),
+            connection_stop_reason: Arc::new(OnceLock::new()),
         };
 
         match engine.open_inner().await {
@@ -636,6 +640,15 @@ where
         log::debug!("Stopped");
 
         let result = outcome.and(close).map_err(Into::into);
+        // Publish the stop reason before the session relays are dropped, so every
+        // session that wakes on the channel closure sees it.
+        let connection_stop_reason = match &result {
+            Err(Error::RemoteClosedWithError(error)) => {
+                ConnectionStopReason::ClosedWithError(error.clone())
+            }
+            _ => ConnectionStopReason::Closed,
+        };
+        let _ = self.connection_stop_reason.set(connection_stop_reason);
         let _ = tx.send(result);
     }
 }

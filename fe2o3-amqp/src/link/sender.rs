@@ -1,5 +1,7 @@
 //! Implementation of AMQP1.0 sender
 
+use std::sync::{Arc, OnceLock};
+
 use bytes::{Bytes, BytesMut};
 use tokio::sync::{mpsc, oneshot};
 
@@ -36,7 +38,7 @@ use super::{
     },
     ArcSenderUnsettledMap, DetachThenResumeSenderError, LinkFrame, LinkRelay, LinkStateError,
     SendError, SenderAttachError, SenderAttachExchange, SenderFlowState, SenderLink,
-    SenderResumeError, SenderResumeErrorKind,
+    SenderResumeError, SenderResumeErrorKind, SessionStopReason,
 };
 
 #[cfg(docsrs)]
@@ -393,7 +395,9 @@ impl Sender {
             .inner
             .send_with_state::<T, SendError>(sendable.into(), None, false)
             .await
-            .map(DeliveryFut::from)?;
+            .map(|settlement| {
+                DeliveryFut::new(settlement, self.inner.link.session_stop_reason.clone())
+            })?;
         fut.await
     }
 
@@ -409,7 +413,9 @@ impl Sender {
             .inner
             .send_ref_with_state::<T, SendError>(sendable, None, false)
             .await
-            .map(DeliveryFut::from)?;
+            .map(|settlement| {
+                DeliveryFut::new(settlement, self.inner.link.session_stop_reason.clone())
+            })?;
         fut.await
     }
 
@@ -444,7 +450,9 @@ impl Sender {
         self.inner
             .send_with_state(sendable.into(), None, true)
             .await
-            .map(DeliveryFut::from)
+            .map(|settlement| {
+                DeliveryFut::new(settlement, self.inner.link.session_stop_reason.clone())
+            })
     }
 
     /// Like [`send_batchable()`](#method.send_batchable) but this only takes a reference.
@@ -458,7 +466,9 @@ impl Sender {
         self.inner
             .send_ref_with_state(sendable, None, true)
             .await
-            .map(DeliveryFut::from)
+            .map(|settlement| {
+                DeliveryFut::new(settlement, self.inner.link.session_stop_reason.clone())
+            })
     }
 
     /// Returns when the remote peer detach/close the link
@@ -566,6 +576,10 @@ where
 
     fn session_control(&self) -> &mpsc::Sender<SessionControl> {
         &self.session
+    }
+
+    fn session_stop_reason(&self) -> &Arc<OnceLock<SessionStopReason>> {
+        self.link().session_stop_reason()
     }
 
     async fn exchange_attach(
