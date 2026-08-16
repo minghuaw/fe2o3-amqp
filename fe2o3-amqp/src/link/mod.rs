@@ -1,6 +1,6 @@
 //! Implements AMQP1.0 Link
 
-use std::{marker::PhantomData, sync::Arc};
+use std::{marker::PhantomData, sync::Arc, sync::OnceLock};
 
 use bytes::{BufMut, BytesMut};
 use fe2o3_amqp_types::{
@@ -209,6 +209,9 @@ pub(crate) struct Link<R, T, F, M> {
     pub(crate) flow_state: F,
     pub(crate) unsettled: ArcUnsettledMap<M>,
 
+    /// Why the session (or its connection) stopped, shared from the session
+    pub(crate) session_stop_reason: Arc<OnceLock<SessionStopReason>>,
+
     pub(crate) verify_incoming_source: bool,
     pub(crate) verify_incoming_target: bool,
 }
@@ -355,7 +358,7 @@ where
         let attach = match unsettled_map_len {
             Some(0) | None => self.as_complete_attach(handle, is_reattaching),
             Some(_) => {
-                let max_frame_size = get_max_frame_size(session).await?; // FIXME: cancel safe?
+                let max_frame_size = get_max_frame_size(session, &self.session_stop_reason).await?; // FIXME: cancel safe?
                 self.as_maybe_incomplete_attach(max_frame_size, handle, is_reattaching)?
             }
         };
@@ -367,7 +370,10 @@ where
             | LinkState::Detached // May attempt to resume
             | LinkState::DetachSent => {
                 writer.send(frame).await // cancel safe
-                    .map_err(|_| SendAttachErrorKind::IllegalSessionState)?;
+                    .map_err(|_| match self.session_stop_reason.get() {
+                        Some(reason) => SendAttachErrorKind::SessionStopped(reason.clone()),
+                        None => SendAttachErrorKind::IllegalState, // defensive: no stop reason recorded; failure is link-local
+                    })?;
                 if incomplete_unsettled {
                     self.local_state = LinkState::IncompleteAttachSent
                 } else {
@@ -376,7 +382,10 @@ where
             }
             LinkState::AttachReceived => {
                 writer.send(frame).await // cancel safe
-                    .map_err(|_| SendAttachErrorKind::IllegalSessionState)?;
+                    .map_err(|_| match self.session_stop_reason.get() {
+                        Some(reason) => SendAttachErrorKind::SessionStopped(reason.clone()),
+                        None => SendAttachErrorKind::IllegalState, // defensive: no stop reason recorded; failure is link-local
+                    })?;
                 if incomplete_unsettled {
                     self.local_state = LinkState::IncompleteAttachExchanged
                 } else {
@@ -395,14 +404,21 @@ where
 /// This should cancel safe if oneshot channel is cancel safe
 pub(crate) async fn get_max_frame_size(
     control: &mpsc::Sender<SessionControl>,
+    session_stop_reason: &OnceLock<SessionStopReason>,
 ) -> Result<usize, SendAttachErrorKind> {
     let (tx, rx) = oneshot::channel();
     control
         .send(SessionControl::GetMaxFrameSize(tx))
         .await // cancel safe
-        .map_err(|_| SendAttachErrorKind::IllegalSessionState)?;
+        .map_err(|_| match session_stop_reason.get() {
+            Some(reason) => SendAttachErrorKind::SessionStopped(reason.clone()),
+            None => SendAttachErrorKind::IllegalState, // defensive: no stop reason recorded; failure is link-local
+        })?;
     rx.await // FIXME: is oneshot channel cancel safe?
-        .map_err(|_| SendAttachErrorKind::IllegalSessionState)
+        .map_err(|_| match session_stop_reason.get() {
+            Some(reason) => SendAttachErrorKind::SessionStopped(reason.clone()),
+            None => SendAttachErrorKind::IllegalState, // defensive: no stop reason recorded; failure is link-local
+        })
 }
 
 impl<R, T, F, M> endpoint::LinkDetach for Link<R, T, F, M>
@@ -510,7 +526,10 @@ where
                 let result = writer
                     .send(LinkFrame::Detach(detach))
                     .await // cancel safe
-                    .map_err(|_| DetachError::IllegalSessionState);
+                    .map_err(|_| match self.session_stop_reason.get() {
+                        Some(reason) => DetachError::SessionStopped(reason.clone()),
+                        None => DetachError::IllegalState, // defensive: no stop reason recorded; failure is link-local
+                    });
 
                 self.output_handle.take();
                 result

@@ -341,7 +341,7 @@ where
         .send_with_state::<T, PostError>(sendable, Some(state), batchable)
         .await?;
 
-    Ok(DeliveryFut::from(settlement))
+    Ok(DeliveryFut::new(settlement, sender.inner.link.session_stop_reason.clone()))
 }
 
 /// Send a ref of transactional posting with the given `batchable` flag.
@@ -370,7 +370,7 @@ where
         .send_ref_with_state::<T, PostError>(sendable, Some(state), batchable)
         .await?;
 
-    Ok(DeliveryFut::from(settlement))
+    Ok(DeliveryFut::new(settlement, sender.inner.link.session_stop_reason.clone()))
 }
 
 /// Transactional acquisition (AMQP 1.0 §4.4.3)

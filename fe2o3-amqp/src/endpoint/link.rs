@@ -1,5 +1,7 @@
 //! Defines traits for link implementations
 
+use std::sync::{Arc, OnceLock};
+
 use fe2o3_amqp_types::{
     definitions::{DeliveryNumber, DeliveryTag, Error, Fields, MessageFormat, ReceiverSettleMode},
     messaging::{DeliveryState, FromBody},
@@ -13,7 +15,7 @@ use crate::{
     link::{
         delivery::{Delivery, DeliveryInfo},
         state::LinkState,
-        LinkFrame,
+        LinkFrame, SessionStopReason,
     },
     util::{AsByteIterator, IntoReader},
     Payload,
@@ -63,6 +65,9 @@ pub(crate) trait LinkExt: Link {
     fn name(&self) -> &str;
 
     fn output_handle_mut(&mut self) -> &mut Option<OutputHandle>;
+
+    /// The shared cell holding why the session (or its connection) stopped
+    fn session_stop_reason(&self) -> &Arc<OnceLock<SessionStopReason>>;
 
     fn flow_state(&self) -> &Self::FlowState;
 

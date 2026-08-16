@@ -82,7 +82,10 @@ pub(crate) async fn declare_on_link(
     send_on_control_link(inner, sendable)
         .await?
         .await
-        .map_err(|_| LinkStateError::IllegalSessionState)?
+        .map_err(|_| match inner.link.session_stop_reason.get() {
+            Some(reason) => LinkStateError::SessionStopped(reason.clone()),
+            None => LinkStateError::IllegalState, // defensive: no stop reason recorded; failure is link-local
+        })?
         .ok_or(ControllerSendError::NonTerminalDeliveryState)?
         .declared_or_else(|state| {
             if let DeliveryState::Rejected(rejected) = state {
@@ -110,7 +113,10 @@ pub(crate) async fn discharge_on_link(
     send_on_control_link(inner, sendable)
         .await?
         .await
-        .map_err(|_| LinkStateError::IllegalSessionState)?
+        .map_err(|_| match inner.link.session_stop_reason.get() {
+            Some(reason) => LinkStateError::SessionStopped(reason.clone()),
+            None => LinkStateError::IllegalState, // defensive: no stop reason recorded; failure is link-local
+        })?
         .ok_or(ControllerSendError::NonTerminalDeliveryState)?
         .accepted_or_else(|state| {
             if let DeliveryState::Rejected(rejected) = state {

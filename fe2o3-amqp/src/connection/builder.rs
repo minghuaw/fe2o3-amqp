@@ -759,7 +759,6 @@ impl<Tls> Builder<'_, mode::ConnectorWithId, Tls> {
         let connection = Connection::new(local_state, local_open);
 
         let engine = ConnectionEngine::open(transport, connection, control_rx, outgoing_rx).await?;
-        // Self::spawn_engine(engine, control_tx, outgoing_tx)
         (spawn_engine_fn)(engine, control_tx, outgoing_tx)
     }
 }
@@ -1339,6 +1338,7 @@ cfg_not_wasm32! {
     where
         Io: AsyncRead + AsyncWrite + std::fmt::Debug + Send + Unpin + 'static,
     {
+        let connection_stop_reason = engine.connection_stop_reason().clone();
         let (handle, outcome) = engine.spawn();
 
         let connection_handle = ConnectionHandle {
@@ -1347,6 +1347,7 @@ cfg_not_wasm32! {
             handle,
             outcome,
             outgoing: outgoing_tx, // session_control: session_control_tx
+            connection_stop_reason,
             session_listener: (),
         };
 
@@ -1364,6 +1365,7 @@ cfg_wasm32! {
     where
         Io: AsyncRead + AsyncWrite + std::fmt::Debug + Unpin + 'static,
     {
+        let connection_stop_reason = engine.connection_stop_reason().clone();
         let (handle, outcome) = engine.spawn_on_local_set(local_set);
 
         let connection_handle = ConnectionHandle {
@@ -1372,6 +1374,7 @@ cfg_wasm32! {
             handle,
             outcome,
             outgoing: outgoing_tx, // session_control: session_control_tx
+            connection_stop_reason,
             session_listener: (),
         };
 
@@ -1386,6 +1389,7 @@ cfg_wasm32! {
     where
         Io: AsyncRead + AsyncWrite + std::fmt::Debug + Unpin + 'static,
     {
+        let connection_stop_reason = engine.connection_stop_reason().clone();
         let (handle, outcome) = engine.spawn_local();
 
         let connection_handle = ConnectionHandle {
@@ -1394,6 +1398,7 @@ cfg_wasm32! {
             handle,
             outcome,
             outgoing: outgoing_tx, // session_control: session_control_tx
+            connection_stop_reason,
             session_listener: (),
         };
 

@@ -1,13 +1,13 @@
 //! Implements errors for the acceptors
 
-use crate::link::{ReceiverAttachError, SenderAttachError};
+use crate::link::{ReceiverAttachError, SenderAttachError, SessionStopReason};
 
 /// Error accepting incoming attach
 #[derive(Debug, thiserror::Error)]
 pub enum AcceptorAttachError {
-    /// Session stopped
-    #[error("Session has stopped")]
-    IllegalSessionState,
+    /// The session (or its connection) stopped
+    #[error("The session stopped before the link was attached: {:?}", .0)]
+    SessionStopped(SessionStopReason),
 
     /// Local sender is unable to accept incoming attach from remote receiver
     #[error("Local sender is unable to accept incoming attach from remote receiver")]
@@ -20,20 +20,12 @@ pub enum AcceptorAttachError {
 
 impl From<SenderAttachError> for AcceptorAttachError {
     fn from(value: SenderAttachError) -> Self {
-        if let SenderAttachError::IllegalSessionState = value {
-            Self::IllegalSessionState
-        } else {
-            Self::LocalSender(value)
-        }
+        Self::LocalSender(value)
     }
 }
 
 impl From<ReceiverAttachError> for AcceptorAttachError {
     fn from(value: ReceiverAttachError) -> Self {
-        if let ReceiverAttachError::IllegalSessionState = value {
-            Self::IllegalSessionState
-        } else {
-            Self::LocalReceiver(value)
-        }
+        Self::LocalReceiver(value)
     }
 }

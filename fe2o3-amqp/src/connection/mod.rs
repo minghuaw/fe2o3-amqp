@@ -1,6 +1,10 @@
 //! Implements AMQP1.0 Connection
 
-use std::{cmp::min, collections::HashMap, sync::Arc};
+use std::{
+    cmp::min,
+    collections::HashMap,
+    sync::{Arc, OnceLock},
+};
 
 use fe2o3_amqp_types::{
     definitions::{self},
@@ -26,8 +30,11 @@ use crate::{
     control::ConnectionControl,
     endpoint::{self, IncomingChannel, OutgoingChannel},
     frames::amqp::{Frame, FrameBody},
-    session::frame::{SessionFrame, SessionFrameBody, SessionIncomingItem},
     session::Session,
+    session::{
+        error::connection_stop_reason_or_closed,
+        frame::{SessionFrame, SessionFrameBody, SessionIncomingItem},
+    },
     SendBound,
 };
 
@@ -53,6 +60,23 @@ pub const DEFAULT_CHANNEL_MAX: u16 = 255;
 
 type SessionRelay = Arc<Sender<SessionIncomingItem>>;
 
+/// Why the connection stopped, shared with the sessions so they can derive
+/// the reason their links observe.
+///
+/// The unprefixed variants describe the local side's action; the `Remote*`
+/// variants describe a remote-initiated close.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ConnectionStopReason {
+    /// The connection closed cleanly (locally)
+    Closed,
+    /// We closed the connection with this error
+    ClosedWithError(definitions::Error),
+    /// The remote peer closed the connection cleanly
+    RemoteClosed,
+    /// The remote peer closed the connection with this error
+    RemoteClosedWithError(definitions::Error),
+}
+
 /// A handle to the [`Connection`] event loop.
 ///
 /// Dropping the handle will also stop the [`Connection`] event loop.
@@ -70,6 +94,8 @@ pub struct ConnectionHandle<R> {
 
     // outgoing channel for session
     pub(crate) outgoing: Sender<SessionFrame>,
+    /// Why the connection stopped, shared with the sessions
+    pub(crate) connection_stop_reason: Arc<OnceLock<ConnectionStopReason>>,
     pub(crate) session_listener: R,
 }
 
@@ -138,6 +164,10 @@ impl<R> ConnectionHandle<R> {
 
     cfg_not_wasm32! {
         /// Close the connection
+        ///
+        /// Closing the connection implicitly ends its sessions (the AMQP model); there is
+        /// no need to end the sessions first. If the peer closed the connection with an
+        /// error, the error is reported through this method.
         ///
         /// An `Error::IllegalState` will be returned if this is called after executing any of
         /// [`close`](#method.close), [`close_with_error`](#method.close_with_error) or
@@ -209,8 +239,16 @@ impl<R> ConnectionHandle<R> {
         self.control
             .send(ConnectionControl::AllocateSession { tx, responder })
             .await
-            .map_err(|_| AllocSessionError::IllegalState)?; // Connection must have stopped
-        resp_rx.await.map_err(|_| AllocSessionError::IllegalState)?
+            .map_err(|_| {
+                AllocSessionError::ConnectionStopped(connection_stop_reason_or_closed(
+                    &self.connection_stop_reason,
+                ))
+            })?; // Connection must have stopped
+        resp_rx.await.map_err(|_| {
+            AllocSessionError::ConnectionStopped(connection_stop_reason_or_closed(
+                &self.connection_stop_reason,
+            ))
+        })?
     }
 }
 
@@ -417,6 +455,9 @@ pub struct Connection {
 
     // mutually agreed channel max
     pub(crate) agreed_channel_max: u16,
+
+    /// Why this connection stopped, shared with the sessions and the handle
+    pub(crate) connection_stop_reason: Arc<OnceLock<ConnectionStopReason>>,
 }
 
 /* ------------------------------- Public API ------------------------------- */
@@ -521,6 +562,7 @@ impl Connection {
 
             remote_open: None,
             agreed_channel_max,
+            connection_stop_reason: Arc::new(OnceLock::new()),
         }
     }
 }
@@ -541,18 +583,32 @@ impl endpoint::Connection for Connection {
         &self.local_open
     }
 
+    fn connection_stop_reason(&self) -> &Arc<OnceLock<ConnectionStopReason>> {
+        &self.connection_stop_reason
+    }
+
+    fn set_connection_stop_reason(&mut self, reason: ConnectionStopReason) {
+        let _ = self.connection_stop_reason.set(reason);
+    }
+
     fn allocate_session(
         &mut self,
         tx: Sender<SessionIncomingItem>,
     ) -> Result<OutgoingChannel, Self::AllocError> {
         match &self.local_state {
+            // The connection has not been opened yet
             ConnectionState::Start
             | ConnectionState::HeaderSent
             | ConnectionState::HeaderReceived
-            | ConnectionState::HeaderExchange
-            | ConnectionState::CloseSent
-            | ConnectionState::Discarding
-            | ConnectionState::End => return Err(AllocSessionError::IllegalState),
+            | ConnectionState::HeaderExchange => {
+                return Err(AllocSessionError::ConnectionNotOpened)
+            }
+            // The connection is closing or closed
+            ConnectionState::CloseSent | ConnectionState::Discarding | ConnectionState::End => {
+                return Err(AllocSessionError::ConnectionStopped(
+                    connection_stop_reason_or_closed(&self.connection_stop_reason),
+                ))
+            }
             // TODO: what about pipelined open?
             _ => {}
         };
@@ -805,5 +861,55 @@ impl Connection {
                 Ok(None)
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use fe2o3_amqp_types::performatives::Open;
+    use tokio::sync::mpsc;
+
+    use super::{
+        AllocSessionError, Connection, ConnectionState, ConnectionStopReason, SessionIncomingItem,
+    };
+    use crate::endpoint::Connection as _;
+
+    fn test_open() -> Open {
+        Open {
+            container_id: "test".to_string(),
+            hostname: None,
+            max_frame_size: Default::default(),
+            channel_max: Default::default(),
+            idle_time_out: None,
+            outgoing_locales: None,
+            incoming_locales: None,
+            offered_capabilities: None,
+            desired_capabilities: None,
+            properties: None,
+        }
+    }
+
+    /// Session allocation must distinguish a connection that has not been
+    /// opened yet from a connection that is closing or closed.
+    #[test]
+    fn allocate_session_distinguishes_not_opened_from_stopped() {
+        // Not opened yet
+        let mut connection = Connection::new(ConnectionState::Start, test_open());
+        let (tx, _rx) = mpsc::channel::<SessionIncomingItem>(8);
+        assert!(matches!(
+            connection.allocate_session(tx),
+            Err(AllocSessionError::ConnectionNotOpened)
+        ));
+
+        // Closing/closed (no stop reason recorded yet, so the defensive
+        // `Closed` fallback is reported)
+        let mut connection = Connection::new(ConnectionState::End, test_open());
+        let (tx, _rx) = mpsc::channel::<SessionIncomingItem>(8);
+        assert!(matches!(
+            connection.allocate_session(tx),
+            Err(AllocSessionError::ConnectionStopped(
+                ConnectionStopReason::Closed
+            ))
+        ));
     }
 }

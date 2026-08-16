@@ -2,6 +2,7 @@
 
 
 use std::collections::HashMap;
+use std::sync::{Arc, OnceLock};
 
 use fe2o3_amqp_types::{
     definitions::{self, ConnectionError},
@@ -12,17 +13,20 @@ use tokio::sync::{mpsc, oneshot};
 use tokio::task::JoinHandle;
 
 use crate::{
-    connection::AllocSessionError,
+    connection::{AllocSessionError, ConnectionStopReason},
     control::{ConnectionControl, SessionControl},
     endpoint::{
         self, IncomingChannel, InputHandle, LinkFlow, OutgoingChannel, OutputHandle, Session,
     },
-    link::{LinkFrame, LinkRelay},
+    link::{LinkFrame, LinkRelay, SessionStopReason},
     session::{
         self,
         engine::SessionEngine,
         frame::{SessionFrame, SessionIncomingItem, SessionOutgoingItem},
-        error::{AllocLinkError, BeginError, Error, SessionInnerError}, SessionHandle, 
+        error::{
+            connection_stop_reason_or_closed, AllocLinkError, BeginError, Error, SessionInnerError,
+        },
+        SessionHandle,
         DEFAULT_SESSION_CONTROL_BUFFER_SIZE,
     },
     util::Initialized,
@@ -64,8 +68,26 @@ pub(crate) async fn allocate_incoming_link(
     link_name: String,
     link_relay: LinkRelay<()>,
     input_handle: InputHandle,
+    session_stop_reason: &Arc<OnceLock<SessionStopReason>>,
 ) -> Result<OutputHandle, AllocLinkError> {
     let (responder, resp_rx) = oneshot::channel();
+
+    let reason = || match session_stop_reason.get() {
+        Some(reason) => reason.clone(),
+        None => {
+            // The session engine should always record a stop reason before
+            // its channels close; an unset cell here is a defensive fallback.
+            #[cfg(feature = "tracing")]
+            tracing::warn!(
+                "allocate_incoming_link: session stop reason not recorded; reporting SessionStopped(Ended)"
+            );
+            #[cfg(feature = "log")]
+            log::warn!(
+                "allocate_incoming_link: session stop reason not recorded; reporting SessionStopped(Ended)"
+            );
+            SessionStopReason::Ended
+        }
+    };
 
     control
         .send(SessionControl::AllocateIncomingLink {
@@ -75,17 +97,10 @@ pub(crate) async fn allocate_incoming_link(
             responder,
         })
         .await
-        // The `SendError` could only happen when the receiving half is
-        // dropped, meaning the `SessionEngine::event_loop` has stopped.
-        // This would also mean the `Session` is Unmapped, and thus it
-        // may be treated as illegal state
-        .map_err(|_| AllocLinkError::IllegalSessionState)?;
+        .map_err(|_| AllocLinkError::SessionStopped(reason()))?;
     resp_rx
         .await
-        // The error could only occur when the sending half is dropped,
-        // indicating the `SessionEngine::even_loop` has stopped or
-        // unmapped. Thus it could be considered as illegal state
-        .map_err(|_| AllocLinkError::IllegalSessionState)?
+        .map_err(|_| AllocLinkError::SessionStopped(reason()))?
 }
 
 /// An acceptor for incoming session
@@ -150,7 +165,6 @@ impl SessionAcceptor {
     }
 
     cfg_not_transaction! {
-        #[allow(clippy::too_many_arguments)]
         async fn launch_listener_session_engine<R>(
             &self,
             listener_session: ListenerSession,
@@ -248,9 +262,6 @@ impl SessionAcceptor {
                 let outgoing_channel = match connection.allocate_session(incoming_tx).await {
                     Ok(channel) => channel,
                     Err(error) => match error {
-                        AllocSessionError::IllegalState => {
-                            return Err(BeginError::IllegalConnectionState)
-                        }
                         AllocSessionError::ChannelMaxReached => {
                             let error = definitions::Error::new(
                                 ConnectionError::FramingError,
@@ -261,17 +272,33 @@ impl SessionAcceptor {
                                 .control
                                 .send(ConnectionControl::Close(Some(error)))
                                 .await
-                                .map_err(|_| BeginError::IllegalConnectionState)?;
+                                .map_err(|_| {
+                                    BeginError::ConnectionStopped(connection_stop_reason_or_closed(
+                                        &connection.connection_stop_reason,
+                                    ))
+                                })?;
 
                             return Err(BeginError::LocalChannelMaxReached);
                         }
+                        other => return Err(other.into()),
                     },
                 };
                 (outgoing_channel, incoming_rx)
             }
         };
 
-        let mut session = self.0.clone().into_session(outgoing_channel, local_state);
+        // The stop reason cells are created here so that the session object, the
+        // engine, and the handle share them: the engine publishes the reason on
+        // the session at exit, and the handle (and the links attached through
+        // it) can read it.
+        let session_stop_reason = Arc::new(OnceLock::new());
+
+        let mut session = self.0.clone().into_session(
+            outgoing_channel,
+            local_state,
+            session_stop_reason.clone(),
+            connection.connection_stop_reason.clone(),
+        );
         session.on_incoming_begin(
             IncomingChannel(incoming_session.channel),
             incoming_session.begin,
@@ -301,6 +328,7 @@ impl SessionAcceptor {
             engine_handle,
             outcome,
             outgoing: outgoing_tx,
+            session_stop_reason,
             link_listener: link_listener_rx,
         };
         Ok(handle)
@@ -315,7 +343,9 @@ impl SessionAcceptor {
         let incoming_session = connection
             .next_incoming_session()
             .await
-            .ok_or(BeginError::IllegalConnectionState)?;
+            .ok_or(BeginError::ConnectionStopped(connection_stop_reason_or_closed(
+                &connection.connection_stop_reason,
+            )))?;
         self.accept_incoming_session(incoming_session, connection)
             .await
     }
@@ -326,6 +356,7 @@ where
     S: ListenerSessionEndpoint + endpoint::SessionEndpoint,
     BeginError: From<S::BeginError>,
 {
+    #[allow(clippy::too_many_arguments)]
     pub async fn begin_listener_session(
         conn_control: mpsc::Sender<ConnectionControl>,
         session: S,
@@ -375,6 +406,18 @@ impl endpoint::Session for ListenerSession {
 
     fn local_state(&self) -> &Self::State {
         self.session.local_state()
+    }
+
+    fn set_session_stop_reason(&mut self, reason: SessionStopReason) {
+        self.session.set_session_stop_reason(reason)
+    }
+
+    fn session_stop_reason(&self) -> &Arc<OnceLock<SessionStopReason>> {
+        self.session.session_stop_reason()
+    }
+
+    fn connection_stop_reason(&self) -> &Arc<OnceLock<ConnectionStopReason>> {
+        self.session.connection_stop_reason()
     }
 
     fn outgoing_channel(&self) -> OutgoingChannel {

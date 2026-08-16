@@ -6,7 +6,10 @@ use bytes::Bytes;
 use fe2o3_amqp_types::{definitions, primitives::Binary, sasl::SaslCode};
 use tokio::{sync::mpsc, task::JoinError};
 
-use crate::transport::{self, error::NegotiationError};
+use crate::{
+    connection::ConnectionStopReason,
+    transport::{self, error::NegotiationError},
+};
 
 cfg_scram! {
     use crate::auth::error::ScramErrorKind;
@@ -256,8 +259,13 @@ impl From<ConnectionStateError> for Error {
 /// Error associated with allocation of new session
 #[derive(Debug, thiserror::Error)]
 pub(crate) enum AllocSessionError {
-    #[error("Illegal local state")]
-    IllegalState,
+    /// The connection has not been opened yet
+    #[error("The connection has not been opened")]
+    ConnectionNotOpened,
+
+    /// The connection stopped before the session was allocated
+    #[error("The connection stopped: {:?}", .0)]
+    ConnectionStopped(ConnectionStopReason),
 
     #[error("Reached connection channel max")]
     ChannelMaxReached,

@@ -31,6 +31,34 @@
    `TxnCoordinator` now logs a warning when the teardown message cannot be enqueued,
    instead of silently discarding the failure. Rollback-on-drop failures log errors as
    well. Gated behind the `log` and `tracing` features.
+9. **Breaking**: `IllegalSessionState` is replaced by `SessionStopped(SessionStopReason)` on
+    [`LinkStateError`], `IllegalLinkStateError`, `DetachError`, `AllocLinkError`,
+    `SendAttachErrorKind`, `SenderAttachError`, `ReceiverAttachError`, and
+    [`AcceptorAttachError`].
+10. **Breaking**: `FromOneshotRecvError` is renamed to `FromDeliveryFailure` and gains a
+    required `from_session_stop_reason` method.
+11. **Breaking**: `SenderAttachError`, `ReceiverAttachError`, and `AllocLinkError` gain a
+    `SessionNotMapped` variant for sessions that were never begun; link allocation on an
+    ending or stopped session reports `SessionStopped(reason)` instead.
+12. A session now ends cleanly (with a warning logged) when its connection stops first,
+    instead of reporting `IllegalConnectionState`; connection-level errors stay on the
+    [`ConnectionHandle`].
+13. Interrupted link operations surface the real stop reason on links created by the
+    listener acceptors and the transaction control link.
+14. [`AcceptorAttachError`] no longer hoists a session stop out of the local
+    sender/receiver attach errors; it stays wrapped in `LocalSender`/`LocalReceiver`.
+15. **Breaking**: `IllegalConnectionState` is replaced by
+    `ConnectionStopped(ConnectionStopReason)` on [`BeginError`] and `Error` (and the
+    internal session error types).
+16. **Breaking**: The public [`SessionStopReason`] and [`ConnectionStopReason`] now
+    distinguish a local from a remote-originated stop (`EndedWithError`/`ClosedWithError`
+    are local; `RemoteEndedWithError`/`RemoteClosedWithError` are remote), and the session
+    reason embeds the connection reason via `ConnectionStopped(ConnectionStopReason)`.
+17. Frames arriving while the connection is `Discarding` are now silently discarded per
+    the AMQP specification instead of failing the close exchange.
+18. **Breaking**: [`BeginError`] gains a `ConnectionNotOpened` variant: beginning a session
+    on a connection that has not been opened yet reports `ConnectionNotOpened`, while one
+    on a stopped connection reports `ConnectionStopped(reason)`.
 
 ## 0.16.2
 

@@ -13,7 +13,12 @@ use fe2o3_amqp_types::{
     primitives::{Symbol, Ulong},
 };
 
-use crate::{connection::DEFAULT_OUTGOING_BUFFER_SIZE, session::SessionHandle, util::Initialized};
+use crate::{
+    connection::DEFAULT_OUTGOING_BUFFER_SIZE,
+    link::SessionStopReason,
+    session::SessionHandle,
+    util::Initialized,
+};
 
 use super::{
     builder::Builder, error::AcceptorAttachError, local_receiver_link::LocalReceiverLinkAcceptor,
@@ -215,10 +220,103 @@ where
         &self,
         session: &mut ListenerSessionHandle,
     ) -> Result<LinkEndpoint, AcceptorAttachError> {
-        let remote_attach = session
-            .next_incoming_attach()
-            .await
-            .ok_or(AcceptorAttachError::IllegalSessionState)?;
+        let remote_attach = match session.next_incoming_attach().await {
+            Some(attach) => attach,
+            None => {
+                return Err(match session.session_stop_reason.get() {
+                    Some(reason) => AcceptorAttachError::SessionStopped(reason.clone()),
+                    None => {
+                        // The session engine should always record a stop reason
+                        // before its channels close; an unset cell here is a
+                        // defensive fallback.
+                        #[cfg(feature = "tracing")]
+                        tracing::warn!(
+                            "accept: session stop reason not recorded; reporting SessionStopped(Ended)"
+                        );
+                        #[cfg(feature = "log")]
+                        log::warn!(
+                            "accept: session stop reason not recorded; reporting SessionStopped(Ended)"
+                        );
+                        AcceptorAttachError::SessionStopped(SessionStopReason::Ended)
+                    }
+                });
+            }
+        };
         self.accept_incoming_attach(remote_attach, session).await
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::sync::{Arc, OnceLock};
+
+    use fe2o3_amqp_types::performatives::Attach;
+    use tokio::sync::{mpsc, oneshot};
+
+    use super::{AcceptorAttachError, LinkAcceptor, ListenerSessionHandle, SessionHandle, SessionStopReason};
+    use crate::{
+        control::SessionControl,
+        link::LinkFrame,
+        session::error::Error,
+    };
+
+    /// Constructs a listener session handle in the "ended" state: the link
+    /// listener sender is dropped (as if the session engine exited) and the
+    /// stop reason cell is either pre-set or left unset.
+    fn ended_listener_session_handle(
+        session_stop_reason: Option<SessionStopReason>,
+    ) -> ListenerSessionHandle {
+        let (_, link_listener) = mpsc::channel::<Attach>(16);
+        let (control, _) = mpsc::channel::<SessionControl>(16);
+        let (outgoing, _) = mpsc::channel::<LinkFrame>(16);
+        let (outcome_tx, outcome) = oneshot::channel::<Result<(), Error>>();
+        drop(outcome_tx);
+        let stop_reason_cell = Arc::new(OnceLock::new());
+        if let Some(reason) = session_stop_reason {
+            let _ = stop_reason_cell.set(reason);
+        }
+        SessionHandle {
+            is_ended: false,
+            control,
+            engine_handle: tokio::spawn(async {}),
+            outcome,
+            outgoing,
+            session_stop_reason: stop_reason_cell,
+            link_listener,
+        }
+    }
+
+    /// The recorded stop reason must be surfaced as-is when the link listener
+    /// ends.
+    #[tokio::test]
+    async fn accept_reports_recorded_stop_reason() {
+        let mut handle = ended_listener_session_handle(Some(
+            SessionStopReason::ConnectionStopped(crate::connection::ConnectionStopReason::Closed),
+        ));
+
+        let result = LinkAcceptor::new().accept(&mut handle).await;
+
+        match result {
+            Err(AcceptorAttachError::SessionStopped(
+                SessionStopReason::ConnectionStopped(
+                    crate::connection::ConnectionStopReason::Closed,
+                ),
+            )) => {}
+            other => panic!("expected SessionStopped(ConnectionClosed), got {:?}", other),
+        }
+    }
+
+    /// When the link listener ends without a recorded stop reason (defensive
+    /// fallback), the acceptor reports `Ended` rather than panicking.
+    #[tokio::test]
+    async fn accept_falls_back_to_ended_without_stop_reason() {
+        let mut handle = ended_listener_session_handle(None);
+
+        let result = LinkAcceptor::new().accept(&mut handle).await;
+
+        match result {
+            Err(AcceptorAttachError::SessionStopped(SessionStopReason::Ended)) => {}
+            other => panic!("expected SessionStopped(Ended), got {:?}", other),
+        }
     }
 }

@@ -1,8 +1,9 @@
 use fe2o3_amqp_types::messaging::{Accepted, DeliveryState, Outcome, Rejected};
 
 use crate::link::{
-    delivery::{FromDeliveryState, FromOneshotRecvError, FromPreSettled},
+    delivery::{FromDeliveryFailure, FromDeliveryState, FromPreSettled},
     DetachError, IllegalLinkStateError, LinkStateError, SendError, SenderAttachError,
+    SessionStopReason,
 };
 
 /// Errors with allocation of new transacation ID
@@ -132,8 +133,8 @@ impl From<IllegalLinkStateError> for ControllerSendError {
     fn from(value: IllegalLinkStateError) -> Self {
         match value {
             IllegalLinkStateError::IllegalState => LinkStateError::IllegalState.into(),
-            IllegalLinkStateError::IllegalSessionState => {
-                LinkStateError::IllegalSessionState.into()
+            IllegalLinkStateError::SessionStopped(reason) => {
+                LinkStateError::SessionStopped(reason).into()
             }
         }
     }
@@ -237,8 +238,8 @@ impl From<IllegalLinkStateError> for PostError {
     fn from(value: IllegalLinkStateError) -> Self {
         match value {
             IllegalLinkStateError::IllegalState => LinkStateError::IllegalState.into(),
-            IllegalLinkStateError::IllegalSessionState => {
-                LinkStateError::IllegalSessionState.into()
+            IllegalLinkStateError::SessionStopped(reason) => {
+                LinkStateError::SessionStopped(reason).into()
             }
         }
     }
@@ -276,10 +277,12 @@ impl FromPreSettled for PostResult {
     }
 }
 
-impl FromOneshotRecvError for PostResult {
+impl FromDeliveryFailure for PostResult {
     fn from_oneshot_recv_error(_: tokio::sync::oneshot::error::RecvError) -> Self {
-        Err(PostError::LinkStateError(
-            LinkStateError::IllegalSessionState,
-        ))
+        Err(PostError::LinkStateError(LinkStateError::IllegalState))
+    }
+
+    fn from_session_stop_reason(reason: SessionStopReason) -> Self {
+        Err(PostError::LinkStateError(LinkStateError::SessionStopped(reason)))
     }
 }

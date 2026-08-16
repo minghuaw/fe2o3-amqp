@@ -2,6 +2,7 @@
 //! transferring frames/messages over channels
 
 use std::io;
+use std::sync::{Arc, OnceLock};
 use std::time::Duration;
 
 use fe2o3_amqp_types::definitions::{self, AmqpError};
@@ -20,6 +21,7 @@ use crate::transport::Transport;
 use crate::util::Running;
 use crate::{endpoint, transport, SendBound};
 
+use super::ConnectionStopReason;
 use super::{heartbeat::HeartBeat, ConnectionState};
 use super::{AllocSessionError, ConnectionInnerError, ConnectionStateError, Error, OpenError};
 
@@ -30,6 +32,17 @@ pub(crate) struct ConnectionEngine<Io, C> {
     control: Receiver<ConnectionControl>,
     outgoing_session_frames: Receiver<SessionFrame>,
     heartbeat: HeartBeat,
+}
+
+impl<Io, C> ConnectionEngine<Io, C>
+where
+    C: endpoint::Connection,
+{
+    /// The shared cell holding why the connection stopped, on the connection
+    /// object and shared with the sessions and the handle
+    pub(crate) fn connection_stop_reason(&self) -> &Arc<OnceLock<ConnectionStopReason>> {
+        self.connection.connection_stop_reason()
+    }
 }
 
 cfg_not_wasm32! {
@@ -279,6 +292,15 @@ where
         #[cfg(feature = "log")]
         log::trace!("RECV frame={:?}", frame);
 
+        // In the DISCARDING state, any incoming frames on the connection MUST
+        // be silently discarded until the peer's close frame is received
+        // (AMQP 1.0 section 2.4.6).
+        if matches!(self.connection.local_state(), ConnectionState::Discarding)
+            && !matches!(frame.body, FrameBody::Close(_))
+        {
+            return Ok(Running::Continue);
+        }
+
         let Frame { channel, body } = frame;
         let channel = IncomingChannel(channel);
         match body {
@@ -371,6 +393,14 @@ where
         log::debug!("{}", control);
         match control {
             ConnectionControl::Close(error) => {
+                // Record a locally initiated close with an error before the
+                // channels close, so sessions and links observe the local
+                // error regardless of how the peer responds.
+                if let Some(error) = &error {
+                    self.connection.set_connection_stop_reason(
+                        ConnectionStopReason::ClosedWithError(error.clone()),
+                    );
+                }
                 self.outgoing_session_frames.close();
                 while let Some(frame) = self.outgoing_session_frames.recv().await {
                     self.on_outgoing_session_frames(frame).await?;
@@ -414,7 +444,10 @@ where
         frame: SessionFrame,
     ) -> Result<Running, ConnectionInnerError> {
         match self.connection.local_state() {
-            ConnectionState::Opened => {}
+            // The drain during the close exchange runs while the state is
+            // `CloseReceived`; the buffered frames are flushed as part of
+            // closing the connection.
+            ConnectionState::Opened | ConnectionState::CloseReceived => {}
             _ => return Err(ConnectionInnerError::IllegalState),
         }
 
@@ -623,19 +656,30 @@ where
         //
         // When the Receiver is dropped, it is possible for unprocessed messages to remain
         // in the channel. Instead, it is usually desirable to perform a “clean” shutdown.
-        // To do this, the receiver first calls close, which will prevent any further messages
-        // to be sent into the channel. Then, the receiver consumes the channel to completion,
-        // at which point the receiver can be dropped.
+        // To do this, the receiver first closes the channels, which will prevent any
+        // further messages to be sent into them.
+        let close = self.transport.close().await.map_err(Into::into);
+        let result = outcome.and(close).map_err(Into::into);
+
+        // Publish the stop reason before the channels are closed, so every
+        // session that wakes on the channel closure sees it.
+        let connection_stop_reason = match &result {
+            Err(Error::RemoteClosedWithError(error)) => {
+                ConnectionStopReason::RemoteClosedWithError(error.clone())
+            }
+            Err(Error::RemoteClosed) => ConnectionStopReason::RemoteClosed,
+            _ => ConnectionStopReason::Closed,
+        };
+        self.connection
+            .set_connection_stop_reason(connection_stop_reason);
+
         self.control.close();
         self.outgoing_session_frames.close();
-        let close = self.transport.close().await.map_err(Into::into);
 
         #[cfg(feature = "tracing")]
         tracing::debug!("Stopped");
         #[cfg(feature = "log")]
         log::debug!("Stopped");
-
-        let result = outcome.and(close).map_err(Into::into);
         let _ = tx.send(result);
     }
 }

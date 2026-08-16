@@ -2,6 +2,8 @@
 
 use std::future::Future;
 
+use std::sync::{Arc, OnceLock};
+
 use fe2o3_amqp_types::{
     definitions::Error,
     performatives::{Begin, Close, End, Open},
@@ -9,7 +11,10 @@ use fe2o3_amqp_types::{
 use futures_util::Sink;
 use tokio::sync::mpsc;
 
-use crate::{frames::amqp::Frame, session::frame::SessionIncomingItem, SendBound};
+use crate::{
+    connection::ConnectionStopReason, frames::amqp::Frame, session::frame::SessionIncomingItem,
+    SendBound,
+};
 
 use super::{IncomingChannel, OutgoingChannel, Session};
 
@@ -24,6 +29,15 @@ pub(crate) trait Connection {
 
     fn local_state(&self) -> &Self::State;
     fn local_open(&self) -> &Open;
+
+    /// The shared cell holding why this connection stopped
+    fn connection_stop_reason(&self) -> &Arc<OnceLock<ConnectionStopReason>>;
+
+    /// Record why this connection stopped
+    ///
+    /// Only succeeds if the stop reason has not been recorded yet; a later
+    /// call is a no-op (the first recorded reason wins).
+    fn set_connection_stop_reason(&mut self, reason: ConnectionStopReason);
 
     // Allocate outgoing channel id and session id to a new session
     fn allocate_session(

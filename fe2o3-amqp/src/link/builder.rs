@@ -1,6 +1,6 @@
 //! Implements the builder for a link
 
-use std::{marker::PhantomData, sync::Arc};
+use std::{marker::PhantomData, sync::Arc, sync::OnceLock};
 
 use fe2o3_amqp_types::{
     definitions::{Fields, ReceiverSettleMode, SenderSettleMode, SequenceNo},
@@ -26,7 +26,7 @@ use super::{
     target_archetype::VerifyTargetArchetype,
     ArcUnsettledMap, Receiver, ReceiverAttachError, ReceiverFlowState, ReceiverLink,
     ReceiverRelayFlowState, Sender, SenderAttachError, SenderFlowState, SenderLink,
-    SenderRelayFlowState,
+    SenderRelayFlowState, SessionStopReason,
 };
 
 cfg_transaction! {
@@ -419,6 +419,7 @@ impl<Role, T, NameState, SS, TS> Builder<Role, T, NameState, SS, TS> {
         unsettled: ArcUnsettledMap<M>,
         output_handle: OutputHandle,
         flow_state_consumer: C,
+        session_stop_reason: Arc<OnceLock<SessionStopReason>>,
         // state_code: Arc<AtomicU8>,
     ) -> Link<Role, T, C, M> {
         let local_state = LinkState::Unattached;
@@ -446,6 +447,7 @@ impl<Role, T, NameState, SS, TS> Builder<Role, T, NameState, SS, TS> {
             // flow_state: Consumer::new(notifier, flow_state),
             flow_state: flow_state_consumer,
             unsettled,
+            session_stop_reason,
             verify_incoming_source: self.verify_incoming_source,
             verify_incoming_target: self.verify_incoming_target,
         }
@@ -536,9 +538,19 @@ where
         let unsettled = Arc::new(RwLock::new(None));
 
         let link_relay = LinkRelay::new_sender(incoming_tx, producer, unsettled.clone());
-        let output_handle =
-            session::allocate_link(&session.control, self.name.clone(), link_relay).await?;
-        let mut link = self.create_link(unsettled, output_handle, consumer);
+        let output_handle = session::allocate_link(
+            &session.control,
+            self.name.clone(),
+            link_relay,
+            session.session_stop_reason(),
+        )
+        .await?;
+        let mut link = self.create_link(
+            unsettled,
+            output_handle,
+            consumer,
+            session.session_stop_reason().clone(),
+        );
 
         match link
             .exchange_attach(&session.outgoing, &mut incoming_rx, &session.control, false)
@@ -575,7 +587,6 @@ where
             session: session.control.clone(),
             outgoing,
             incoming: incoming_rx,
-            // marker: PhantomData,
         };
         Ok(inner)
     }
@@ -649,9 +660,19 @@ where
         );
         // Create Link in Session
         // Any error here will be on the Session level and thus it should immediately return with an error
-        let output_handle =
-            session::allocate_link(&session.control, self.name.clone(), link_relay).await?;
-        let mut link = self.create_link(unsettled, output_handle, flow_state);
+        let output_handle = session::allocate_link(
+            &session.control,
+            self.name.clone(),
+            link_relay,
+            session.session_stop_reason(),
+        )
+        .await?;
+        let mut link = self.create_link(
+            unsettled,
+            output_handle,
+            flow_state,
+            session.session_stop_reason().clone(),
+        );
 
         match link
             .exchange_attach(&session.outgoing, &mut incoming_rx, &session.control, false)

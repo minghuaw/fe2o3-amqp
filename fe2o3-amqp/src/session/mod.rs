@@ -1,6 +1,9 @@
 //! Implements AMQP1.0 Session
 
-use std::collections::{HashMap, VecDeque};
+use std::{
+    collections::{HashMap, VecDeque},
+    sync::{Arc, OnceLock},
+};
 
 use fe2o3_amqp_types::{
     definitions::{
@@ -20,9 +23,10 @@ use tokio::{
 };
 
 use crate::{
+    connection::ConnectionStopReason,
     control::SessionControl,
     endpoint::{self, IncomingChannel, InputHandle, LinkFlow, OutgoingChannel, OutputHandle},
-    link::{LinkFrame, LinkRelay},
+    link::{LinkFrame, LinkRelay, SessionStopReason},
     util::{is_consecutive, Constant},
     Payload,
 };
@@ -40,7 +44,9 @@ pub(crate) mod engine;
 pub(crate) mod frame;
 
 pub mod error;
-use error::{AllocLinkError, SessionInnerError, SessionStateError};
+use error::{
+    connection_stop_reason_or_closed, AllocLinkError, SessionInnerError, SessionStateError,
+};
 pub use error::{BeginError, Error, TryEndError};
 
 mod builder;
@@ -68,6 +74,8 @@ pub struct SessionHandle<R> {
 
     // outgoing for Link
     pub(crate) outgoing: mpsc::Sender<LinkFrame>,
+    /// Why the session (or its connection) stopped, shared with the links
+    pub(crate) session_stop_reason: Arc<OnceLock<SessionStopReason>>,
     pub(crate) link_listener: R,
 }
 
@@ -98,6 +106,11 @@ impl<R> Drop for SessionHandle<R> {
 }
 
 impl<R> SessionHandle<R> {
+    /// The shared stop reason cell, used by links to observe why the session stopped
+    pub(crate) fn session_stop_reason(&self) -> &Arc<OnceLock<SessionStopReason>> {
+        &self.session_stop_reason
+    }
+
     /// Checks if the underlying event loop has stopped
     pub fn is_ended(&self) -> bool {
         match self.is_ended {
@@ -135,6 +148,10 @@ impl<R> SessionHandle<R> {
 
     cfg_not_wasm32! {
         /// End the session
+        ///
+        /// If the connection stopped before the session, the session ends with it and
+        /// this method returns `Ok`; connection-level errors are reported through the
+        /// [`ConnectionHandle`](crate::connection::ConnectionHandle).
         ///
         /// An `Error::IllegalState` will be returned if called after any of [`end`](#method.end),
         /// [`end_with_error`](#method.end_with_error), [`on_end`](#on_end) has beend executed. This
@@ -213,8 +230,26 @@ pub(crate) async fn allocate_link(
     control: &mpsc::Sender<SessionControl>,
     link_name: String,
     link_relay: LinkRelay<()>,
+    session_stop_reason: &Arc<OnceLock<SessionStopReason>>,
 ) -> Result<OutputHandle, AllocLinkError> {
     let (responder, resp_rx) = oneshot::channel();
+
+    let reason = || match session_stop_reason.get() {
+        Some(reason) => reason.clone(),
+        None => {
+            // The session engine should always record a stop reason before its
+            // channels close; an unset cell here is a defensive fallback.
+            #[cfg(feature = "tracing")]
+            tracing::warn!(
+                "allocate_link: session stop reason not recorded; reporting SessionStopped(Ended)"
+            );
+            #[cfg(feature = "log")]
+            log::warn!(
+                "allocate_link: session stop reason not recorded; reporting SessionStopped(Ended)"
+            );
+            SessionStopReason::Ended
+        }
+    };
 
     control
         .send(SessionControl::AllocateLink {
@@ -227,13 +262,13 @@ pub(crate) async fn allocate_link(
         // dropped, meaning the `SessionEngine::event_loop` has stopped.
         // This would also mean the `Session` is Unmapped, and thus it
         // may be treated as illegal state
-        .map_err(|_| AllocLinkError::IllegalSessionState)?;
+        .map_err(|_| AllocLinkError::SessionStopped(reason()))?;
     resp_rx
         .await // FIXME: Is oneshot channel cancel safe?
         // The error could only occur when the sending half is dropped,
         // indicating the `SessionEngine::even_loop` has stopped or
         // unmapped. Thus it could be considered as illegal state
-        .map_err(|_| AllocLinkError::IllegalSessionState)?
+        .map_err(|_| AllocLinkError::SessionStopped(reason()))?
 }
 
 /// AMQP1.0 Session
@@ -273,6 +308,14 @@ pub(crate) async fn allocate_link(
 #[derive(Debug)]
 pub struct Session {
     pub(crate) outgoing_channel: OutgoingChannel,
+
+    /// Why this session (or its connection) stopped, shared with the links
+    /// and the session handle
+    pub(crate) session_stop_reason: Arc<OnceLock<SessionStopReason>>,
+
+    /// Why the connection stopped, shared with the connection engine and the
+    /// connection handle
+    pub(crate) connection_stop_reason: Arc<OnceLock<ConnectionStopReason>>,
 
     // local amqp states
     pub(crate) local_state: SessionState,
@@ -511,6 +554,18 @@ impl endpoint::Session for Session {
         &self.local_state
     }
 
+    fn set_session_stop_reason(&mut self, reason: SessionStopReason) {
+        let _ = self.session_stop_reason.set(reason);
+    }
+
+    fn session_stop_reason(&self) -> &Arc<OnceLock<SessionStopReason>> {
+        &self.session_stop_reason
+    }
+
+    fn connection_stop_reason(&self) -> &Arc<OnceLock<ConnectionStopReason>> {
+        &self.connection_stop_reason
+    }
+
     fn outgoing_channel(&self) -> OutgoingChannel {
         self.outgoing_channel
     }
@@ -522,7 +577,34 @@ impl endpoint::Session for Session {
     ) -> Result<OutputHandle, Self::AllocError> {
         match &self.local_state {
             SessionState::Mapped => {}
-            _ => return Err(AllocLinkError::IllegalSessionState),
+            _ => {
+                return Err(match self.session_stop_reason.get() {
+                    // The session (or its connection) stopped; the reason is
+                    // recorded before the session becomes Unmapped
+                    Some(reason) => AllocLinkError::SessionStopped(reason.clone()),
+                    None => match &self.local_state {
+                        // The session is ending while the engine still runs; the
+                        // stop reason is only recorded at engine exit, so `Ended`
+                        // is accurate here (defensive fallback)
+                        SessionState::EndSent
+                        | SessionState::EndReceived
+                        | SessionState::Discarding => {
+                            #[cfg(feature = "tracing")]
+                            tracing::warn!(
+                                "allocate_link: session stop reason not recorded; reporting SessionStopped(Ended)"
+                            );
+                            #[cfg(feature = "log")]
+                            log::warn!(
+                                "allocate_link: session stop reason not recorded; reporting SessionStopped(Ended)"
+                            );
+                            AllocLinkError::SessionStopped(SessionStopReason::Ended)
+                        }
+                        // Not begun yet (or fully ended without a recorded stop):
+                        // the session exists but is not mapped
+                        _ => AllocLinkError::SessionNotMapped,
+                    },
+                });
+            }
         };
 
         // check whether link name is duplciated
@@ -834,15 +916,20 @@ impl endpoint::Session for Session {
                     .send(frame)
                     .await
                     // The receiving half must have dropped, and thus the `Connection`
-                    // event loop has stopped. It should be treated as an io error
-                    .map_err(|_| SessionStateError::IllegalConnectionState)?;
+                    // event loop has stopped.
+                    .map_err(|_| {
+                        SessionStateError::ConnectionStopped(connection_stop_reason_or_closed(
+                            &self.connection_stop_reason,
+                        ))
+                    })?;
                 self.local_state = SessionState::BeginSent;
             }
             SessionState::BeginReceived => {
-                writer
-                    .send(frame)
-                    .await
-                    .map_err(|_| SessionStateError::IllegalConnectionState)?;
+                writer.send(frame).await.map_err(|_| {
+                    SessionStateError::ConnectionStopped(connection_stop_reason_or_closed(
+                        &self.connection_stop_reason,
+                    ))
+                })?;
                 self.local_state = SessionState::Mapped;
             }
             _ => return Err(SessionStateError::IllegalState),
@@ -870,8 +957,12 @@ impl endpoint::Session for Session {
             .send(frame)
             .await
             // The receiving half must have dropped, and thus the `Connection`
-            // event loop has stopped. It should be treated as an io error
-            .map_err(|_| SessionStateError::IllegalConnectionState)?;
+            // event loop has stopped.
+            .map_err(|_| {
+                SessionStateError::ConnectionStopped(connection_stop_reason_or_closed(
+                    &self.connection_stop_reason,
+                ))
+            })?;
         Ok(())
     }
 
