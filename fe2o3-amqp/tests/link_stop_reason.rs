@@ -12,12 +12,23 @@ use fe2o3_amqp::{
         ConnectionAcceptor, LinkAcceptor, ListenerConnectionHandle, ListenerSessionHandle,
         SessionAcceptor,
     },
-    connection::{Connection, ConnectionHandle},
+    connection::{Connection, ConnectionHandle, ConnectionStopReason},
     link::{LinkStateError, RecvError, SendError, SenderAttachError, SessionStopReason},
     session::{Session, SessionHandle},
-    types::messaging::{Source, Target},
+    types::{
+        definitions::{self, AmqpError},
+        messaging::{Source, Target},
+    },
     Receiver, Sendable, Sender,
 };
+
+fn test_error() -> definitions::Error {
+    definitions::Error::new(
+        AmqpError::InternalError,
+        Some("test error".to_string()),
+        None,
+    )
+}
 
 async fn establish_connection_pair() -> (ListenerConnectionHandle, ConnectionHandle<()>) {
     let (client_io, server_io) = tokio::io::duplex(4096);
@@ -136,7 +147,11 @@ async fn link_send_surfaces_connection_closed() {
 
     drop(client_connection);
 
-    expect_send_stop_reason(&mut sender, SessionStopReason::ConnectionClosed).await;
+    expect_send_stop_reason(
+        &mut sender,
+        SessionStopReason::ConnectionStopped(ConnectionStopReason::Closed),
+    )
+    .await;
 }
 
 /// When only the session ends while the connection stays alive, a send on an
@@ -171,7 +186,7 @@ async fn link_recv_surfaces_connection_closed() {
 
     match result {
         Err(RecvError::LinkStateError(LinkStateError::SessionStopped(
-            SessionStopReason::ConnectionClosed,
+            SessionStopReason::ConnectionStopped(ConnectionStopReason::RemoteClosed),
         ))) => {}
         other => panic!("expected SessionStopped(ConnectionClosed), got {:?}", other),
     }
@@ -195,9 +210,9 @@ async fn link_recv_surfaces_session_ended() {
 
     match result {
         Err(RecvError::LinkStateError(LinkStateError::SessionStopped(
-            SessionStopReason::Ended,
+            SessionStopReason::RemoteEnded,
         ))) => {}
-        other => panic!("expected SessionStopped(Ended), got {:?}", other),
+        other => panic!("expected SessionStopped(RemoteEnded), got {:?}", other),
     }
 }
 
@@ -223,7 +238,103 @@ async fn attach_after_stop_reports_stop_reason() {
     .expect("attach timed out");
 
     match result {
-        Err(SenderAttachError::SessionStopped(SessionStopReason::ConnectionClosed)) => {}
+        Err(SenderAttachError::SessionStopped(SessionStopReason::ConnectionStopped(
+            ConnectionStopReason::RemoteClosed,
+        ))) => {}
         other => panic!("expected SessionStopped(ConnectionClosed), got {:?}", other),
     }
+}
+
+/// A locally ended session with an error must surface as `EndedWithError`
+/// with the local error.
+#[tokio::test]
+async fn link_send_surfaces_local_end_with_error() {
+    let (mut server_connection, mut client_connection) = establish_connection_pair().await;
+    let (mut client_session, mut listener_session) =
+        establish_session_pair(&mut server_connection, &mut client_connection).await;
+    let mut sender = attach_sender(&mut client_session, &mut listener_session, "sender-1").await;
+
+    let error = test_error();
+    client_session
+        .end_with_error(error.clone())
+        .await
+        .expect("end failed");
+
+    expect_send_stop_reason(&mut sender, SessionStopReason::EndedWithError(error)).await;
+}
+
+/// A remote-initiated session end with an error must surface as
+/// `RemoteEndedWithError` with the remote error.
+#[tokio::test]
+async fn link_send_surfaces_remote_end_with_error() {
+    let (mut server_connection, mut client_connection) = establish_connection_pair().await;
+    let (mut client_session, mut listener_session) =
+        establish_session_pair(&mut server_connection, &mut client_connection).await;
+    let mut sender = attach_sender(&mut client_session, &mut listener_session, "sender-1").await;
+
+    let error = test_error();
+    listener_session
+        .end_with_error(error.clone())
+        .await
+        .expect("end failed");
+
+    expect_send_stop_reason(&mut sender, SessionStopReason::RemoteEndedWithError(error)).await;
+}
+
+/// A remote-initiated clean session end must surface as `RemoteEnded`.
+#[tokio::test]
+async fn link_send_surfaces_remote_end() {
+    let (mut server_connection, mut client_connection) = establish_connection_pair().await;
+    let (mut client_session, mut listener_session) =
+        establish_session_pair(&mut server_connection, &mut client_connection).await;
+    let mut sender = attach_sender(&mut client_session, &mut listener_session, "sender-1").await;
+
+    drop(listener_session);
+
+    expect_send_stop_reason(&mut sender, SessionStopReason::RemoteEnded).await;
+}
+
+/// A locally closed connection with an error must surface as
+/// `ConnectionStopped(ClosedWithError(..))` with the local error, regardless
+/// of how the peer responds.
+#[tokio::test]
+async fn link_send_surfaces_local_close_with_error() {
+    let (mut server_connection, mut client_connection) = establish_connection_pair().await;
+    let (mut client_session, mut listener_session) =
+        establish_session_pair(&mut server_connection, &mut client_connection).await;
+    let mut sender = attach_sender(&mut client_session, &mut listener_session, "sender-1").await;
+
+    let error = test_error();
+    client_connection
+        .close_with_error(error.clone())
+        .await
+        .expect("close failed");
+
+    expect_send_stop_reason(
+        &mut sender,
+        SessionStopReason::ConnectionStopped(ConnectionStopReason::ClosedWithError(error)),
+    )
+    .await;
+}
+
+/// A remote-initiated connection close with an error must surface as
+/// `ConnectionStopped(RemoteClosedWithError(..))` with the remote error.
+#[tokio::test]
+async fn link_send_surfaces_remote_close_with_error() {
+    let (mut server_connection, mut client_connection) = establish_connection_pair().await;
+    let (mut client_session, mut listener_session) =
+        establish_session_pair(&mut server_connection, &mut client_connection).await;
+    let mut sender = attach_sender(&mut client_session, &mut listener_session, "sender-1").await;
+
+    let error = test_error();
+    server_connection
+        .close_with_error(error.clone())
+        .await
+        .expect("close failed");
+
+    expect_send_stop_reason(
+        &mut sender,
+        SessionStopReason::ConnectionStopped(ConnectionStopReason::RemoteClosedWithError(error)),
+    )
+    .await;
 }

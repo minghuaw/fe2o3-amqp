@@ -554,11 +554,11 @@ mod tests {
 
     #[test]
     fn test_send_result_from_session_stop_reason() {
-        let reason = SessionStopReason::ConnectionClosedWithError(definitions::Error::new(
-            ConnectionError::ConnectionForced,
-            None,
-            None,
-        ));
+        let reason = SessionStopReason::ConnectionStopped(
+            crate::connection::ConnectionStopReason::RemoteClosedWithError(
+                definitions::Error::new(ConnectionError::ConnectionForced, None, None),
+            ),
+        );
         let result = <SendResult as FromDeliveryFailure>::from_session_stop_reason(reason.clone());
         match result {
             Err(SendError::LinkStateError(LinkStateError::SessionStopped(actual))) => {
@@ -580,14 +580,18 @@ mod tests {
         };
         let session_stop_reason = Arc::new(OnceLock::new());
         session_stop_reason
-            .set(SessionStopReason::ConnectionClosed)
+            .set(SessionStopReason::ConnectionStopped(
+                crate::connection::ConnectionStopReason::Closed,
+            ))
             .unwrap();
         let fut = DeliveryFut::new(settlement, session_stop_reason);
         drop(tx);
 
         match fut.await {
             Err(SendError::LinkStateError(LinkStateError::SessionStopped(
-                SessionStopReason::ConnectionClosed,
+                SessionStopReason::ConnectionStopped(
+                    crate::connection::ConnectionStopReason::Closed,
+                ),
             ))) => {}
             other => panic!("unexpected result: {:?}", other),
         }

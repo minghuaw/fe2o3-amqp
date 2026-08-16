@@ -1,7 +1,7 @@
 use fe2o3_amqp_types::definitions::{self, AmqpError, ErrorCondition, SessionError};
 use serde_amqp::primitives::Symbol;
 
-use crate::session::error::AllocLinkError;
+use crate::{connection::ConnectionStopReason, session::error::AllocLinkError};
 
 #[cfg(docsrs)]
 use fe2o3_amqp_types::transaction::Coordinator;
@@ -12,16 +12,23 @@ use super::{delivery::DeliveryInfo, receiver::DetachedReceiver, sender::Detached
 /// detached or closed. From a link's perspective, a parent stopping earlier
 /// is always an error for the link's operations; the variants here describe
 /// the parent's state so the caller can decide how to recover.
+///
+/// The unprefixed variants describe the local side's action; the `Remote*`
+/// variants describe a remote-initiated end. `ConnectionStopped(..)` embeds
+/// the connection's own stop reason (see [`ConnectionStopReason`]).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum SessionStopReason {
-    /// The session ended cleanly
+    /// The session ended cleanly (locally)
     Ended,
-    /// The session ended with an error
+    /// We ended the session with this error
     EndedWithError(definitions::Error),
-    /// The connection stopped first, cleanly
-    ConnectionClosed,
-    /// The connection stopped first, with an error
-    ConnectionClosedWithError(definitions::Error),
+    /// The remote peer ended the session cleanly
+    RemoteEnded,
+    /// The remote peer ended the session with this error
+    RemoteEndedWithError(definitions::Error),
+    /// The connection stopped; the embedded reason tells whether the close
+    /// was local or remote and whether it carried an error
+    ConnectionStopped(ConnectionStopReason),
 }
 
 /// Error associated with detaching

@@ -292,6 +292,15 @@ where
         #[cfg(feature = "log")]
         log::trace!("RECV frame={:?}", frame);
 
+        // In the DISCARDING state, any incoming frames on the connection MUST
+        // be silently discarded until the peer's close frame is received
+        // (AMQP 1.0 section 2.4.6).
+        if matches!(self.connection.local_state(), ConnectionState::Discarding)
+            && !matches!(frame.body, FrameBody::Close(_))
+        {
+            return Ok(Running::Continue);
+        }
+
         let Frame { channel, body } = frame;
         let channel = IncomingChannel(channel);
         match body {
@@ -384,6 +393,14 @@ where
         log::debug!("{}", control);
         match control {
             ConnectionControl::Close(error) => {
+                // Record a locally initiated close with an error before the
+                // channels close, so sessions and links observe the local
+                // error regardless of how the peer responds.
+                if let Some(error) = &error {
+                    self.connection.set_connection_stop_reason(
+                        ConnectionStopReason::ClosedWithError(error.clone()),
+                    );
+                }
                 self.outgoing_session_frames.close();
                 while let Some(frame) = self.outgoing_session_frames.recv().await {
                     self.on_outgoing_session_frames(frame).await?;
@@ -427,7 +444,10 @@ where
         frame: SessionFrame,
     ) -> Result<Running, ConnectionInnerError> {
         match self.connection.local_state() {
-            ConnectionState::Opened => {}
+            // The drain during the close exchange runs while the state is
+            // `CloseReceived`; the buffered frames are flushed as part of
+            // closing the connection.
+            ConnectionState::Opened | ConnectionState::CloseReceived => {}
             _ => return Err(ConnectionInnerError::IllegalState),
         }
 
@@ -645,8 +665,9 @@ where
         // session that wakes on the channel closure sees it.
         let connection_stop_reason = match &result {
             Err(Error::RemoteClosedWithError(error)) => {
-                ConnectionStopReason::ClosedWithError(error.clone())
+                ConnectionStopReason::RemoteClosedWithError(error.clone())
             }
+            Err(Error::RemoteClosed) => ConnectionStopReason::RemoteClosed,
             _ => ConnectionStopReason::Closed,
         };
         self.connection
@@ -659,7 +680,6 @@ where
         tracing::debug!("Stopped");
         #[cfg(feature = "log")]
         log::debug!("Stopped");
-
         let _ = tx.send(result);
     }
 }

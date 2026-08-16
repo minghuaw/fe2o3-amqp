@@ -246,10 +246,7 @@ pub(crate) fn connection_stop_reason_or_closed(
 /// The session stop reason corresponding to a connection stop
 impl From<ConnectionStopReason> for SessionStopReason {
     fn from(reason: ConnectionStopReason) -> Self {
-        match reason {
-            ConnectionStopReason::Closed => Self::ConnectionClosed,
-            ConnectionStopReason::ClosedWithError(error) => Self::ConnectionClosedWithError(error),
-        }
+        Self::ConnectionStopped(reason)
     }
 }
 

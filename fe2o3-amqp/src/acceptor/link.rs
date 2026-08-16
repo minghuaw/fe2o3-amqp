@@ -290,12 +290,18 @@ mod tests {
     /// ends.
     #[tokio::test]
     async fn accept_reports_recorded_stop_reason() {
-        let mut handle = ended_listener_session_handle(Some(SessionStopReason::ConnectionClosed));
+        let mut handle = ended_listener_session_handle(Some(
+            SessionStopReason::ConnectionStopped(crate::connection::ConnectionStopReason::Closed),
+        ));
 
         let result = LinkAcceptor::new().accept(&mut handle).await;
 
         match result {
-            Err(AcceptorAttachError::SessionStopped(SessionStopReason::ConnectionClosed)) => {}
+            Err(AcceptorAttachError::SessionStopped(
+                SessionStopReason::ConnectionStopped(
+                    crate::connection::ConnectionStopReason::Closed,
+                ),
+            )) => {}
             other => panic!("expected SessionStopped(ConnectionClosed), got {:?}", other),
         }
     }

@@ -34,9 +34,7 @@
 9. **Breaking**: `IllegalSessionState` is replaced by `SessionStopped(SessionStopReason)` on
     [`LinkStateError`], `IllegalLinkStateError`, `DetachError`, `AllocLinkError`,
     `SendAttachErrorKind`, `SenderAttachError`, `ReceiverAttachError`, and
-    [`AcceptorAttachError`]. The new public [`SessionStopReason`] tells whether the session
-    or its connection stopped first and whether it carried an error, so callers can decide
-    whether to retry at the session or connection level.
+    [`AcceptorAttachError`].
 10. **Breaking**: `FromOneshotRecvError` is renamed to `FromDeliveryFailure` and gains a
     required `from_session_stop_reason` method.
 11. **Breaking**: `SenderAttachError`, `ReceiverAttachError`, and `AllocLinkError` gain a
@@ -44,16 +42,21 @@
     ending or stopped session reports `SessionStopped(reason)` instead.
 12. A session now ends cleanly (with a warning logged) when its connection stops first,
     instead of reporting `IllegalConnectionState`; connection-level errors stay on the
-    [`ConnectionHandle`]. Interrupted link operations surface the real stop reason
-    (`ConnectionClosed(..)` vs `Ended`/`EndedWithError`) — including on links created by
-    the listener acceptors and the transaction control link.
-13. [`AcceptorAttachError`] no longer hoists a session stop out of the local
+    [`ConnectionHandle`].
+13. Interrupted link operations surface the real stop reason on links created by the
+    listener acceptors and the transaction control link.
+14. [`AcceptorAttachError`] no longer hoists a session stop out of the local
     sender/receiver attach errors; it stays wrapped in `LocalSender`/`LocalReceiver`.
-14. **Breaking**: `IllegalConnectionState` is replaced by
+15. **Breaking**: `IllegalConnectionState` is replaced by
     `ConnectionStopped(ConnectionStopReason)` on [`BeginError`] and `Error` (and the
-    internal session error types). The new public [`ConnectionStopReason`] (`Closed` /
-    `ClosedWithError`) mirrors `SessionStopped(..)` at the connection level.
-15. **Breaking**: [`BeginError`] gains a `ConnectionNotOpened` variant: beginning a session
+    internal session error types).
+16. **Breaking**: The public [`SessionStopReason`] and [`ConnectionStopReason`] now
+    distinguish a local from a remote-originated stop (`EndedWithError`/`ClosedWithError`
+    are local; `RemoteEndedWithError`/`RemoteClosedWithError` are remote), and the session
+    reason embeds the connection reason via `ConnectionStopped(ConnectionStopReason)`.
+17. Frames arriving while the connection is `Discarding` are now silently discarded per
+    the AMQP specification instead of failing the close exchange.
+18. **Breaking**: [`BeginError`] gains a `ConnectionNotOpened` variant: beginning a session
     on a connection that has not been opened yet reports `ConnectionNotOpened`, while one
     on a stopped connection reports `ConnectionStopped(reason)`.
 

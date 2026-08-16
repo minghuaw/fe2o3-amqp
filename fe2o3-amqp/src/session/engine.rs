@@ -223,10 +223,15 @@ where
                 let result = self.session.on_incoming_end(channel, end);
                 if matches!(self.session.local_state(), SessionState::EndReceived) {
                     // Record the stop reason before the link channel is closed,
-                    // so links that fail on the closure observe the reason.
+                    // so links that fail on the closure observe the reason. The
+                    // `EndReceived` state only results from a remote-initiated
+                    // end, so the error (if any) is the remote's.
                     self.session.set_session_stop_reason(match end_error {
-                        Some(error) => SessionStopReason::EndedWithError(error),
-                        None => self.session_stop_reason_from_connection(),
+                        Some(error) => SessionStopReason::RemoteEndedWithError(error),
+                        None => match self.session.connection_stop_reason().get() {
+                            Some(reason) => SessionStopReason::from(reason.clone()),
+                            None => SessionStopReason::RemoteEnded,
+                        },
                     });
                     // if control is closing, finish sending all buffered messages before closing
                     self.outgoing_link_frames.close();
@@ -689,8 +694,9 @@ where
                 SessionStopReason::from(reason.clone())
             }
             Err(SessionInnerError::RemoteEndedWithError(error)) => {
-                SessionStopReason::EndedWithError(error.clone())
+                SessionStopReason::RemoteEndedWithError(error.clone())
             }
+            Err(SessionInnerError::RemoteEnded) => SessionStopReason::RemoteEnded,
             _ => SessionStopReason::Ended,
         };
         self.session.set_session_stop_reason(session_stop_reason);

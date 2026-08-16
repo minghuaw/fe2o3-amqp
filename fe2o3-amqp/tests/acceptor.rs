@@ -11,7 +11,7 @@ use fe2o3_amqp::{
         error::AcceptorAttachError,
         {ConnectionAcceptor, LinkAcceptor, SessionAcceptor},
     },
-    connection::Connection,
+    connection::{Connection, ConnectionStopReason},
     link::SessionStopReason,
     Session,
 };
@@ -64,7 +64,9 @@ async fn listener_acceptor_reports_connection_closed() {
         .expect("accept task panicked");
 
     match result {
-        Err(AcceptorAttachError::SessionStopped(SessionStopReason::ConnectionClosed)) => {}
+        Err(AcceptorAttachError::SessionStopped(SessionStopReason::ConnectionStopped(
+            ConnectionStopReason::RemoteClosed,
+        ))) => {}
         other => panic!("expected SessionStopped(ConnectionClosed), got {:?}", other),
     }
 }
@@ -117,7 +119,7 @@ async fn listener_acceptor_reports_session_ended() {
         .expect("accept task panicked");
 
     match result {
-        Err(AcceptorAttachError::SessionStopped(SessionStopReason::Ended)) => {}
-        other => panic!("expected SessionStopped(Ended), got {:?}", other),
+        Err(AcceptorAttachError::SessionStopped(SessionStopReason::RemoteEnded)) => {}
+        other => panic!("expected SessionStopped(RemoteEnded), got {:?}", other),
     }
 }

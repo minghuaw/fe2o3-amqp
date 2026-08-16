@@ -62,12 +62,19 @@ type SessionRelay = Arc<Sender<SessionIncomingItem>>;
 
 /// Why the connection stopped, shared with the sessions so they can derive
 /// the reason their links observe.
+///
+/// The unprefixed variants describe the local side's action; the `Remote*`
+/// variants describe a remote-initiated close.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ConnectionStopReason {
-    /// The connection closed cleanly
+    /// The connection closed cleanly (locally)
     Closed,
-    /// The connection closed with an error
+    /// We closed the connection with this error
     ClosedWithError(definitions::Error),
+    /// The remote peer closed the connection cleanly
+    RemoteClosed,
+    /// The remote peer closed the connection with this error
+    RemoteClosedWithError(definitions::Error),
 }
 
 /// A handle to the [`Connection`] event loop.
