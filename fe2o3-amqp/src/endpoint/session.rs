@@ -113,6 +113,11 @@ pub(crate) trait Session {
 
     fn on_outgoing_flow(&mut self, flow: LinkFlow) -> Result<SessionFrame, Self::Error>;
 
+    /// Returns a session-only flow (no link handle) when the session should proactively
+    /// re-advertise its window after receiving transfers. Called by the session engine after
+    /// every incoming transfer; returns `None` when no flow is due.
+    fn maybe_outgoing_session_flow(&mut self) -> Option<SessionOutgoingItem>;
+
     fn on_outgoing_transfer(
         &mut self,
         input_handle: InputHandle,

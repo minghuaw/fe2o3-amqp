@@ -195,6 +195,19 @@ where
                 self.session
                     .on_incoming_transfer(performative, payload)
                     .await?;
+
+                // Re-advertise the session window (session-only flow) once half of the
+                // incoming-window has been consumed by received transfers, mirroring
+                // go-amqp's proactive top-up. This keeps the peer's send window sliding
+                // even when no link-level flow is generated.
+                if let Some(outgoing_item) = self.session.maybe_outgoing_session_flow() {
+                    send_outgoing_item(
+                        &self.outgoing,
+                        outgoing_item,
+                        self.session.connection_stop_reason(),
+                    )
+                    .await?;
+                }
             }
             SessionFrameBody::Disposition(disposition) => {
                 if let Some(dispositions) = self.session.on_incoming_disposition(disposition)? {
