@@ -137,7 +137,6 @@ impl Builder {
 
     pub(crate) fn into_session(
         self,
-        // control: mpsc::Sender<SessionControl>,
         outgoing_channel: OutgoingChannel,
         local_state: SessionState,
         connection_stop_reason: Arc<OnceLock<ConnectionStopReason>>,
@@ -385,6 +384,7 @@ impl Builder {
                 mpsc::channel::<SessionControl>(DEFAULT_SESSION_CONTROL_BUFFER_SIZE);
             let (incoming_tx, incoming_rx) = mpsc::channel(self.buffer_size);
             let (outgoing_tx, outgoing_rx) = mpsc::channel(self.buffer_size);
+            let session_stop_reason = Arc::new(OnceLock::new());
 
             // create session in connection::Engine
             let outgoing_channel = match connection.allocate_session(incoming_tx).await {
@@ -452,6 +452,7 @@ impl Builder {
                 mpsc::channel::<SessionControl>(DEFAULT_SESSION_CONTROL_BUFFER_SIZE);
             let (incoming_tx, incoming_rx) = mpsc::channel(self.buffer_size);
             let (outgoing_tx, outgoing_rx) = mpsc::channel(self.buffer_size);
+            let session_stop_reason = Arc::new(OnceLock::new());
 
             // create session in connection::Engine
             let outgoing_channel = match connection.allocate_session(incoming_tx).await {
