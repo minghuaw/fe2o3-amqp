@@ -144,8 +144,12 @@ where
                         Err(LinkStateError::ExpectImmediateDetach)
                     }
                     None => {
-                        // Other frames should not forwarded to the sender by the session
-                        Err(LinkStateError::ExpectImmediateDetach)
+                        // The channel closed without a frame: the session (or its
+                        // connection) stopped and the engine dropped the relay.
+                        match self.session_stop_reason.get() {
+                            Some(reason) => Err(LinkStateError::SessionStopped(reason.clone())),
+                            None => Err(LinkStateError::ExpectImmediateDetach), // defensive: no stop reason recorded; failure is link-local
+                        }
                     }
                 }
             }

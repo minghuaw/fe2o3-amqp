@@ -200,8 +200,15 @@ where
                 self.session.on_incoming_detach(detach).await?;
             }
             SessionFrameBody::End(end) => {
+                let end_error = end.error.clone();
                 let result = self.session.on_incoming_end(channel, end);
                 if matches!(self.session.local_state(), SessionState::EndReceived) {
+                    // Record the stop reason before the link channel is closed,
+                    // so links that fail on the closure observe the reason.
+                    self.session.set_session_stop_reason(match end_error {
+                        Some(error) => SessionStopReason::EndedWithError(error),
+                        None => self.session_stop_reason_from_connection(),
+                    });
                     // if control is closing, finish sending all buffered messages before closing
                     self.outgoing_link_frames.close();
                     while let Some(frame) = self.outgoing_link_frames.recv().await {
@@ -220,6 +227,18 @@ where
         }
     }
 
+    /// The session stop reason derived from the connection's recorded stop;
+    /// `Ended` when the connection has not stopped.
+    fn session_stop_reason_from_connection(&self) -> SessionStopReason {
+        match self.conn_stop.get() {
+            Some(ConnectionStopReason::Closed) => SessionStopReason::ConnectionClosed,
+            Some(ConnectionStopReason::ClosedWithError(error)) => {
+                SessionStopReason::ConnectionClosedWithError(error.clone())
+            }
+            None => SessionStopReason::Ended,
+        }
+    }
+
     #[inline]
     #[cfg_attr(feature = "tracing", tracing::instrument(skip_all))]
     async fn on_control(&mut self, control: SessionControl) -> Result<Running, SessionInnerError> {
@@ -229,6 +248,12 @@ where
         log::trace!("control: {}", control);
         match control {
             SessionControl::End(error) => {
+                // Record the stop reason before the link channel is closed, so
+                // links that fail on the closure observe the reason.
+                self.session.set_session_stop_reason(match &error {
+                    Some(error) => SessionStopReason::EndedWithError(error.clone()),
+                    None => self.session_stop_reason_from_connection(),
+                });
                 // if control is closing, finish sending all buffered messages before closing
                 self.outgoing_link_frames.close();
                 while let Some(frame) = self.outgoing_link_frames.recv().await {
@@ -494,6 +519,9 @@ where
     #[cfg_attr(feature = "tracing", tracing::instrument(name = "Session::event_loop", skip(self), fields(outgoing_channel = %self.session.outgoing_channel().0)))]
     async fn event_loop(mut self, tx: oneshot::Sender<Result<(), Error>>) {
         let mut outcome = Ok(());
+        // Set when the connection stopped before the session ended; the
+        // connection's stop reason cell may not be recorded yet at that point.
+        let mut connection_stopped_first = false;
         loop {
             let result = tokio::select! {
                 incoming = self.incoming.recv() => {
@@ -503,6 +531,7 @@ where
                             // Check local state
                             match self.continue_or_stop_by_state() {
                                 Running::Continue => {
+                                    connection_stopped_first = true;
                                     // The connection stopped before the session ended;
                                     // the session ends with it. Connection-level errors
                                     // are reported through the `ConnectionHandle`.
@@ -575,6 +604,7 @@ where
                 Ok(running) => running,
                 Err(error) => {
                     if matches!(error, SessionInnerError::IllegalConnectionState) {
+                        connection_stopped_first = true;
                         // The connection stopped before the session ended; the session
                         // ends with it. Connection-level errors are reported through
                         // the `ConnectionHandle`.
@@ -623,6 +653,11 @@ where
             Some(ConnectionStopReason::Closed) => SessionStopReason::ConnectionClosed,
             Some(ConnectionStopReason::ClosedWithError(error)) => {
                 SessionStopReason::ConnectionClosedWithError(error.clone())
+            }
+            None if connection_stopped_first => {
+                // The connection stopped before the session ended but has not
+                // recorded its own stop reason yet.
+                SessionStopReason::ConnectionClosed
             }
             None => match &outcome {
                 Err(SessionInnerError::RemoteEndedWithError(error)) => {
