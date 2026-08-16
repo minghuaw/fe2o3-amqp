@@ -759,6 +759,13 @@ impl endpoint::Session for Session {
         }
     }
 
+    /// Handle an incoming transfer.
+    ///
+    /// Always returns `Ok(None)`: settlement of non-transactional deliveries is
+    /// handled at the link level, so this session never produces an immediate
+    /// disposition. The `Option<Disposition>` return is only used by the
+    /// transactional session ([`crate::transaction::session::TxnSession`]) for
+    /// the presumptive-outcome reply.
     async fn on_incoming_transfer(
         &mut self,
         transfer: Transfer,

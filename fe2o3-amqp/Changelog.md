@@ -63,6 +63,9 @@
     half of the incoming-window has been consumed by received transfers, so a peer sending
     continuously never stalls on the session window even when no link-level flow is
     generated.
+20. A live transactional posting now sends the presumptive-outcome disposition reply
+    (`transactional-state` with `Accepted`) instead of dropping it; previously it was only
+    sent on the transaction discharge path.
 
 ## 0.16.2
 

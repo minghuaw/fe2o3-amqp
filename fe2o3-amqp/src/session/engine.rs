@@ -192,9 +192,23 @@ where
                 performative,
                 payload,
             } => {
-                self.session
+                // A received transfer can require an immediate disposition back — only the
+                // transactional session produces one (the presumptive-outcome reply to a
+                // posted transfer, AMQP §4.4.1); non-transactional sessions return `None`.
+                // The transaction discharge path routes its own reply via
+                // `SessionControl::Disposition` instead.
+                if let Some(disposition) = self
+                    .session
                     .on_incoming_transfer(performative, payload)
-                    .await?;
+                    .await?
+                {
+                    let frame = self.session.on_outgoing_disposition(disposition)?;
+                    self.outgoing.send(frame).await.map_err(|_| {
+                        SessionInnerError::ConnectionStopped(connection_stop_reason_or_closed(
+                            self.session.connection_stop_reason(),
+                        ))
+                    })?;
+                }
 
                 // Re-advertise the session window (session-only flow) once half of the
                 // incoming-window has been consumed by received transfers, mirroring
