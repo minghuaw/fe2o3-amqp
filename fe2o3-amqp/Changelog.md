@@ -23,6 +23,14 @@
    [`OwnedTransaction`].
 6. [`OwnedTransaction`] is now rolled back when dropped without being discharged,
    matching the behavior of [`Transaction`].
+7. The best-effort rollback on drop is now configurable: [`Transaction`] and
+   [`OwnedTransaction`] expose `rollback_on_drop_trials()` /
+   `set_rollback_on_drop_trials()`, and `DEFAULT_ROLLBACK_ON_DROP_TRIALS` (20)
+   replaces the hardcoded trial count. Set to 0 to skip the rollback.
+8. Dropping a live [`ConnectionHandle`], [`SessionHandle`], sender or receiver link, or
+   `TxnCoordinator` now logs a warning when the teardown message cannot be enqueued,
+   instead of silently discarding the failure. Rollback-on-drop failures log errors as
+   well. Gated behind the `log` and `tracing` features.
 
 ## 0.16.2
 

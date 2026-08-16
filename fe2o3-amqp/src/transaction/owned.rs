@@ -4,12 +4,13 @@
 use fe2o3_amqp_types::transaction::{Declared, TransactionId};
 
 use crate::{
-    link::{shared_inner::LinkEndpointInnerDetach, DispositionError},
+    link::{sender::SenderInner, shared_inner::LinkEndpointInnerDetach, DispositionError},
     session::SessionHandle,
 };
 
 use super::{
-    rollback_on_drop, Controller, ControllerSendError, OwnedDeclareError,
+    declare_on_link, discharge_on_link, rollback_on_drop, ControlLink, Controller,
+    ControllerSendError, DEFAULT_ROLLBACK_ON_DROP_TRIALS, OwnedDeclareError,
     OwnedDischargeError, TransactionAcquisition, TransactionBase, TransactionDischarge,
     TransactionExt, TransactionPosting, TransactionRetirement,
 };
@@ -91,9 +92,10 @@ use super::{
 /// ```
 #[derive(Debug)]
 pub struct OwnedTransaction {
-    controller: Controller,
+    inner: SenderInner<ControlLink>,
     declared: Declared,
     is_discharged: bool,
+    rollback_on_drop_trials: u32,
 }
 
 
@@ -106,9 +108,7 @@ impl TransactionDischarge for OwnedTransaction {
 
     async fn discharge(&mut self, fail: bool) -> Result<(), Self::Error> {
         if !self.is_discharged {
-            self.controller
-                .discharge(self.declared.txn_id.clone(), fail)
-                .await?;
+            discharge_on_link(&mut self.inner, self.declared.txn_id.clone(), fail).await?;
             self.is_discharged = true;
         }
         Ok(())
@@ -116,13 +116,13 @@ impl TransactionDischarge for OwnedTransaction {
 
     async fn rollback(mut self) -> Result<(), Self::Error> {
         self.discharge(true).await?;
-        self.controller.inner.get_mut().close_with_error(None).await?;
+        self.inner.close_with_error(None).await?;
         Ok(())
     }
 
     async fn commit(mut self) -> Result<(), Self::Error> {
         self.discharge(false).await?;
-        self.controller.inner.get_mut().close_with_error(None).await?;
+        self.inner.close_with_error(None).await?;
         Ok(())
     }
 }
@@ -152,16 +152,33 @@ impl OwnedTransaction {
     }
 
     /// Declare an transaction with an owned control link
+    ///
+    /// The controller must not be shared with any borrowed [`Transaction`](super::Transaction)
+    /// after this call, as the owned transaction takes exclusive ownership of the control link.
     pub async fn declare_with_controller(
         controller: Controller,
         global_id: impl Into<Option<TransactionId>>,
     ) -> Result<OwnedTransaction, ControllerSendError> {
-        let declared = controller.declare_inner(global_id.into()).await?;
+        let mut inner = controller.into_inner();
+        let declared = declare_on_link(&mut inner, global_id.into()).await?;
         Ok(Self {
-            controller,
+            inner,
             declared,
             is_discharged: false,
+            rollback_on_drop_trials: DEFAULT_ROLLBACK_ON_DROP_TRIALS,
         })
+    }
+
+    /// Number of lock-acquisition / outcome-wait trials for the best-effort rollback
+    /// performed when the transaction is dropped (see [`DEFAULT_ROLLBACK_ON_DROP_TRIALS`]).
+    pub fn rollback_on_drop_trials(&self) -> u32 {
+        self.rollback_on_drop_trials
+    }
+
+    /// Sets the number of trials for the best-effort rollback performed when the transaction
+    /// is dropped. Set to 0 to skip the rollback attempt.
+    pub fn set_rollback_on_drop_trials(&mut self, trials: u32) {
+        self.rollback_on_drop_trials = trials;
     }
 }
 
@@ -174,7 +191,11 @@ impl TransactionExt for OwnedTransaction {}
 impl Drop for OwnedTransaction {
     fn drop(&mut self) {
         if !self.is_discharged {
-            rollback_on_drop(&self.controller.inner, &self.declared.txn_id);
+            rollback_on_drop(
+                &mut self.inner,
+                &self.declared.txn_id,
+                self.rollback_on_drop_trials,
+            );
         }
     }
 }

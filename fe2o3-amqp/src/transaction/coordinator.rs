@@ -345,13 +345,16 @@ impl TxnCoordinator {
 impl Drop for TxnCoordinator {
     fn drop(&mut self) {
         for txn_id in self.txn_ids.drain() {
-            if self
+            if let Err(_error) = self
                 .inner
                 .session_control()
                 .try_send(SessionControl::AbortTransaction(txn_id))
-                .is_err()
             {
                 // Session must have dropped
+                #[cfg(feature = "tracing")]
+                tracing::warn!("Failed to send AbortTransaction on coordinator drop: session dropped");
+                #[cfg(feature = "log")]
+                log::warn!("Failed to send AbortTransaction on coordinator drop: session dropped");
                 return;
             }
         }

@@ -802,7 +802,23 @@ impl<L: endpoint::ReceiverLink> Drop for ReceiverInner<L> {
                 closed: true,
                 error: None,
             };
-            let _ = self.outgoing.try_send(LinkFrame::Detach(detach));
+            if let Err(_error) = self.outgoing.try_send(LinkFrame::Detach(detach)) {
+                #[cfg(any(feature = "log", feature = "tracing"))]
+                {
+                    let reason = match &_error {
+                        tokio::sync::mpsc::error::TrySendError::Full(_) => {
+                            "control channel is full"
+                        }
+                        tokio::sync::mpsc::error::TrySendError::Closed(_) => {
+                            "control channel is closed"
+                        }
+                    };
+                    #[cfg(feature = "tracing")]
+                    tracing::warn!(reason, "Failed to enqueue Detach frame on receiver drop");
+                    #[cfg(feature = "log")]
+                    log::warn!("Failed to enqueue Detach frame on receiver drop: {reason}");
+                }
+            }
         }
     }
 }

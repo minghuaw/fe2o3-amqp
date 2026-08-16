@@ -57,6 +57,10 @@ use fe2o3_amqp_types::{
 
 pub(crate) const TXN_ID_KEY: &str = "txn-id";
 
+/// Default number of lock-acquisition / outcome-wait trials for the best-effort rollback
+/// performed when a transaction is dropped.
+pub const DEFAULT_ROLLBACK_ON_DROP_TRIALS: u32 = 20;
+
 mod controller;
 pub use controller::*;
 
@@ -67,7 +71,7 @@ use serde_amqp::{ser::Serializer, Value};
 
 mod acquisition;
 pub use acquisition::*;
-use tokio::sync::{mpsc::error::TryRecvError, oneshot, Mutex};
+use tokio::sync::{mpsc::error::TryRecvError, oneshot};
 
 use controller::ControlLink;
 
@@ -517,6 +521,7 @@ pub struct Transaction<'t> {
     controller: &'t Controller,
     declared: Declared,
     is_discharged: bool,
+    rollback_on_drop_trials: u32,
 }
 
 
@@ -529,9 +534,8 @@ impl<'t> TransactionDischarge for Transaction<'t> {
 
     async fn discharge(&mut self, fail: bool) -> Result<(), Self::Error> {
         if !self.is_discharged {
-            self.controller
-                .discharge(self.declared.txn_id.clone(), fail)
-                .await?;
+            let mut inner = self.controller.inner.lock().await;
+            discharge_on_link(&mut inner, self.declared.txn_id.clone(), fail).await?;
             self.is_discharged = true;
         }
         Ok(())
@@ -557,12 +561,26 @@ impl<'t> Transaction<'t> {
         controller: &'t Controller,
         global_id: impl Into<Option<TransactionId>>,
     ) -> Result<Transaction<'t>, ControllerSendError> {
-        let declared = controller.declare_inner(global_id.into()).await?;
+        let mut inner = controller.inner.lock().await;
+        let declared = declare_on_link(&mut inner, global_id.into()).await?;
         Ok(Self {
             controller,
             declared,
             is_discharged: false,
+            rollback_on_drop_trials: DEFAULT_ROLLBACK_ON_DROP_TRIALS,
         })
+    }
+
+    /// Number of lock-acquisition / outcome-wait trials for the best-effort rollback
+    /// performed when the transaction is dropped (see [`DEFAULT_ROLLBACK_ON_DROP_TRIALS`]).
+    pub fn rollback_on_drop_trials(&self) -> u32 {
+        self.rollback_on_drop_trials
+    }
+
+    /// Sets the number of trials for the best-effort rollback performed when the transaction
+    /// is dropped. Set to 0 to skip the rollback attempt.
+    pub fn set_rollback_on_drop_trials(&mut self, trials: u32) {
+        self.rollback_on_drop_trials = trials;
     }
 }
 
@@ -576,7 +594,35 @@ impl<'t> Drop for Transaction<'t> {
     #[cfg_attr(feature = "tracing", tracing::instrument)]
     fn drop(&mut self) {
         if !self.is_discharged {
-            rollback_on_drop(&self.controller.inner, &self.declared.txn_id);
+            let mut counter = 0u32;
+            let mut guard = loop {
+                if counter > self.rollback_on_drop_trials {
+                    #[cfg(feature = "tracing")]
+                    tracing::error!(
+                        trials = self.rollback_on_drop_trials,
+                        "rollback_on_drop: giving up acquiring the control link lock"
+                    );
+                    #[cfg(feature = "log")]
+                    log::error!(
+                        "rollback_on_drop: giving up acquiring the control link lock after {} trials",
+                        self.rollback_on_drop_trials
+                    );
+                    return;
+                }
+                counter += 1;
+
+                match self.controller.inner.try_lock() {
+                    Ok(inner) => break inner,
+                    Err(_) => std::thread::sleep(std::time::Duration::from_millis(
+                        (10 * counter + 1) as u64,
+                    )),
+                }
+            };
+            rollback_on_drop(
+                &mut guard,
+                &self.declared.txn_id,
+                self.rollback_on_drop_trials,
+            );
         }
     }
 }
@@ -585,13 +631,14 @@ impl<'t> Drop for Transaction<'t> {
 ///
 /// This is a best-effort synchronous operation: the discharge transfer is serialized and
 /// sent over the control link without `.await` (which is not possible in `Drop`), retrying
-/// the lock acquisition and the outcome wait for a limited number of trials.
+/// the outcome wait for a limited number of trials.
+///
+/// The caller must hold exclusive access to the control link.
 pub(crate) fn rollback_on_drop(
-    controller: &Mutex<SenderInner<ControlLink>>,
+    inner: &mut SenderInner<ControlLink>,
     txn_id: &TransactionId,
+    trials: u32,
 ) {
-    const TRIALS_BEFORE_GIVE_UP: u64 = 20;
-
     let discharge = Discharge {
         txn_id: txn_id.clone(),
         fail: Some(true),
@@ -609,27 +656,6 @@ pub(crate) fn rollback_on_drop(
     }
     let payload = payload.freeze();
     let payload_copy = payload.clone();
-
-    // TODO: what if lock fails
-    let mut counter = 0;
-    let mut inner = loop {
-        if counter > TRIALS_BEFORE_GIVE_UP {
-            return;
-        }
-        counter += 1;
-
-        match controller.try_lock() {
-            Ok(inner) => break inner,
-            Err(_error) => {
-                #[cfg(feature = "tracing")]
-                tracing::error!(error = ?_error);
-                #[cfg(feature = "log")]
-                log::error!("error = {:?}", _error);
-
-                std::thread::sleep(std::time::Duration::from_millis(10 * counter + 1))
-            }
-        }
-    };
 
     match inner.link.flow_state.try_consume(1) {
         Ok(_) => {
@@ -686,8 +712,12 @@ pub(crate) fn rollback_on_drop(
                 performative: transfer,
                 payload,
             };
-            if inner.outgoing.try_send(frame).is_err() {
-                // Channel is already closed
+            if let Err(_error) = inner.outgoing.try_send(frame) {
+                // The channel to the session is already closed
+                #[cfg(feature = "tracing")]
+                tracing::error!(txn_id = ?txn_id, "rollback_on_drop: failed to send the discharge transfer, the control link channel is closed");
+                #[cfg(feature = "log")]
+                log::error!("rollback_on_drop: failed to send the discharge transfer, the control link channel is closed");
                 return;
             }
 
@@ -705,10 +735,14 @@ pub(crate) fn rollback_on_drop(
                     .get_or_insert(OrderedMap::new())
                     .insert(delivery_tag, unsettled);
             }
-            let mut counter = 0;
+            let mut counter = 0u32;
             loop {
                 // TODO:: limits?
-                if counter > TRIALS_BEFORE_GIVE_UP {
+                if counter > trials {
+                    #[cfg(feature = "tracing")]
+                    tracing::error!(txn_id = ?txn_id, trials, "rollback_on_drop: giving up waiting for the discharge outcome");
+                    #[cfg(feature = "log")]
+                    log::error!("rollback_on_drop: giving up waiting for the discharge outcome after {trials} trials");
                     return;
                 }
                 counter += 1;
@@ -725,7 +759,9 @@ pub(crate) fn rollback_on_drop(
                         }
                     },
                     Ok(None) => {
-                        std::thread::sleep(std::time::Duration::from_millis(10 * counter + 1));
+                        std::thread::sleep(std::time::Duration::from_millis(
+                            (10 * counter + 1) as u64,
+                        ));
                     }
                     Err(_error) => {
                         #[cfg(feature = "tracing")]
