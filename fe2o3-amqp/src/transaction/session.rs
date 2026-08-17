@@ -379,6 +379,10 @@ where
         self.session.on_outgoing_flow(flow)
     }
 
+    fn maybe_outgoing_session_flow(&mut self) -> Option<SessionOutgoingItem> {
+        self.session.maybe_outgoing_session_flow()
+    }
+
     fn on_outgoing_transfer(
         &mut self,
         input_handle: InputHandle,

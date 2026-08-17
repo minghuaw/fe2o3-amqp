@@ -329,6 +329,11 @@ pub struct Session {
     pub(crate) incoming_channel: Option<IncomingChannel>,
     // initialize with 0 first and change after receiving the remote Begin
     pub(crate) next_incoming_id: TransferNumber,
+    // Number of transfer frames received since the last session flow was sent.
+    // Used to re-advertise the session window (advancing next-incoming-id) when half
+    // of the incoming-window has been consumed, mirroring go-amqp's approach. This
+    // keeps the peer's send window sliding even when no link-level flow is generated.
+    pub(crate) need_flow_count: u32,
     pub(crate) remote_incoming_window: SequenceNo,
     // Outgoing transfers that are blocked by the remote-incoming-window
     pub(crate) remote_incoming_window_exhausted_buffer: VecDeque<(InputHandle, Transfer, Payload)>,
@@ -443,6 +448,30 @@ impl Session {
         };
         let frame = SessionFrame::new(self.outgoing_channel, body);
         Ok(frame)
+    }
+
+    /// Build a session-only flow that re-advertises the session window. It carries no link
+    /// state (`handle` and the link fields are unset), so it only updates the peer's view of
+    /// our session window via the advanced `next-incoming-id`.
+    fn on_outgoing_session_flow(&self) -> SessionFrame {
+        let flow = Flow {
+            // Session flow states
+            next_incoming_id: Some(self.next_incoming_id),
+            incoming_window: self.incoming_window,
+            next_outgoing_id: self.next_outgoing_id,
+            outgoing_window: self.outgoing_window,
+            // No link flow states: this is a session-only flow
+            handle: None,
+            delivery_count: None,
+            link_credit: None,
+            available: None,
+            drain: false,
+            echo: false,
+            properties: None,
+        };
+
+        let body = SessionFrameBody::Flow(flow);
+        SessionFrame::new(self.outgoing_channel, body)
     }
 
     async fn on_incoming_flow_inner(
@@ -740,6 +769,7 @@ impl endpoint::Session for Session {
         // remote-outgoing-window, and MAY (depending on policy) decrement its incoming-window.
         self.next_incoming_id = self.next_incoming_id.wrapping_add(1);
         self.remote_outgoing_window = self.remote_outgoing_window.saturating_sub(1);
+        self.need_flow_count = self.need_flow_count.saturating_add(1);
 
         // TODO: allow user to define whether the incoming window should be decremented
 
@@ -994,6 +1024,27 @@ impl endpoint::Session for Session {
         Ok(frame)
     }
 
+    /// Returns a session-only flow to send when half of the incoming-window has been consumed
+    /// by received transfer frames, mirroring go-amqp's proactive window top-up. The advertised
+    /// window size is constant; the peer's remaining allowance is recomputed from the advanced
+    /// `next-incoming-id`, so a peer that relies on continuous sending never stalls when no
+    /// link-level flow is generated.
+    fn maybe_outgoing_session_flow(&mut self) -> Option<SessionOutgoingItem> {
+        // Only send while the session is fully mapped; no flows are emitted during teardown.
+        if !matches!(self.local_state, SessionState::Mapped) {
+            return None;
+        }
+
+        if self.need_flow_count >= self.incoming_window / 2 {
+            self.need_flow_count = 0;
+            Some(SessionOutgoingItem::SingleFrame(
+                self.on_outgoing_session_flow(),
+            ))
+        } else {
+            None
+        }
+    }
+
     fn on_outgoing_transfer(
         &mut self,
         input_handle: InputHandle,
@@ -1116,7 +1167,25 @@ fn consecutive_chunk_indices(delivery_ids: &[DeliveryNumber]) -> Vec<usize> {
 
 #[cfg(test)]
 mod tests {
-    use super::num_messages_settled_by_disposition;
+    use std::sync::{Arc, OnceLock};
+
+    use super::{
+        num_messages_settled_by_disposition, Builder, Session, SessionFrame, SessionFrameBody,
+        SessionOutgoingItem, SessionState,
+    };
+    use crate::endpoint::{OutgoingChannel, Session as _};
+
+    fn mapped_session() -> Session {
+        Builder::new()
+            .incoming_window(2048)
+            .outgoing_window(2048)
+            .into_session(
+                OutgoingChannel(0),
+                SessionState::Mapped,
+                Arc::new(OnceLock::new()),
+                Arc::new(OnceLock::new()),
+            )
+    }
 
     #[test]
     fn number_of_message_settled_by_disposition() {
@@ -1135,5 +1204,53 @@ mod tests {
         let last = Some(1);
         let count = num_messages_settled_by_disposition(first, last);
         assert_eq!(count, 1);
+    }
+
+    #[test]
+    fn maybe_outgoing_session_flow_fires_at_half_window() {
+        let mut session = mapped_session();
+
+        // Below half of the incoming window: no flow is due.
+        session.need_flow_count = 1023;
+        assert!(session.maybe_outgoing_session_flow().is_none());
+
+        // At half of the incoming window: a session-only flow is due and the
+        // counter is reset.
+        session.need_flow_count = 1024;
+        let item = session
+            .maybe_outgoing_session_flow()
+            .expect("session flow should be due");
+        let flow = match item {
+            SessionOutgoingItem::SingleFrame(SessionFrame {
+                body: SessionFrameBody::Flow(flow),
+                ..
+            }) => flow,
+            _ => panic!("expected a single session flow frame"),
+        };
+
+        // Session-only flow: no link handle and no link fields.
+        assert!(flow.handle.is_none());
+        assert!(flow.delivery_count.is_none());
+        assert!(flow.link_credit.is_none());
+
+        // The session window is re-advertised from the current session state.
+        assert_eq!(flow.next_incoming_id, Some(session.next_incoming_id));
+        assert_eq!(flow.incoming_window, session.incoming_window);
+        assert_eq!(flow.next_outgoing_id, session.next_outgoing_id);
+        assert_eq!(flow.outgoing_window, session.outgoing_window);
+
+        // The counter must be reset after the flow is emitted, so no flow is
+        // due immediately after.
+        assert_eq!(session.need_flow_count, 0);
+        assert!(session.maybe_outgoing_session_flow().is_none());
+    }
+
+    #[test]
+    fn maybe_outgoing_session_flow_skips_when_not_mapped() {
+        let mut session = mapped_session();
+        session.local_state = SessionState::EndSent;
+        session.need_flow_count = u32::MAX;
+
+        assert!(session.maybe_outgoing_session_flow().is_none());
     }
 }

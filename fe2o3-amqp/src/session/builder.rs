@@ -29,9 +29,16 @@ pub struct Builder {
     pub next_outgoing_id: TransferNumber,
 
     /// The initial incoming-window of the sender
+    ///
+    /// Defaults to [`DEFAULT_WINDOW`]. Once half of the window has been consumed
+    /// by received transfers, the session re-advertises its window with a
+    /// session-only flow (no link handle), so a peer sending continuously never
+    /// stalls even when no link-level flow is generated.
     pub incoming_window: TransferNumber,
 
     /// The initial outgoing-window of the sender
+    ///
+    /// Defaults to [`DEFAULT_WINDOW`].
     pub outgoing_window: TransferNumber,
 
     /// The maximum handle value that can be used on the session
@@ -106,6 +113,7 @@ cfg_transaction! {
                     handle_max: self.handle_max,
                     incoming_channel: None,
                     next_incoming_id: 0,
+                    need_flow_count: 0,
                     remote_incoming_window: 0,
                     remote_incoming_window_exhausted_buffer: VecDeque::new(),
                     remote_outgoing_window: 0,
@@ -153,6 +161,7 @@ impl Builder {
             handle_max: self.handle_max,
             incoming_channel: None,
             next_incoming_id: 0,
+            need_flow_count: 0,
             remote_incoming_window: 0,
             remote_incoming_window_exhausted_buffer: VecDeque::new(),
             remote_outgoing_window: 0,
@@ -174,12 +183,19 @@ impl Builder {
     }
 
     /// The initial incoming-window of the sender
+    ///
+    /// Defaults to [`DEFAULT_WINDOW`]. Once half of the window has been consumed
+    /// by received transfers, the session re-advertises its window with a
+    /// session-only flow (no link handle), so a peer sending continuously never
+    /// stalls even when no link-level flow is generated.
     pub fn incoming_window(mut self, value: TransferNumber) -> Self {
         self.incoming_window = value;
         self
     }
 
     /// The initial outgoing-window of the sender
+    ///
+    /// Defaults to [`DEFAULT_WINDOW`].
     pub fn outgoing_window(mut self, value: TransferNumber) -> Self {
         self.outgoing_window = value;
         self

@@ -59,6 +59,10 @@
 18. **Breaking**: [`BeginError`] gains a `ConnectionNotOpened` variant: beginning a session
     on a connection that has not been opened yet reports `ConnectionNotOpened`, while one
     on a stopped connection reports `ConnectionStopped(reason)`.
+19. A session now re-advertises its window (a session-only flow with no link handle) when
+    half of the incoming-window has been consumed by received transfers, so a peer sending
+    continuously never stalls on the session window even when no link-level flow is
+    generated.
 
 ## 0.16.2
 
