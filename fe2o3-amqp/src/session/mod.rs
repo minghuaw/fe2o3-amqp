@@ -1190,7 +1190,6 @@ mod tests {
                 OutgoingChannel(0),
                 SessionState::Mapped,
                 Arc::new(OnceLock::new()),
-                Arc::new(OnceLock::new()),
             )
     }
 
