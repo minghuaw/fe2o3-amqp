@@ -66,6 +66,8 @@
 20. A live transactional posting now sends the presumptive-outcome disposition reply
     (`transactional-state` with `Accepted`) instead of dropping it; previously it was only
     sent on the transaction discharge path.
+21. **Breaking**: [`DEFAULT_WINDOW`] is changed from `2048` to `5000`, matching the default
+    used by Microsoft.Azure.Amqp (.NET) and Azure/go-amqp.
 
 ## 0.16.2
 
