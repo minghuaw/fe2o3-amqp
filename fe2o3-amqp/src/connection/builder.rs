@@ -803,11 +803,10 @@ impl Builder<'_, mode::ConnectorWithId, ()> {
         self.connect_with_stream(tls_stream, spawn_engine_fn).await
     }
 
-    #[cfg(all(
-        feature = "native-tls",
-        not(feature = "rustls"),
-        not(target_arch = "wasm32")
-    ))]
+    // Also the default backend when both `"rustls"` and `"native-tls"` are enabled
+    // (matching reqwest). The `rustls` default path stays exclusive to rustls-only
+    // builds to avoid dead code in the both-enabled case.
+    #[cfg(all(feature = "native-tls", not(target_arch = "wasm32")))]
     async fn connect_tls_with_native_tls_default<Io, F>(
         self,
         stream: Io,
@@ -847,10 +846,15 @@ cfg_not_wasm32! {
         ///
         /// # TLS
         ///
-        /// TLS is not supported unless one and only one of the following feature must be enabled
+        /// TLS requires at least one of the following features to be enabled:
         ///
         /// 1. "rustls"
         /// 2. "native-tls"
+        ///
+        /// If both are enabled, `"native-tls"` is used as the default TLS connector
+        /// for `amqps://`; to pick the `"rustls"` stack explicitly, supply a connector
+        /// via [`Builder::rustls_connector`] (or [`Builder::native_tls_connector`] for
+        /// native-tls).
         ///
         /// If no custom `TlsConnector` is supplied, the following default connector will be used.
         ///
@@ -973,6 +977,9 @@ cfg_not_wasm32! {
                     self.connect_with_stream(stream, spawn_engine).await
                 },
                 "amqps" => {
+                    // With both TLS features enabled, `native-tls` is the default
+                    // backend for `amqps://` (matching reqwest). Explicit selection is
+                    // available via `rustls_connector`/`native_tls_connector`.
                     #[cfg(all(feature = "rustls", not(feature = "native-tls")))]
                     {
                         let domain = self.domain.ok_or(OpenError::InvalidDomain)?;
@@ -981,9 +988,10 @@ cfg_not_wasm32! {
                             .await;
                     }
 
+                    // Covers the native-tls-only build and, as the default, the
+                    // both-features-enabled build.
                     #[cfg(all(
                         feature = "native-tls",
-                        not(feature = "rustls"),
                         not(target_arch = "wasm32")
                     ))]
                     {
