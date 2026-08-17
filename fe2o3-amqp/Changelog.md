@@ -68,6 +68,8 @@
     sent on the transaction discharge path.
 21. **Breaking**: [`DEFAULT_WINDOW`] is changed from `2048` to `5000`, matching the default
     used by Microsoft.Azure.Amqp (.NET) and Azure/go-amqp.
+22. `amqps://` with both the `"rustls"` and `"native-tls"` features enabled now uses the
+    `"native-tls"` default connector instead of failing with `TlsConnectorNotFound`.
 
 ## 0.16.2
 
