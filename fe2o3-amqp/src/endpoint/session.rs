@@ -76,6 +76,15 @@ pub(crate) trait Session {
         flow: Flow,
     ) -> impl Future<Output = Result<Option<SessionOutgoingItem>, Self::Error>> + Send;
 
+    /// Handle an incoming transfer.
+    ///
+    /// An `Ok(Some(Disposition))` is produced only by the transactional session
+    /// implementation ([`crate::transaction::session::TxnSession`]) as the
+    /// presumptive-outcome reply required when a posted transfer is received
+    /// (AMQP §4.4.1). Non-transactional implementations MUST return `Ok(None)`,
+    /// since settlement of ordinary deliveries is handled at the link level.
+    /// The session engine sends the reply in the live path; the transaction
+    /// discharge path consumes it via `SessionControl::Disposition`.
     fn on_incoming_transfer(
         &mut self,
         transfer: Transfer,

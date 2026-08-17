@@ -54,6 +54,20 @@ impl ResourceTransaction {
         Self { frames: Vec::new() }
     }
 
+    /// Handle a transfer posted against a live transaction, returning the
+    /// disposition reply to send back.
+    ///
+    /// Per AMQP §4.4.1, on receiving a non-settled posted transfer the resource
+    /// MUST send a disposition whose state is a `transactional-state` carrying
+    /// the presumptive terminal outcome — the outcome in effect if the
+    /// transaction is successfully discharged. `Accepted` is the provisional
+    /// outcome chosen here (§4.5.6 defines the outcome field as the "provisional
+    /// outcome to be applied if the transaction commits"); it is the canonical
+    /// default used by the spec's own example (Figure 4.3,
+    /// `TransactionalState(txn-id, outcome=Accepted())`) and by Qpid Broker-J
+    /// (its `TransactionalTransferTest` asserts `Accepted` for settle-first,
+    /// settle-second, and discharge-fail cases). The controller may override it
+    /// before discharge via a transactional retirement disposition (§4.4.2).
     pub(crate) fn on_incoming_post(
         &mut self,
         txn_id: TransactionId,

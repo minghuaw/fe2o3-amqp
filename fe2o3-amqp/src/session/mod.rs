@@ -55,7 +55,7 @@ pub use builder::*;
 use self::frame::{SessionFrame, SessionFrameBody, SessionOutgoingItem};
 
 /// Default incoming_window and outgoing_window
-pub const DEFAULT_WINDOW: Uint = 2048;
+pub const DEFAULT_WINDOW: Uint = 5000;
 
 /// A handle to the [`Session`] event loop
 ///
@@ -759,6 +759,13 @@ impl endpoint::Session for Session {
         }
     }
 
+    /// Handle an incoming transfer.
+    ///
+    /// Always returns `Ok(None)`: settlement of non-transactional deliveries is
+    /// handled at the link level, so this session never produces an immediate
+    /// disposition. The `Option<Disposition>` return is only used by the
+    /// transactional session ([`crate::transaction::session::TxnSession`]) for
+    /// the presumptive-outcome reply.
     async fn on_incoming_transfer(
         &mut self,
         transfer: Transfer,
@@ -1131,7 +1138,6 @@ cfg_transaction! {
         }
     }
 
-
     impl HandleDischarge for Session {
         async fn commit_transaction(
             &mut self,
@@ -1171,18 +1177,17 @@ mod tests {
 
     use super::{
         num_messages_settled_by_disposition, Builder, Session, SessionFrame, SessionFrameBody,
-        SessionOutgoingItem, SessionState,
+        SessionOutgoingItem, SessionState, DEFAULT_WINDOW,
     };
     use crate::endpoint::{OutgoingChannel, Session as _};
 
     fn mapped_session() -> Session {
         Builder::new()
-            .incoming_window(2048)
-            .outgoing_window(2048)
+            .incoming_window(DEFAULT_WINDOW)
+            .outgoing_window(DEFAULT_WINDOW)
             .into_session(
                 OutgoingChannel(0),
                 SessionState::Mapped,
-                Arc::new(OnceLock::new()),
                 Arc::new(OnceLock::new()),
             )
     }
@@ -1211,12 +1216,12 @@ mod tests {
         let mut session = mapped_session();
 
         // Below half of the incoming window: no flow is due.
-        session.need_flow_count = 1023;
+        session.need_flow_count = DEFAULT_WINDOW / 2 - 1;
         assert!(session.maybe_outgoing_session_flow().is_none());
 
         // At half of the incoming window: a session-only flow is due and the
         // counter is reset.
-        session.need_flow_count = 1024;
+        session.need_flow_count = DEFAULT_WINDOW / 2;
         let item = session
             .maybe_outgoing_session_flow()
             .expect("session flow should be due");
