@@ -11,8 +11,7 @@ use tokio::sync::mpsc;
 use crate::{
     connection::{AllocSessionError, ConnectionHandle, ConnectionStopReason},
     control::SessionControl,
-    endpoint::OutgoingChannel,
-    link::SessionStopReason,
+    endpoint::{OutgoingChannel, Session as _},
     session::{engine::SessionEngine, SessionState},
     util::Constant,
     Session,
@@ -91,14 +90,13 @@ cfg_transaction! {
                 outgoing_channel: OutgoingChannel,
                 control_link_acceptor: ControlLinkAcceptor,
                 local_state: SessionState,
-                session_stop_reason: Arc<OnceLock<SessionStopReason>>,
                 connection_stop_reason: Arc<OnceLock<ConnectionStopReason>>,
             ) -> TxnSession<Session> {
                 let txn_manager = TransactionManager::new(outgoing, control_link_acceptor);
                 let session = Session {
                     // control,
                     outgoing_channel,
-                    session_stop_reason,
+                    session_stop_reason: Arc::new(OnceLock::new()),
                     connection_stop_reason,
                     local_state,
                     initial_outgoing_id: Constant::new(self.next_outgoing_id),
@@ -139,15 +137,13 @@ impl Builder {
 
     pub(crate) fn into_session(
         self,
-        // control: mpsc::Sender<SessionControl>,
         outgoing_channel: OutgoingChannel,
         local_state: SessionState,
-        session_stop_reason: Arc<OnceLock<SessionStopReason>>,
         connection_stop_reason: Arc<OnceLock<ConnectionStopReason>>,
     ) -> Session {
         Session {
             outgoing_channel,
-            session_stop_reason,
+            session_stop_reason: Arc::new(OnceLock::new()),
             connection_stop_reason,
             local_state,
             initial_outgoing_id: Constant::new(self.next_outgoing_id),
@@ -271,7 +267,6 @@ impl Builder {
                 mpsc::channel::<SessionControl>(DEFAULT_SESSION_CONTROL_BUFFER_SIZE);
             let (incoming_tx, incoming_rx) = mpsc::channel(self.buffer_size);
             let (outgoing_tx, outgoing_rx) = mpsc::channel(self.buffer_size);
-            let session_stop_reason = Arc::new(OnceLock::new());
 
             // create session in connection::Engine
             let outgoing_channel = match connection.allocate_session(incoming_tx).await {
@@ -286,14 +281,14 @@ impl Builder {
             };
 
             #[cfg(not(all(feature = "transaction", feature = "acceptor")))]
-            let (engine_handle, outcome) = {
+            let (engine_handle, outcome, session_stop_reason) = {
                 let session = self.into_session(
                     outgoing_channel,
                     local_state,
-                    session_stop_reason.clone(),
                     connection.connection_stop_reason.clone(),
                 );
-                let engine = SessionEngine::begin_client_session(
+                let session_stop_reason = session.session_stop_reason().clone();
+                let (handle, outcome) = SessionEngine::begin_client_session(
                     connection.control.clone(),
                     session,
                     session_control_rx,
@@ -301,12 +296,13 @@ impl Builder {
                     connection.outgoing.clone(),
                     outgoing_rx,
                 )
-                .await?;
-                engine.spawn()
+                .await?
+                .spawn();
+                (handle, outcome, session_stop_reason)
             };
 
             #[cfg(all(feature = "transaction", feature = "acceptor"))]
-            let (engine_handle, outcome) = {
+            let (engine_handle, outcome, session_stop_reason) = {
                 let mut this = self;
                 match this.control_link_acceptor.take() {
                     Some(control_link_acceptor) => {
@@ -316,10 +312,10 @@ impl Builder {
                             outgoing_channel,
                             control_link_acceptor,
                             local_state,
-                            session_stop_reason.clone(),
                             connection.connection_stop_reason.clone(),
                         );
-                        let engine = SessionEngine::begin_client_session(
+                        let session_stop_reason = session.session_stop_reason().clone();
+                        let (handle, outcome) = SessionEngine::begin_client_session(
                             connection.control.clone(),
                             session,
                             session_control_rx,
@@ -327,17 +323,18 @@ impl Builder {
                             connection.outgoing.clone(),
                             outgoing_rx,
                         )
-                        .await?;
-                        engine.spawn()
+                        .await?
+                        .spawn();
+                        (handle, outcome, session_stop_reason)
                     }
                     None => {
                         let session = this.into_session(
                             outgoing_channel,
                             local_state,
-                            session_stop_reason.clone(),
                             connection.connection_stop_reason.clone(),
                         );
-                        let engine = SessionEngine::begin_client_session(
+                        let session_stop_reason = session.session_stop_reason().clone();
+                        let (handle, outcome) = SessionEngine::begin_client_session(
                             connection.control.clone(),
                             session,
                             session_control_rx,
@@ -345,8 +342,9 @@ impl Builder {
                             connection.outgoing.clone(),
                             outgoing_rx,
                         )
-                        .await?;
-                        engine.spawn()
+                        .await?
+                        .spawn();
+                        (handle, outcome, session_stop_reason)
                     }
                 }
             };
@@ -386,7 +384,6 @@ impl Builder {
                 mpsc::channel::<SessionControl>(DEFAULT_SESSION_CONTROL_BUFFER_SIZE);
             let (incoming_tx, incoming_rx) = mpsc::channel(self.buffer_size);
             let (outgoing_tx, outgoing_rx) = mpsc::channel(self.buffer_size);
-            let session_stop_reason = Arc::new(OnceLock::new());
 
             // create session in connection::Engine
             let outgoing_channel = match connection.allocate_session(incoming_tx).await {
@@ -400,14 +397,14 @@ impl Builder {
                 },
             };
 
-            let (engine_handle, outcome) = {
+            let (engine_handle, outcome, session_stop_reason) = {
                 let session = self.into_session(
                     outgoing_channel,
                     local_state,
-                    session_stop_reason.clone(),
                     connection.connection_stop_reason.clone(),
                 );
-                let engine = SessionEngine::begin_client_session(
+                let session_stop_reason = session.session_stop_reason().clone();
+                let (handle, outcome) = SessionEngine::begin_client_session(
                     connection.control.clone(),
                     session,
                     session_control_rx,
@@ -415,8 +412,9 @@ impl Builder {
                     connection.outgoing.clone(),
                     outgoing_rx,
                 )
-                .await?;
-                engine.spawn_on_local_set(local_set)
+                .await?
+                .spawn_on_local_set(local_set);
+                (handle, outcome, session_stop_reason)
             };
 
             let handle = SessionHandle {
@@ -453,7 +451,6 @@ impl Builder {
                 mpsc::channel::<SessionControl>(DEFAULT_SESSION_CONTROL_BUFFER_SIZE);
             let (incoming_tx, incoming_rx) = mpsc::channel(self.buffer_size);
             let (outgoing_tx, outgoing_rx) = mpsc::channel(self.buffer_size);
-            let session_stop_reason = Arc::new(OnceLock::new());
 
             // create session in connection::Engine
             let outgoing_channel = match connection.allocate_session(incoming_tx).await {
@@ -467,14 +464,14 @@ impl Builder {
                 },
             };
 
-            let (engine_handle, outcome) = {
+            let (engine_handle, outcome, session_stop_reason) = {
                 let session = self.into_session(
                     outgoing_channel,
                     local_state,
-                    session_stop_reason.clone(),
                     connection.connection_stop_reason.clone(),
                 );
-                let engine = SessionEngine::begin_client_session(
+                let session_stop_reason = session.session_stop_reason().clone();
+                let (handle, outcome) = SessionEngine::begin_client_session(
                     connection.control.clone(),
                     session,
                     session_control_rx,
@@ -482,8 +479,9 @@ impl Builder {
                     connection.outgoing.clone(),
                     outgoing_rx,
                 )
-                .await?;
-                engine.spawn_local()
+                .await?
+                .spawn_local();
+                (handle, outcome, session_stop_reason)
             };
 
             let handle = SessionHandle {

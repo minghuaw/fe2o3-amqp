@@ -287,18 +287,15 @@ impl SessionAcceptor {
             }
         };
 
-        // The stop reason cells are created here so that the session object, the
-        // engine, and the handle share them: the engine publishes the reason on
-        // the session at exit, and the handle (and the links attached through
-        // it) can read it.
-        let session_stop_reason = Arc::new(OnceLock::new());
-
+        // `into_session` creates the shared stop-reason cell; the engine
+        // publishes the reason on the session at exit, and the handle (and the
+        // links attached through it) read the same cell via a clone.
         let mut session = self.0.clone().into_session(
             outgoing_channel,
             local_state,
-            session_stop_reason.clone(),
             connection.connection_stop_reason.clone(),
         );
+        let session_stop_reason = session.session_stop_reason().clone();
         session.on_incoming_begin(
             IncomingChannel(incoming_session.channel),
             incoming_session.begin,
