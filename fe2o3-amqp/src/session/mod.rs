@@ -1138,7 +1138,6 @@ cfg_transaction! {
         }
     }
 
-
     impl HandleDischarge for Session {
         async fn commit_transaction(
             &mut self,
