@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.17.0
+
+1. Bumped version to "0.17.0" to match other `fe2o3-amqp` crates, so that a
+   downstream crate does not pull two versions of the family. This crate has no
+   source change.
+
 ## 0.16.0
 
 1. Bumped version to "0.16.0" to match other `fe2o3-amqp` crates, so that a

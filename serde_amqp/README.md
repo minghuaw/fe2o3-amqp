@@ -88,11 +88,11 @@ For the sake of completeness, serialization and deserialization for these varian
 implemented as follows:
 
 - `NewTypeVariant` is encoded/decoded as a map of one key-value pair with the variant index
-being the key and the single wrapped field being the value.
+  being the key and the single wrapped field being the value.
 - `TupleVariant` is encoded/decoded as a map of one key-value pair with the varant index being
-the key and a list of the fields being the value.
+  the key and a list of the fields being the value.
 - `StructVariant` is encoded/decoded as a map of one key-value pair with the variant index being
-the key and a list of the fields being the value.
+  the key and a list of the fields being the value.
 
 ## Feature flag
 
@@ -145,13 +145,13 @@ empty field will be decoded as the default value of the type.
 The `"list"` encoding will encode the `Attach` struct as a described list (a descriptor followed
 by a list of the fields).
 
-```rust, ignore
+```rust
 /// 2.7.3 Attach
 /// Attach a link to a session.
 /// <type name="attach" class="composite" source="list" provides="frame">
 ///     <descriptor name="amqp:attach:list" code="0x00000000:0x00000012"/>
-##[derive(Debug, DeserializeComposite, SerializeComposite)]
-##[amqp_contract(
+#[derive(Debug, DeserializeComposite, SerializeComposite)]
+#[amqp_contract(
     name = "amqp:attach:list",
     code = "0x0000_0000:0x0000_0012",
     encoding = "list",
@@ -203,9 +203,9 @@ pub struct Attach {
     /// <field name="properties" type="fields"/>
     pub properties: Option<Fields>,
 }
-```rust
+```
 
-```rust,ignore
+```rust
 /// 3.2.5 Application Properties
 /// <type name="application-properties" class="restricted" source="map" provides="section">
 ///     <descriptor name="amqp:application-properties:map" code="0x00000000:0x00000074"/>

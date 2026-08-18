@@ -1,6 +1,6 @@
 # Change Log
 
-## Unreleased
+## 0.17.0
 
 1. **Breaking**: Added the [`TransactionBase`] trait, which provides the `txn_id()`
    accessor for transactions.

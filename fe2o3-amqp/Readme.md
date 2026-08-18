@@ -37,12 +37,17 @@ To use a different provider, install it with
 `rustls::crypto::CryptoProvider::install_default` and supply your own
 `tokio_rustls::TlsConnector` to the connection builder.
 
-The default features also include `prefer-post-quantum`. A client therefore sends
-an `X25519MLKEM768` key share in the first ClientHello. To send an `X25519` key
-share instead, build the config with `ClientConfig::builder_with_provider` and pass
-a `CryptoProvider` whose `kx_groups` field starts with `X25519`. A plain
-`ClientConfig::builder()` does not change the order, because it takes the order
-from the default provider.
+When both the `"rustls"` and `"native-tls"` features are enabled, `"native-tls"`
+is used as the default TLS connector for `amqps://` when no connector is supplied
+to the builder. Pick a specific stack with
+[`Connection::builder().rustls_connector(..)`] / `native_tls_connector(..)`.
+
+The default features also include `prefer-post-quantum`. A client therefore
+sends an `X25519MLKEM768` key share in the first ClientHello. To send an
+`X25519` key share instead, build the config with
+`ClientConfig::builder_with_provider` and pass a `CryptoProvider` whose
+`kx_groups` field starts with `X25519`. A plain `ClientConfig::builder()` does
+not change the order, because it takes the order from the default provider.
 
 Neither TLS feature does anything on a `wasm32` target. See [WebAssembly
 support](#webassembly-support).
@@ -187,7 +192,8 @@ receiving message in a browser tab can be found
 The `"rustls"` and `"native-tls"` features do nothing on a `wasm32` target. A browser
 cannot open a raw socket, so it terminates TLS itself. Use a `wss://` URL with
 `fe2o3-amqp-ws` to get an encrypted connection. If you enable a TLS feature and then
-open an `amqps://` URL on `wasm32`, the call returns `OpenError::TlsConnectorNotFound`.
+open an `amqps://` URL on `wasm32`, the call returns
+[`connection::OpenError::TlsConnectorNotFound`].
 
 ## Components
 
@@ -202,7 +208,7 @@ open an `amqps://` URL on `wasm32`, the call returns `OpenError::TlsConnectorNot
 |`fe2o3-amqp-management`| Experimental implementation of AMQP1.0 management |
 |`fe2o3-amqp-cbs`| Experimental implementation of AMQP1.0 CBS |
 
-## MSRV
+## Minimum rust version supported
 
 1.85.0
 
