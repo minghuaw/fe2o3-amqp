@@ -144,7 +144,7 @@ cfg_wasm32! {
 const SEC_WEBSOCKET_PROTOCOL_AMQP: &str = "amqp";
 
 pin_project! {
-    /// A wrapper over [`tokio_tungstenite::WebSoccketStream`] that implements
+    /// A wrapper over [`tokio_tungstenite::WebSocketStream`] that implements
     /// `tokio::io::AsyncRead` and `tokio::io::AsyncWrite`.
     ///
     /// The public APIs all internally call their equivalent in `tokio_tungstenite` and checks the

@@ -1,6 +1,6 @@
 # Change Log
 
-## Unreleased
+## 0.17.0
 
 1. Derived `PartialEq` and `Eq` on the performatives (`Open`, `Begin`, `Attach`,
    `Flow`, `Transfer`, `Disposition`, `Detach`, `End`, `Close`, and `Performative`),

@@ -5,7 +5,7 @@ WebSocket adapter for AMQP 1.0 websocket binding
 This provides a thin wrapper over `tokio_tungstenite::WebSocketStream`, and the wrapper performs
 the WebSocket handshake with the "Sec-WebSocket-Protocol" HTTP header set to "amqp".
 
-Every public constructor of `WebSocketStream` sets the "Sec-WebSocket-Protocol" header to
+Every public constructor of [`WebSocketStream`] sets the "Sec-WebSocket-Protocol" header to
 "amqp" and rejects a handshake response that does not return the same value. To do the
 handshake over a stream that you open yourself, use `WebSocketStream::connect_with_stream` or
 `WebSocketStream::connect_with_stream_and_config`. This crate has no public constructor that

@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.17.0
+
+1. Bumped version to "0.17.0" to track `fe2o3-amqp` 0.17.0. This crate has no
+   source change.
+
 ## 0.16.0
 
 1. Bumped version to "0.16.0" to track `fe2o3-amqp` 0.16.0, which drops the `ring`
