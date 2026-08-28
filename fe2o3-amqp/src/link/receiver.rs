@@ -360,8 +360,15 @@ impl Receiver {
     /// re-attach and then close by exchanging closing Detach performatives.
     pub async fn detach(mut self) -> Result<DetachedReceiver, (DetachedReceiver, DetachError)> {
         match self.inner.detach_with_error(None).await {
-            Ok(_) => Ok(DetachedReceiver { inner: Box::new(self.inner) }),
-            Err(err) => Err((DetachedReceiver { inner: Box::new(self.inner) }, err)),
+            Ok(_) => Ok(DetachedReceiver {
+                inner: Box::new(self.inner),
+            }),
+            Err(err) => Err((
+                DetachedReceiver {
+                    inner: Box::new(self.inner),
+                },
+                err,
+            )),
         }
     }
 
@@ -375,8 +382,15 @@ impl Receiver {
         error: impl Into<definitions::Error>,
     ) -> Result<DetachedReceiver, (DetachedReceiver, DetachError)> {
         match self.inner.detach_with_error(Some(error.into())).await {
-            Ok(_) => Ok(DetachedReceiver { inner: Box::new(self.inner) }),
-            Err(err) => Err((DetachedReceiver { inner: Box::new(self.inner) }, err)),
+            Ok(_) => Ok(DetachedReceiver {
+                inner: Box::new(self.inner),
+            }),
+            Err(err) => Err((
+                DetachedReceiver {
+                    inner: Box::new(self.inner),
+                },
+                err,
+            )),
         }
     }
 

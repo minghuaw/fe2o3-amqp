@@ -1078,7 +1078,9 @@ macro_rules! try_as_sender {
 
 impl DetachedSender {
     fn new(inner: SenderInner<SenderLink<Target>>) -> Self {
-        Self { inner: Box::new(inner) }
+        Self {
+            inner: Box::new(inner),
+        }
     }
 
     /// Get a reference to the link's source field
