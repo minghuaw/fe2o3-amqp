@@ -4,7 +4,9 @@ use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::{Arc, OnceLock};
 
 use fe2o3_amqp_types::{
-    definitions::{self, DeliveryTag, Fields, Handle, LinkError, ReceiverSettleMode, Role, SequenceNo},
+    definitions::{
+        self, DeliveryTag, Fields, Handle, LinkError, ReceiverSettleMode, Role, SequenceNo,
+    },
     messaging::{
         Accepted, Address, DeliveryState, FromBody, Modified, Rejected, Released, Source, Target,
     },
@@ -968,7 +970,6 @@ where
     {
         loop {
             match self.recv_inner().await? {
-
                 Some(delivery) => return Ok(delivery),
                 None => continue, // Incomplete transfer, there are more transfer frames coming
             }
@@ -1195,14 +1196,11 @@ where
                 .as_ref()
                 .and_then(|i| i.performative.delivery_id)
         });
-        let delivery_tag = transfer
-            .delivery_tag
-            .clone()
-            .or_else(|| {
-                self.incomplete_transfer
-                    .as_ref()
-                    .and_then(|i| i.performative.delivery_tag.clone())
-            });
+        let delivery_tag = transfer.delivery_tag.clone().or_else(|| {
+            self.incomplete_transfer
+                .as_ref()
+                .and_then(|i| i.performative.delivery_tag.clone())
+        });
 
         // Discard the buffered chunks of the oversized delivery
         self.incomplete_transfer.take();
@@ -1211,9 +1209,7 @@ where
         if !transfer.settled.unwrap_or(false) {
             if let (Some(delivery_id), Some(delivery_tag)) = (delivery_id, delivery_tag) {
                 let error = definitions::Error::new(LinkError::MessageSizeExceeded, None, None);
-                let state = DeliveryState::Rejected(Rejected {
-                    error: Some(error),
-                });
+                let state = DeliveryState::Rejected(Rejected { error: Some(error) });
                 let info = DeliveryInfo {
                     delivery_id,
                     delivery_tag,
@@ -1241,7 +1237,9 @@ where
                     "Cannot send rejection disposition: missing delivery-id or delivery-tag"
                 );
                 #[cfg(feature = "log")]
-                log::warn!("Cannot send rejection disposition: missing delivery-id or delivery-tag");
+                log::warn!(
+                    "Cannot send rejection disposition: missing delivery-id or delivery-tag"
+                );
             }
         }
 
@@ -1267,7 +1265,9 @@ where
         if let Some(max_size) = self.link.max_message_size() {
             let total = self.accumulated_message_size(&transfer) + payload.len() as u64;
             if total > max_size {
-                return self.reject_oversized_message(transfer, total, max_size).await;
+                return self
+                    .reject_oversized_message(transfer, total, max_size)
+                    .await;
             }
         }
 
@@ -1340,7 +1340,9 @@ where
             if let Some(max_size) = self.link.max_message_size() {
                 let total = self.accumulated_message_size(&transfer) + payload.len() as u64;
                 if total > max_size {
-                    return self.reject_oversized_message(transfer, total, max_size).await;
+                    return self
+                        .reject_oversized_message(transfer, total, max_size)
+                        .await;
                 }
             }
 
