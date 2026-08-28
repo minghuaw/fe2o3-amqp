@@ -4,11 +4,12 @@ use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::{Arc, OnceLock};
 
 use fe2o3_amqp_types::{
-    definitions::{self, DeliveryTag, Fields, Handle, ReceiverSettleMode, Role, SequenceNo},
+    definitions::{self, DeliveryTag, Fields, Handle, LinkError, ReceiverSettleMode, Role, SequenceNo},
     messaging::{
         Accepted, Address, DeliveryState, FromBody, Modified, Rejected, Released, Source, Target,
     },
     performatives::{Attach, Detach, Disposition, Transfer},
+    primitives::OrderedMap,
 };
 use tokio::sync::mpsc;
 
@@ -21,6 +22,7 @@ use crate::{
     control::SessionControl,
     endpoint::{self, LinkAttach, LinkDetach, LinkExt, LinkFlow, OutputHandle},
     session::SessionHandle,
+    util::Sealed,
     Payload,
 };
 
@@ -33,9 +35,10 @@ use super::{
     role,
     shared_inner::{LinkEndpointInner, LinkEndpointInnerDetach, LinkEndpointInnerReattach},
     ArcReceiverUnsettledMap, DetachThenResumeReceiverError, DispositionError, FlowError,
-    IllegalLinkStateError, LinkFrame, LinkRelay, LinkStateError, ReceiverAttachError,
-    ReceiverAttachExchange, ReceiverFlowState, ReceiverLink, ReceiverResumeError,
-    ReceiverResumeErrorKind, ReceiverTransferError, RecvError, SessionStopReason, DEFAULT_CREDIT,
+    IllegalLinkStateError, LinkFrame, LinkRelay, LinkStateError, MessageSizeExceeded,
+    ReceiverAttachError, ReceiverAttachExchange, ReceiverFlowState, ReceiverLink,
+    ReceiverResumeError, ReceiverResumeErrorKind, ReceiverTransferError, RecvError,
+    SessionStopReason, DEFAULT_CREDIT,
 };
 
 cfg_transaction! {
@@ -132,6 +135,11 @@ impl Receiver {
 
     /// Returns the `max_message_size` of the link. A value of zero indicates that the link has no
     /// maximum message size, and thus a zero value is turned into a `None`
+    ///
+    /// When this value is set, deliveries larger than it are rejected on
+    /// receive with `amqp:link:message-size-exceeded` and [`recv`](#method.recv)
+    /// returns [`RecvError::MessageSizeExceeded`]; the link itself is not
+    /// detached.
     pub fn max_message_size(&self) -> Option<u64> {
         self.inner.link.max_message_size()
     }
@@ -303,6 +311,17 @@ impl Receiver {
     /// receiver.accept(&delivery).await.unwrap();
     /// ```
     ///
+    /// # Message size
+    ///
+    /// When the link advertises a `max_message_size` (see
+    /// [`max_message_size`](#method.max_message_size)) and the peer sends a
+    /// delivery larger than it, the receiver rejects the delivery with a
+    /// `Rejected` disposition carrying `amqp:link:message-size-exceeded` and
+    /// this method returns [`RecvError::MessageSizeExceeded`]. The rejection
+    /// is delivery-scoped: **the link is not detached** — only the oversized
+    /// delivery is discarded, and subsequent calls to this method continue to
+    /// receive normally.
+    ///
     /// # Cancel safety
     ///
     /// This function is cancel-safe. See [#22](https://github.com/minghuaw/fe2o3-amqp/issues/22)
@@ -388,11 +407,8 @@ impl Receiver {
             .await
             .map_err(DetachThenResumeReceiverError::from);
 
-        let is_reattaching = !self.inner.session.same_channel(&new_session.control);
-
         // re-attach the link
-        self.inner.session = new_session.control.clone();
-        self.inner.outgoing = new_session.outgoing.clone();
+        let is_reattaching = self.inner.switch_session(new_session);
         let exchange_result = self
             .inner
             .resume_incoming_attach(None, is_reattaching)
@@ -883,12 +899,7 @@ where
         is_reattaching: bool,
     ) -> Result<ReceiverAttachExchange, <Self::Link as LinkAttach>::AttachError> {
         self.link
-            .exchange_attach(
-                &self.outgoing,
-                &mut self.incoming,
-                &self.session,
-                is_reattaching,
-            )
+            .exchange_attach(&self.outgoing, &mut self.incoming, is_reattaching)
             .await
     }
 
@@ -956,8 +967,8 @@ where
         for<'de> T: FromBody<'de> + Send,
     {
         loop {
-            match self.recv_inner().await? // FIXME: cancel safe? if oneshot channel is cancel safe
-            {
+            match self.recv_inner().await? {
+
                 Some(delivery) => return Ok(delivery),
                 None => continue, // Incomplete transfer, there are more transfer frames coming
             }
@@ -966,7 +977,8 @@ where
 
     /// # Cancel safety
     ///
-    /// This should be cancel safe if oneshot channel is cancel safe
+    /// This is cancel safe because all internal `.await` point(s) are cancel
+    /// safe (`tokio::sync::mpsc` operations and synchronous processing)
     #[inline]
     pub(crate) async fn recv_inner<T>(&mut self) -> Result<Option<Delivery<T>>, RecvError>
     where
@@ -1134,6 +1146,111 @@ where
         }
     }
 
+    /// The bytes of the delivery accumulated so far that belong to the same
+    /// delivery as `transfer` (i.e. the buffered chunks of the incomplete
+    /// multi-frame delivery, when the transfer is a continuation of it).
+    fn accumulated_message_size(&self, transfer: &Transfer) -> u64 {
+        match &self.incomplete_transfer {
+            Some(incomplete) if incomplete.performative.delivery_tag == transfer.delivery_tag => {
+                incomplete
+                    .buffer
+                    .iter()
+                    .map(|p| p.len() as u64)
+                    .sum::<u64>()
+            }
+            _ => 0,
+        }
+    }
+
+    /// Reject a delivery that exceeds the negotiated max-message-size of the
+    /// link with the `amqp:link:message-size-exceeded` error condition and
+    /// discard the buffered chunks, so the oversized message is neither
+    /// buffered further nor surfaced to the application.
+    ///
+    /// If the sender pre-settled the delivery there is nothing to reply with;
+    /// otherwise a terminal `Rejected` disposition is sent. The
+    /// [`RecvError::MessageSizeExceeded`] error is returned in both cases so
+    /// `recv()` observes the rejected delivery; the link itself is not
+    /// detached and remains usable.
+    async fn reject_oversized_message<T>(
+        &mut self,
+        transfer: Transfer,
+        total_size: u64,
+        max_size: u64,
+    ) -> Result<Option<Delivery<T>>, RecvError>
+    where
+        for<'de> T: FromBody<'de> + Send,
+    {
+        #[cfg(feature = "tracing")]
+        tracing::warn!(
+            "Rejected delivery of {total_size} bytes: exceeds the link's max message size of {max_size}"
+        );
+        #[cfg(feature = "log")]
+        log::warn!(
+            "Rejected delivery of {total_size} bytes: exceeds the link's max message size of {max_size}"
+        );
+
+        let delivery_id = transfer.delivery_id.or_else(|| {
+            self.incomplete_transfer
+                .as_ref()
+                .and_then(|i| i.performative.delivery_id)
+        });
+        let delivery_tag = transfer
+            .delivery_tag
+            .clone()
+            .or_else(|| {
+                self.incomplete_transfer
+                    .as_ref()
+                    .and_then(|i| i.performative.delivery_tag.clone())
+            });
+
+        // Discard the buffered chunks of the oversized delivery
+        self.incomplete_transfer.take();
+
+        // If the sender pre-settled the delivery, there is nothing to reply with
+        if !transfer.settled.unwrap_or(false) {
+            if let (Some(delivery_id), Some(delivery_tag)) = (delivery_id, delivery_tag) {
+                let error = definitions::Error::new(LinkError::MessageSizeExceeded, None, None);
+                let state = DeliveryState::Rejected(Rejected {
+                    error: Some(error),
+                });
+                let info = DeliveryInfo {
+                    delivery_id,
+                    delivery_tag,
+                    rcv_settle_mode: None,
+                    _sealed: Sealed {},
+                };
+                // Track the delivery: `link.dispose` only sends the disposition when
+                // the delivery is in the unsettled map. First/single frames aren't
+                // tracked yet: the entry is only inserted by
+                // `ReceiverLink::on_incomplete_transfer` (first partial frame of a
+                // multi-frame delivery) or `ReceiverLink::on_complete_transfer` (final
+                // assembly), and this size check runs before either of those.
+                {
+                    let mut lock = self.link.unsettled().write();
+                    lock.get_or_insert(OrderedMap::new())
+                        .insert(info.delivery_tag.clone(), Some(state.clone()));
+                }
+                self.dispose(info, Some(true), state).await?;
+            } else {
+                // The frame could not be identified (missing delivery-id and
+                // delivery-tag), so no disposition can be sent. This should not
+                // happen with a well-behaved peer.
+                #[cfg(feature = "tracing")]
+                tracing::warn!(
+                    "Cannot send rejection disposition: missing delivery-id or delivery-tag"
+                );
+                #[cfg(feature = "log")]
+                log::warn!("Cannot send rejection disposition: missing delivery-id or delivery-tag");
+            }
+        }
+
+        Err(RecvError::MessageSizeExceeded(MessageSizeExceeded {
+            size: total_size,
+            max_size,
+        }))
+    }
+
     /// # Cancel safety
     ///
     /// This is cancel safe because all internal `.await` point(s) are cancel safe
@@ -1145,6 +1262,15 @@ where
     where
         for<'de> T: FromBody<'de> + Send,
     {
+        // Enforce the negotiated max-message-size of the link before
+        // assembling the delivery
+        if let Some(max_size) = self.link.max_message_size() {
+            let total = self.accumulated_message_size(&transfer) + payload.len() as u64;
+            if total > max_size {
+                return self.reject_oversized_message(transfer, total, max_size).await;
+            }
+        }
+
         let delivery = match self.incomplete_transfer.take() {
             Some(mut incomplete) => {
                 incomplete.or_assign(transfer)?;
@@ -1206,6 +1332,18 @@ where
         }
 
         if transfer.more {
+            // Enforce the negotiated max-message-size of the link: reject the
+            // delivery with the `amqp:link:message-size-exceeded` error
+            // condition once the accumulated message size would exceed it,
+            // discarding the buffered chunks instead of buffering the
+            // oversized message.
+            if let Some(max_size) = self.link.max_message_size() {
+                let total = self.accumulated_message_size(&transfer) + payload.len() as u64;
+                if total > max_size {
+                    return self.reject_oversized_message(transfer, total, max_size).await;
+                }
+            }
+
             // Partial transfer of the delivery
             // There is only ONE incomplet transfer locally, so the partial transfer must belong to the
             // same delivery
@@ -1317,6 +1455,21 @@ where
 }
 
 impl ReceiverInner<ReceiverLink<Target>> {
+    /// Switch the link to a new session, returning whether the link is being
+    /// reattached (i.e. the new session is a different session from the
+    /// current one).
+    ///
+    /// The new session may belong to a different connection whose negotiated
+    /// max frame size differs, so the link's `max_frame_size` is refreshed
+    /// from the new session before any attach/transfer frame is sent.
+    pub(crate) fn switch_session<R>(&mut self, new_session: &SessionHandle<R>) -> bool {
+        let is_reattaching = !self.session.same_channel(&new_session.control);
+        self.session = new_session.control.clone();
+        self.outgoing = new_session.outgoing.clone();
+        self.link.max_frame_size = new_session.max_frame_size();
+        is_reattaching
+    }
+
     pub(crate) async fn resume_incoming_attach(
         &mut self,
         mut initial_remote_attach: Option<Attach>,
@@ -1327,7 +1480,7 @@ impl ReceiverInner<ReceiverLink<Target>> {
         let exchange = match initial_remote_attach.take() {
             Some(remote_attach) => {
                 self.link
-                    .send_attach(&self.outgoing, &self.session, is_reattaching)
+                    .send_attach(&self.outgoing, is_reattaching)
                     .await?;
                 self.link.on_incoming_attach(remote_attach)?
             }
@@ -1569,10 +1722,7 @@ impl DetachedReceiver {
         mut self,
         session: &SessionHandle<R>,
     ) -> Result<ResumingReceiver, ReceiverResumeError> {
-        let is_reattaching = !self.inner.session.same_channel(&session.control);
-
-        self.inner.session = session.control.clone();
-        self.inner.outgoing = session.outgoing.clone();
+        let is_reattaching = self.inner.switch_session(session);
 
         self.resume_inner(is_reattaching).await
     }
@@ -1611,10 +1761,7 @@ impl DetachedReceiver {
         remote_attach: Attach,
         session: &SessionHandle<R>,
     ) -> Result<ResumingReceiver, ReceiverResumeError> {
-        let is_reattaching = !self.inner.session.same_channel(&session.control);
-
-        self.inner.session = session.control.clone();
-        self.inner.outgoing = session.outgoing.clone();
+        let is_reattaching = self.inner.switch_session(session);
 
         let exchange = try_as_recver!(
             self,
@@ -1643,9 +1790,7 @@ impl DetachedReceiver {
             session: &SessionHandle<R>,
             duration: Duration,
         ) -> Result<ResumingReceiver, ReceiverResumeError> {
-            let is_reattaching = !self.inner.session.same_channel(&session.control);
-            self.inner.session = session.control.clone();
-            self.inner.outgoing = session.outgoing.clone();
+            let is_reattaching = self.inner.switch_session(session);
             self.resume_with_timeout_inner(duration, is_reattaching).await
         }
 
@@ -1696,10 +1841,7 @@ impl DetachedReceiver {
             session: &SessionHandle<R>,
             duration: Duration,
         ) -> Result<ResumingReceiver, ReceiverResumeError> {
-            let is_reattaching = !self.inner.session.same_channel(&session.control);
-
-            self.inner.session = session.control.clone();
-            self.inner.outgoing = session.outgoing.clone();
+            let is_reattaching = self.inner.switch_session(session);
 
             let fut = self.inner.resume_incoming_attach(Some(remote_attach), is_reattaching);
 
@@ -1735,8 +1877,10 @@ impl DetachedReceiver {
 mod tests {
     use super::*;
     use crate::endpoint::OutputHandle;
-    use crate::link::state::{LinkFlowState, LinkFlowStateInner};
+    use crate::link::state::{LinkFlowState, LinkFlowStateInner, LinkState};
     use crate::util::Sealed;
+    use fe2o3_amqp_types::definitions::SenderSettleMode;
+    use tokio::sync::oneshot;
 
     fn make_flow_state(link_credit: u32) -> ReceiverFlowState {
         Arc::new(LinkFlowState::receiver(LinkFlowStateInner {
@@ -1977,5 +2121,78 @@ mod tests {
             count += 1;
         }
         assert_eq!(count, 100);
+    }
+
+    fn make_receiver_inner(max_frame_size: usize) -> ReceiverInner<ReceiverLink<Target>> {
+        let (session_tx, _session_rx) = mpsc::channel::<SessionControl>(16);
+        let (outgoing_tx, _outgoing_rx) = mpsc::channel::<LinkFrame>(16);
+        let (incoming_tx, incoming_rx) = mpsc::channel::<LinkFrame>(16);
+        let _ = incoming_tx; // the link relay side is not needed by the test
+        let unsettled: ArcReceiverUnsettledMap = Arc::new(parking_lot::RwLock::new(None));
+        let link = ReceiverLink::<Target> {
+            role: std::marker::PhantomData,
+            local_state: LinkState::Attached,
+            name: String::from("test-receiver"),
+            output_handle: None,
+            input_handle: None,
+            snd_settle_mode: SenderSettleMode::Mixed,
+            rcv_settle_mode: ReceiverSettleMode::First,
+            source: None,
+            target: None,
+            max_message_size: 0,
+            offered_capabilities: None,
+            desired_capabilities: None,
+            flow_state: make_flow_state(200),
+            unsettled,
+            session_stop_reason: Arc::new(OnceLock::new()),
+            max_frame_size,
+            verify_incoming_source: true,
+            verify_incoming_target: true,
+        };
+        ReceiverInner {
+            link,
+            buffer_size: 16,
+            credit_mode: CreditMode::Auto(200),
+            processed: Arc::new(AtomicU32::new(0)),
+            auto_accept: false,
+            session: session_tx,
+            outgoing: outgoing_tx,
+            incoming: incoming_rx,
+            incomplete_transfer: None,
+        }
+    }
+
+    fn make_session_handle(max_frame_size: usize) -> SessionHandle<()> {
+        let (control, _control_rx) = mpsc::channel::<SessionControl>(16);
+        let (outgoing_tx, _outgoing_rx) = mpsc::channel::<LinkFrame>(16);
+        let (outcome_tx, outcome) = oneshot::channel::<Result<(), crate::session::error::Error>>();
+        drop(outcome_tx);
+        SessionHandle {
+            is_ended: false,
+            control,
+            engine_handle: tokio::spawn(async {}),
+            outcome,
+            outgoing: outgoing_tx,
+            session_stop_reason: Arc::new(OnceLock::new()),
+            max_frame_size,
+            link_listener: (),
+        }
+    }
+
+    #[tokio::test]
+    async fn switch_session_refreshes_max_frame_size() {
+        let mut inner = make_receiver_inner(4092);
+        let session_b = make_session_handle(1020);
+
+        // Switching to a different session marks the link as reattaching and
+        // refreshes the link's max frame size from the new session
+        let is_reattaching = inner.switch_session(&session_b);
+        assert!(is_reattaching);
+        assert_eq!(inner.link.max_frame_size, 1020);
+
+        // Switching to the same session does not mark the link as reattaching
+        let is_reattaching = inner.switch_session(&session_b);
+        assert!(!is_reattaching);
+        assert_eq!(inner.link.max_frame_size, 1020);
     }
 }

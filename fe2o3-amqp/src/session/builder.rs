@@ -98,6 +98,7 @@ cfg_transaction! {
                 control_link_acceptor: ControlLinkAcceptor,
                 local_state: SessionState,
                 connection_stop_reason: Arc<OnceLock<ConnectionStopReason>>,
+                max_frame_size: usize,
             ) -> TxnSession<Session> {
                 let txn_manager = TransactionManager::new(outgoing, control_link_acceptor);
                 let session = Session {
@@ -105,6 +106,7 @@ cfg_transaction! {
                     outgoing_channel,
                     session_stop_reason: Arc::new(OnceLock::new()),
                     connection_stop_reason,
+                    max_frame_size,
                     local_state,
                     initial_outgoing_id: Constant::new(self.next_outgoing_id),
                     next_outgoing_id: self.next_outgoing_id,
@@ -148,11 +150,13 @@ impl Builder {
         outgoing_channel: OutgoingChannel,
         local_state: SessionState,
         connection_stop_reason: Arc<OnceLock<ConnectionStopReason>>,
+        max_frame_size: usize,
     ) -> Session {
         Session {
             outgoing_channel,
             session_stop_reason: Arc::new(OnceLock::new()),
             connection_stop_reason,
+            max_frame_size,
             local_state,
             initial_outgoing_id: Constant::new(self.next_outgoing_id),
             next_outgoing_id: self.next_outgoing_id,
@@ -297,11 +301,13 @@ impl Builder {
             };
 
             #[cfg(not(all(feature = "transaction", feature = "acceptor")))]
-            let (engine_handle, outcome, session_stop_reason) = {
+            let (engine_handle, outcome, session_stop_reason, max_frame_size) = {
+                let max_frame_size = connection.max_frame_size();
                 let session = self.into_session(
                     outgoing_channel,
                     local_state,
                     connection.connection_stop_reason.clone(),
+                    max_frame_size,
                 );
                 let session_stop_reason = session.session_stop_reason().clone();
                 let (handle, outcome) = SessionEngine::begin_client_session(
@@ -314,14 +320,15 @@ impl Builder {
                 )
                 .await?
                 .spawn();
-                (handle, outcome, session_stop_reason)
+                (handle, outcome, session_stop_reason, max_frame_size)
             };
 
             #[cfg(all(feature = "transaction", feature = "acceptor"))]
-            let (engine_handle, outcome, session_stop_reason) = {
+            let (engine_handle, outcome, session_stop_reason, max_frame_size) = {
                 let mut this = self;
                 match this.control_link_acceptor.take() {
                     Some(control_link_acceptor) => {
+                        let max_frame_size = connection.max_frame_size();
                         let session = this.into_txn_session(
                             session_control_tx.clone(),
                             outgoing_tx.clone(),
@@ -329,6 +336,7 @@ impl Builder {
                             control_link_acceptor,
                             local_state,
                             connection.connection_stop_reason.clone(),
+                            max_frame_size,
                         );
                         let session_stop_reason = session.session_stop_reason().clone();
                         let (handle, outcome) = SessionEngine::begin_client_session(
@@ -341,13 +349,15 @@ impl Builder {
                         )
                         .await?
                         .spawn();
-                        (handle, outcome, session_stop_reason)
+                        (handle, outcome, session_stop_reason, max_frame_size)
                     }
                     None => {
+                        let max_frame_size = connection.max_frame_size();
                         let session = this.into_session(
                             outgoing_channel,
                             local_state,
                             connection.connection_stop_reason.clone(),
+                            max_frame_size,
                         );
                         let session_stop_reason = session.session_stop_reason().clone();
                         let (handle, outcome) = SessionEngine::begin_client_session(
@@ -360,7 +370,7 @@ impl Builder {
                         )
                         .await?
                         .spawn();
-                        (handle, outcome, session_stop_reason)
+                        (handle, outcome, session_stop_reason, max_frame_size)
                     }
                 }
             };
@@ -372,6 +382,7 @@ impl Builder {
                 outcome,
                 outgoing: outgoing_tx,
                 session_stop_reason,
+                max_frame_size,
                 link_listener: (),
             };
             Ok(handle)
@@ -413,11 +424,13 @@ impl Builder {
                 },
             };
 
-            let (engine_handle, outcome, session_stop_reason) = {
+            let (engine_handle, outcome, session_stop_reason, max_frame_size) = {
+                let max_frame_size = connection.max_frame_size();
                 let session = self.into_session(
                     outgoing_channel,
                     local_state,
                     connection.connection_stop_reason.clone(),
+                    max_frame_size,
                 );
                 let session_stop_reason = session.session_stop_reason().clone();
                 let (handle, outcome) = SessionEngine::begin_client_session(
@@ -430,7 +443,7 @@ impl Builder {
                 )
                 .await?
                 .spawn_on_local_set(local_set);
-                (handle, outcome, session_stop_reason)
+                (handle, outcome, session_stop_reason, max_frame_size)
             };
 
             let handle = SessionHandle {
@@ -440,6 +453,7 @@ impl Builder {
                 outcome,
                 outgoing: outgoing_tx,
                 session_stop_reason,
+                max_frame_size,
                 link_listener: (),
             };
             Ok(handle)
@@ -480,11 +494,13 @@ impl Builder {
                 },
             };
 
-            let (engine_handle, outcome, session_stop_reason) = {
+            let (engine_handle, outcome, session_stop_reason, max_frame_size) = {
+                let max_frame_size = connection.max_frame_size();
                 let session = self.into_session(
                     outgoing_channel,
                     local_state,
                     connection.connection_stop_reason.clone(),
+                    max_frame_size,
                 );
                 let session_stop_reason = session.session_stop_reason().clone();
                 let (handle, outcome) = SessionEngine::begin_client_session(
@@ -497,7 +513,7 @@ impl Builder {
                 )
                 .await?
                 .spawn_local();
-                (handle, outcome, session_stop_reason)
+                (handle, outcome, session_stop_reason, max_frame_size)
             };
 
             let handle = SessionHandle {
@@ -507,6 +523,7 @@ impl Builder {
                 outcome,
                 outgoing: outgoing_tx,
                 session_stop_reason,
+                max_frame_size,
                 link_listener: (),
             };
             Ok(handle)

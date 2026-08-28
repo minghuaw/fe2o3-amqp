@@ -747,15 +747,15 @@ where
 
     /// # Cancel safety
     ///
-    /// This is cancel safe if oneshot channel is cancel safe
+    /// This is cancel safe: it only awaits on sending over `tokio::mpsc::Sender`
+    /// (see `send_attach_inner`) and on `tokio::sync::mpsc::Receiver::recv`,
+    /// both of which are cancel safe.
     async fn send_attach(
         &mut self,
         writer: &mpsc::Sender<LinkFrame>,
-        session: &mpsc::Sender<SessionControl>,
         is_reattaching: bool,
     ) -> Result<(), Self::AttachError> {
-        self.send_attach_inner(writer, session, is_reattaching)
-            .await?; // FIXME: cancel safe? if oneshot channel is cancel safe
+        self.send_attach_inner(writer, is_reattaching).await?;
         Ok(())
     }
 }
@@ -836,16 +836,16 @@ where
 
     /// # Cancel safety
     ///
-    /// This should be cancel safe if oneshot channel is cancel safe
+    /// This is cancel safe: it only awaits on sending over `tokio::mpsc::Sender`
+    /// and on `tokio::sync::mpsc::Receiver::recv`, both of which are cancel safe.
     async fn exchange_attach(
         &mut self,
         writer: &mpsc::Sender<LinkFrame>,
         reader: &mut mpsc::Receiver<LinkFrame>,
-        session: &mpsc::Sender<SessionControl>,
         is_reattaching: bool,
     ) -> Result<Self::AttachExchange, ReceiverAttachError> {
         // Send out local attach
-        self.send_attach(writer, session, is_reattaching).await?; // FIXME: cancel safe? if oneshot channel is cancel safe
+        self.send_attach(writer, is_reattaching).await?;
 
         // Wait for remote attach
         let remote_attach = match reader

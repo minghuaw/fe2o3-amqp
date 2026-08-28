@@ -2,8 +2,8 @@ use fe2o3_amqp_types::messaging::{Accepted, DeliveryState, Outcome, Rejected};
 
 use crate::link::{
     delivery::{FromDeliveryFailure, FromDeliveryState, FromPreSettled},
-    DetachError, IllegalLinkStateError, LinkStateError, SendError, SenderAttachError,
-    SessionStopReason,
+    DetachError, IllegalLinkStateError, LinkStateError, MessageSizeExceeded, SendError,
+    SenderAttachError, SessionStopReason,
 };
 
 /// Errors with allocation of new transacation ID
@@ -112,6 +112,11 @@ pub enum ControllerSendError {
     #[error("Transactional state found on non-transactional delivery")]
     IllegalDeliveryState,
 
+    /// The encoded message is larger than the maximum message size
+    /// negotiated on the link
+    #[error(transparent)]
+    MessageSizeExceeded(MessageSizeExceeded),
+
     /// Error serializing message
     #[error("Error encoding message")]
     MessageEncodeError,
@@ -124,6 +129,7 @@ impl From<SendError> for ControllerSendError {
             SendError::Detached(value) => Self::Detached(value),
             SendError::NonTerminalDeliveryState => Self::NonTerminalDeliveryState,
             SendError::IllegalDeliveryState => Self::IllegalDeliveryState,
+            SendError::MessageSizeExceeded(error) => Self::MessageSizeExceeded(error),
             SendError::MessageEncodeError => Self::MessageEncodeError,
         }
     }
@@ -217,6 +223,11 @@ pub enum PostError {
     #[error("Transactional state found on non-transactional delivery")]
     IllegalDeliveryState,
 
+    /// The encoded message is larger than the maximum message size
+    /// negotiated on the link
+    #[error(transparent)]
+    MessageSizeExceeded(MessageSizeExceeded),
+
     /// Error serializing message
     #[error("Error encoding message")]
     MessageEncodeError,
@@ -225,6 +236,12 @@ pub enum PostError {
 impl From<serde_amqp::Error> for PostError {
     fn from(_: serde_amqp::Error) -> Self {
         Self::MessageEncodeError
+    }
+}
+
+impl From<MessageSizeExceeded> for PostError {
+    fn from(error: MessageSizeExceeded) -> Self {
+        Self::MessageSizeExceeded(error)
     }
 }
 

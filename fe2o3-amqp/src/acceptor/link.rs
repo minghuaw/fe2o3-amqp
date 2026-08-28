@@ -282,6 +282,7 @@ mod tests {
             outcome,
             outgoing,
             session_stop_reason: stop_reason_cell,
+            max_frame_size: 4096,
             link_listener,
         }
     }

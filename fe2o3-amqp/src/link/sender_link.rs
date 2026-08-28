@@ -2,6 +2,7 @@ use std::sync::{Arc, OnceLock};
 
 use fe2o3_amqp_types::{definitions::Fields, messaging::MESSAGE_FORMAT};
 use futures_util::Future;
+use serde_amqp::serialized_size;
 
 use crate::endpoint::LinkExt;
 
@@ -35,9 +36,40 @@ where
             .clone()
             .ok_or(LinkStateError::IllegalState)?;
 
-        // Check message size
-        // If this field is zero or unset, there is no maximum size imposed by the link endpoint.
-        let more = (self.max_message_size != 0) && (payload.len() as u64 > self.max_message_size);
+        // The connection engine publishes the negotiated encoder max frame
+        // length before the connection handle is created; links are only
+        // attached after the connection is opened, so the value is always
+        // populated. Per AMQP 1.0 §2.7.1 `max-frame-size` is directional: a
+        // peer MUST NOT send frames larger than its partner can accept, so
+        // the outbound limit is the remote's advertised value as enforced by
+        // the transport encoder (see `ConnectionEngine::max_frame_size`).
+        //
+        // Maximum payload bytes per transfer frame. The frame body (serialized
+        // transfer performative + payload) must fit within the encoder's
+        // `max_frame_body_size` (i.e. `self.max_frame_size - 4`): the 4-byte
+        // frame header (doff, type, channel) is written by the encoder and the
+        // 4-byte size prefix is added by the length-delimited codec, so a
+        // frame that respects this bound never exceeds the negotiated max
+        // frame size. The delivery-id is only assigned by the session *after*
+        // the link splits, so its worst-case size (a uint, 0x70 + 4 bytes) is
+        // reserved to guarantee that the first frame still fits. The transfer
+        // is measured in place with the worst-case delivery-id set (and
+        // restored afterwards) so the real serializer decides the list
+        // encoding; `serialized_size` computes the size without allocating a
+        // buffer. The first frame of a split delivery is sent with `more=true`
+        // (the single-frame branch below explicitly resets it to `false`).
+        transfer.more = true;
+        let orig_delivery_id = transfer.delivery_id; // None on all send paths
+        transfer.delivery_id = Some(u32::MAX);
+        let performative_size = serialized_size(&transfer)
+            .map_err(|_| LinkStateError::IllegalState)?; // This should not happen
+        transfer.delivery_id = orig_delivery_id;
+        let max_payload = self.max_frame_size - 4 - performative_size;
+
+        // Split the payload so that every transfer frame fits within the
+        // negotiated max frame size, keeping the session's transfer-id and
+        // window accounting consistent with the frames actually sent.
+        let more = payload.len() > max_payload;
         if !more {
             transfer.more = false;
             send_transfer(
@@ -51,7 +83,7 @@ where
         // cancel safe
         } else {
             // Send the first frame
-            let partial = payload.split_to(self.max_message_size as usize);
+            let partial = payload.split_to(max_payload);
             transfer.more = true;
             send_transfer(
                 writer,
@@ -62,12 +94,19 @@ where
             )
             .await?; // cancel safe
 
+            // AMQP 1.0 §2.7.5: on continuation transfers the delivery-id may be
+            // omitted and the delivery-tag / message-format can only be omitted.
+            // Clear them *before* the loop so the last transfer is also cleared
+            // even when there is no middle frame (i.e. the delivery spans exactly
+            // two frames).
+            transfer.delivery_tag = None;
+            transfer.message_format = None;
+            transfer.settled = None;
+            transfer.rcv_settle_mode = None;
+
             // Send the transfers in the middle
-            while payload.len() > self.max_message_size as usize {
-                let partial = payload.split_to(self.max_message_size as usize);
-                transfer.delivery_tag = None;
-                transfer.message_format = None;
-                transfer.settled = None;
+            while payload.len() > max_payload {
+                let partial = payload.split_to(max_payload);
                 send_transfer(
                     writer,
                     input_handle.clone(),
@@ -666,11 +705,9 @@ where
     async fn send_attach(
         &mut self,
         writer: &mpsc::Sender<LinkFrame>,
-        session: &mpsc::Sender<SessionControl>,
         is_reattaching: bool,
     ) -> Result<(), Self::AttachError> {
-        self.send_attach_inner(writer, session, is_reattaching)
-            .await?;
+        self.send_attach_inner(writer, is_reattaching).await?;
         Ok(())
     }
 }
@@ -753,11 +790,10 @@ where
         &mut self,
         writer: &mpsc::Sender<LinkFrame>,
         reader: &mut mpsc::Receiver<LinkFrame>,
-        session: &mpsc::Sender<SessionControl>,
         is_reattaching: bool,
     ) -> Result<Self::AttachExchange, SenderAttachError> {
         // Send out local attach
-        self.send_attach(writer, session, is_reattaching).await?;
+        self.send_attach(writer, is_reattaching).await?;
 
         // Wait for remote attach
         let remote_attach =

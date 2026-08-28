@@ -420,6 +420,7 @@ impl<Role, T, NameState, SS, TS> Builder<Role, T, NameState, SS, TS> {
         output_handle: OutputHandle,
         flow_state_consumer: C,
         session_stop_reason: Arc<OnceLock<SessionStopReason>>,
+        max_frame_size: usize,
         // state_code: Arc<AtomicU8>,
     ) -> Link<Role, T, C, M> {
         let local_state = LinkState::Unattached;
@@ -448,6 +449,7 @@ impl<Role, T, NameState, SS, TS> Builder<Role, T, NameState, SS, TS> {
             flow_state: flow_state_consumer,
             unsettled,
             session_stop_reason,
+            max_frame_size,
             verify_incoming_source: self.verify_incoming_source,
             verify_incoming_target: self.verify_incoming_target,
         }
@@ -550,10 +552,11 @@ where
             output_handle,
             consumer,
             session.session_stop_reason().clone(),
+            session.max_frame_size(),
         );
 
         match link
-            .exchange_attach(&session.outgoing, &mut incoming_rx, &session.control, false)
+            .exchange_attach(&session.outgoing, &mut incoming_rx, false)
             .await
         {
             Ok(exchange) => {
@@ -672,10 +675,11 @@ where
             output_handle,
             flow_state,
             session.session_stop_reason().clone(),
+            session.max_frame_size(),
         );
 
         match link
-            .exchange_attach(&session.outgoing, &mut incoming_rx, &session.control, false)
+            .exchange_attach(&session.outgoing, &mut incoming_rx, false)
             .await
         {
             Ok(outcome) => outcome.complete_or(ReceiverAttachError::IllegalState)?,

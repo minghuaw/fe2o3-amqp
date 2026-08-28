@@ -37,8 +37,8 @@ use super::{
         recv_remote_detach, LinkEndpointInner, LinkEndpointInnerDetach, LinkEndpointInnerReattach,
     },
     ArcSenderUnsettledMap, DetachThenResumeSenderError, LinkFrame, LinkRelay, LinkStateError,
-    SendError, SenderAttachError, SenderAttachExchange, SenderFlowState, SenderLink,
-    SenderResumeError, SenderResumeErrorKind, SessionStopReason,
+    MessageSizeExceeded, SendError, SenderAttachError, SenderAttachExchange, SenderFlowState,
+    SenderLink, SenderResumeError, SenderResumeErrorKind, SessionStopReason,
 };
 
 #[cfg(docsrs)]
@@ -255,11 +255,8 @@ impl Sender {
         // Detach the link
         let detach_result = self.inner.detach_with_error(None).await;
 
-        let is_reattaching = !self.inner.session.same_channel(&new_session.control);
-
         // Re-attach the link
-        self.inner.session = new_session.control.clone();
-        self.inner.outgoing = new_session.outgoing.clone();
+        let is_reattaching = self.inner.switch_session(new_session);
         let attach_result = self
             .inner
             .resume_incoming_attach(None, is_reattaching)
@@ -587,12 +584,7 @@ where
         is_reattaching: bool,
     ) -> Result<SenderAttachExchange, <Self::Link as LinkAttach>::AttachError> {
         self.link
-            .exchange_attach(
-                &self.outgoing,
-                &mut self.incoming,
-                &self.session,
-                is_reattaching,
-            )
+            .exchange_attach(&self.outgoing, &mut self.incoming, is_reattaching)
             .await
     }
 
@@ -659,7 +651,7 @@ where
     ) -> Result<Settlement, E>
     where
         T: SerializableBody,
-        E: From<L::TransferError> + From<serde_amqp::Error>,
+        E: From<L::TransferError> + From<serde_amqp::Error> + From<MessageSizeExceeded>,
     {
         use bytes::BufMut;
         use serde::Serialize;
@@ -689,7 +681,7 @@ where
     ) -> Result<Settlement, E>
     where
         T: SerializableBody,
-        E: From<L::TransferError> + From<serde_amqp::Error>,
+        E: From<L::TransferError> + From<serde_amqp::Error> + From<MessageSizeExceeded>,
     {
         use bytes::BufMut;
         use serde::Serialize;
@@ -720,8 +712,19 @@ where
         batchable: bool,
     ) -> Result<Settlement, E>
     where
-        E: From<L::TransferError> + From<serde_amqp::Error>,
+        E: From<L::TransferError> + From<serde_amqp::Error> + From<MessageSizeExceeded>,
     {
+        // Reject the message locally before any transfer frame is sent when it
+        // exceeds the negotiated max-message-size of the link. The payload is
+        // the already-encoded message, so its length is the encoded message
+        // size. A max-message-size of zero means no limit is imposed.
+        if let Some(max_size) = self.link.max_message_size() {
+            let size = payload.len() as u64;
+            if size > max_size {
+                return Err(E::from(MessageSizeExceeded { size, max_size }));
+            }
+        }
+
         // send a transfer, checking state will be implemented in SenderLink
         let detached_fut = self.incoming.recv(); // cancel safe
         let settlement = self
@@ -741,6 +744,21 @@ where
 }
 
 impl SenderInner<SenderLink<Target>> {
+    /// Switch the link to a new session, returning whether the link is being
+    /// reattached (i.e. the new session is a different session from the
+    /// current one).
+    ///
+    /// The new session may belong to a different connection whose negotiated
+    /// max frame size differs, so the link's `max_frame_size` is refreshed
+    /// from the new session before any attach/transfer frame is sent.
+    pub(crate) fn switch_session<R>(&mut self, new_session: &SessionHandle<R>) -> bool {
+        let is_reattaching = !self.session.same_channel(&new_session.control);
+        self.session = new_session.control.clone();
+        self.outgoing = new_session.outgoing.clone();
+        self.link.max_frame_size = new_session.max_frame_size();
+        is_reattaching
+    }
+
     /// Resumes a delivery with the given state and payload.
     ///
     /// The resume operation should not replace the unsettled map entry.
@@ -991,7 +1009,7 @@ impl SenderInner<SenderLink<Target>> {
             let attach_exchange = match initial_remote_attach.take() {
                 Some(remote_attach) => {
                     self.link
-                        .send_attach(&self.outgoing, &self.session, is_reattaching)
+                        .send_attach(&self.outgoing, is_reattaching)
                         .await?;
                     self.link.on_incoming_attach(remote_attach)?
                 }
@@ -1184,9 +1202,7 @@ impl DetachedSender {
         mut self,
         session: &SessionHandle<R>,
     ) -> Result<Sender, SenderResumeError> {
-        let is_reattaching = !self.inner.session.same_channel(&session.control);
-        self.inner.session = session.control.clone();
-        self.inner.outgoing = session.outgoing.clone();
+        let is_reattaching = self.inner.switch_session(session);
         self.resume_inner(is_reattaching).await
     }
 
@@ -1196,9 +1212,7 @@ impl DetachedSender {
         remote_attach: Attach,
         session: &SessionHandle<R>,
     ) -> Result<Sender, SenderResumeError> {
-        let is_reattaching = !self.inner.session.same_channel(&session.control);
-        self.inner.session = session.control.clone();
-        self.inner.outgoing = session.outgoing.clone();
+        let is_reattaching = self.inner.switch_session(session);
 
         try_as_sender!(
             self,
@@ -1216,9 +1230,7 @@ impl DetachedSender {
             session: &SessionHandle<R>,
             duration: Duration,
         ) -> Result<Sender, SenderResumeError> {
-            let is_reattaching = !self.inner.session.same_channel(&session.control);
-            self.inner.session = session.control.clone();
-            self.inner.outgoing = session.outgoing.clone();
+            let is_reattaching = self.inner.switch_session(session);
             self.resume_with_timeout_inner(duration, is_reattaching).await
         }
 
@@ -1229,11 +1241,104 @@ impl DetachedSender {
             session: &SessionHandle<R>,
             duration: Duration,
         ) -> Result<Sender, SenderResumeError> {
-            let is_reattaching = !self.inner.session.same_channel(&session.control);
-            self.inner.session = session.control.clone();
-            self.inner.outgoing = session.outgoing.clone();
+            let is_reattaching = self.inner.switch_session(session);
             self.resume_incoming_attach_with_timeout_inner(remote_attach, duration, is_reattaching)
                 .await
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::marker::PhantomData;
+
+    use fe2o3_amqp_types::definitions::ReceiverSettleMode;
+    use parking_lot::RwLock;
+    use tokio::sync::Notify;
+
+    use super::*;
+    use crate::{
+        link::state::{LinkFlowState, LinkFlowStateInner, LinkState},
+        util::Consumer,
+    };
+
+    fn make_sender_inner(max_frame_size: usize) -> SenderInner<SenderLink<Target>> {
+        let (session_tx, _session_rx) = mpsc::channel::<SessionControl>(16);
+        let (outgoing_tx, _outgoing_rx) = mpsc::channel::<LinkFrame>(16);
+        let (incoming_tx, incoming_rx) = mpsc::channel::<LinkFrame>(16);
+        let _ = incoming_tx; // the link relay side is not needed by the test
+
+        let flow_state_inner = LinkFlowStateInner {
+            initial_delivery_count: 0,
+            delivery_count: 0,
+            link_credit: 0,
+            available: 0,
+            drain: false,
+            properties: None,
+        };
+        let flow_state = Arc::new(LinkFlowState::sender(flow_state_inner));
+        let consumer = Consumer::new(Arc::new(Notify::new()), flow_state);
+
+        let link = SenderLink::<Target> {
+            role: PhantomData,
+            local_state: LinkState::Attached,
+            name: String::from("test-sender"),
+            output_handle: None,
+            input_handle: None,
+            snd_settle_mode: SenderSettleMode::Mixed,
+            rcv_settle_mode: ReceiverSettleMode::First,
+            source: None,
+            target: None,
+            max_message_size: 0,
+            offered_capabilities: None,
+            desired_capabilities: None,
+            flow_state: consumer,
+            unsettled: Arc::new(RwLock::new(None)),
+            session_stop_reason: Arc::new(OnceLock::new()),
+            max_frame_size,
+            verify_incoming_source: true,
+            verify_incoming_target: true,
+        };
+        SenderInner {
+            link,
+            buffer_size: 16,
+            session: session_tx,
+            outgoing: outgoing_tx,
+            incoming: incoming_rx,
+        }
+    }
+
+    fn make_session_handle(max_frame_size: usize) -> SessionHandle<()> {
+        let (control, _control_rx) = mpsc::channel::<SessionControl>(16);
+        let (outgoing_tx, _outgoing_rx) = mpsc::channel::<LinkFrame>(16);
+        let (outcome_tx, outcome) = oneshot::channel::<Result<(), crate::session::error::Error>>();
+        drop(outcome_tx);
+        SessionHandle {
+            is_ended: false,
+            control,
+            engine_handle: tokio::spawn(async {}),
+            outcome,
+            outgoing: outgoing_tx,
+            session_stop_reason: Arc::new(OnceLock::new()),
+            max_frame_size,
+            link_listener: (),
+        }
+    }
+
+    #[tokio::test]
+    async fn switch_session_refreshes_max_frame_size() {
+        let mut inner = make_sender_inner(4092);
+        let session_b = make_session_handle(1020);
+
+        // Switching to a different session marks the link as reattaching and
+        // refreshes the link's max frame size from the new session
+        let is_reattaching = inner.switch_session(&session_b);
+        assert!(is_reattaching);
+        assert_eq!(inner.link.max_frame_size, 1020);
+
+        // Switching to the same session does not mark the link as reattaching
+        let is_reattaching = inner.switch_session(&session_b);
+        assert!(!is_reattaching);
+        assert_eq!(inner.link.max_frame_size, 1020);
     }
 }

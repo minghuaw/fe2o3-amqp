@@ -76,6 +76,9 @@ pub struct SessionHandle<R> {
     pub(crate) outgoing: mpsc::Sender<LinkFrame>,
     /// Why the session (or its connection) stopped, shared with the links
     pub(crate) session_stop_reason: Arc<OnceLock<SessionStopReason>>,
+    /// The negotiated max frame size (encoder max frame length), shared from
+    /// the connection and with the links
+    pub(crate) max_frame_size: usize,
     pub(crate) link_listener: R,
 }
 
@@ -109,6 +112,13 @@ impl<R> SessionHandle<R> {
     /// The shared stop reason cell, used by links to observe why the session stopped
     pub(crate) fn session_stop_reason(&self) -> &Arc<OnceLock<SessionStopReason>> {
         &self.session_stop_reason
+    }
+
+    /// The negotiated max frame size (encoder max frame length) of the
+    /// session's connection, used by links to split transfers and attach
+    /// frames
+    pub(crate) fn max_frame_size(&self) -> usize {
+        self.max_frame_size
     }
 
     /// Checks if the underlying event loop has stopped
@@ -316,6 +326,10 @@ pub struct Session {
     /// Why the connection stopped, shared with the connection engine and the
     /// connection handle
     pub(crate) connection_stop_reason: Arc<OnceLock<ConnectionStopReason>>,
+
+    /// The negotiated max frame size (encoder max frame length), shared from
+    /// the connection and with the links
+    pub(crate) max_frame_size: usize,
 
     // local amqp states
     pub(crate) local_state: SessionState,
@@ -593,6 +607,10 @@ impl endpoint::Session for Session {
 
     fn connection_stop_reason(&self) -> &Arc<OnceLock<ConnectionStopReason>> {
         &self.connection_stop_reason
+    }
+
+    fn max_frame_size(&self) -> usize {
+        self.max_frame_size
     }
 
     fn outgoing_channel(&self) -> OutgoingChannel {
@@ -1189,6 +1207,7 @@ mod tests {
                 OutgoingChannel(0),
                 SessionState::Mapped,
                 Arc::new(OnceLock::new()),
+                4096,
             )
     }
 

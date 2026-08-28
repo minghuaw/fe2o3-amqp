@@ -163,6 +163,7 @@ where
             flow_state: flow_state_consumer,
             unsettled,
             session_stop_reason: session.session_stop_reason().clone(),
+            max_frame_size: session.max_frame_size(),
             verify_incoming_source: self.verify_incoming_source,
             verify_incoming_target: self.verify_incoming_target,
         };
@@ -170,10 +171,10 @@ where
         let outgoing = session.outgoing.clone();
 
         match link.on_incoming_attach(remote_attach) {
-            Ok(_) => link.send_attach(&outgoing, &session.control, false).await?,
+            Ok(_) => link.send_attach(&outgoing, false).await?,
             Err(attach_error) => {
                 // Complete attach then detach should any error happen
-                link.send_attach(&outgoing, &session.control, false).await?;
+                link.send_attach(&outgoing, false).await?;
                 match attach_error {
                     SenderAttachError::SndSettleModeNotSupported => {
                         // FIXME: The initiating side is responsible for checking whether the desired modes are supported?

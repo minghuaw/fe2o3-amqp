@@ -143,6 +143,40 @@ pub enum SenderAttachError {
     RemoteClosedWithError(definitions::Error),
 }
 
+/// The encoded message is larger than the maximum message size negotiated on
+/// the link.
+///
+/// The maximum message size is the minimum of the local and remote
+/// `max-message-size` advertised at link attach (see `get_max_message_size`);
+/// a value of zero means no limit is imposed. The error is produced on both
+/// sides of the link:
+///
+/// - On the **sender** side, [`Sender::send`](crate::Sender::send) rejects
+///   the message locally before any transfer frame is sent, mirroring other
+///   AMQP client implementations (e.g. go-amqp surfaces the
+///   `amqp:link:message-size-exceeded` error condition in this case).
+/// - On the **receiver** side, [`Receiver::recv`](crate::Receiver::recv)
+///   returns this error when the peer sends a delivery larger than the
+///   advertised `max_message_size`. The delivery is rejected with a
+///   `Rejected` disposition carrying `amqp:link:message-size-exceeded`, but
+///   the link is **not** detached: only the oversized delivery is discarded
+///   and the receiver can be used to receive subsequent messages.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MessageSizeExceeded {
+    /// Size of the encoded message in bytes
+    pub size: u64,
+    /// The maximum message size of the link in bytes
+    pub max_size: u64,
+}
+
+impl std::fmt::Display for MessageSizeExceeded {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "message size exceeds max of {}", self.max_size)
+    }
+}
+
+impl std::error::Error for MessageSizeExceeded {}
+
 /// Error associated with sending a message
 #[derive(Debug, thiserror::Error)]
 pub enum SendError {
@@ -163,6 +197,11 @@ pub enum SendError {
     #[error("Transactional state found on non-transactional delivery")]
     IllegalDeliveryState,
 
+    /// The encoded message is larger than the maximum message size
+    /// negotiated on the link
+    #[error(transparent)]
+    MessageSizeExceeded(MessageSizeExceeded),
+
     /// Error serializing message
     #[error("Error encoding message")]
     MessageEncodeError,
@@ -171,6 +210,12 @@ pub enum SendError {
 impl From<serde_amqp::Error> for SendError {
     fn from(_: serde_amqp::Error) -> Self {
         Self::MessageEncodeError
+    }
+}
+
+impl From<MessageSizeExceeded> for SendError {
+    fn from(error: MessageSizeExceeded) -> Self {
+        Self::MessageSizeExceeded(error)
     }
 }
 
@@ -535,6 +580,16 @@ pub enum RecvError {
     /// Field is inconsisten in multi-frame delivery
     #[error("Field is inconsisten in multi-frame delivery")]
     InconsistentFieldInMultiFrameDelivery,
+
+    /// A delivery larger than the negotiated `max_message_size` of the link
+    /// was rejected with the `amqp:link:message-size-exceeded` error
+    /// condition.
+    ///
+    /// The rejection is delivery-scoped: the link is **not** detached and
+    /// remains usable, so subsequent [`Receiver::recv`](crate::Receiver::recv)
+    /// calls continue to receive normally.
+    #[error(transparent)]
+    MessageSizeExceeded(MessageSizeExceeded),
 
     /// Transactional acquision is not supported yet
     #[error("Transactional acquisition is not implemented")]

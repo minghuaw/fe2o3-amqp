@@ -89,7 +89,7 @@ where
         &mut self,
     ) -> Result<&mut Self, <Self::Link as LinkAttach>::AttachError> {
         self.reallocate_output_handle().await?; // FIXME: cancel safe? if oneshot channel is cancel safe
-        match self.exchange_attach(true).await // FIXME: cancel safe? if oneshot channel is cancel safe
+        match self.exchange_attach(true).await // cancel safe: the attach exchange only awaits on mpsc operations
         {
             Ok(attach_exchange) => self.handle_reattach_outcome(attach_exchange),
             Err(attach_error) => Err(self.handle_attach_error(attach_error).await),

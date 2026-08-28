@@ -36,12 +36,32 @@ pub(crate) struct ConnectionEngine<Io, C> {
 
 impl<Io, C> ConnectionEngine<Io, C>
 where
+    Io: AsyncRead + AsyncWrite + Unpin,
     C: endpoint::Connection,
 {
     /// The shared cell holding why the connection stopped, on the connection
     /// object and shared with the sessions and the handle
     pub(crate) fn connection_stop_reason(&self) -> &Arc<OnceLock<ConnectionStopReason>> {
         self.connection.connection_stop_reason()
+    }
+
+    /// The negotiated max frame size (encoder max frame length) of this
+    /// connection, i.e. the maximum length of the frame data (excluding the
+    /// 4-byte size prefix) that the transport encoder will emit.
+    ///
+    /// Per AMQP 1.0 §2.7.1 the `max-frame-size` field of the Open performative
+    /// is directional: it is the largest frame the advertising peer can
+    /// accept, and a peer MUST NOT send frames larger than its partner can
+    /// handle. The outbound limit is therefore derived from the *remote*
+    /// value (clamped to at least `MIN_MAX_FRAME_SIZE`), not from the minimum
+    /// of the two advertised values. This is the same value the transport
+    /// encoder enforces, so link-level splitting that respects it guarantees
+    /// every frame fits.
+    ///
+    /// The value is final once the Open exchange completes in `open_inner`,
+    /// i.e. before any `ConnectionHandle` is created.
+    pub(crate) fn max_frame_size(&self) -> usize {
+        self.transport.encoder_max_frame_size()
     }
 }
 
@@ -418,16 +438,6 @@ where
             }
             ConnectionControl::DeallocateSession(session_id) => {
                 self.connection.deallocate_session(session_id)
-            }
-            ConnectionControl::GetMaxFrameSize(resp) => {
-                let max_frame_size = self.transport.encoder_max_frame_size();
-                #[allow(unused_variables)]
-                if let Err(error) = resp.send(max_frame_size) {
-                    #[cfg(feature = "tracing")]
-                    tracing::error!(?error);
-                    #[cfg(feature = "log")]
-                    log::error!("{:?}", error);
-                }
             }
         }
 

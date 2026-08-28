@@ -41,6 +41,11 @@ pub(crate) trait Session {
     /// The shared cell holding why the connection stopped
     fn connection_stop_reason(&self) -> &Arc<OnceLock<ConnectionStopReason>>;
 
+    /// The shared value holding the negotiated max frame size (encoder max
+    /// frame length), shared from the connection and used by links to split
+    /// transfers and attach frames
+    fn max_frame_size(&self) -> usize;
+
     fn outgoing_channel(&self) -> OutgoingChannel;
 
     // Allocate new local handle for new Link

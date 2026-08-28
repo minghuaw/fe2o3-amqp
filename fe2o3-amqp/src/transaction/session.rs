@@ -106,11 +106,18 @@ where
         let control = self.control.clone();
         let outgoing = self.txn_manager.control_link_outgoing.clone();
         let session_stop_reason = self.session.session_stop_reason().clone();
+        let max_frame_size = self.session.max_frame_size();
 
         tokio::spawn(async move {
             // Error accepting new control link is handled by acceptor
             if let Ok(coordinator) = acceptor
-                .accept_incoming_attach(remote_attach, control, outgoing, session_stop_reason)
+                .accept_incoming_attach(
+                    remote_attach,
+                    control,
+                    outgoing,
+                    session_stop_reason,
+                    max_frame_size,
+                )
                 .await
             {
                 coordinator.event_loop().await
@@ -238,6 +245,10 @@ where
 
     fn connection_stop_reason(&self) -> &Arc<OnceLock<ConnectionStopReason>> {
         self.session.connection_stop_reason()
+    }
+
+    fn max_frame_size(&self) -> usize {
+        self.session.max_frame_size()
     }
 
     fn outgoing_channel(&self) -> OutgoingChannel {
