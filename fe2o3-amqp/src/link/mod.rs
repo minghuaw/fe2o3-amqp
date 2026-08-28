@@ -606,11 +606,12 @@ impl LinkRelay<OutputHandle> {
     pub(crate) async fn send(
         &mut self,
         frame: LinkFrame,
-    ) -> Result<(), mpsc::error::SendError<LinkFrame>> {
+    ) -> Result<(), Box<mpsc::error::SendError<LinkFrame>>> {
         match self {
             LinkRelay::Sender { tx, .. } => tx.send(frame).await,
             LinkRelay::Receiver { tx, .. } => tx.send(frame).await,
         }
+        .map_err(Box::new)
     }
 
     #[allow(unused_variables)]
@@ -804,13 +805,13 @@ impl LinkRelay<OutputHandle> {
     pub async fn on_incoming_detach(
         &mut self,
         detach: Detach,
-    ) -> Result<(), mpsc::error::SendError<LinkFrame>> {
+    ) -> Result<(), Box<mpsc::error::SendError<LinkFrame>>> {
         match self {
             LinkRelay::Sender { tx, .. } => {
-                tx.send(LinkFrame::Detach(detach)).await?;
+                tx.send(LinkFrame::Detach(detach)).await.map_err(Box::new)?;
             }
             LinkRelay::Receiver { tx, .. } => {
-                tx.send(LinkFrame::Detach(detach)).await?;
+                tx.send(LinkFrame::Detach(detach)).await.map_err(Box::new)?;
             }
         }
         Ok(())

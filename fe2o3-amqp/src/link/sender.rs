@@ -1058,7 +1058,8 @@ impl SenderInner<SenderLink<Target>> {
 /// ```
 #[derive(Debug)]
 pub struct DetachedSender {
-    inner: SenderInner<SenderLink<Target>>,
+    // Boxed to keep the link-reattachment result small
+    inner: Box<SenderInner<SenderLink<Target>>>,
 }
 
 macro_rules! try_as_sender {
@@ -1077,7 +1078,7 @@ macro_rules! try_as_sender {
 
 impl DetachedSender {
     fn new(inner: SenderInner<SenderLink<Target>>) -> Self {
-        Self { inner }
+        Self { inner: Box::new(inner) }
     }
 
     /// Get a reference to the link's source field
@@ -1107,7 +1108,7 @@ impl DetachedSender {
                 .resume_incoming_attach(None, is_reattaching)
                 .await
         );
-        Ok(Sender { inner: self.inner })
+        Ok(Sender { inner: *self.inner })
     }
 
     /// Resume the sender link on the original session
@@ -1127,7 +1128,7 @@ impl DetachedSender {
                 .resume_incoming_attach(Some(remote_attach), false)
                 .await
         );
-        Ok(Sender { inner: self.inner })
+        Ok(Sender { inner: *self.inner })
     }
 
     cfg_not_wasm32! {
@@ -1139,7 +1140,7 @@ impl DetachedSender {
             let fut = self.inner.resume_incoming_attach(None, is_reattaching);
 
             match tokio::time::timeout(duration, fut).await {
-                Ok(Ok(_)) => Ok(Sender { inner: self.inner }),
+                Ok(Ok(_)) => Ok(Sender { inner: *self.inner }),
                 Ok(Err(kind)) => Err(SenderResumeError {
                     detached_sender: self,
                     kind,
@@ -1172,7 +1173,7 @@ impl DetachedSender {
             let fut = self.inner.resume_incoming_attach(Some(remote_attach), is_reattaching);
 
             match tokio::time::timeout(duration, fut).await {
-                Ok(Ok(_)) => Ok(Sender { inner: self.inner }),
+                Ok(Ok(_)) => Ok(Sender { inner: *self.inner }),
                 Ok(Err(kind)) => Err(SenderResumeError {
                     detached_sender: self,
                     kind,
@@ -1220,7 +1221,7 @@ impl DetachedSender {
                 .resume_incoming_attach(Some(remote_attach), is_reattaching)
                 .await
         );
-        Ok(Sender { inner: self.inner })
+        Ok(Sender { inner: *self.inner })
     }
 
     cfg_not_wasm32! {

@@ -360,8 +360,8 @@ impl Receiver {
     /// re-attach and then close by exchanging closing Detach performatives.
     pub async fn detach(mut self) -> Result<DetachedReceiver, (DetachedReceiver, DetachError)> {
         match self.inner.detach_with_error(None).await {
-            Ok(_) => Ok(DetachedReceiver { inner: self.inner }),
-            Err(err) => Err((DetachedReceiver { inner: self.inner }, err)),
+            Ok(_) => Ok(DetachedReceiver { inner: Box::new(self.inner) }),
+            Err(err) => Err((DetachedReceiver { inner: Box::new(self.inner) }, err)),
         }
     }
 
@@ -375,8 +375,8 @@ impl Receiver {
         error: impl Into<definitions::Error>,
     ) -> Result<DetachedReceiver, (DetachedReceiver, DetachError)> {
         match self.inner.detach_with_error(Some(error.into())).await {
-            Ok(_) => Ok(DetachedReceiver { inner: self.inner }),
-            Err(err) => Err((DetachedReceiver { inner: self.inner }, err)),
+            Ok(_) => Ok(DetachedReceiver { inner: Box::new(self.inner) }),
+            Err(err) => Err((DetachedReceiver { inner: Box::new(self.inner) }, err)),
         }
     }
 
@@ -1512,7 +1512,7 @@ impl ReceiverInner<ReceiverLink<Target>> {
 /// ```
 #[derive(Debug)]
 pub struct DetachedReceiver {
-    inner: ReceiverInner<ReceiverLink<Target>>,
+    inner: Box<ReceiverInner<ReceiverLink<Target>>>,
 }
 
 macro_rules! try_as_recver {
@@ -1647,7 +1647,7 @@ impl DetachedReceiver {
                 .resume_incoming_attach(None, is_reattaching)
                 .await
         );
-        let receiver = Receiver { inner: self.inner };
+        let receiver = Receiver { inner: *self.inner };
         let resuming_receiver = match exchange {
             ReceiverAttachExchange::Complete => ResumingReceiver::Complete(receiver),
             ReceiverAttachExchange::IncompleteUnsettled => {
@@ -1677,7 +1677,7 @@ impl DetachedReceiver {
 
             match tokio::time::timeout(duration, fut).await {
                 Ok(Ok(exchange)) => {
-                    let receiver = Receiver { inner: self.inner };
+                    let receiver = Receiver { inner: *self.inner };
                     let resuming_receiver = match exchange {
                         ReceiverAttachExchange::Complete => ResumingReceiver::Complete(receiver),
                         ReceiverAttachExchange::IncompleteUnsettled => {
@@ -1743,7 +1743,7 @@ impl DetachedReceiver {
                 .resume_incoming_attach(Some(remote_attach), false)
                 .await
         );
-        let receiver = Receiver { inner: self.inner };
+        let receiver = Receiver { inner: *self.inner };
         let resuming_receiver = match exchange {
             ReceiverAttachExchange::Complete => ResumingReceiver::Complete(receiver),
             ReceiverAttachExchange::IncompleteUnsettled => {
@@ -1771,7 +1771,7 @@ impl DetachedReceiver {
                 .resume_incoming_attach(Some(remote_attach), is_reattaching)
                 .await
         );
-        let receiver = Receiver { inner: self.inner };
+        let receiver = Receiver { inner: *self.inner };
         let resuming_receiver = match exchange {
             ReceiverAttachExchange::Complete => ResumingReceiver::Complete(receiver),
             ReceiverAttachExchange::IncompleteUnsettled => {
@@ -1809,7 +1809,7 @@ impl DetachedReceiver {
 
             match tokio::time::timeout(duration, fut).await {
                 Ok(Ok(exchange)) => {
-                    let receiver = Receiver { inner: self.inner };
+                    let receiver = Receiver { inner: *self.inner };
                     let resuming_receiver = match exchange {
                         ReceiverAttachExchange::Complete => ResumingReceiver::Complete(receiver),
                         ReceiverAttachExchange::IncompleteUnsettled => {
@@ -1849,7 +1849,7 @@ impl DetachedReceiver {
 
             match tokio::time::timeout(duration, fut).await {
                 Ok(Ok(exchange)) => {
-                    let receiver = Receiver { inner: self.inner };
+                    let receiver = Receiver { inner: *self.inner };
                     let resuming_receiver = match exchange {
                         ReceiverAttachExchange::Complete => ResumingReceiver::Complete(receiver),
                         ReceiverAttachExchange::IncompleteUnsettled => {
