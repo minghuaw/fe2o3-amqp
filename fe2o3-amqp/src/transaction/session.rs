@@ -85,6 +85,9 @@ where
     pub(crate) control: mpsc::Sender<SessionControl>,
     pub(crate) session: S,
     pub(crate) txn_manager: TransactionManager,
+    /// The negotiated max frame size of the session's connection, used when
+    /// accepting the transaction control link
+    pub(crate) max_frame_size: usize,
 }
 
 impl<S> TxnSession<S> where
@@ -106,7 +109,7 @@ where
         let control = self.control.clone();
         let outgoing = self.txn_manager.control_link_outgoing.clone();
         let session_stop_reason = self.session.session_stop_reason().clone();
-        let max_frame_size = self.session.max_frame_size();
+        let max_frame_size = self.max_frame_size;
 
         tokio::spawn(async move {
             // Error accepting new control link is handled by acceptor
@@ -245,10 +248,6 @@ where
 
     fn connection_stop_reason(&self) -> &Arc<OnceLock<ConnectionStopReason>> {
         self.session.connection_stop_reason()
-    }
-
-    fn max_frame_size(&self) -> usize {
-        self.session.max_frame_size()
     }
 
     fn outgoing_channel(&self) -> OutgoingChannel {

@@ -208,6 +208,7 @@ impl SessionAcceptor {
                         control: session_control_tx.clone(),
                         session: listener_session,
                         txn_manager,
+                        max_frame_size: connection.max_frame_size(),
                     };
     
                     let engine = SessionEngine::begin_listener_session(
@@ -295,7 +296,6 @@ impl SessionAcceptor {
             outgoing_channel,
             local_state,
             connection.connection_stop_reason.clone(),
-            max_frame_size,
         );
         let session_stop_reason = session.session_stop_reason().clone();
         session.on_incoming_begin(
@@ -418,10 +418,6 @@ impl endpoint::Session for ListenerSession {
 
     fn connection_stop_reason(&self) -> &Arc<OnceLock<ConnectionStopReason>> {
         self.session.connection_stop_reason()
-    }
-
-    fn max_frame_size(&self) -> usize {
-        self.session.max_frame_size()
     }
 
     fn outgoing_channel(&self) -> OutgoingChannel {

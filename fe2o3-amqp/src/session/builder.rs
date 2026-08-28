@@ -106,7 +106,6 @@ cfg_transaction! {
                     outgoing_channel,
                     session_stop_reason: Arc::new(OnceLock::new()),
                     connection_stop_reason,
-                    max_frame_size,
                     local_state,
                     initial_outgoing_id: Constant::new(self.next_outgoing_id),
                     next_outgoing_id: self.next_outgoing_id,
@@ -133,6 +132,7 @@ cfg_transaction! {
                     control,
                     session,
                     txn_manager,
+                    max_frame_size,
                 }
             }
         }
@@ -150,13 +150,11 @@ impl Builder {
         outgoing_channel: OutgoingChannel,
         local_state: SessionState,
         connection_stop_reason: Arc<OnceLock<ConnectionStopReason>>,
-        max_frame_size: usize,
     ) -> Session {
         Session {
             outgoing_channel,
             session_stop_reason: Arc::new(OnceLock::new()),
             connection_stop_reason,
-            max_frame_size,
             local_state,
             initial_outgoing_id: Constant::new(self.next_outgoing_id),
             next_outgoing_id: self.next_outgoing_id,
@@ -307,7 +305,6 @@ impl Builder {
                     outgoing_channel,
                     local_state,
                     connection.connection_stop_reason.clone(),
-                    max_frame_size,
                 );
                 let session_stop_reason = session.session_stop_reason().clone();
                 let (handle, outcome) = SessionEngine::begin_client_session(
@@ -357,7 +354,6 @@ impl Builder {
                             outgoing_channel,
                             local_state,
                             connection.connection_stop_reason.clone(),
-                            max_frame_size,
                         );
                         let session_stop_reason = session.session_stop_reason().clone();
                         let (handle, outcome) = SessionEngine::begin_client_session(
@@ -430,7 +426,6 @@ impl Builder {
                     outgoing_channel,
                     local_state,
                     connection.connection_stop_reason.clone(),
-                    max_frame_size,
                 );
                 let session_stop_reason = session.session_stop_reason().clone();
                 let (handle, outcome) = SessionEngine::begin_client_session(
@@ -500,7 +495,6 @@ impl Builder {
                     outgoing_channel,
                     local_state,
                     connection.connection_stop_reason.clone(),
-                    max_frame_size,
                 );
                 let session_stop_reason = session.session_stop_reason().clone();
                 let (handle, outcome) = SessionEngine::begin_client_session(

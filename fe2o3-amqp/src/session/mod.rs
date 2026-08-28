@@ -327,10 +327,6 @@ pub struct Session {
     /// connection handle
     pub(crate) connection_stop_reason: Arc<OnceLock<ConnectionStopReason>>,
 
-    /// The negotiated max frame size (encoder max frame length), shared from
-    /// the connection and with the links
-    pub(crate) max_frame_size: usize,
-
     // local amqp states
     pub(crate) local_state: SessionState,
     pub(crate) initial_outgoing_id: Constant<TransferNumber>,
@@ -607,10 +603,6 @@ impl endpoint::Session for Session {
 
     fn connection_stop_reason(&self) -> &Arc<OnceLock<ConnectionStopReason>> {
         &self.connection_stop_reason
-    }
-
-    fn max_frame_size(&self) -> usize {
-        self.max_frame_size
     }
 
     fn outgoing_channel(&self) -> OutgoingChannel {
@@ -1207,7 +1199,6 @@ mod tests {
                 OutgoingChannel(0),
                 SessionState::Mapped,
                 Arc::new(OnceLock::new()),
-                4096,
             )
     }
 
