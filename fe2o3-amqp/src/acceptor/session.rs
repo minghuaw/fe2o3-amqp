@@ -208,6 +208,7 @@ impl SessionAcceptor {
                         control: session_control_tx.clone(),
                         session: listener_session,
                         txn_manager,
+                        max_frame_size: connection.max_frame_size(),
                     };
     
                     let engine = SessionEngine::begin_listener_session(
@@ -290,6 +291,7 @@ impl SessionAcceptor {
         // `into_session` creates the shared stop-reason cell; the engine
         // publishes the reason on the session at exit, and the handle (and the
         // links attached through it) read the same cell via a clone.
+        let max_frame_size = connection.max_frame_size();
         let mut session = self.0.clone().into_session(
             outgoing_channel,
             local_state,
@@ -326,6 +328,7 @@ impl SessionAcceptor {
             outcome,
             outgoing: outgoing_tx,
             session_stop_reason,
+            max_frame_size,
             link_listener: link_listener_rx,
         };
         Ok(handle)

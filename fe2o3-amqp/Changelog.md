@@ -1,5 +1,20 @@
 # Change Log
 
+## Unreleased
+
+1. **Breaking**: `SendError` and `RecvError` gain a `MessageSizeExceeded` variant: the
+   sender rejects oversized messages locally, and the receiver rejects deliveries
+   larger than the advertised max-message-size (with `amqp:link:message-size-exceeded`)
+   without detaching the link.
+2. **Bugfix**: large messages are now split at the negotiated **max-frame-size** boundary
+   instead of the link's max-message-size, keeping the session's transfer-id and window
+   accounting consistent with the wire. The frame size is refreshed when a link resumes
+   on a different connection.
+3. Continuation frames of a split delivery now always omit the delivery-id, delivery-tag,
+   message-format, settled and rcv-settle-mode fields (previously a two-frame delivery
+   could carry a delivery-tag on its last frame, which peers such as Qpid Broker-J
+   reject).
+
 ## 0.17.0
 
 1. **Breaking**: Added the [`TransactionBase`] trait, which provides the `txn_id()`

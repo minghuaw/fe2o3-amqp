@@ -30,7 +30,6 @@ pub(crate) enum ConnectionControl {
         responder: oneshot::Sender<Result<OutgoingChannel, AllocSessionError>>,
     },
     DeallocateSession(OutgoingChannel),
-    GetMaxFrameSize(oneshot::Sender<usize>),
 }
 
 impl std::fmt::Display for ConnectionControl {
@@ -42,7 +41,6 @@ impl std::fmt::Display for ConnectionControl {
                 responder: _,
             } => write!(f, "AllocateSession"),
             Self::DeallocateSession(id) => write!(f, "DeallocateSession({})", id.0),
-            Self::GetMaxFrameSize(_) => write!(f, "GetMaxFrameSize"),
         }
     }
 }
@@ -64,7 +62,6 @@ pub(crate) enum SessionControl {
     DeallocateLink(OutputHandle),
     Disposition(Disposition),
     CloseConnectionWithError((ConnectionError, Option<String>)),
-    GetMaxFrameSize(oneshot::Sender<usize>),
 
     // Transaction related controls
     #[cfg(feature = "transaction")]
@@ -103,7 +100,6 @@ impl std::fmt::Display for SessionControl {
             SessionControl::DeallocateLink(name) => write!(f, "DeallocateLink({:?})", name),
             SessionControl::Disposition(_) => write!(f, "Disposition"),
             SessionControl::CloseConnectionWithError(_) => write!(f, "CloseConnectionWithError"),
-            SessionControl::GetMaxFrameSize(_) => write!(f, "GetMaxFrameSize"),
 
             #[cfg(feature = "transaction")]
             SessionControl::AllocateTransactionId { .. } => write!(f, "AllocateTransactionId"),

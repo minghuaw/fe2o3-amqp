@@ -94,6 +94,7 @@ where
             session.control.clone(),
             session.outgoing.clone(),
             session.session_stop_reason().clone(),
+            session.max_frame_size(),
         )
         .await
         .map(|inner| Receiver { inner })
@@ -113,6 +114,7 @@ where
         control: mpsc::Sender<SessionControl>,
         outgoing: mpsc::Sender<LinkFrame>,
         session_stop_reason: Arc<OnceLock<SessionStopReason>>,
+        max_frame_size: usize,
     ) -> Result<ReceiverInner<ReceiverLink<T>>, ReceiverAttachError>
     where
         T: Into<TargetArchetype>
@@ -221,6 +223,7 @@ where
             flow_state: flow_state_consumer,
             unsettled,
             session_stop_reason,
+            max_frame_size,
             verify_incoming_source: self.verify_incoming_source,
             verify_incoming_target: self.verify_incoming_target,
         };
@@ -229,7 +232,7 @@ where
         match (err, link.on_incoming_attach(remote_attach)) {
             (Some(attach_error), _) | (_, Err(attach_error)) => {
                 // Complete attach anyway
-                link.send_attach(&outgoing, &control, false).await?;
+                link.send_attach(&outgoing, false).await?;
                 return Err(link
                     .handle_attach_error(
                         attach_error,
@@ -239,7 +242,7 @@ where
                     )
                     .await)
             }
-            _ => link.send_attach(&outgoing, &control, false).await?,
+            _ => link.send_attach(&outgoing, false).await?,
         }
 
         let mut inner = ReceiverInner {

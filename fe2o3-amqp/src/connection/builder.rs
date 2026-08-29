@@ -1347,6 +1347,7 @@ cfg_not_wasm32! {
         Io: AsyncRead + AsyncWrite + std::fmt::Debug + Send + Unpin + 'static,
     {
         let connection_stop_reason = engine.connection_stop_reason().clone();
+        let max_frame_size = engine.max_frame_size();
         let (handle, outcome) = engine.spawn();
 
         let connection_handle = ConnectionHandle {
@@ -1356,6 +1357,7 @@ cfg_not_wasm32! {
             outcome,
             outgoing: outgoing_tx, // session_control: session_control_tx
             connection_stop_reason,
+            max_frame_size,
             session_listener: (),
         };
 
@@ -1374,6 +1376,7 @@ cfg_wasm32! {
         Io: AsyncRead + AsyncWrite + std::fmt::Debug + Unpin + 'static,
     {
         let connection_stop_reason = engine.connection_stop_reason().clone();
+        let max_frame_size = engine.max_frame_size();
         let (handle, outcome) = engine.spawn_on_local_set(local_set);
 
         let connection_handle = ConnectionHandle {
@@ -1383,6 +1386,7 @@ cfg_wasm32! {
             outcome,
             outgoing: outgoing_tx, // session_control: session_control_tx
             connection_stop_reason,
+            max_frame_size,
             session_listener: (),
         };
 
@@ -1398,6 +1402,7 @@ cfg_wasm32! {
         Io: AsyncRead + AsyncWrite + std::fmt::Debug + Unpin + 'static,
     {
         let connection_stop_reason = engine.connection_stop_reason().clone();
+        let max_frame_size = engine.max_frame_size();
         let (handle, outcome) = engine.spawn_local();
 
         let connection_handle = ConnectionHandle {
@@ -1407,6 +1412,7 @@ cfg_wasm32! {
             outcome,
             outgoing: outgoing_tx, // session_control: session_control_tx
             connection_stop_reason,
+            max_frame_size,
             session_listener: (),
         };
 

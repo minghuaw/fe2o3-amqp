@@ -85,6 +85,9 @@ where
     pub(crate) control: mpsc::Sender<SessionControl>,
     pub(crate) session: S,
     pub(crate) txn_manager: TransactionManager,
+    /// The negotiated max frame size of the session's connection, used when
+    /// accepting the transaction control link
+    pub(crate) max_frame_size: usize,
 }
 
 impl<S> TxnSession<S> where
@@ -106,11 +109,18 @@ where
         let control = self.control.clone();
         let outgoing = self.txn_manager.control_link_outgoing.clone();
         let session_stop_reason = self.session.session_stop_reason().clone();
+        let max_frame_size = self.max_frame_size;
 
         tokio::spawn(async move {
             // Error accepting new control link is handled by acceptor
             if let Ok(coordinator) = acceptor
-                .accept_incoming_attach(remote_attach, control, outgoing, session_stop_reason)
+                .accept_incoming_attach(
+                    remote_attach,
+                    control,
+                    outgoing,
+                    session_stop_reason,
+                    max_frame_size,
+                )
                 .await
             {
                 coordinator.event_loop().await

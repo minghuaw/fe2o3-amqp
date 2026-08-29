@@ -96,6 +96,9 @@ pub struct ConnectionHandle<R> {
     pub(crate) outgoing: Sender<SessionFrame>,
     /// Why the connection stopped, shared with the sessions
     pub(crate) connection_stop_reason: Arc<OnceLock<ConnectionStopReason>>,
+    /// The negotiated max frame size (encoder max frame length), shared with
+    /// the sessions and the links
+    pub(crate) max_frame_size: usize,
     pub(crate) session_listener: R,
 }
 
@@ -132,6 +135,12 @@ impl<R> ConnectionHandle<R> {
             true => true,
             false => self.control.is_closed(),
         }
+    }
+
+    /// The negotiated max frame size (encoder max frame length) of this
+    /// connection
+    pub(crate) fn max_frame_size(&self) -> usize {
+        self.max_frame_size
     }
 
     /// Tries to close the connection

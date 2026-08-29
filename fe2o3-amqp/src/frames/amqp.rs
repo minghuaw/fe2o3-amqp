@@ -95,6 +95,19 @@ impl FrameEncoder {
         let more = remaining_bytes > self.max_frame_body_size;
 
         if more {
+            // DEFENSIVE PATH — likely never taken.
+            //
+            // The sender link (`SenderLink::send_transfer_without_modifying_unsettled_map`)
+            // already splits payloads with the same bound as this encoder
+            // (`max_frame_size - 4 - performative_size`, including worst-case
+            // delivery-id headroom), so every link-level transfer produces
+            // exactly one physical frame. If this branch ever triggers, it
+            // indicates a sizing mismatch (e.g. a new field added to the
+            // `Transfer` performative or a code path that bypasses the link
+            // split). Note that frames split here are NOT counted by the
+            // session (`next-outgoing-id` / `remote-incoming-window` are only
+            // updated once per link-level transfer), so this path must stay a
+            // safety net rather than the primary splitting mechanism.
             let orig_more = transfer.more; // If the transfer is pre-split at link
             transfer.more = true;
             buf.clear();

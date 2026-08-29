@@ -2,7 +2,6 @@
 
 use std::{marker::PhantomData, sync::Arc, sync::OnceLock};
 
-use bytes::{BufMut, BytesMut};
 use fe2o3_amqp_types::{
     definitions::{
         self, DeliveryNumber, DeliveryTag, MessageFormat, ReceiverSettleMode, Role,
@@ -18,8 +17,7 @@ pub use error::*;
 use parking_lot::RwLock;
 pub use receiver::{CreditMode, Receiver, ReceiverDisposer};
 pub use sender::Sender;
-use serde::Serialize;
-use serde_amqp::ser::Serializer;
+use serde_amqp::serialized_size;
 use tokio::sync::{mpsc, oneshot};
 
 use crate::{
@@ -212,6 +210,11 @@ pub(crate) struct Link<R, T, F, M> {
     /// Why the session (or its connection) stopped, shared from the session
     pub(crate) session_stop_reason: Arc<OnceLock<SessionStopReason>>,
 
+    /// The negotiated max frame size (encoder max frame length), shared from
+    /// the session and the connection; used to split transfers and attach
+    /// frames that must fit within the frame size
+    pub(crate) max_frame_size: usize,
+
     pub(crate) verify_incoming_source: bool,
     pub(crate) verify_incoming_target: bool,
 }
@@ -305,23 +308,16 @@ where
         is_reattaching: bool,
     ) -> Result<Attach, SendAttachErrorKind> {
         let mut denominator = 1usize; // This is going to be the denominator
-        let mut buf = BytesMut::new();
 
         let mut attach = self.as_attach_inner(handle.clone(), is_reattaching, denominator);
-        let mut serializer = Serializer::from((&mut buf).writer());
-        attach
-            .serialize(&mut serializer)
-            .map_err(|_| SendAttachErrorKind::IllegalState)?; // This should not happen
-
-        while buf.len() > max_frame_size {
-            buf.clear();
+        // `SizeSerializer` computes the serialized size without allocating a
+        // buffer; only the size is needed here.
+        while serialized_size(&attach).map_err(|_| SendAttachErrorKind::IllegalState)? // This should not happen
+            > max_frame_size
+        {
             denominator *= 2;
 
             attach = self.as_attach_inner(handle.clone(), is_reattaching, denominator);
-            let mut serializer = Serializer::from((&mut buf).writer());
-            attach
-                .serialize(&mut serializer)
-                .map_err(|_| SendAttachErrorKind::IllegalState)?; // This should not happen
         }
 
         Ok(attach)
@@ -329,11 +325,11 @@ where
 
     /// # Cancel safety
     ///
-    /// This is cancel safe if oneshot channel is cancel safe
+    /// This is cancel safe: the only `.await` is on sending over
+    /// `tokio::mpsc::Sender`, which is cancel safe.
     pub(crate) async fn send_attach_inner(
         &mut self,
         writer: &mpsc::Sender<LinkFrame>,
-        session: &mpsc::Sender<SessionControl>,
         is_reattaching: bool,
     ) -> Result<(), SendAttachErrorKind> {
         // Create Attach frame
@@ -358,8 +354,11 @@ where
         let attach = match unsettled_map_len {
             Some(0) | None => self.as_complete_attach(handle, is_reattaching),
             Some(_) => {
-                let max_frame_size = get_max_frame_size(session, &self.session_stop_reason).await?; // FIXME: cancel safe?
-                self.as_maybe_incomplete_attach(max_frame_size, handle, is_reattaching)?
+                // The connection engine publishes the negotiated encoder max
+                // frame size before the connection handle is created; links
+                // are only attached after the connection is opened, so the
+                // value is always populated.
+                self.as_maybe_incomplete_attach(self.max_frame_size, handle, is_reattaching)?
             }
         };
         let incomplete_unsettled = attach.incomplete_unsettled;
@@ -397,28 +396,6 @@ where
 
         Ok(())
     }
-}
-
-/// # Cancel safety
-///
-/// This should cancel safe if oneshot channel is cancel safe
-pub(crate) async fn get_max_frame_size(
-    control: &mpsc::Sender<SessionControl>,
-    session_stop_reason: &OnceLock<SessionStopReason>,
-) -> Result<usize, SendAttachErrorKind> {
-    let (tx, rx) = oneshot::channel();
-    control
-        .send(SessionControl::GetMaxFrameSize(tx))
-        .await // cancel safe
-        .map_err(|_| match session_stop_reason.get() {
-            Some(reason) => SendAttachErrorKind::SessionStopped(reason.clone()),
-            None => SendAttachErrorKind::IllegalState, // defensive: no stop reason recorded; failure is link-local
-        })?;
-    rx.await // FIXME: is oneshot channel cancel safe?
-        .map_err(|_| match session_stop_reason.get() {
-            Some(reason) => SendAttachErrorKind::SessionStopped(reason.clone()),
-            None => SendAttachErrorKind::IllegalState, // defensive: no stop reason recorded; failure is link-local
-        })
 }
 
 impl<R, T, F, M> endpoint::LinkDetach for Link<R, T, F, M>
@@ -629,11 +606,12 @@ impl LinkRelay<OutputHandle> {
     pub(crate) async fn send(
         &mut self,
         frame: LinkFrame,
-    ) -> Result<(), mpsc::error::SendError<LinkFrame>> {
+    ) -> Result<(), Box<mpsc::error::SendError<LinkFrame>>> {
         match self {
             LinkRelay::Sender { tx, .. } => tx.send(frame).await,
             LinkRelay::Receiver { tx, .. } => tx.send(frame).await,
         }
+        .map_err(Box::new)
     }
 
     #[allow(unused_variables)]
@@ -827,13 +805,13 @@ impl LinkRelay<OutputHandle> {
     pub async fn on_incoming_detach(
         &mut self,
         detach: Detach,
-    ) -> Result<(), mpsc::error::SendError<LinkFrame>> {
+    ) -> Result<(), Box<mpsc::error::SendError<LinkFrame>>> {
         match self {
             LinkRelay::Sender { tx, .. } => {
-                tx.send(LinkFrame::Detach(detach)).await?;
+                tx.send(LinkFrame::Detach(detach)).await.map_err(Box::new)?;
             }
             LinkRelay::Receiver { tx, .. } => {
-                tx.send(LinkFrame::Detach(detach)).await?;
+                tx.send(LinkFrame::Detach(detach)).await.map_err(Box::new)?;
             }
         }
         Ok(())

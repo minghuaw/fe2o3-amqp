@@ -74,6 +74,7 @@ impl ControlLinkAcceptor {
         control: mpsc::Sender<SessionControl>,
         outgoing: mpsc::Sender<LinkFrame>,
         session_stop_reason: Arc<OnceLock<SessionStopReason>>,
+        max_frame_size: usize,
     ) -> Result<TxnCoordinator, ReceiverAttachError> {
         self.inner
             .accept_incoming_attach_inner(
@@ -82,6 +83,7 @@ impl ControlLinkAcceptor {
                 control,
                 outgoing,
                 session_stop_reason,
+                max_frame_size,
             )
             .await
             .map(|inner| TxnCoordinator {
@@ -235,6 +237,7 @@ impl TxnCoordinator {
             | RecvError::MessageDecode(_)
             | RecvError::IllegalRcvSettleModeInTransfer
             | RecvError::InconsistentFieldInMultiFrameDelivery
+            | RecvError::MessageSizeExceeded(_)
             | RecvError::TransactionalAcquisitionIsNotImeplemented => {
                 #[cfg(feature = "tracing")]
                 tracing::error!(?error);

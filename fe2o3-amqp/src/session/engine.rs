@@ -360,16 +360,6 @@ where
                     ))
                 })?;
             }
-            SessionControl::GetMaxFrameSize(resp) => {
-                self.conn_control
-                    .send(ConnectionControl::GetMaxFrameSize(resp))
-                    .await
-                    .map_err(|_| {
-                        SessionInnerError::ConnectionStopped(connection_stop_reason_or_closed(
-                            self.session.connection_stop_reason(),
-                        ))
-                    })?;
-            }
 
             #[cfg(feature = "transaction")]
             SessionControl::AllocateTransactionId { resp } => {

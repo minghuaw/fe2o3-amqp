@@ -17,6 +17,47 @@ cfg_not_wasm32! {
 
     mod common;
 
+    /// Round trip a payload through the broker and assert byte equality.
+    ///
+    /// This is modeled on Apache Artemis `AmqpLargeMessageTest`
+    /// (`testSendFixedSizedMessages`/`testSend1MBMessage`), which sends
+    /// payloads spanning multiple frames (the frame size is at most
+    /// 131072 on RabbitMQ and smaller on Artemis/Qpid) and asserts the
+    /// received bytes equal the sent bytes.
+    async fn send_receive_large_content(url: &str, payload: String, detach_on_close: bool) {
+        let mut connection = Connection::open("test-connection", url).await.unwrap();
+        let mut session = Session::begin(&mut connection).await.unwrap();
+        let mut sender = Sender::attach(&mut session, "test-sender", "test-queue")
+            .await
+            .unwrap();
+        let mut receiver = Receiver::attach(&mut session, "test-receiver", "test-queue")
+            .await
+            .unwrap();
+
+        let message = Message::from(payload.clone());
+        let outcome = sender.send(message).await.unwrap();
+        outcome.accepted_or("Not accepted").unwrap();
+
+        let received = receiver.recv::<String>().await.unwrap();
+        receiver.accept(&received).await.unwrap();
+        assert_eq!(received.body(), &payload);
+
+        if detach_on_close {
+            // rabbitmq only supports non-closing detach
+            sender.detach().await.unwrap();
+            receiver.detach().await.unwrap();
+        } else {
+            sender.close().await.unwrap();
+            receiver.close().await.unwrap();
+        }
+        session.close().await.unwrap();
+        connection.close().await.unwrap();
+    }
+
+    /// Fixed payload sizes that each span multiple frames at the broker's
+    /// default frame size (as in Artemis `testSendFixedSizedMessages`).
+    const LARGE_CONTENT_SIZES: [usize; 4] = [64 * 1024, 128 * 1024, 256 * 1024, 1024 * 1024];
+
     #[tokio::test]
     async fn activemq_artemis_send_receive() {
         let (_node, port) = common::setup_activemq_artemis(None, None).await;
@@ -50,27 +91,9 @@ cfg_not_wasm32! {
         let (_node, port) = common::setup_activemq_artemis(None, None).await;
 
         let url = format!("amqp://localhost:{}", port);
-        let mut connection = Connection::open("test-connection", &url[..]).await.unwrap();
-        let mut session = Session::begin(&mut connection).await.unwrap();
-        let mut sender = Sender::attach(&mut session, "test-sender", "test-queue")
-            .await
-            .unwrap();
-        let mut receiver = Receiver::attach(&mut session, "test-receiver", "test-queue")
-            .await
-            .unwrap();
-
-        let message = Message::from("test-message".repeat(100_000));
-        let outcome = sender.send(message).await.unwrap();
-        outcome.accepted_or("Not accepted").unwrap();
-
-        let received = receiver.recv::<String>().await.unwrap();
-        receiver.accept(&received).await.unwrap();
-        assert_eq!(received.body(), &"test-message".repeat(100_000));
-
-        sender.close().await.unwrap();
-        receiver.close().await.unwrap();
-        session.close().await.unwrap();
-        connection.close().await.unwrap();
+        for size in LARGE_CONTENT_SIZES {
+            send_receive_large_content(&url, "a".repeat(size), false).await;
+        }
     }
 
     #[tokio::test]
@@ -106,27 +129,9 @@ cfg_not_wasm32! {
         let (_node, port) = common::setup_qpid_broker_j(None, None).await;
 
         let url = format!("amqp://admin:admin@localhost:{}", port);
-        let mut connection = Connection::open("test-connection", &url[..]).await.unwrap();
-        let mut session = Session::begin(&mut connection).await.unwrap();
-        let mut sender = Sender::attach(&mut session, "test-sender", "test-queue")
-            .await
-            .unwrap();
-        let mut receiver = Receiver::attach(&mut session, "test-receiver", "test-queue")
-            .await
-            .unwrap();
-
-        let message = Message::from("test-message".repeat(100_000));
-        let outcome = sender.send(message).await.unwrap();
-        outcome.accepted_or("Not accepted").unwrap();
-
-        let received = receiver.recv::<String>().await.unwrap();
-        receiver.accept(&received).await.unwrap();
-        assert_eq!(received.body(), &"test-message".repeat(100_000));
-
-        sender.close().await.unwrap();
-        receiver.close().await.unwrap();
-        session.close().await.unwrap();
-        connection.close().await.unwrap();
+        for size in LARGE_CONTENT_SIZES {
+            send_receive_large_content(&url, "p".repeat(size), false).await;
+        }
     }
 
     #[tokio::test]
@@ -163,27 +168,8 @@ cfg_not_wasm32! {
         let (_node, port) = common::setup_rabbitmq_amqp10(None, None).await;
 
         let url = format!("amqp://localhost:{}", port);
-        let mut connection = Connection::open("test-connection", &url[..]).await.unwrap();
-        let mut session = Session::begin(&mut connection).await.unwrap();
-        let mut sender = Sender::attach(&mut session, "test-sender", "test-queue")
-            .await
-            .unwrap();
-        let mut receiver = Receiver::attach(&mut session, "test-receiver", "test-queue")
-            .await
-            .unwrap();
-
-        let message = Message::from("test-message".repeat(100_000));
-        let outcome = sender.send(message).await.unwrap();
-        outcome.accepted_or("Not accepted").unwrap();
-
-        let received = receiver.recv::<String>().await.unwrap();
-        receiver.accept(&received).await.unwrap();
-        assert_eq!(received.body(), &"test-message".repeat(100_000));
-
-        // rabbitmq only supports non-closing detach
-        sender.detach().await.unwrap();
-        receiver.detach().await.unwrap();
-        session.close().await.unwrap();
-        connection.close().await.unwrap();
+        for size in LARGE_CONTENT_SIZES {
+            send_receive_large_content(&url, "r".repeat(size), true).await;
+        }
     }
 }
