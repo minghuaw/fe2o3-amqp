@@ -77,17 +77,22 @@ pub async fn setup_rabbitmq_amqp10(
     username: Option<&str>,
     password: Option<&str>,
 ) -> (ContainerAsync<GenericImage>, u16) {
+    // Wait for RabbitMQ to finish booting before connecting: the AMQP 1.0
+    // plugin accepts TCP connections while the broker is still starting up,
+    // and the client has no handshake timeout, so connecting too early hangs
+    // the test until the CI job timeout.
+    let wait_for = WaitFor::message_on_either_std("Server startup complete");
     let image = match (username, password) {
         (Some(username), Some(password)) => {
             GenericImage::new("docker.io/minghuaw/rabbitmq-amqp1.0", "latest")
                 .with_exposed_port(5672.tcp())
-                .with_wait_for(WaitFor::seconds(10))
+                .with_wait_for(wait_for)
                 .with_env_var("RABBITMQ_DEFAULT_USER", username)
                 .with_env_var("RABBITMQ_DEFAULT_PASS", password)
         }
         _ => GenericImage::new("docker.io/minghuaw/rabbitmq-amqp1.0", "latest")
             .with_exposed_port(5672.tcp())
-            .with_wait_for(WaitFor::seconds(10))
+            .with_wait_for(wait_for)
             .into(),
     };
     let node = image.start().await.unwrap();
