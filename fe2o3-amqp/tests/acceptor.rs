@@ -16,6 +16,8 @@ use fe2o3_amqp::{
     Session,
 };
 
+mod common;
+
 /// When the connection stops while the listener session is waiting for an
 /// incoming link, `LinkAcceptor::accept` must surface the connection-level
 /// stop reason rather than a fabricated one.
@@ -28,11 +30,10 @@ async fn listener_acceptor_reports_connection_closed() {
         .build();
     let connection_task = tokio::spawn(async move { acceptor.accept(server_io).await });
 
-    let mut client_connection = Connection::builder()
+    let mut client_connection = common::expect_ok!(Connection::builder()
         .container_id("test-client")
-        .open_with_stream(client_io)
-        .await
-        .expect("client connection failed");
+        .open_with_stream(client_io))
+    .await;
 
     let mut server_connection = connection_task
         .await
@@ -43,11 +44,10 @@ async fn listener_acceptor_reports_connection_closed() {
     // its session; the connection handle stays in scope so the connection
     // stays alive.
     let session_acceptor = SessionAcceptor::new();
-    let (session_result, begin_result) = tokio::join!(
-        session_acceptor.accept(&mut server_connection),
-        Session::begin(&mut client_connection),
-    );
-    let _client_session = begin_result.expect("client session begin failed");
+    let begin_fut = common::expect_ok!(Session::begin(&mut client_connection));
+    let (session_result, begin_result) =
+        tokio::join!(session_acceptor.accept(&mut server_connection), begin_fut);
+    let _client_session = begin_result;
     let mut listener_session = session_result.expect("session accept failed");
 
     let link_acceptor = LinkAcceptor::builder().build();
@@ -83,11 +83,10 @@ async fn listener_acceptor_reports_session_ended() {
         .build();
     let connection_task = tokio::spawn(async move { acceptor.accept(server_io).await });
 
-    let mut client_connection = Connection::builder()
+    let mut client_connection = common::expect_ok!(Connection::builder()
         .container_id("test-client")
-        .open_with_stream(client_io)
-        .await
-        .expect("client connection failed");
+        .open_with_stream(client_io))
+    .await;
 
     let mut server_connection = connection_task
         .await
@@ -98,11 +97,10 @@ async fn listener_acceptor_reports_session_ended() {
     // its session; the connection handle stays in scope so the connection
     // stays alive.
     let session_acceptor = SessionAcceptor::new();
-    let (session_result, begin_result) = tokio::join!(
-        session_acceptor.accept(&mut server_connection),
-        Session::begin(&mut client_connection),
-    );
-    let client_session = begin_result.expect("client session begin failed");
+    let begin_fut = common::expect_ok!(Session::begin(&mut client_connection));
+    let (session_result, begin_result) =
+        tokio::join!(session_acceptor.accept(&mut server_connection), begin_fut);
+    let client_session = begin_result;
     let mut listener_session = session_result.expect("session accept failed");
 
     let link_acceptor = LinkAcceptor::builder().build();

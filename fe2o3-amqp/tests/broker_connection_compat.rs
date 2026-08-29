@@ -18,7 +18,7 @@ cfg_not_wasm32! {
     async fn activemq_artemis_connection() {
         let (_node, port) = common::setup_activemq_artemis(None, None).await;
         let url = format!("amqp://localhost:{}", port);
-        let mut connection = Connection::open("test-connection", &url[..]).await.unwrap();
+        let mut connection = common::expect_ok!(Connection::open("test-connection", &url[..])).await;
         connection.close().await.unwrap();
     }
 
@@ -26,7 +26,7 @@ cfg_not_wasm32! {
     async fn activemq_artemis_sasl_plain_connection() {
         let (_node, port) = common::setup_activemq_artemis(Some("artemis"), Some("artemis")).await;
         let url = format!("amqp://artemis:artemis@localhost:{}", port);
-        let mut connection = Connection::open("test-connection", &url[..]).await.unwrap();
+        let mut connection = common::expect_ok!(Connection::open("test-connection", &url[..])).await;
         connection.close().await.unwrap();
     }
 
@@ -36,7 +36,7 @@ cfg_not_wasm32! {
         // `admin`/`admin` user. Anonymous access is not enabled.
         let (_node, port) = common::setup_qpid_broker_j(None, None).await;
         let url = format!("amqp://admin:admin@localhost:{}", port);
-        let mut connection = Connection::open("test-connection", &url[..]).await.unwrap();
+        let mut connection = common::expect_ok!(Connection::open("test-connection", &url[..])).await;
         connection.close().await.unwrap();
     }
 
@@ -44,7 +44,7 @@ cfg_not_wasm32! {
     async fn qpid_broker_j_sasl_plain_connection() {
         let (_node, port) = common::setup_qpid_broker_j(Some("admin"), Some("admin")).await;
         let url = format!("amqp://admin:admin@localhost:{}", port);
-        let mut connection = Connection::open("test-connection", &url[..]).await.unwrap();
+        let mut connection = common::expect_ok!(Connection::open("test-connection", &url[..])).await;
         connection.close().await.unwrap();
     }
 
@@ -52,7 +52,7 @@ cfg_not_wasm32! {
     async fn rabbitmq_amqp10_connection() {
         let (_node, port) = common::setup_rabbitmq_amqp10(None, None).await;
         let url = format!("amqp://localhost:{}", port);
-        let mut connection = Connection::open("test-connection", &url[..]).await.unwrap();
+        let mut connection = common::expect_ok!(Connection::open("test-connection", &url[..])).await;
         connection.close().await.unwrap();
     }
 
@@ -60,7 +60,7 @@ cfg_not_wasm32! {
     async fn rabbitmq_amqp10_sasl_plain_connection() {
         let (_node, port) = common::setup_rabbitmq_amqp10(Some("guest"), Some("guest")).await;
         let url = format!("amqp://guest:guest@localhost:{}", port);
-        let mut connection = Connection::open("test-connection", &url[..]).await.unwrap();
+        let mut connection = common::expect_ok!(Connection::open("test-connection", &url[..])).await;
         connection.close().await.unwrap();
     }
 }

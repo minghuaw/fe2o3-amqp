@@ -6,6 +6,29 @@ use testcontainers::{
     ContainerAsync, GenericImage, ImageExt,
 };
 
+/// Runs `fut` under a 60s timeout, panicking with the expression text on
+/// timeout or with the error on failure. Bounds the AMQP setup operations
+/// (connection open, session begin, link attach) in integration tests: a
+/// broker that accepts TCP but stalls the handshake would otherwise hang the
+/// test until the CI job timeout.
+///
+/// Expands to a future so that it can also be joined concurrently with the
+/// acceptor-side operation (e.g. `tokio::join!`).
+macro_rules! expect_ok {
+    ($fut:expr) => {
+        async {
+            let what = stringify!($fut);
+            tokio::time::timeout(std::time::Duration::from_secs(60), $fut)
+                .await
+                .unwrap_or_else(|_| panic!("AMQP operation timed out after 60s: {what}"))
+                .unwrap()
+        }
+    };
+}
+
+pub(crate) use expect_ok;
+
+#[allow(dead_code)] // not used by all test binaries
 pub async fn setup_activemq_artemis(
     username: Option<&str>,
     password: Option<&str>,
@@ -29,6 +52,7 @@ pub async fn setup_activemq_artemis(
     (node, port)
 }
 
+#[allow(dead_code)] // not used by all test binaries
 pub async fn setup_qpid_broker_j(
     username: Option<&str>,
     password: Option<&str>,
@@ -77,17 +101,22 @@ pub async fn setup_rabbitmq_amqp10(
     username: Option<&str>,
     password: Option<&str>,
 ) -> (ContainerAsync<GenericImage>, u16) {
+    // Wait for RabbitMQ to finish booting before connecting: the AMQP 1.0
+    // plugin accepts TCP connections while the broker is still starting up,
+    // and the client has no handshake timeout, so connecting too early hangs
+    // the test until the CI job timeout.
+    let wait_for = WaitFor::message_on_either_std("Server startup complete");
     let image = match (username, password) {
         (Some(username), Some(password)) => {
             GenericImage::new("docker.io/minghuaw/rabbitmq-amqp1.0", "latest")
                 .with_exposed_port(5672.tcp())
-                .with_wait_for(WaitFor::seconds(10))
+                .with_wait_for(wait_for)
                 .with_env_var("RABBITMQ_DEFAULT_USER", username)
                 .with_env_var("RABBITMQ_DEFAULT_PASS", password)
         }
         _ => GenericImage::new("docker.io/minghuaw/rabbitmq-amqp1.0", "latest")
             .with_exposed_port(5672.tcp())
-            .with_wait_for(WaitFor::seconds(10))
+            .with_wait_for(wait_for)
             .into(),
     };
     let node = image.start().await.unwrap();
