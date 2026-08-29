@@ -97,17 +97,11 @@ cfg_not_wasm32! {
     }
 
     async fn transaction_posting_commit(url: &str) {
-        let mut connection = Connection::open("test-connection", url).await.unwrap();
-        let mut session = Session::begin(&mut connection).await.unwrap();
-        let controller = Controller::attach(&mut session, "test-controller")
-            .await
-            .unwrap();
-        let mut sender = Sender::attach(&mut session, "test-sender", "test-queue")
-            .await
-            .unwrap();
-        let mut receiver = Receiver::attach(&mut session, "test-receiver", "test-queue")
-            .await
-            .unwrap();
+        let mut connection = common::expect_ok!(Connection::open("test-connection", url)).await;
+        let mut session = common::expect_ok!(Session::begin(&mut connection)).await;
+        let controller = common::expect_ok!(Controller::attach(&mut session, "test-controller")).await;
+        let mut sender = common::expect_ok!(Sender::attach(&mut session, "test-sender", "test-queue")).await;
+        let mut receiver = common::expect_ok!(Receiver::attach(&mut session, "test-receiver", "test-queue")).await;
 
         let txn = Transaction::declare(&controller, None).await.unwrap();
         post_commit_and_verify(txn, &mut sender, &mut receiver).await;
@@ -120,18 +114,12 @@ cfg_not_wasm32! {
     }
 
     async fn owned_transaction_posting_commit(url: &str) {
-        let mut connection = Connection::open("test-connection", url).await.unwrap();
-        let mut session = Session::begin(&mut connection).await.unwrap();
-        let mut sender = Sender::attach(&mut session, "test-sender", "test-queue")
-            .await
-            .unwrap();
-        let mut receiver = Receiver::attach(&mut session, "test-receiver", "test-queue")
-            .await
-            .unwrap();
+        let mut connection = common::expect_ok!(Connection::open("test-connection", url)).await;
+        let mut session = common::expect_ok!(Session::begin(&mut connection)).await;
+        let mut sender = common::expect_ok!(Sender::attach(&mut session, "test-sender", "test-queue")).await;
+        let mut receiver = common::expect_ok!(Receiver::attach(&mut session, "test-receiver", "test-queue")).await;
 
-        let txn = OwnedTransaction::declare(&mut session, "test-owned-controller", None)
-            .await
-            .unwrap();
+        let txn = common::expect_ok!(OwnedTransaction::declare(&mut session, "test-owned-controller", None)).await;
         post_commit_and_verify(txn, &mut sender, &mut receiver).await;
 
         sender.close().await.unwrap();
@@ -162,18 +150,12 @@ cfg_not_wasm32! {
     }
 
     async fn transaction_discharge(url: &str) {
-        let mut connection = Connection::open("test-connection", url).await.unwrap();
-        let mut session = Session::begin(&mut connection).await.unwrap();
-        let controller = Controller::attach(&mut session, "test-controller")
-            .await
-            .unwrap();
-        let mut sender = Sender::attach(&mut session, "test-sender", "test-queue-discharge")
-            .await
-            .unwrap();
+        let mut connection = common::expect_ok!(Connection::open("test-connection", url)).await;
+        let mut session = common::expect_ok!(Session::begin(&mut connection)).await;
+        let controller = common::expect_ok!(Controller::attach(&mut session, "test-controller")).await;
+        let mut sender = common::expect_ok!(Sender::attach(&mut session, "test-sender", "test-queue-discharge")).await;
         let mut receiver =
-            Receiver::attach(&mut session, "test-receiver", "test-queue-discharge")
-                .await
-                .unwrap();
+            common::expect_ok!(Receiver::attach(&mut session, "test-receiver", "test-queue-discharge")).await;
 
         let txn = Transaction::declare(&controller, None).await.unwrap();
         discharge_and_verify(txn, &mut sender, &mut receiver).await;
@@ -186,19 +168,13 @@ cfg_not_wasm32! {
     }
 
     async fn owned_transaction_discharge(url: &str) {
-        let mut connection = Connection::open("test-connection", url).await.unwrap();
-        let mut session = Session::begin(&mut connection).await.unwrap();
-        let mut sender = Sender::attach(&mut session, "test-sender", "test-queue-discharge")
-            .await
-            .unwrap();
+        let mut connection = common::expect_ok!(Connection::open("test-connection", url)).await;
+        let mut session = common::expect_ok!(Session::begin(&mut connection)).await;
+        let mut sender = common::expect_ok!(Sender::attach(&mut session, "test-sender", "test-queue-discharge")).await;
         let mut receiver =
-            Receiver::attach(&mut session, "test-receiver", "test-queue-discharge")
-                .await
-                .unwrap();
+            common::expect_ok!(Receiver::attach(&mut session, "test-receiver", "test-queue-discharge")).await;
 
-        let txn = OwnedTransaction::declare(&mut session, "test-owned-controller", None)
-            .await
-            .unwrap();
+        let txn = common::expect_ok!(OwnedTransaction::declare(&mut session, "test-owned-controller", None)).await;
         discharge_and_verify(txn, &mut sender, &mut receiver).await;
 
         sender.close().await.unwrap();
@@ -250,22 +226,16 @@ cfg_not_wasm32! {
     }
 
     async fn posting_variants(url: &str) {
-        let mut connection = Connection::open("test-connection", url).await.unwrap();
-        let mut session = Session::begin(&mut connection).await.unwrap();
-        let controller = Controller::attach(&mut session, "test-controller")
-            .await
-            .unwrap();
+        let mut connection = common::expect_ok!(Connection::open("test-connection", url)).await;
+        let mut session = common::expect_ok!(Session::begin(&mut connection)).await;
+        let controller = common::expect_ok!(Controller::attach(&mut session, "test-controller")).await;
         let mut sender =
-            Sender::attach(&mut session, "test-sender", "test-queue-variants")
-                .await
-                .unwrap();
-        let mut receiver = Receiver::attach(
+            common::expect_ok!(Sender::attach(&mut session, "test-sender", "test-queue-variants")).await;
+        let mut receiver = common::expect_ok!(Receiver::attach(
             &mut session,
             "test-receiver",
             "test-queue-variants",
-        )
-        .await
-        .unwrap();
+        )).await;
 
         let txn = Transaction::declare(&controller, None).await.unwrap();
         post_variants_and_verify(txn, &mut sender, &mut receiver).await;
@@ -278,23 +248,17 @@ cfg_not_wasm32! {
     }
 
     async fn owned_posting_variants(url: &str) {
-        let mut connection = Connection::open("test-connection", url).await.unwrap();
-        let mut session = Session::begin(&mut connection).await.unwrap();
+        let mut connection = common::expect_ok!(Connection::open("test-connection", url)).await;
+        let mut session = common::expect_ok!(Session::begin(&mut connection)).await;
         let mut sender =
-            Sender::attach(&mut session, "test-sender", "test-queue-variants")
-                .await
-                .unwrap();
-        let mut receiver = Receiver::attach(
+            common::expect_ok!(Sender::attach(&mut session, "test-sender", "test-queue-variants")).await;
+        let mut receiver = common::expect_ok!(Receiver::attach(
             &mut session,
             "test-receiver",
             "test-queue-variants",
-        )
-        .await
-        .unwrap();
+        )).await;
 
-        let txn = OwnedTransaction::declare(&mut session, "test-owned-controller", None)
-            .await
-            .unwrap();
+        let txn = common::expect_ok!(OwnedTransaction::declare(&mut session, "test-owned-controller", None)).await;
         post_variants_and_verify(txn, &mut sender, &mut receiver).await;
 
         sender.close().await.unwrap();
@@ -324,18 +288,12 @@ cfg_not_wasm32! {
     }
 
     async fn transaction_rollback(url: &str) {
-        let mut connection = Connection::open("test-connection", url).await.unwrap();
-        let mut session = Session::begin(&mut connection).await.unwrap();
-        let controller = Controller::attach(&mut session, "test-controller")
-            .await
-            .unwrap();
-        let mut sender = Sender::attach(&mut session, "test-sender", "test-queue-rollback")
-            .await
-            .unwrap();
+        let mut connection = common::expect_ok!(Connection::open("test-connection", url)).await;
+        let mut session = common::expect_ok!(Session::begin(&mut connection)).await;
+        let controller = common::expect_ok!(Controller::attach(&mut session, "test-controller")).await;
+        let mut sender = common::expect_ok!(Sender::attach(&mut session, "test-sender", "test-queue-rollback")).await;
         let mut receiver =
-            Receiver::attach(&mut session, "test-receiver", "test-queue-rollback")
-                .await
-                .unwrap();
+            common::expect_ok!(Receiver::attach(&mut session, "test-receiver", "test-queue-rollback")).await;
 
         let txn = Transaction::declare(&controller, None).await.unwrap();
         rollback_and_verify(txn, &mut sender, &mut receiver).await;
@@ -352,25 +310,17 @@ cfg_not_wasm32! {
     }
 
     async fn owned_transaction_rollback(url: &str) {
-        let mut connection = Connection::open("test-connection", url).await.unwrap();
-        let mut session = Session::begin(&mut connection).await.unwrap();
-        let mut sender = Sender::attach(&mut session, "test-sender", "test-queue-rollback")
-            .await
-            .unwrap();
+        let mut connection = common::expect_ok!(Connection::open("test-connection", url)).await;
+        let mut session = common::expect_ok!(Session::begin(&mut connection)).await;
+        let mut sender = common::expect_ok!(Sender::attach(&mut session, "test-sender", "test-queue-rollback")).await;
         let mut receiver =
-            Receiver::attach(&mut session, "test-receiver", "test-queue-rollback")
-                .await
-                .unwrap();
+            common::expect_ok!(Receiver::attach(&mut session, "test-receiver", "test-queue-rollback")).await;
 
-        let txn = OwnedTransaction::declare(&mut session, "test-owned-controller-0", None)
-            .await
-            .unwrap();
+        let txn = common::expect_ok!(OwnedTransaction::declare(&mut session, "test-owned-controller-0", None)).await;
         rollback_and_verify(txn, &mut sender, &mut receiver).await;
 
         // A subsequent transaction on its own control link still works
-        let txn = OwnedTransaction::declare(&mut session, "test-owned-controller-1", None)
-            .await
-            .unwrap();
+        let txn = common::expect_ok!(OwnedTransaction::declare(&mut session, "test-owned-controller-1", None)).await;
         post_commit_and_verify(txn, &mut sender, &mut receiver).await;
 
         sender.close().await.unwrap();
@@ -524,20 +474,16 @@ cfg_not_wasm32! {
     {
         let queue = format!("test-queue-ret-{}", body);
 
-        let mut seed_sender = Sender::attach(
+        let mut seed_sender = common::expect_ok!(Sender::attach(
             session,
             format!("test-seed-sender-{}", body),
             &queue,
-        )
-        .await
-        .unwrap();
-        let mut receiver = Receiver::attach(
+        )).await;
+        let mut receiver = common::expect_ok!(Receiver::attach(
             session,
             format!("test-receiver-{}", body),
             &queue,
-        )
-        .await
-        .unwrap();
+        )).await;
         seed_sender.send(Message::from(body)).await.unwrap();
 
         match body {
@@ -569,11 +515,9 @@ cfg_not_wasm32! {
     }
 
     async fn qpid_retirement(url: &str) {
-        let mut connection = Connection::open("test-connection", url).await.unwrap();
-        let mut session = Session::begin(&mut connection).await.unwrap();
-        let controller = Controller::attach(&mut session, "test-controller")
-            .await
-            .unwrap();
+        let mut connection = common::expect_ok!(Connection::open("test-connection", url)).await;
+        let mut session = common::expect_ok!(Session::begin(&mut connection)).await;
+        let controller = common::expect_ok!(Controller::attach(&mut session, "test-controller")).await;
 
         for &body in RETIREMENT_BODIES.iter() {
             let txn = Transaction::declare(&controller, None).await.unwrap();
@@ -586,17 +530,15 @@ cfg_not_wasm32! {
     }
 
     async fn qpid_owned_retirement(url: &str) {
-        let mut connection = Connection::open("test-connection", url).await.unwrap();
-        let mut session = Session::begin(&mut connection).await.unwrap();
+        let mut connection = common::expect_ok!(Connection::open("test-connection", url)).await;
+        let mut session = common::expect_ok!(Session::begin(&mut connection)).await;
 
         for (index, &body) in RETIREMENT_BODIES.iter().enumerate() {
-            let txn = OwnedTransaction::declare(
+            let txn = common::expect_ok!(OwnedTransaction::declare(
                 &mut session,
                 format!("test-owned-controller-{}", index),
                 None,
-            )
-            .await
-            .unwrap();
+            )).await;
             qpid_retire_case(body, txn, &mut session).await;
         }
 
@@ -629,20 +571,16 @@ cfg_not_wasm32! {
     {
         let queue = format!("test-queue-ret-{}", body);
 
-        let mut seed_sender = Sender::attach(
+        let mut seed_sender = common::expect_ok!(Sender::attach(
             session,
             format!("test-seed-sender-{}", body),
             &queue,
-        )
-        .await
-        .unwrap();
-        let mut receiver = Receiver::attach(
+        )).await;
+        let mut receiver = common::expect_ok!(Receiver::attach(
             session,
             format!("test-receiver-{}", body),
             &queue,
-        )
-        .await
-        .unwrap();
+        )).await;
         seed_sender.send(Message::from(body)).await.unwrap();
 
         match body {
@@ -662,11 +600,9 @@ cfg_not_wasm32! {
     }
 
     async fn artemis_retirement(url: &str) {
-        let mut connection = Connection::open("test-connection", url).await.unwrap();
-        let mut session = Session::begin(&mut connection).await.unwrap();
-        let controller = Controller::attach(&mut session, "test-controller")
-            .await
-            .unwrap();
+        let mut connection = common::expect_ok!(Connection::open("test-connection", url)).await;
+        let mut session = common::expect_ok!(Session::begin(&mut connection)).await;
+        let controller = common::expect_ok!(Controller::attach(&mut session, "test-controller")).await;
 
         for &body in RETIREMENT_BODIES.iter() {
             let txn = Transaction::declare(&controller, None).await.unwrap();
@@ -679,17 +615,15 @@ cfg_not_wasm32! {
     }
 
     async fn artemis_owned_retirement(url: &str) {
-        let mut connection = Connection::open("test-connection", url).await.unwrap();
-        let mut session = Session::begin(&mut connection).await.unwrap();
+        let mut connection = common::expect_ok!(Connection::open("test-connection", url)).await;
+        let mut session = common::expect_ok!(Session::begin(&mut connection)).await;
 
         for (index, &body) in RETIREMENT_BODIES.iter().enumerate() {
-            let txn = OwnedTransaction::declare(
+            let txn = common::expect_ok!(OwnedTransaction::declare(
                 &mut session,
                 format!("test-owned-controller-{}", index),
                 None,
-            )
-            .await
-            .unwrap();
+            )).await;
             artemis_retire_case(body, txn, &mut session).await;
         }
 
@@ -748,19 +682,13 @@ cfg_not_wasm32! {
         <T as TransactionDischarge>::Error: From<FlowError> + Debug,
         <T as TransactionRetirement>::RetireError: Debug,
     {
-        let mut seed_sender = Sender::attach(session, "test-seed-sender", queue)
-            .await
-            .unwrap();
+        let mut seed_sender = common::expect_ok!(Sender::attach(session, "test-seed-sender", queue)).await;
         seed_sender.send(Message::from(body)).await.unwrap();
-        let mut receiver = Receiver::attach(session, "test-receiver", queue)
-            .await
-            .unwrap();
+        let mut receiver = common::expect_ok!(Receiver::attach(session, "test-receiver", queue)).await;
 
         acquire_commit_and_verify(txn, &mut receiver, body).await;
 
-        let mut verify_receiver = Receiver::attach(session, "test-verify-receiver", queue)
-            .await
-            .unwrap();
+        let mut verify_receiver = common::expect_ok!(Receiver::attach(session, "test-verify-receiver", queue)).await;
         let result = timeout(
             Duration::from_secs(3),
             verify_receiver.recv::<String>(),
@@ -784,19 +712,13 @@ cfg_not_wasm32! {
         <T as TransactionDischarge>::Error: From<FlowError> + Debug,
         <T as TransactionRetirement>::RetireError: Debug,
     {
-        let mut seed_sender = Sender::attach(session, "test-seed-sender", queue)
-            .await
-            .unwrap();
+        let mut seed_sender = common::expect_ok!(Sender::attach(session, "test-seed-sender", queue)).await;
         seed_sender.send(Message::from(body)).await.unwrap();
-        let mut receiver = Receiver::attach(session, "test-receiver", queue)
-            .await
-            .unwrap();
+        let mut receiver = common::expect_ok!(Receiver::attach(session, "test-receiver", queue)).await;
 
         acquire_rollback_and_verify(txn, &mut receiver, body).await;
 
-        let mut verify_receiver = Receiver::attach(session, "test-verify-receiver", queue)
-            .await
-            .unwrap();
+        let mut verify_receiver = common::expect_ok!(Receiver::attach(session, "test-verify-receiver", queue)).await;
         let delivery = recv_string(&mut verify_receiver).await;
         assert_eq!(delivery.body(), body);
         verify_receiver.accept(&delivery).await.unwrap();
@@ -806,11 +728,9 @@ cfg_not_wasm32! {
     }
 
     async fn acquisition(url: &str) {
-        let mut connection = Connection::open("test-connection", url).await.unwrap();
-        let mut session = Session::begin(&mut connection).await.unwrap();
-        let controller = Controller::attach(&mut session, "test-controller")
-            .await
-            .unwrap();
+        let mut connection = common::expect_ok!(Connection::open("test-connection", url)).await;
+        let mut session = common::expect_ok!(Session::begin(&mut connection)).await;
+        let controller = common::expect_ok!(Controller::attach(&mut session, "test-controller")).await;
 
         let txn = Transaction::declare(&controller, None).await.unwrap();
         acquire_commit_case(txn, &mut session, "test-queue-acquire", "acquire-commit").await;
@@ -830,17 +750,13 @@ cfg_not_wasm32! {
     }
 
     async fn owned_acquisition(url: &str) {
-        let mut connection = Connection::open("test-connection", url).await.unwrap();
-        let mut session = Session::begin(&mut connection).await.unwrap();
+        let mut connection = common::expect_ok!(Connection::open("test-connection", url)).await;
+        let mut session = common::expect_ok!(Session::begin(&mut connection)).await;
 
-        let txn = OwnedTransaction::declare(&mut session, "test-owned-controller-0", None)
-            .await
-            .unwrap();
+        let txn = common::expect_ok!(OwnedTransaction::declare(&mut session, "test-owned-controller-0", None)).await;
         acquire_commit_case(txn, &mut session, "test-queue-acquire", "acquire-commit").await;
 
-        let txn = OwnedTransaction::declare(&mut session, "test-owned-controller-1", None)
-            .await
-            .unwrap();
+        let txn = common::expect_ok!(OwnedTransaction::declare(&mut session, "test-owned-controller-1", None)).await;
         acquire_rollback_case(
             txn,
             &mut session,

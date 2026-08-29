@@ -28,6 +28,8 @@ use fe2o3_amqp::{
     Sender,
 };
 
+mod common;
+
 const FRAME_SIZE: usize = 1024;
 
 async fn establish_connection_pair(
@@ -44,12 +46,11 @@ async fn establish_connection_pair(
         .build();
     let connection_task = tokio::spawn(async move { acceptor.accept(server_io).await });
 
-    let client_connection = Connection::builder()
+    let client_connection = common::expect_ok!(Connection::builder()
         .container_id("test-client")
         .max_frame_size(frame_size as u32)
-        .open_with_stream(client_io)
-        .await
-        .expect("client connection failed");
+        .open_with_stream(client_io))
+    .await;
 
     let server_connection = connection_task
         .await
@@ -67,13 +68,12 @@ async fn establish_session_pair(
     let session_acceptor = SessionAcceptor::builder()
         .incoming_window(session_incoming_window)
         .build();
-    let (session_result, begin_result) = tokio::join!(
-        session_acceptor.accept(server_connection),
-        Session::builder()
-            .incoming_window(session_incoming_window)
-            .begin(client_connection),
-    );
-    let client_session = begin_result.expect("client session begin failed");
+    let begin_fut = common::expect_ok!(Session::builder()
+        .incoming_window(session_incoming_window)
+        .begin(client_connection));
+    let (session_result, begin_result) =
+        tokio::join!(session_acceptor.accept(server_connection), begin_fut);
+    let client_session = begin_result;
     let listener_session = session_result.expect("session accept failed");
     (listener_session, client_session)
 }
@@ -85,12 +85,12 @@ async fn establish_link_pair(
     client_session: &mut SessionHandle<()>,
 ) -> (Sender, fe2o3_amqp::Receiver) {
     let link_acceptor = LinkAcceptor::builder().build();
-    let (accept_result, attach_result) = tokio::join!(
-        link_acceptor.accept(listener_session),
-        Sender::attach(client_session, "test-sender", "test-queue"),
-    );
+    let attach_fut =
+        common::expect_ok!(Sender::attach(client_session, "test-sender", "test-queue"));
+    let (accept_result, attach_result) =
+        tokio::join!(link_acceptor.accept(listener_session), attach_fut);
 
-    let sender = attach_result.expect("sender attach failed");
+    let sender = attach_result;
     let receiver = match accept_result.expect("link accept failed") {
         LinkEndpoint::Receiver(receiver) => receiver,
         other => panic!("expected receiver endpoint, got {:?}", other),
@@ -202,11 +202,14 @@ async fn message_larger_than_max_message_size_is_rejected() {
         establish_session_pair(&mut server_connection, &mut client_connection, 5000).await;
 
     let link_acceptor = LinkAcceptor::builder().max_message_size(1000u64).build();
-    let (accept_result, attach_result) = tokio::join!(
-        link_acceptor.accept(&mut listener_session),
-        Sender::attach(&mut client_session, "test-sender", "test-queue"),
-    );
-    let mut sender = attach_result.expect("sender attach failed");
+    let attach_fut = common::expect_ok!(Sender::attach(
+        &mut client_session,
+        "test-sender",
+        "test-queue"
+    ));
+    let (accept_result, attach_result) =
+        tokio::join!(link_acceptor.accept(&mut listener_session), attach_fut);
+    let mut sender = attach_result;
     let receiver = match accept_result.expect("link accept failed") {
         LinkEndpoint::Receiver(receiver) => receiver,
         other => panic!("expected receiver endpoint, got {:?}", other),
@@ -263,11 +266,10 @@ async fn resume_on_new_connection_refreshes_max_frame_size() {
 
     // Attach the sender on connection A
     let link_acceptor_a = LinkAcceptor::builder().build();
-    let (accept_a, attach_a) = tokio::join!(
-        link_acceptor_a.accept(&mut listener_a),
-        Sender::attach(&mut session_a, "test-sender", "test-queue"),
-    );
-    let sender = attach_a.expect("sender attach failed");
+    let attach_a_fut =
+        common::expect_ok!(Sender::attach(&mut session_a, "test-sender", "test-queue"));
+    let (accept_a, attach_a) = tokio::join!(link_acceptor_a.accept(&mut listener_a), attach_a_fut);
+    let sender = attach_a;
     let mut receiver_a = match accept_a.expect("link accept failed") {
         LinkEndpoint::Receiver(receiver) => receiver,
         other => panic!("expected receiver endpoint, got {:?}", other),
@@ -293,7 +295,7 @@ async fn resume_on_new_connection_refreshes_max_frame_size() {
     // Detach on A and resume the sender on connection B's session
     let detached = sender.detach().await.unwrap();
     recv_a_task.await.unwrap();
-    let mut sender = detached.resume_on_session(&session_b).await.unwrap();
+    let mut sender = common::expect_ok!(detached.resume_on_session(&session_b)).await;
 
     // Keep the listener session alive for the rest of the test (dropping it
     // would end the server-side session)

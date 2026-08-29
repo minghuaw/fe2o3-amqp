@@ -25,14 +25,10 @@ cfg_not_wasm32! {
     /// 131072 on RabbitMQ and smaller on Artemis/Qpid) and asserts the
     /// received bytes equal the sent bytes.
     async fn send_receive_large_content(url: &str, payload: String, detach_on_close: bool) {
-        let mut connection = Connection::open("test-connection", url).await.unwrap();
-        let mut session = Session::begin(&mut connection).await.unwrap();
-        let mut sender = Sender::attach(&mut session, "test-sender", "test-queue")
-            .await
-            .unwrap();
-        let mut receiver = Receiver::attach(&mut session, "test-receiver", "test-queue")
-            .await
-            .unwrap();
+        let mut connection = common::expect_ok!(Connection::open("test-connection", url)).await;
+        let mut session = common::expect_ok!(Session::begin(&mut connection)).await;
+        let mut sender = common::expect_ok!(Sender::attach(&mut session, "test-sender", "test-queue")).await;
+        let mut receiver = common::expect_ok!(Receiver::attach(&mut session, "test-receiver", "test-queue")).await;
 
         let message = Message::from(payload.clone());
         let outcome = sender.send(message).await.unwrap();
@@ -63,14 +59,10 @@ cfg_not_wasm32! {
         let (_node, port) = common::setup_activemq_artemis(None, None).await;
 
         let url = format!("amqp://localhost:{}", port);
-        let mut connection = Connection::open("test-connection", &url[..]).await.unwrap();
-        let mut session = Session::begin(&mut connection).await.unwrap();
-        let mut sender = Sender::attach(&mut session, "test-sender", "test-queue")
-            .await
-            .unwrap();
-        let mut receiver = Receiver::attach(&mut session, "test-receiver", "test-queue")
-            .await
-            .unwrap();
+        let mut connection = common::expect_ok!(Connection::open("test-connection", &url[..])).await;
+        let mut session = common::expect_ok!(Session::begin(&mut connection)).await;
+        let mut sender = common::expect_ok!(Sender::attach(&mut session, "test-sender", "test-queue")).await;
+        let mut receiver = common::expect_ok!(Receiver::attach(&mut session, "test-receiver", "test-queue")).await;
 
         let message = Message::from("test-message");
         let outcome = sender.send(message).await.unwrap();
@@ -101,14 +93,10 @@ cfg_not_wasm32! {
         let (_node, port) = common::setup_qpid_broker_j(None, None).await;
 
         let url = format!("amqp://admin:admin@localhost:{}", port);
-        let mut connection = Connection::open("test-connection", &url[..]).await.unwrap();
-        let mut session = Session::begin(&mut connection).await.unwrap();
-        let mut sender = Sender::attach(&mut session, "test-sender", "test-queue")
-            .await
-            .unwrap();
-        let mut receiver = Receiver::attach(&mut session, "test-receiver", "test-queue")
-            .await
-            .unwrap();
+        let mut connection = common::expect_ok!(Connection::open("test-connection", &url[..])).await;
+        let mut session = common::expect_ok!(Session::begin(&mut connection)).await;
+        let mut sender = common::expect_ok!(Sender::attach(&mut session, "test-sender", "test-queue")).await;
+        let mut receiver = common::expect_ok!(Receiver::attach(&mut session, "test-receiver", "test-queue")).await;
 
         let message = Message::from("test-message");
         let outcome = sender.send(message).await.unwrap();
@@ -139,14 +127,10 @@ cfg_not_wasm32! {
         let (_node, port) = common::setup_rabbitmq_amqp10(None, None).await;
 
         let url = format!("amqp://localhost:{}", port);
-        let mut connection = Connection::open("test-connection", &url[..]).await.unwrap();
-        let mut session = Session::begin(&mut connection).await.unwrap();
-        let mut sender = Sender::attach(&mut session, "test-sender", "test-queue")
-            .await
-            .unwrap();
-        let mut receiver = Receiver::attach(&mut session, "test-receiver", "test-queue")
-            .await
-            .unwrap();
+        let mut connection = common::expect_ok!(Connection::open("test-connection", &url[..])).await;
+        let mut session = common::expect_ok!(Session::begin(&mut connection)).await;
+        let mut sender = common::expect_ok!(Sender::attach(&mut session, "test-sender", "test-queue")).await;
+        let mut receiver = common::expect_ok!(Receiver::attach(&mut session, "test-receiver", "test-queue")).await;
 
         let message = Message::from("test-message");
         let outcome = sender.send(message).await.unwrap();

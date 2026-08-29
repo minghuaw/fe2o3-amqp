@@ -6,6 +6,29 @@ use testcontainers::{
     ContainerAsync, GenericImage, ImageExt,
 };
 
+/// Runs `fut` under a 60s timeout, panicking with the expression text on
+/// timeout or with the error on failure. Bounds the AMQP setup operations
+/// (connection open, session begin, link attach) in integration tests: a
+/// broker that accepts TCP but stalls the handshake would otherwise hang the
+/// test until the CI job timeout.
+///
+/// Expands to a future so that it can also be joined concurrently with the
+/// acceptor-side operation (e.g. `tokio::join!`).
+macro_rules! expect_ok {
+    ($fut:expr) => {
+        async {
+            let what = stringify!($fut);
+            tokio::time::timeout(std::time::Duration::from_secs(60), $fut)
+                .await
+                .unwrap_or_else(|_| panic!("AMQP operation timed out after 60s: {what}"))
+                .unwrap()
+        }
+    };
+}
+
+pub(crate) use expect_ok;
+
+#[allow(dead_code)] // not used by all test binaries
 pub async fn setup_activemq_artemis(
     username: Option<&str>,
     password: Option<&str>,
@@ -29,6 +52,7 @@ pub async fn setup_activemq_artemis(
     (node, port)
 }
 
+#[allow(dead_code)] // not used by all test binaries
 pub async fn setup_qpid_broker_j(
     username: Option<&str>,
     password: Option<&str>,

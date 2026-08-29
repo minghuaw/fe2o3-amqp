@@ -15,6 +15,8 @@ use fe2o3_amqp::{
     types::definitions::{self, AmqpError},
 };
 
+mod common;
+
 fn test_error() -> definitions::Error {
     definitions::Error::new(
         AmqpError::InternalError,
@@ -34,11 +36,10 @@ async fn establish_connection_pair() -> (
         .build();
     let connection_task = tokio::spawn(async move { acceptor.accept(server_io).await });
 
-    let client_connection = Connection::builder()
+    let client_connection = common::expect_ok!(Connection::builder()
         .container_id("test-client")
-        .open_with_stream(client_io)
-        .await
-        .expect("client connection failed");
+        .open_with_stream(client_io))
+    .await;
 
     let server_connection = connection_task
         .await
@@ -53,11 +54,10 @@ async fn establish_session_pair(
     client_connection: &mut ConnectionHandle<()>,
 ) -> SessionHandle<()> {
     let session_acceptor = SessionAcceptor::new();
-    let (session_result, begin_result) = tokio::join!(
-        session_acceptor.accept(server_connection),
-        Session::begin(client_connection),
-    );
-    let client_session = begin_result.expect("client session begin failed");
+    let begin_fut = common::expect_ok!(Session::begin(client_connection));
+    let (session_result, begin_result) =
+        tokio::join!(session_acceptor.accept(server_connection), begin_fut);
+    let client_session = begin_result;
     session_result.expect("session accept failed");
     client_session
 }

@@ -22,6 +22,8 @@ use fe2o3_amqp::{
     Receiver, Sendable, Sender,
 };
 
+mod common;
+
 fn test_error() -> definitions::Error {
     definitions::Error::new(
         AmqpError::InternalError,
@@ -38,11 +40,10 @@ async fn establish_connection_pair() -> (ListenerConnectionHandle, ConnectionHan
         .build();
     let connection_task = tokio::spawn(async move { acceptor.accept(server_io).await });
 
-    let client_connection = Connection::builder()
+    let client_connection = common::expect_ok!(Connection::builder()
         .container_id("test-client")
-        .open_with_stream(client_io)
-        .await
-        .expect("client connection failed");
+        .open_with_stream(client_io))
+    .await;
 
     let server_connection = connection_task
         .await
@@ -59,11 +60,10 @@ async fn establish_session_pair(
     client_connection: &mut ConnectionHandle<()>,
 ) -> (SessionHandle<()>, ListenerSessionHandle) {
     let session_acceptor = SessionAcceptor::new();
-    let (session_result, begin_result) = tokio::join!(
-        session_acceptor.accept(server_connection),
-        Session::begin(client_connection),
-    );
-    let client_session = begin_result.expect("client session begin failed");
+    let begin_fut = common::expect_ok!(Session::begin(client_connection));
+    let (session_result, begin_result) =
+        tokio::join!(session_acceptor.accept(server_connection), begin_fut);
+    let client_session = begin_result;
     let listener_session = session_result.expect("session accept failed");
     (client_session, listener_session)
 }
@@ -75,16 +75,15 @@ async fn attach_sender(
     name: &str,
 ) -> Sender {
     let link_acceptor = LinkAcceptor::new();
-    let (link_result, attach_result) = tokio::join!(
-        link_acceptor.accept(listener_session),
-        Sender::builder()
-            .name(name)
-            .source(Source::builder().build())
-            .target(Target::builder().build())
-            .attach(client_session),
-    );
+    let attach_fut = common::expect_ok!(Sender::builder()
+        .name(name)
+        .source(Source::builder().build())
+        .target(Target::builder().build())
+        .attach(client_session));
+    let (link_result, attach_result) =
+        tokio::join!(link_acceptor.accept(listener_session), attach_fut);
     let _server_receiver = link_result.expect("link accept failed");
-    attach_result.expect("sender attach failed")
+    attach_result
 }
 
 /// Attach a client receiver link, with the listener accepting it concurrently.
@@ -94,16 +93,15 @@ async fn attach_receiver(
     name: &str,
 ) -> Receiver {
     let link_acceptor = LinkAcceptor::new();
-    let (link_result, attach_result) = tokio::join!(
-        link_acceptor.accept(listener_session),
-        Receiver::builder()
-            .name(name)
-            .source(Source::builder().build())
-            .target(Target::builder().build())
-            .attach(client_session),
-    );
+    let attach_fut = common::expect_ok!(Receiver::builder()
+        .name(name)
+        .source(Source::builder().build())
+        .target(Target::builder().build())
+        .attach(client_session));
+    let (link_result, attach_result) =
+        tokio::join!(link_acceptor.accept(listener_session), attach_fut);
     let _server_sender = link_result.expect("link accept failed");
-    attach_result.expect("receiver attach failed")
+    attach_result
 }
 
 /// Sends until the teardown has propagated and the send surfaces the expected
