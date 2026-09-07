@@ -243,10 +243,9 @@ where
                 }
             }
             SessionFrameBody::Detach(detach) => {
-                // A remote-initiated detach is answered by the relay. The
-                // response flows out through the same outbound path as a
-                // locally initiated detach, without expecting a further echo
-                // from the peer.
+                // If the peer detached the link on its own, the relay has a
+                // reply to send back. The reply goes out through the same
+                // path as any other detach, and no answer is expected for it.
                 if let Some(detach) = self.session.on_incoming_detach(detach).await? {
                     if let Some(frame) = self.session.on_outgoing_detach(detach, false) {
                         self.outgoing.send(frame).await.map_err(|_| {

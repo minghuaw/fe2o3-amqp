@@ -407,15 +407,6 @@ where
 {
     type DetachError = DetachError;
 
-    /// Handle a detach frame that is the response to the engine's *own*
-    /// outgoing detach/close (the echo). The relay does not respond to such
-    /// frames — the engine's detach handshake (`close`/`detach`/attach-error
-    /// paths) consumes them and completes the state transition here.
-    ///
-    /// This is NOT the method for a detach the engine must answer itself (the
-    /// relay already answered any remote-initiated detach at arrival); see
-    /// [`endpoint::LinkDetach::apply_remote_detach_outcome`] for that.
-    /// Closing or not isn't taken care of here but outside.
     #[cfg_attr(feature = "tracing", tracing::instrument(skip_all))]
     fn on_incoming_detach(&mut self, detach: Detach) -> Result<(), Self::DetachError> {
         #[cfg(feature = "tracing")]
@@ -850,19 +841,16 @@ impl LinkRelay<OutputHandle> {
         }
     }
 
-    /// Handle an incoming detach from the peer.
+    /// Forward an incoming detach into the link engine's channel. A failure
+    /// to send only means the link endpoint was dropped.
     ///
-    /// The raw detach is always forwarded into the link engine's channel
-    /// (ignoring a forward failure, which only happens when the link endpoint
-    /// was dropped). If the detach is remote-initiated (`remote_initiated`),
-    /// the relay also sends the response detach (returned as `Some`) so the
-    /// peer's close handshake completes promptly, and for a closing detach on
-    /// a sender link, fails the pending unsettled deliveries. If the detach is
-    /// the response to our own detach/close, nothing is returned and the
-    /// engine's local handshake consumes the forwarded frame.
+    /// If the peer detached the link on its own, also returns the reply
+    /// detach for the session to send back, and fails the still-pending
+    /// deliveries when the detach closes the link. If the detach instead
+    /// answers one the link sent itself, returns `None`: the engine's own
+    /// close/detach procedure is waiting for it.
     ///
-    /// This is cancel safe because it only `.await`s on sending over
-    /// `tokio::mpsc::Sender`.
+    /// Cancel safe: only `.await`s on sending over `tokio::mpsc::Sender`.
     pub(crate) async fn on_incoming_detach(
         &mut self,
         detach: Detach,
@@ -920,10 +908,10 @@ impl LinkRelay<OutputHandle> {
     }
 }
 
-/// Fail the pending unsettled deliveries of a sender link.
+/// Fail the pending deliveries of a sender link.
 ///
-/// The entries are `take()`n out of the shared map so the drain is exclusive:
-/// the link endpoint's drop path and the relay cannot fail an entry twice.
+/// The entries are removed from the shared map before failing, so the link's
+/// drop path and the relay cannot fail the same delivery twice.
 fn fail_pending_unsettled(unsettled: &ArcSenderUnsettledMap, detach: &Detach) {
     if let Some(entries) = unsettled.write().take() {
         for (_, entry) in entries {

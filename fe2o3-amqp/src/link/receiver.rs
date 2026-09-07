@@ -836,15 +836,11 @@ pub(crate) struct ReceiverInner<L: endpoint::ReceiverLink> {
 
 impl<L: endpoint::ReceiverLink> Drop for ReceiverInner<L> {
     fn drop(&mut self) {
-        // A remote detach/close may already have been forwarded into the
-        // engine's channel by the relay (the relay replies to the peer on its
-        // own, without the engine). Apply the terminal outcome here so the
-        // link state is not left stale. Once any detach frame has been
-        // drained, the detach/close exchange with the peer is complete (the
-        // relay answered a remote-initiated detach at arrival; an echo
-        // answers the engine's own detach), so the closing detach this drop
-        // would otherwise send must be suppressed: replying a second time
-        // would be a duplicate.
+        // A detach the relay already answered may be waiting in the engine's
+        // channel. Apply it so the link state matches the detach; and once
+        // any detach was drained, the peer has already ended the link, so
+        // the closing detach this drop would otherwise send would be a
+        // duplicate.
         let mut remote_detach_received = false;
         while let Ok(frame) = self.incoming.try_recv() {
             if let LinkFrame::Detach(detach) = frame {
@@ -1039,12 +1035,10 @@ where
         };
 
         match frame {
-            // The response detach is handled by the relay; only the local
-            // outcome is applied here. A detach frame that reached the
-            // engine is a real link event and is reported as such even when
-            // the session (or its connection) is also stopping: the stop
-            // reason surfaces through the channel closure (the `None` case
-            // above) and the other link operations.
+            // The relay already sent the reply to this peer detach; the link
+            // records the outcome here. Reported as-is even when the session
+            // is stopping: a stop without a detach shows up as the channel
+            // closing (`None` above).
             LinkFrame::Detach(detach) => {
                 let closed = detach.closed;
                 self.link

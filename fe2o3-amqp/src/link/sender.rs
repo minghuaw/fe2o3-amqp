@@ -470,10 +470,9 @@ impl Sender {
 
     /// Returns when the remote peer detach/close the link
     ///
-    /// The relay has already answered a remote-initiated detach at arrival,
-    /// so the link transitions directly to its terminal state (`Closed` /
-    /// `Detached`, releasing the output handle); a subsequent `close()`
-    /// completes without writing another detach.
+    /// The peer's detach has already been answered when this returns, so the
+    /// link is left `Closed` or `Detached` (its output handle is released),
+    /// and a later `close()` finishes without sending another detach.
     pub async fn on_detach(&mut self) -> DetachError {
         match recv_remote_detach(&mut self.inner).await {
             Ok(detach) => {
@@ -518,15 +517,11 @@ where
     L: endpoint::SenderLink + LinkExt<Unsettled = ArcSenderUnsettledMap>,
 {
     fn drop(&mut self) {
-        // A remote detach/close may already have been forwarded into the
-        // engine's channel by the relay (the relay replies to the peer on its
-        // own, without the engine). Apply the terminal outcome here so the
-        // link state is not left stale. Once any detach frame has been
-        // drained, the detach/close exchange with the peer is complete (the
-        // relay answered a remote-initiated detach at arrival; an echo
-        // answers the engine's own detach), so the closing detach this drop
-        // would otherwise send must be suppressed: replying a second time
-        // would be a duplicate.
+        // A detach the relay already answered may be waiting in the engine's
+        // channel. Apply it so the link state matches the detach; and once
+        // any detach was drained, the peer has already ended the link, so
+        // the closing detach this drop would otherwise send would be a
+        // duplicate.
         let mut remote_detach_received = false;
         let mut detach_error: Option<LinkStateError> = None;
         while let Ok(frame) = self.incoming.try_recv() {
@@ -534,9 +529,9 @@ where
                 remote_detach_received = true;
                 let closed = detach.closed;
                 let error = detach.error.clone();
-                // The state transition may fail on a stale state, but the
-                // engine is being dropped either way; only the wire event
-                // decides the fate of the pending deliveries below.
+                // If the state change fails, ignore it: the engine is being
+                // dropped anyway, and the deliveries below are failed from
+                // the detach itself.
                 if self.link.apply_remote_detach_outcome(detach).is_err() {
                     #[cfg(feature = "tracing")]
                     tracing::debug!("failed to apply remote detach outcome on sender drop");
@@ -586,13 +581,12 @@ where
             }
         }
 
-        // Fail the outstanding deliveries that can no longer be settled by the
-        // peer: the remote closed/detached the link first (the relay may have
-        // already failed them; `take()` makes the drain exclusive), or the
-        // session (or its connection) stopped so the closing detach could not
-        // even be enqueued. Deliveries that are still pending on a live link
-        // are left alone: the relay keeps settling them from the peer's
-        // dispositions.
+        // Fail the deliveries that can no longer be settled: the peer closed
+        // or detached the link without settling them (the entries are
+        // removed first, so each is failed once, even if the relay already
+        // failed it), or the session stopped so the closing detach could not
+        // be sent. Deliveries on a still-open link stay pending: the relay
+        // settles them as the peer's dispositions arrive.
         let error = detach_error.or_else(|| {
             if detach_sent {
                 None

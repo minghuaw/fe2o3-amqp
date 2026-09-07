@@ -365,8 +365,8 @@ pub struct Session {
     pub(crate) link_name_by_output_handle: Slab<String>,
     pub(crate) link_by_name: HashMap<String, Option<LinkRelay<OutputHandle>>>,
     pub(crate) link_by_input_handle: HashMap<InputHandle, LinkRelay<OutputHandle>>,
-    // Output handles of links with an in-flight locally initiated
-    // detach/close, awaiting the peer's response detach
+    // Output handles of links whose own detach/close has been sent and is
+    // still awaiting the peer's answer
     pub(crate) close_pending: HashSet<OutputHandle>,
     // Maps from DeliveryId to link.DeliveryCount
     pub(crate) delivery_tag_by_id: HashMap<(Role, DeliveryNumber), (InputHandle, DeliveryTag)>, // Role must be the remote peer's role
@@ -901,27 +901,26 @@ impl endpoint::Session for Session {
                     LinkRelay::Sender { output_handle, .. }
                     | LinkRelay::Receiver { output_handle, .. } => output_handle.clone(),
                 };
-                // An incoming detach is the response to our own detach/close iff
-                // we have an in-flight locally initiated detach on the link.
+                // If the link is in `close_pending`, this detach answers the
+                // one the link sent itself; otherwise the peer detached the
+                // link on its own.
                 let remote_initiated = !self.close_pending.remove(&output_handle);
 
-                // The relay forwards the raw detach into the link engine and,
-                // for a remote-initiated detach, returns the response detach to
-                // send to the peer. The response flows out through
-                // `on_outgoing_detach` (with `expects_echo = false`), which
-                // releases the link bookkeeping.
+                // Forward the detach into the link engine. If the peer
+                // detached the link on its own, the relay returns the reply
+                // detach; it is sent out via `on_outgoing_detach` (see the
+                // trait doc), which releases the link bookkeeping.
                 let response = link.on_incoming_detach(detach, remote_initiated).await;
 
                 Ok(response)
             }
             None => {
-                // The link is no longer registered. This can happen when both
-                // sides close the link concurrently and our response to the
-                // remote's first detach has already removed the link, yet the
-                // remote still processes the detach we sent for our own
-                // locally initiated close and echoes a detach back. The second
-                // detach is for a handle that is already gone, so it is
-                // dropped rather than tearing down the session.
+                // The link is no longer registered: both sides closed it at
+                // the same time, our reply to the peer's first detach removed
+                // it, and the peer then answered the detach we sent for our
+                // own close. That second detach is for a handle that no
+                // longer exists, so it is dropped instead of ending the
+                // session.
                 #[cfg(feature = "tracing")]
                 tracing::trace!(frame = ?detach, "incoming detach for an unattached handle is ignored");
                 #[cfg(feature = "log")]
@@ -1155,32 +1154,19 @@ impl endpoint::Session for Session {
         Ok(frame)
     }
 
-    /// The single outbound path for detach frames.
-    ///
-    /// The link bookkeeping (name and output handle) is released here for
-    /// both a locally initiated detach and the relay's reply to a
-    /// remote-initiated detach.
-    ///
-    /// `expects_echo` marks a locally initiated detach (engine-written
-    /// close/detach/drop/attach-error): the peer's response detach is
-    /// expected, so the output handle is recorded in `close_pending` to
-    /// recognize the echo. The relay's reply passes `false` — the peer sends
-    /// nothing back, and recording an entry it could never remove would let a
-    /// later detach on a recycled handle be misclassified as our own echo,
-    /// silencing the relay on a genuine peer close.
-    ///
-    /// Returns `None` (nothing is sent) when a locally initiated detach is a
-    /// duplicate: the bookkeeping is already gone because the relay answered
-    /// the remote's detach first, in which case the engine's own handshake
-    /// completes locally on the forwarded remote detach.
+    /// The single outbound path for detach frames (see the trait doc).
     fn on_outgoing_detach(&mut self, detach: Detach, expects_echo: bool) -> Option<SessionFrame> {
         let deallocated = self.deallocate_link(detach.handle.clone().into());
         if expects_echo {
+            // Only a detach the link sent itself will be answered by the
+            // peer. An entry for any other detach would stay stale and could
+            // make a later detach on a reused handle look like it is waiting
+            // for an answer.
             if !deallocated {
-                // A duplicate locally initiated detach: the relay already
-                // answered the remote-initiated detach for this link, so the
-                // engine's own close/detach handshake completes locally on the
-                // forwarded detach and nothing more is sent to the peer.
+                // Both sides closed at the same time: the relay already sent
+                // the closing detach for this link, so this one would only
+                // repeat it. The engine's own close/detach still completes —
+                // it consumes the peer's detach that the relay forwarded.
                 #[cfg(feature = "tracing")]
                 tracing::debug!("Suppressing duplicate locally initiated detach");
                 #[cfg(feature = "log")]

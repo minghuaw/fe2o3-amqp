@@ -99,10 +99,10 @@ pub(crate) trait Session {
         disposition: Disposition,
     ) -> Result<Option<Vec<Disposition>>, Self::Error>;
 
-    /// Handle an incoming detach, returning the response detach for the peer
-    /// (the relay's reply to a remote-initiated detach) when one is owed. The
-    /// response is not sent here: the engine routes it through
-    /// [`Session::on_outgoing_detach`] with `expects_echo = false`.
+    /// Handle an incoming detach. Returns the detach to send back when the
+    /// peer detached the link on its own, or `None` when it only answers a
+    /// detach the link sent itself. The reply is not sent here; the engine
+    /// sends it through [`Session::on_outgoing_detach`].
     fn on_incoming_detach(
         &mut self,
         detach: Detach,
@@ -145,15 +145,15 @@ pub(crate) trait Session {
         disposition: Disposition,
     ) -> Result<SessionFrame, Self::Error>;
 
-    /// Send a detach frame out, releasing the link's bookkeeping, and record
-    /// whether the peer's response detach is expected.
+    /// Send a detach frame out and release the link's bookkeeping.
     ///
-    /// `expects_echo` is true for a locally initiated detach (engine-written
-    /// close/detach/drop/attach-error): the output handle is recorded so an
-    /// incoming detach on the link can be recognized as the peer's echo. It
-    /// is false for the relay's reply to a remote-initiated detach, for which
-    /// the peer sends nothing back. Returns `None` when a locally initiated
-    /// detach is a duplicate (the link's bookkeeping is already gone because
-    /// the relay answered the remote's detach first); nothing is sent then.
+    /// Set `expects_echo` when the link sent the detach itself and is
+    /// waiting for the peer's answer: the output handle is recorded so that
+    /// answer can be recognized. Leave it unset when this detach answers a
+    /// detach the peer sent itself.
+    ///
+    /// Returns `None` when the link was already closed towards the peer:
+    /// both sides closed at the same time, the relay already answered the
+    /// peer's detach, and this detach would only repeat that answer.
     fn on_outgoing_detach(&mut self, detach: Detach, expects_echo: bool) -> Option<SessionFrame>;
 }

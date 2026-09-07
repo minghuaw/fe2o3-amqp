@@ -155,15 +155,11 @@ where
             biased;
             frame = detached => { // cancel safe
                 match frame {
-                    // If remote has detached the link. The response detach is
-                    // handled by the relay; only the local outcome is applied
-                    // here.
+                    // The relay already sent the reply to this peer detach;
+                    // the link records the outcome here. Reported as-is even
+                    // when the session is stopping: a stop without a detach
+                    // shows up as the channel closing (`None` below).
                     Some(LinkFrame::Detach(detach)) => {
-                        // A detach frame that reached the engine is a real
-                        // link event and is reported as such even when the
-                        // session (or its connection) is also stopping: the
-                        // stop reason surfaces through the channel closure
-                        // (the `None` case below) and the other operations.
                         let closed = detach.closed;
                         let result = self.apply_remote_detach_outcome(detach);
 
