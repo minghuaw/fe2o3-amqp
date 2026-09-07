@@ -26,6 +26,14 @@ use super::{OutputHandle, Settlement};
 pub(crate) trait LinkDetach {
     type DetachError: Send;
 
+    /// Handle a detach the peer sends in reply to a detach/close this link
+    /// sent itself (from `close()`, `detach()`, or the attach-error paths).
+    ///
+    /// The relay forwards such a reply without answering it; the link's own
+    /// close/detach procedure consumes the frame and completes here. A
+    /// detach the peer sends on its own is answered by the relay already,
+    /// so the engine handles it with [`Self::apply_remote_detach_outcome`]
+    /// instead.
     fn on_incoming_detach(&mut self, detach: Detach) -> Result<(), Self::DetachError>;
 
     async fn send_detach(
@@ -34,6 +42,18 @@ pub(crate) trait LinkDetach {
         closed: bool,
         error: Option<Error>,
     ) -> Result<(), Self::DetachError>;
+
+    /// Record that the peer detached or closed the link when this link does
+    /// not need to reply: the peer acted on its own and the session relay
+    /// already sent the reply, or the link is being dropped. Nothing is
+    /// sent.
+    ///
+    /// The link becomes `Closed` or `Detached` and its output handle is
+    /// released, without the `CloseReceived` / `DetachReceived` states that
+    /// the engine uses while it still owes the peer a reply (see
+    /// [`Self::on_incoming_detach`]). An error on the detach is reported as
+    /// `RemoteClosedWithError` / `RemoteDetachedWithError`.
+    fn apply_remote_detach_outcome(&mut self, detach: Detach) -> Result<(), Self::DetachError>;
 }
 
 pub(crate) trait LinkAttach {

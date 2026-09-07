@@ -243,7 +243,18 @@ where
                 }
             }
             SessionFrameBody::Detach(detach) => {
-                self.session.on_incoming_detach(detach).await?;
+                // If the peer detached the link on its own, the relay has a
+                // reply to send back. The reply goes out through the same
+                // path as any other detach, and no answer is expected for it.
+                if let Some(detach) = self.session.on_incoming_detach(detach).await? {
+                    if let Some(frame) = self.session.on_outgoing_detach(detach, false) {
+                        self.outgoing.send(frame).await.map_err(|_| {
+                            SessionInnerError::ConnectionStopped(connection_stop_reason_or_closed(
+                                self.session.connection_stop_reason(),
+                            ))
+                        })?;
+                    }
+                }
             }
             SessionFrameBody::End(end) => {
                 let end_error = end.error.clone();
@@ -424,9 +435,10 @@ where
                 .on_outgoing_disposition(disposition)
                 .map(SessionOutgoingItem::SingleFrame)
                 .map(Some)?,
-            LinkFrame::Detach(detach) => Some(SessionOutgoingItem::SingleFrame(
-                self.session.on_outgoing_detach(detach),
-            )),
+            LinkFrame::Detach(detach) => self
+                .session
+                .on_outgoing_detach(detach, true)
+                .map(SessionOutgoingItem::SingleFrame),
 
             #[cfg(feature = "transaction")]
             LinkFrame::Acquisition(_) => {

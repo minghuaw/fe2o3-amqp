@@ -836,27 +836,52 @@ pub(crate) struct ReceiverInner<L: endpoint::ReceiverLink> {
 
 impl<L: endpoint::ReceiverLink> Drop for ReceiverInner<L> {
     fn drop(&mut self) {
-        if let Some(handle) = self.link.output_handle_mut().take() {
-            let detach = Detach {
-                handle: handle.into(),
-                closed: true,
-                error: None,
-            };
-            if let Err(_error) = self.outgoing.try_send(LinkFrame::Detach(detach)) {
-                #[cfg(any(feature = "log", feature = "tracing"))]
-                {
-                    let reason = match &_error {
-                        tokio::sync::mpsc::error::TrySendError::Full(_) => {
-                            "control channel is full"
-                        }
-                        tokio::sync::mpsc::error::TrySendError::Closed(_) => {
-                            "control channel is closed"
-                        }
-                    };
+        // A detach the relay already answered may be waiting in the engine's
+        // channel. Apply it so the link state matches the detach; and once
+        // any detach was drained, the peer has already ended the link, so
+        // the closing detach this drop would otherwise send would be a
+        // duplicate.
+        let mut remote_detach_received = false;
+        while let Ok(frame) = self.incoming.try_recv() {
+            if let LinkFrame::Detach(detach) = frame {
+                remote_detach_received = true;
+                // If the state change fails, ignore it: the engine is being
+                // dropped anyway.
+                if self.link.apply_remote_detach_outcome(detach).is_err() {
                     #[cfg(feature = "tracing")]
-                    tracing::warn!(reason, "Failed to enqueue Detach frame on receiver drop");
+                    tracing::debug!("failed to apply remote detach outcome on receiver drop");
                     #[cfg(feature = "log")]
-                    log::warn!("Failed to enqueue Detach frame on receiver drop: {reason}");
+                    log::debug!("failed to apply remote detach outcome on receiver drop");
+                }
+            }
+            // Any other frame (e.g. a partially received transfer or an attach
+            // response left behind by an interrupted reattach) is superseded
+            // by the drop.
+        }
+
+        if !remote_detach_received {
+            if let Some(handle) = self.link.output_handle_mut().take() {
+                let detach = Detach {
+                    handle: handle.into(),
+                    closed: true,
+                    error: None,
+                };
+                if let Err(_error) = self.outgoing.try_send(LinkFrame::Detach(detach)) {
+                    #[cfg(any(feature = "log", feature = "tracing"))]
+                    {
+                        let reason = match &_error {
+                            tokio::sync::mpsc::error::TrySendError::Full(_) => {
+                                "control channel is full"
+                            }
+                            tokio::sync::mpsc::error::TrySendError::Closed(_) => {
+                                "control channel is closed"
+                            }
+                        };
+                        #[cfg(feature = "tracing")]
+                        tracing::warn!(reason, "Failed to enqueue Detach frame on receiver drop");
+                        #[cfg(feature = "log")]
+                        log::warn!("Failed to enqueue Detach frame on receiver drop: {reason}");
+                    }
                 }
             }
         }
@@ -1017,11 +1042,14 @@ where
         };
 
         match frame {
+            // The relay already sent the reply to this peer detach; the link
+            // records the outcome here. Reported as-is even when the session
+            // is stopping: a stop without a detach shows up as the channel
+            // closing (`None` above).
             LinkFrame::Detach(detach) => {
                 let closed = detach.closed;
-                self.link.send_detach(&self.outgoing, closed, None).await?; // cancel safe
                 self.link
-                    .on_incoming_detach(detach)
+                    .apply_remote_detach_outcome(detach)
                     .map_err(Into::into)
                     .and_then(|_| match closed {
                         true => Err(LinkStateError::RemoteClosed.into()),

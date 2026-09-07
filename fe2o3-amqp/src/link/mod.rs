@@ -407,7 +407,6 @@ where
 {
     type DetachError = DetachError;
 
-    /// Closing or not isn't taken care of here but outside
     #[cfg_attr(feature = "tracing", tracing::instrument(skip_all))]
     fn on_incoming_detach(&mut self, detach: Detach) -> Result<(), Self::DetachError> {
         #[cfg(feature = "tracing")]
@@ -512,6 +511,47 @@ where
                 result
             }
             None => Err(DetachError::IllegalState),
+        }
+    }
+
+    /// See [`endpoint::LinkDetach::apply_remote_detach_outcome`] for the
+    /// documented contract of this method.
+    fn apply_remote_detach_outcome(&mut self, detach: Detach) -> Result<(), Self::DetachError> {
+        match detach.closed {
+            true => match self.local_state {
+                LinkState::Attached
+                | LinkState::AttachSent
+                | LinkState::AttachReceived
+                | LinkState::IncompleteAttachExchanged
+                | LinkState::IncompleteAttachSent
+                | LinkState::IncompleteAttachReceived
+                | LinkState::CloseSent => {
+                    self.local_state = LinkState::Closed;
+                    let _ = self.output_handle.take();
+                    match detach.error {
+                        Some(error) => Err(DetachError::RemoteClosedWithError(error)),
+                        None => Ok(()),
+                    }
+                }
+                _ => Err(DetachError::IllegalState),
+            },
+            false => match self.local_state {
+                LinkState::Attached
+                | LinkState::AttachSent
+                | LinkState::AttachReceived
+                | LinkState::IncompleteAttachExchanged
+                | LinkState::IncompleteAttachSent
+                | LinkState::IncompleteAttachReceived
+                | LinkState::DetachSent => {
+                    self.local_state = LinkState::Detached;
+                    let _ = self.output_handle.take();
+                    match detach.error {
+                        Some(error) => Err(DetachError::RemoteDetachedWithError(error)),
+                        None => Ok(()),
+                    }
+                }
+                _ => Err(DetachError::IllegalState),
+            },
         }
     }
 }
@@ -801,20 +841,86 @@ impl LinkRelay<OutputHandle> {
         }
     }
 
-    /// This is cancel safe because it only .await on sending over `tokio::mpsc::Sender`
-    pub async fn on_incoming_detach(
+    /// Forward an incoming detach into the link engine's channel. A failure
+    /// to send only means the link endpoint was dropped.
+    ///
+    /// If the peer detached the link on its own, also returns the reply
+    /// detach for the session to send back, and fails the still-pending
+    /// deliveries when the detach closes the link. If the detach instead
+    /// answers one the link sent itself, returns `None`: the engine's own
+    /// close/detach procedure is waiting for it.
+    ///
+    /// Cancel safe: only `.await`s on sending over `tokio::mpsc::Sender`.
+    pub(crate) async fn on_incoming_detach(
         &mut self,
         detach: Detach,
-    ) -> Result<(), Box<mpsc::error::SendError<LinkFrame>>> {
+        remote_initiated: bool,
+    ) -> Option<Detach> {
+        let frame = LinkFrame::Detach(detach.clone());
         match self {
-            LinkRelay::Sender { tx, .. } => {
-                tx.send(LinkFrame::Detach(detach)).await.map_err(Box::new)?;
+            LinkRelay::Sender {
+                tx,
+                output_handle,
+                unsettled,
+                ..
+            } => {
+                // A send failure means the link endpoint was dropped; the
+                // response (if any) must still go out.
+                let forward_result = tx.send(frame).await;
+
+                if !remote_initiated {
+                    // The detach is the response to our own detach/close. The
+                    // link endpoint's local handshake consumes the forwarded
+                    // frame — unless the endpoint was dropped, in which case
+                    // the forward fails and nothing else would fail the
+                    // deliveries that are still pending on the closed link.
+                    if forward_result.is_err() && detach.closed {
+                        fail_pending_unsettled(unsettled, &detach);
+                    }
+                    return None;
+                }
+
+                if detach.closed {
+                    fail_pending_unsettled(unsettled, &detach);
+                }
+
+                Some(Detach {
+                    handle: output_handle.clone().into(),
+                    closed: detach.closed,
+                    error: detach.error.clone(),
+                })
             }
-            LinkRelay::Receiver { tx, .. } => {
-                tx.send(LinkFrame::Detach(detach)).await.map_err(Box::new)?;
+            LinkRelay::Receiver {
+                tx, output_handle, ..
+            } => {
+                let _ = tx.send(frame).await;
+                if !remote_initiated {
+                    return None;
+                }
+
+                Some(Detach {
+                    handle: output_handle.clone().into(),
+                    closed: detach.closed,
+                    error: detach.error.clone(),
+                })
             }
         }
-        Ok(())
+    }
+}
+
+/// Fail the pending deliveries of a sender link.
+///
+/// The entries are removed from the shared map before failing, so the link's
+/// drop path and the relay cannot fail the same delivery twice.
+fn fail_pending_unsettled(unsettled: &ArcSenderUnsettledMap, detach: &Detach) {
+    if let Some(entries) = unsettled.write().take() {
+        for (_, entry) in entries {
+            let error = match detach.error.clone() {
+                Some(error) => LinkStateError::RemoteClosedWithError(error),
+                None => LinkStateError::RemoteClosed,
+            };
+            let _ = entry.fail(error);
+        }
     }
 }
 

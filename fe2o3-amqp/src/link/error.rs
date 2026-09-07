@@ -453,7 +453,7 @@ impl<'a> TryFrom<&'a SenderAttachError> for definitions::Error {
 }
 
 /// Errors associated with link state
-#[derive(Debug, thiserror::Error)]
+#[derive(Debug, Clone, thiserror::Error)]
 pub enum LinkStateError {
     /// ILlegal link state
     #[error("Illegal local state")]

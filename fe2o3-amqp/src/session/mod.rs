@@ -1,7 +1,7 @@
 //! Implements AMQP1.0 Session
 
 use std::{
-    collections::{HashMap, VecDeque},
+    collections::{HashMap, HashSet, VecDeque},
     sync::{Arc, OnceLock},
 };
 
@@ -365,6 +365,9 @@ pub struct Session {
     pub(crate) link_name_by_output_handle: Slab<String>,
     pub(crate) link_by_name: HashMap<String, Option<LinkRelay<OutputHandle>>>,
     pub(crate) link_by_input_handle: HashMap<InputHandle, LinkRelay<OutputHandle>>,
+    // Output handles of links whose own detach/close has been sent and is
+    // still awaiting the peer's answer
+    pub(crate) close_pending: HashSet<OutputHandle>,
     // Maps from DeliveryId to link.DeliveryCount
     pub(crate) delivery_tag_by_id: HashMap<(Role, DeliveryNumber), (InputHandle, DeliveryTag)>, // Role must be the remote peer's role
 }
@@ -677,13 +680,18 @@ impl endpoint::Session for Session {
         }
     }
 
-    /// This should only deallocate the output handle
-    fn deallocate_link(&mut self, output_handle: OutputHandle) {
+    /// This should only deallocate the output handle. Returns whether the
+    /// link's bookkeeping was still present (i.e. the detach is the first for
+    /// the link rather than a duplicate).
+    fn deallocate_link(&mut self, output_handle: OutputHandle) -> bool {
         if let Some(name) = self
             .link_name_by_output_handle
             .try_remove(output_handle.0 as usize)
         {
             let _ = self.link_by_name.remove(&name);
+            true
+        } else {
+            false
         }
     }
 
@@ -878,7 +886,7 @@ impl endpoint::Session for Session {
     }
 
     #[cfg_attr(feature = "tracing", tracing::instrument(skip_all))]
-    async fn on_incoming_detach(&mut self, detach: Detach) -> Result<(), Self::Error> {
+    async fn on_incoming_detach(&mut self, detach: Detach) -> Result<Option<Detach>, Self::Error> {
         #[cfg(feature = "tracing")]
         tracing::trace!(frame = ?detach);
         #[cfg(feature = "log")]
@@ -889,19 +897,39 @@ impl endpoint::Session for Session {
             .remove(&InputHandle::from(detach.handle.clone()))
         {
             Some(mut link) => {
-                // The link endpoint may already have been dropped without an explicit
-                // close handshake (e.g. a `Sender`/`Receiver` that was simply dropped).
-                // In that case the frame cannot be forwarded and the detach reply is
-                // discarded; this must not tear down the session.
-                if let Err(_error) = link.on_incoming_detach(detach).await {
-                    #[cfg(feature = "tracing")]
-                    tracing::error!(error = ?_error);
-                    #[cfg(feature = "log")]
-                    log::error!("error = {:?}", _error);
-                }
-                Ok(())
+                let output_handle = match &link {
+                    LinkRelay::Sender { output_handle, .. }
+                    | LinkRelay::Receiver { output_handle, .. } => output_handle.clone(),
+                };
+                // If the link is in `close_pending`, this detach answers the
+                // one the link sent itself; otherwise the peer detached the
+                // link on its own.
+                let remote_initiated = !self.close_pending.remove(&output_handle);
+
+                // Forward the detach into the link engine. If the peer
+                // detached the link on its own, the relay returns the reply
+                // detach; it is sent out via `on_outgoing_detach` (see the
+                // trait doc), which releases the link bookkeeping.
+                let response = link.on_incoming_detach(detach, remote_initiated).await;
+
+                Ok(response)
             }
-            None => Err(SessionInnerError::UnattachedHandle),
+            None => {
+                // The link is no longer registered: both sides closed it at
+                // the same time, our reply to the peer's first detach removed
+                // it, and the peer then answered the detach we sent for our
+                // own close. That second detach is for a handle that no
+                // longer exists, so it is dropped instead of ending the
+                // session.
+                #[cfg(feature = "tracing")]
+                tracing::trace!(frame = ?detach, "incoming detach for an unattached handle is ignored");
+                #[cfg(feature = "log")]
+                log::trace!(
+                    "incoming detach for an unattached handle is ignored: {:?}",
+                    detach
+                );
+                Ok(None)
+            }
         }
     }
 
@@ -1126,10 +1154,29 @@ impl endpoint::Session for Session {
         Ok(frame)
     }
 
-    fn on_outgoing_detach(&mut self, detach: Detach) -> SessionFrame {
-        self.deallocate_link(detach.handle.clone().into());
+    /// The single outbound path for detach frames (see the trait doc).
+    fn on_outgoing_detach(&mut self, detach: Detach, expects_echo: bool) -> Option<SessionFrame> {
+        let deallocated = self.deallocate_link(detach.handle.clone().into());
+        if expects_echo {
+            // Only a detach the link sent itself will be answered by the
+            // peer. An entry for any other detach would stay stale and could
+            // make a later detach on a reused handle look like it is waiting
+            // for an answer.
+            if !deallocated {
+                // Both sides closed at the same time: the relay already sent
+                // the closing detach for this link, so this one would only
+                // repeat it. The engine's own close/detach still completes —
+                // it consumes the peer's detach that the relay forwarded.
+                #[cfg(feature = "tracing")]
+                tracing::debug!("Suppressing duplicate locally initiated detach");
+                #[cfg(feature = "log")]
+                log::debug!("Suppressing duplicate locally initiated detach");
+                return None;
+            }
+            self.close_pending.insert(detach.handle.clone().into());
+        }
         let body = SessionFrameBody::Detach(detach);
-        SessionFrame::new(self.outgoing_channel, body)
+        Some(SessionFrame::new(self.outgoing_channel, body))
     }
 }
 

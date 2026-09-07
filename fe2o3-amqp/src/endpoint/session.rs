@@ -57,7 +57,9 @@ pub(crate) trait Session {
         input_handle: InputHandle,
     ) -> Result<OutputHandle, Self::AllocError>;
 
-    fn deallocate_link(&mut self, output_handle: OutputHandle);
+    /// Release the link's bookkeeping (name and output handle). Returns
+    /// whether the bookkeeping was still present.
+    fn deallocate_link(&mut self, output_handle: OutputHandle) -> bool;
 
     fn on_incoming_begin(
         &mut self,
@@ -97,10 +99,14 @@ pub(crate) trait Session {
         disposition: Disposition,
     ) -> Result<Option<Vec<Disposition>>, Self::Error>;
 
+    /// Handle an incoming detach. Returns the detach to send back when the
+    /// peer detached the link on its own, or `None` when it only answers a
+    /// detach the link sent itself. The reply is not sent here; the engine
+    /// sends it through [`Session::on_outgoing_detach`].
     fn on_incoming_detach(
         &mut self,
         detach: Detach,
-    ) -> impl Future<Output = Result<(), Self::Error>> + Send;
+    ) -> impl Future<Output = Result<Option<Detach>, Self::Error>> + Send;
 
     fn on_incoming_end(&mut self, channel: IncomingChannel, end: End)
         -> Result<(), Self::EndError>;
@@ -139,5 +145,15 @@ pub(crate) trait Session {
         disposition: Disposition,
     ) -> Result<SessionFrame, Self::Error>;
 
-    fn on_outgoing_detach(&mut self, detach: Detach) -> SessionFrame;
+    /// Send a detach frame out and release the link's bookkeeping.
+    ///
+    /// Set `expects_echo` when the link sent the detach itself and is
+    /// waiting for the peer's answer: the output handle is recorded so that
+    /// answer can be recognized. Leave it unset when this detach answers a
+    /// detach the peer sent itself.
+    ///
+    /// Returns `None` when the link was already closed towards the peer:
+    /// both sides closed at the same time, the relay already answered the
+    /// peer's detach, and this detach would only repeat that answer.
+    fn on_outgoing_detach(&mut self, detach: Detach, expects_echo: bool) -> Option<SessionFrame>;
 }

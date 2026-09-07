@@ -273,7 +273,7 @@ where
             .allocate_incoming_link(link_name, link_relay, input_handle)
     }
 
-    fn deallocate_link(&mut self, output_handle: OutputHandle) {
+    fn deallocate_link(&mut self, output_handle: OutputHandle) -> bool {
         self.session.deallocate_link(output_handle)
     }
 
@@ -352,7 +352,10 @@ where
         }
     }
 
-    async fn on_incoming_detach(&mut self, detach: Detach) -> Result<(), Self::Error> {
+    async fn on_incoming_detach(
+        &mut self,
+        detach: Detach,
+    ) -> Result<Option<Detach>, Self::Error> {
         self.session.on_incoming_detach(detach).await
     }
 
@@ -410,7 +413,7 @@ where
         self.session.on_outgoing_disposition(disposition)
     }
 
-    fn on_outgoing_detach(&mut self, detach: Detach) -> SessionFrame {
-        self.session.on_outgoing_detach(detach)
+    fn on_outgoing_detach(&mut self, detach: Detach, expects_echo: bool) -> Option<SessionFrame> {
+        self.session.on_outgoing_detach(detach, expects_echo)
     }
 }

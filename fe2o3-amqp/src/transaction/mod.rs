@@ -748,7 +748,7 @@ pub(crate) fn rollback_on_drop(
                 counter += 1;
 
                 match rx.try_recv() {
-                    Ok(Some(state)) => match state {
+                    Ok(Ok(Some(state))) => match state {
                         DeliveryState::Accepted(_) => break,
                         _ => {
                             #[cfg(feature = "tracing")]
@@ -758,10 +758,20 @@ pub(crate) fn rollback_on_drop(
                             break;
                         }
                     },
-                    Ok(None) => {
+                    Ok(Ok(None)) => {
                         std::thread::sleep(std::time::Duration::from_millis(
                             (10 * counter + 1) as u64,
                         ));
+                    }
+                    // A link-state error was delivered through the channel
+                    // (e.g. the remote closed the control link): the discharge
+                    // outcome will not arrive, so give up waiting.
+                    Ok(Err(_error)) => {
+                        #[cfg(feature = "tracing")]
+                        tracing::error!(error = ?_error);
+                        #[cfg(feature = "log")]
+                        log::error!("error = {:?}", _error);
+                        return;
                     }
                     Err(_error) => {
                         #[cfg(feature = "tracing")]

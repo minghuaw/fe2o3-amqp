@@ -9,8 +9,8 @@ use std::time::Duration;
 
 use fe2o3_amqp::{
     acceptor::{
-        ConnectionAcceptor, LinkAcceptor, ListenerConnectionHandle, ListenerSessionHandle,
-        SessionAcceptor,
+        ConnectionAcceptor, LinkAcceptor, LinkEndpoint, ListenerConnectionHandle,
+        ListenerSessionHandle, SessionAcceptor,
     },
     connection::{Connection, ConnectionHandle, ConnectionStopReason},
     link::{LinkStateError, RecvError, SendError, SenderAttachError, SessionStopReason},
@@ -69,11 +69,17 @@ async fn establish_session_pair(
 }
 
 /// Attach a client sender link, with the listener accepting it concurrently.
+///
+/// The listener-side receiver is returned so the test controls when that end
+/// of the link is torn down: dropping it before the teardown under test would
+/// race a closing detach ahead of the session/connection stop, and the link
+/// operation would then report the detach outcome (the detach was the event
+/// that actually ended the link) instead of the stop reason.
 async fn attach_sender(
     client_session: &mut SessionHandle<()>,
     listener_session: &mut ListenerSessionHandle,
     name: &str,
-) -> Sender {
+) -> (Sender, Receiver) {
     let link_acceptor = LinkAcceptor::new();
     let attach_fut = common::expect_ok!(Sender::builder()
         .name(name)
@@ -82,16 +88,22 @@ async fn attach_sender(
         .attach(client_session));
     let (link_result, attach_result) =
         tokio::join!(link_acceptor.accept(listener_session), attach_fut);
-    let _server_receiver = link_result.expect("link accept failed");
-    attach_result
+    let server_receiver = match link_result.expect("link accept failed") {
+        LinkEndpoint::Receiver(receiver) => receiver,
+        other => panic!("expected receiver endpoint, got {:?}", other),
+    };
+    (attach_result, server_receiver)
 }
 
 /// Attach a client receiver link, with the listener accepting it concurrently.
+///
+/// The listener-side sender is returned so the test controls when that end of
+/// the link is torn down (see [`attach_sender`]).
 async fn attach_receiver(
     client_session: &mut SessionHandle<()>,
     listener_session: &mut ListenerSessionHandle,
     name: &str,
-) -> Receiver {
+) -> (Receiver, Sender) {
     let link_acceptor = LinkAcceptor::new();
     let attach_fut = common::expect_ok!(Receiver::builder()
         .name(name)
@@ -100,8 +112,11 @@ async fn attach_receiver(
         .attach(client_session));
     let (link_result, attach_result) =
         tokio::join!(link_acceptor.accept(listener_session), attach_fut);
-    let _server_sender = link_result.expect("link accept failed");
-    attach_result
+    let server_sender = match link_result.expect("link accept failed") {
+        LinkEndpoint::Sender(sender) => sender,
+        other => panic!("expected sender endpoint, got {:?}", other),
+    };
+    (attach_result, server_sender)
 }
 
 /// Sends until the teardown has propagated and the send surfaces the expected
@@ -141,7 +156,8 @@ async fn link_send_surfaces_connection_closed() {
     let (mut server_connection, mut client_connection) = establish_connection_pair().await;
     let (mut client_session, mut listener_session) =
         establish_session_pair(&mut server_connection, &mut client_connection).await;
-    let mut sender = attach_sender(&mut client_session, &mut listener_session, "sender-1").await;
+    let (mut sender, _listener_receiver) =
+        attach_sender(&mut client_session, &mut listener_session, "sender-1").await;
 
     drop(client_connection);
 
@@ -159,7 +175,8 @@ async fn link_send_surfaces_session_ended() {
     let (mut server_connection, mut client_connection) = establish_connection_pair().await;
     let (mut client_session, mut listener_session) =
         establish_session_pair(&mut server_connection, &mut client_connection).await;
-    let mut sender = attach_sender(&mut client_session, &mut listener_session, "sender-1").await;
+    let (mut sender, _listener_receiver) =
+        attach_sender(&mut client_session, &mut listener_session, "sender-1").await;
 
     drop(client_session);
 
@@ -173,7 +190,7 @@ async fn link_recv_surfaces_connection_closed() {
     let (mut server_connection, mut client_connection) = establish_connection_pair().await;
     let (mut client_session, mut listener_session) =
         establish_session_pair(&mut server_connection, &mut client_connection).await;
-    let mut receiver =
+    let (mut receiver, _listener_sender) =
         attach_receiver(&mut client_session, &mut listener_session, "receiver-1").await;
 
     drop(server_connection);
@@ -197,7 +214,7 @@ async fn link_recv_surfaces_session_ended() {
     let (mut server_connection, mut client_connection) = establish_connection_pair().await;
     let (mut client_session, mut listener_session) =
         establish_session_pair(&mut server_connection, &mut client_connection).await;
-    let mut receiver =
+    let (mut receiver, _listener_sender) =
         attach_receiver(&mut client_session, &mut listener_session, "receiver-1").await;
 
     drop(listener_session);
@@ -250,7 +267,8 @@ async fn link_send_surfaces_local_end_with_error() {
     let (mut server_connection, mut client_connection) = establish_connection_pair().await;
     let (mut client_session, mut listener_session) =
         establish_session_pair(&mut server_connection, &mut client_connection).await;
-    let mut sender = attach_sender(&mut client_session, &mut listener_session, "sender-1").await;
+    let (mut sender, _listener_receiver) =
+        attach_sender(&mut client_session, &mut listener_session, "sender-1").await;
 
     let error = test_error();
     client_session
@@ -268,7 +286,8 @@ async fn link_send_surfaces_remote_end_with_error() {
     let (mut server_connection, mut client_connection) = establish_connection_pair().await;
     let (mut client_session, mut listener_session) =
         establish_session_pair(&mut server_connection, &mut client_connection).await;
-    let mut sender = attach_sender(&mut client_session, &mut listener_session, "sender-1").await;
+    let (mut sender, _listener_receiver) =
+        attach_sender(&mut client_session, &mut listener_session, "sender-1").await;
 
     let error = test_error();
     listener_session
@@ -285,7 +304,8 @@ async fn link_send_surfaces_remote_end() {
     let (mut server_connection, mut client_connection) = establish_connection_pair().await;
     let (mut client_session, mut listener_session) =
         establish_session_pair(&mut server_connection, &mut client_connection).await;
-    let mut sender = attach_sender(&mut client_session, &mut listener_session, "sender-1").await;
+    let (mut sender, _listener_receiver) =
+        attach_sender(&mut client_session, &mut listener_session, "sender-1").await;
 
     drop(listener_session);
 
@@ -300,7 +320,8 @@ async fn link_send_surfaces_local_close_with_error() {
     let (mut server_connection, mut client_connection) = establish_connection_pair().await;
     let (mut client_session, mut listener_session) =
         establish_session_pair(&mut server_connection, &mut client_connection).await;
-    let mut sender = attach_sender(&mut client_session, &mut listener_session, "sender-1").await;
+    let (mut sender, _listener_receiver) =
+        attach_sender(&mut client_session, &mut listener_session, "sender-1").await;
 
     let error = test_error();
     client_connection
@@ -322,7 +343,8 @@ async fn link_send_surfaces_remote_close_with_error() {
     let (mut server_connection, mut client_connection) = establish_connection_pair().await;
     let (mut client_session, mut listener_session) =
         establish_session_pair(&mut server_connection, &mut client_connection).await;
-    let mut sender = attach_sender(&mut client_session, &mut listener_session, "sender-1").await;
+    let (mut sender, _listener_receiver) =
+        attach_sender(&mut client_session, &mut listener_session, "sender-1").await;
 
     let error = test_error();
     server_connection

@@ -302,4 +302,40 @@ impl FromDeliveryFailure for PostResult {
     fn from_session_stop_reason(reason: SessionStopReason) -> Self {
         Err(PostError::LinkStateError(LinkStateError::SessionStopped(reason)))
     }
+
+    fn from_link_state_error(error: LinkStateError) -> Self {
+        Err(PostError::LinkStateError(error))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use fe2o3_amqp_types::definitions;
+
+    use super::{FromDeliveryFailure, LinkStateError, PostError, PostResult};
+
+    #[test]
+    fn test_post_result_from_link_state_error() {
+        let result =
+            <PostResult as FromDeliveryFailure>::from_link_state_error(LinkStateError::RemoteClosed);
+        match result {
+            Err(PostError::LinkStateError(LinkStateError::RemoteClosed)) => {}
+            other => panic!("unexpected result: {:?}", other),
+        }
+
+        let error = definitions::Error::new(
+            definitions::ConnectionError::ConnectionForced,
+            Some("remote closed".to_string()),
+            None,
+        );
+        let result = <PostResult as FromDeliveryFailure>::from_link_state_error(
+            LinkStateError::RemoteClosedWithError(error.clone()),
+        );
+        match result {
+            Err(PostError::LinkStateError(LinkStateError::RemoteClosedWithError(actual))) => {
+                assert_eq!(actual, error);
+            }
+            other => panic!("unexpected result: {:?}", other),
+        }
+    }
 }
