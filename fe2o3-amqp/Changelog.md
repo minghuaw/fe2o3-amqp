@@ -14,38 +14,9 @@
    message-format, settled and rcv-settle-mode fields (previously a two-frame delivery
    could carry a delivery-tag on its last frame, which peers such as Qpid Broker-J
    reject).
-4. Remote-initiated link detach/close frames are now answered by the session relay at
-   arrival time; the link engine no longer writes the response. This fixes a hang when
-   the remote closes a link while the local engine is idle (waiting for link-credit or
-   not awaiting anything), and lets the peer's close handshake complete even when the
-   link endpoint was dropped.
-5. The sender's pending deliveries are now failed with `LinkStateError::RemoteClosed` /
-   `RemoteClosedWithError` when the remote closes the link with them still unsettled,
-   instead of leaving the delivery futures pending until the session tears down.
-6. Dropping a sender or receiver link without a clean close no longer emits a duplicate
-   closing detach when the remote's own detach has already been forwarded to (and
-   answered for) the link. Dropping a sender additionally fails the deliveries that can
-   no longer be settled by the peer (remote closed/detached first, or the session
-   stopped), while deliveries on a still-live link stay pending for the peer's
-   settlement, which the relay keeps applying.
-7. A send that wins the race against a concurrently arriving remote closing detach now
-   fails with the detach outcome instead of consuming link-credit and writing a transfer
-   the relay can no longer forward (the detach is polled before the credit).
-8. An in-flight receive or send reports the remote detach outcome (`RemoteClosed` /
-   `RemoteClosedWithError` / `RemoteDetached(WithError)`) when a real detach raced the
-   session or connection stop, instead of the stop reason dominating; the stop reason
-   surfaces through the channel closure and the subsequent operations.
-9. A non-closing remote detach that carries an error now surfaces as
-   `RemoteDetachedWithError` instead of losing the error.
-10. [`Sender::on_detach`] now transitions the link straight to its terminal state (`Closed`
-    / `Detached`, releasing the output handle) — the relay already answered the remote's
-    detach at arrival — so a subsequent `close()` completes cleanly instead of sending a
-    duplicate closing detach or failing with `DetachedByRemote`.
-11. Locally initiated detaches are only sent while the link's bookkeeping still exists: a
-    duplicate closing detach in the double-close race (both sides close concurrently and
-    the relay already answered the remote's detach) is suppressed by the session instead
-    of being sent to the peer and leaking a stale close-pending entry. All outgoing
-    detaches (engine-written and relay replies) now flow through the same outbound path.
+4. **Bugfix**: a remote-initiated link detach/close is now handled in the session loop,
+   which answers it at arrival instead of the link engine. The peer's close handshake
+   completes even when the link engine is idle or has been dropped.
 
 ## 0.17.0
 
