@@ -303,7 +303,7 @@ pub(crate) struct UnsettledMessage {
     pub(crate) payload: Payload,
     pub(crate) state: Option<DeliveryState>,
     pub(crate) message_format: u32,
-    pub(crate) sender: oneshot::Sender<Option<DeliveryState>>,
+    pub(crate) sender: oneshot::Sender<Result<Option<DeliveryState>, LinkStateError>>,
 }
 
 impl UnsettledMessage {
@@ -311,7 +311,7 @@ impl UnsettledMessage {
         payload: Payload,
         state: Option<DeliveryState>,
         message_format: u32,
-        sender: oneshot::Sender<Option<DeliveryState>>,
+        sender: oneshot::Sender<Result<Option<DeliveryState>, LinkStateError>>,
     ) -> Self {
         Self {
             payload,
@@ -321,15 +321,25 @@ impl UnsettledMessage {
         }
     }
 
-    pub fn settle(self) -> Result<(), Option<DeliveryState>> {
-        self.sender.send(self.state)
+    pub fn settle(self) -> Result<(), Result<Option<DeliveryState>, LinkStateError>> {
+        self.sender.send(Ok(self.state))
     }
 
     pub fn settle_with_state(
         self,
         state: Option<DeliveryState>,
-    ) -> Result<(), Option<DeliveryState>> {
-        self.sender.send(state)
+    ) -> Result<(), Result<Option<DeliveryState>, LinkStateError>> {
+        self.sender.send(Ok(state))
+    }
+
+    /// Fail the pending settlement with a link-state error (e.g. the remote
+    /// closed the link while the delivery was still unsettled).
+    #[allow(dead_code)] // used by the relay's unsettled-map drain
+    pub fn fail(
+        self,
+        error: LinkStateError,
+    ) -> Result<(), Result<Option<DeliveryState>, LinkStateError>> {
+        self.sender.send(Err(error))
     }
 }
 
@@ -397,8 +407,9 @@ pub trait FromDeliveryState {
     fn from_delivery_state(state: DeliveryState) -> Self;
 }
 
-/// This trait defines how to interprete `tokio::sync::oneshot::error::RecvError`
-/// and a session-stop reason when the settlement channel dies
+/// This trait defines how to interprete `tokio::sync::oneshot::error::RecvError`,
+/// a session-stop reason, and a delivered link-state error when the settlement
+/// channel dies or is failed
 ///
 /// This is public for compatibility with rust versions <= 1.58.0
 pub trait FromDeliveryFailure {
@@ -407,6 +418,10 @@ pub trait FromDeliveryFailure {
 
     /// how to interprete a "the session (or its connection) stopped" failure
     fn from_session_stop_reason(reason: SessionStopReason) -> Self;
+
+    /// how to interprete a link-state error delivered through the settlement
+    /// channel (e.g. the remote closed the link while the delivery was pending)
+    fn from_link_state_error(error: LinkStateError) -> Self;
 }
 
 impl FromDeliveryFailure for SendResult {
@@ -418,6 +433,10 @@ impl FromDeliveryFailure for SendResult {
 
     fn from_session_stop_reason(reason: SessionStopReason) -> Self {
         Err(LinkStateError::SessionStopped(reason).into())
+    }
+
+    fn from_link_state_error(error: LinkStateError) -> Self {
+        Err(error.into())
     }
 }
 
@@ -476,8 +495,12 @@ where
                     Poll::Pending => Poll::Pending,
                     Poll::Ready(result) => {
                         match result {
-                            Ok(Some(state)) => Poll::Ready(O::from_delivery_state(state)),
-                            Ok(None) => Poll::Ready(O::from_none()),
+                            Ok(Ok(Some(state))) => Poll::Ready(O::from_delivery_state(state)),
+                            Ok(Ok(None)) => Poll::Ready(O::from_none()),
+                            // A link-state error was delivered through the
+                            // channel (e.g. the remote closed the link while
+                            // the delivery was still pending)
+                            Ok(Err(error)) => Poll::Ready(O::from_link_state_error(error)),
                             Err(err) => {
                                 // If the sender is dropped, there is likely issues with the connection
                                 // or the session, and thus the error should propagate to the user.
@@ -612,6 +635,59 @@ mod tests {
 
         match fut.await {
             Err(SendError::LinkStateError(LinkStateError::IllegalState)) => {}
+            other => panic!("unexpected result: {:?}", other),
+        }
+    }
+
+    #[test]
+    fn test_send_result_from_link_state_error() {
+        let result = <SendResult as FromDeliveryFailure>::from_link_state_error(
+            LinkStateError::RemoteClosed,
+        );
+        match result {
+            Err(SendError::LinkStateError(LinkStateError::RemoteClosed)) => {}
+            other => panic!("unexpected result: {:?}", other),
+        }
+
+        let error = definitions::Error::new(
+            definitions::ConnectionError::ConnectionForced,
+            Some("remote closed".to_string()),
+            None,
+        );
+        let result = <SendResult as FromDeliveryFailure>::from_link_state_error(
+            LinkStateError::RemoteClosedWithError(error.clone()),
+        );
+        match result {
+            Err(SendError::LinkStateError(LinkStateError::RemoteClosedWithError(actual))) => {
+                assert_eq!(actual, error);
+            }
+            other => panic!("unexpected result: {:?}", other),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_delivery_fut_link_state_error_delivered() {
+        use crate::endpoint::Settlement;
+        use tokio::sync::oneshot;
+
+        let (tx, rx) = oneshot::channel();
+        let settlement = Settlement::Unsettled {
+            delivery_tag: DeliveryTag::from(b"tag".to_vec()),
+            outcome: rx,
+        };
+        let fut = DeliveryFut::new(settlement, Arc::new(OnceLock::new()));
+
+        let error = definitions::Error::new(
+            definitions::ConnectionError::ConnectionForced,
+            Some("remote closed".to_string()),
+            None,
+        );
+        let _ = tx.send(Err(LinkStateError::RemoteClosedWithError(error.clone())));
+
+        match fut.await {
+            Err(SendError::LinkStateError(LinkStateError::RemoteClosedWithError(actual))) => {
+                assert_eq!(actual, error);
+            }
             other => panic!("unexpected result: {:?}", other),
         }
     }

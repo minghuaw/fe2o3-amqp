@@ -799,7 +799,7 @@ impl SenderInner<SenderLink<Target>> {
         &mut self,
         delivery_tag: DeliveryTag,
         message_format: MessageFormat,
-        sender: Option<oneshot::Sender<Option<DeliveryState>>>,
+        sender: Option<oneshot::Sender<Result<Option<DeliveryState>, LinkStateError>>>,
     ) -> Result<(), SendError> {
         let handle = self
             .link
@@ -834,7 +834,7 @@ impl SenderInner<SenderLink<Target>> {
         match settled {
             true => {
                 if let Some(sender) = sender {
-                    let _ = sender.send(None);
+                    let _ = sender.send(Ok(None));
                 }
             }
             false => {
@@ -910,7 +910,7 @@ impl SenderInner<SenderLink<Target>> {
         message_format: MessageFormat,
         state: DeliveryState,
         payload: Payload,
-        sender: oneshot::Sender<Option<DeliveryState>>,
+        sender: oneshot::Sender<Result<Option<DeliveryState>, LinkStateError>>,
     ) -> Result<(), SendError> {
         let handle = self
             .link
@@ -943,7 +943,7 @@ impl SenderInner<SenderLink<Target>> {
 
         match settled {
             true => {
-                let _ = sender.send(None);
+                let _ = sender.send(Ok(None));
             }
             false => {
                 let unsettled = UnsettledMessage::new(payload, None, message_format, sender);

@@ -48,7 +48,7 @@ pub struct Controller {
 async fn send_on_control_link<T>(
     sender: &mut SenderInner<ControlLink>,
     sendable: Sendable<T>,
-) -> Result<oneshot::Receiver<Option<DeliveryState>>, link::SendError>
+) -> Result<oneshot::Receiver<Result<Option<DeliveryState>, LinkStateError>>, link::SendError>
 where
     T: SerializableBody,
 {
@@ -79,13 +79,15 @@ pub(crate) async fn declare_on_link(
     // the outcome of the declare from the receiver
     let sendable = Sendable::builder().message(message).settled(false).build();
 
-    send_on_control_link(inner, sendable)
+    let outcome = send_on_control_link(inner, sendable)
         .await?
         .await
         .map_err(|_| match inner.link.session_stop_reason.get() {
             Some(reason) => LinkStateError::SessionStopped(reason.clone()),
             None => LinkStateError::IllegalState, // defensive: no stop reason recorded; failure is link-local
-        })?
+        })?;
+    let outcome = outcome?;
+    outcome
         .ok_or(ControllerSendError::NonTerminalDeliveryState)?
         .declared_or_else(|state| {
             if let DeliveryState::Rejected(rejected) = state {
@@ -110,13 +112,15 @@ pub(crate) async fn discharge_on_link(
     let message = Message::builder().value(discharge).build();
     let sendable = Sendable::builder().message(message).settled(false).build();
 
-    send_on_control_link(inner, sendable)
+    let outcome = send_on_control_link(inner, sendable)
         .await?
         .await
         .map_err(|_| match inner.link.session_stop_reason.get() {
             Some(reason) => LinkStateError::SessionStopped(reason.clone()),
             None => LinkStateError::IllegalState, // defensive: no stop reason recorded; failure is link-local
-        })?
+        })?;
+    let outcome = outcome?;
+    outcome
         .ok_or(ControllerSendError::NonTerminalDeliveryState)?
         .accepted_or_else(|state| {
             if let DeliveryState::Rejected(rejected) = state {
