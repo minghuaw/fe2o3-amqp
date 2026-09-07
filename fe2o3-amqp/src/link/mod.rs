@@ -407,7 +407,15 @@ where
 {
     type DetachError = DetachError;
 
-    /// Closing or not isn't taken care of here but outside
+    /// Handle a detach frame that is the response to the engine's *own*
+    /// outgoing detach/close (the echo). The relay does not respond to such
+    /// frames — the engine's detach handshake (`close`/`detach`/attach-error
+    /// paths) consumes them and completes the state transition here.
+    ///
+    /// This is NOT the method for a detach the engine must answer itself (the
+    /// relay already answered any remote-initiated detach at arrival); see
+    /// [`endpoint::LinkDetach::apply_remote_detach_outcome`] for that.
+    /// Closing or not isn't taken care of here but outside.
     #[cfg_attr(feature = "tracing", tracing::instrument(skip_all))]
     fn on_incoming_detach(&mut self, detach: Detach) -> Result<(), Self::DetachError> {
         #[cfg(feature = "tracing")]
@@ -515,6 +523,8 @@ where
         }
     }
 
+    /// See [`endpoint::LinkDetach::apply_remote_detach_outcome`] for the
+    /// documented contract of this method.
     fn apply_remote_detach_outcome(&mut self, detach: Detach) -> Result<(), Self::DetachError> {
         match detach.closed {
             true => match self.local_state {
@@ -544,7 +554,10 @@ where
                 | LinkState::DetachSent => {
                     self.local_state = LinkState::Detached;
                     let _ = self.output_handle.take();
-                    Ok(())
+                    match detach.error {
+                        Some(error) => Err(DetachError::RemoteDetachedWithError(error)),
+                        None => Ok(()),
+                    }
                 }
                 _ => Err(DetachError::IllegalState),
             },

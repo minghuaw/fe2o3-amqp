@@ -1040,15 +1040,12 @@ where
 
         match frame {
             // The response detach is handled by the relay; only the local
-            // outcome is applied here.
+            // outcome is applied here. A detach frame that reached the
+            // engine is a real link event and is reported as such even when
+            // the session (or its connection) is also stopping: the stop
+            // reason surfaces through the channel closure (the `None` case
+            // above) and the other link operations.
             LinkFrame::Detach(detach) => {
-                // If the session (or its connection) has already stopped, the
-                // stop reason dominates over a link-level detach frame.
-                if let Some(reason) = self.link().session_stop_reason().get() {
-                    return Err(RecvError::LinkStateError(LinkStateError::SessionStopped(
-                        reason.clone(),
-                    )));
-                }
                 let closed = detach.closed;
                 self.link
                     .apply_remote_detach_outcome(detach)

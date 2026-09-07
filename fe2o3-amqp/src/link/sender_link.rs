@@ -159,12 +159,11 @@ where
                     // handled by the relay; only the local outcome is applied
                     // here.
                     Some(LinkFrame::Detach(detach)) => {
-                        // If the session (or its connection) has already
-                        // stopped, the stop reason dominates over a link-level
-                        // detach frame.
-                        if let Some(reason) = self.session_stop_reason.get() {
-                            return Err(LinkStateError::SessionStopped(reason.clone()));
-                        }
+                        // A detach frame that reached the engine is a real
+                        // link event and is reported as such even when the
+                        // session (or its connection) is also stopping: the
+                        // stop reason surfaces through the channel closure
+                        // (the `None` case below) and the other operations.
                         let closed = detach.closed;
                         let result = self.apply_remote_detach_outcome(detach);
 

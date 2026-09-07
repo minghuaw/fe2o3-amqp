@@ -26,6 +26,15 @@ use super::{OutputHandle, Settlement};
 pub(crate) trait LinkDetach {
     type DetachError: Send;
 
+    /// Handle a detach frame that is the response to the engine's *own*
+    /// outgoing detach/close (the echo) during an engine-driven handshake
+    /// (`close`, `detach`, or the attach-error paths). The relay does not
+    /// respond to such frames; the engine consumes the echo and completes
+    /// the state transition here.
+    ///
+    /// This is NOT the method for a detach the engine must answer itself
+    /// (the relay already answered any remote-initiated detach at arrival);
+    /// see [`LinkDetach::apply_remote_detach_outcome`] for that.
     fn on_incoming_detach(&mut self, detach: Detach) -> Result<(), Self::DetachError>;
 
     async fn send_detach(
@@ -36,13 +45,28 @@ pub(crate) trait LinkDetach {
     ) -> Result<(), Self::DetachError>;
 
     /// Apply the outcome of a remote detach/close whose response detach has
-    /// already been sent (by the relay).
+    /// already been sent (by the relay), or that the engine will never send
+    /// (a detach frame drained by a drop path).
     ///
-    /// The link transitions straight to the terminal state that processing the
-    /// detach in the engine used to produce (`send_detach` followed by
-    /// `on_incoming_detach`), without writing anything to the wire: a closing
-    /// detach leaves the link `Closed` and a non-closing one leaves it
-    /// `Detached`; the output handle is released in both cases.
+    /// This method writes nothing to the wire. It must only be called when
+    /// the peer's detach has already been answered — for remote-initiated
+    /// detaches the relay sends the response at arrival time, and a drop
+    /// path drains frames whose response likewise already went out. Calling
+    /// it when the engine still owes the response would leave the peer's
+    /// close/detach handshake hanging.
+    ///
+    /// The link transitions **directly to the terminal state** — `Closed`
+    /// for a closing detach, `Detached` otherwise — and releases the output
+    /// handle. It never passes through the intermediate `CloseReceived` /
+    /// `DetachReceived` states: those record that the engine must reply with
+    /// a detach of its own, which is the engine-driven handshake's job (see
+    /// [`LinkDetach::on_incoming_detach`]), not this method's. The engine's
+    /// mid-handshake states `CloseSent` (closing detach) and `DetachSent`
+    /// (non-closing detach) are accepted so a drop-path drain can apply an
+    /// echo whose engine handshake never ran.
+    ///
+    /// The remote's error (if any) is reported as `RemoteClosedWithError` /
+    /// `RemoteDetachedWithError`.
     fn apply_remote_detach_outcome(&mut self, detach: Detach) -> Result<(), Self::DetachError>;
 }
 

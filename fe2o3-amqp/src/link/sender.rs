@@ -469,11 +469,16 @@ impl Sender {
     }
 
     /// Returns when the remote peer detach/close the link
+    ///
+    /// The relay has already answered a remote-initiated detach at arrival,
+    /// so the link transitions directly to its terminal state (`Closed` /
+    /// `Detached`, releasing the output handle); a subsequent `close()`
+    /// completes without writing another detach.
     pub async fn on_detach(&mut self) -> DetachError {
         match recv_remote_detach(&mut self.inner).await {
             Ok(detach) => {
                 let closed = detach.closed;
-                match self.inner.link.on_incoming_detach(detach) {
+                match self.inner.link.apply_remote_detach_outcome(detach) {
                     Ok(_) => {
                         if closed {
                             DetachError::ClosedByRemote
