@@ -766,11 +766,11 @@ pub(crate) fn rollback_on_drop(
                     // A link-state error was delivered through the channel
                     // (e.g. the remote closed the control link): the discharge
                     // outcome will not arrive, so give up waiting.
-                    Ok(Err(error)) => {
+                    Ok(Err(_error)) => {
                         #[cfg(feature = "tracing")]
-                        tracing::error!(error = ?error);
+                        tracing::error!(error = ?_error);
                         #[cfg(feature = "log")]
-                        log::error!("error = {:?}", error);
+                        log::error!("error = {:?}", _error);
                         return;
                     }
                     Err(_error) => {

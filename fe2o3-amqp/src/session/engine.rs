@@ -243,14 +243,18 @@ where
                 }
             }
             SessionFrameBody::Detach(detach) => {
-                // A remote-initiated detach is answered by the relay: the
-                // returned frame is the response detach to send to the peer.
-                if let Some(frame) = self.session.on_incoming_detach(detach).await? {
-                    self.outgoing.send(frame).await.map_err(|_| {
-                        SessionInnerError::ConnectionStopped(connection_stop_reason_or_closed(
-                            self.session.connection_stop_reason(),
-                        ))
-                    })?;
+                // A remote-initiated detach is answered by the relay. The
+                // response flows out through the same outbound path as a
+                // locally initiated detach, without expecting a further echo
+                // from the peer.
+                if let Some(detach) = self.session.on_incoming_detach(detach).await? {
+                    if let Some(frame) = self.session.on_outgoing_detach(detach, false) {
+                        self.outgoing.send(frame).await.map_err(|_| {
+                            SessionInnerError::ConnectionStopped(connection_stop_reason_or_closed(
+                                self.session.connection_stop_reason(),
+                            ))
+                        })?;
+                    }
                 }
             }
             SessionFrameBody::End(end) => {
@@ -432,9 +436,10 @@ where
                 .on_outgoing_disposition(disposition)
                 .map(SessionOutgoingItem::SingleFrame)
                 .map(Some)?,
-            LinkFrame::Detach(detach) => Some(SessionOutgoingItem::SingleFrame(
-                self.session.on_outgoing_detach(detach),
-            )),
+            LinkFrame::Detach(detach) => self
+                .session
+                .on_outgoing_detach(detach, true)
+                .map(SessionOutgoingItem::SingleFrame),
 
             #[cfg(feature = "transaction")]
             LinkFrame::Acquisition(_) => {

@@ -680,13 +680,18 @@ impl endpoint::Session for Session {
         }
     }
 
-    /// This should only deallocate the output handle
-    fn deallocate_link(&mut self, output_handle: OutputHandle) {
+    /// This should only deallocate the output handle. Returns whether the
+    /// link's bookkeeping was still present (i.e. the detach is the first for
+    /// the link rather than a duplicate).
+    fn deallocate_link(&mut self, output_handle: OutputHandle) -> bool {
         if let Some(name) = self
             .link_name_by_output_handle
             .try_remove(output_handle.0 as usize)
         {
             let _ = self.link_by_name.remove(&name);
+            true
+        } else {
+            false
         }
     }
 
@@ -881,10 +886,7 @@ impl endpoint::Session for Session {
     }
 
     #[cfg_attr(feature = "tracing", tracing::instrument(skip_all))]
-    async fn on_incoming_detach(
-        &mut self,
-        detach: Detach,
-    ) -> Result<Option<SessionFrame>, Self::Error> {
+    async fn on_incoming_detach(&mut self, detach: Detach) -> Result<Option<Detach>, Self::Error> {
         #[cfg(feature = "tracing")]
         tracing::trace!(frame = ?detach);
         #[cfg(feature = "log")]
@@ -904,19 +906,13 @@ impl endpoint::Session for Session {
                 let remote_initiated = !self.close_pending.remove(&output_handle);
 
                 // The relay forwards the raw detach into the link engine and,
-                // for a remote-initiated detach, returns the response frame to
-                // send to the peer.
+                // for a remote-initiated detach, returns the response detach to
+                // send to the peer. The response flows out through
+                // `on_outgoing_detach` (with `expects_echo = false`), which
+                // releases the link bookkeeping.
                 let response = link.on_incoming_detach(detach, remote_initiated).await;
 
-                if remote_initiated {
-                    // The relay's response detach bypasses `on_outgoing_detach`,
-                    // so the link bookkeeping is deallocated here.
-                    self.deallocate_link(output_handle);
-                }
-
-                Ok(response.map(|detach| {
-                    SessionFrame::new(self.outgoing_channel, SessionFrameBody::Detach(detach))
-                }))
+                Ok(response)
             }
             None => {
                 // The link is no longer registered. This can happen when both
@@ -1159,14 +1155,42 @@ impl endpoint::Session for Session {
         Ok(frame)
     }
 
-    fn on_outgoing_detach(&mut self, detach: Detach) -> SessionFrame {
-        // Our own outgoing detach: record the link as awaiting the peer's
-        // response detach, so an incoming detach on it can be recognized as
-        // such rather than a remote-initiated one.
-        self.close_pending.insert(detach.handle.clone().into());
-        self.deallocate_link(detach.handle.clone().into());
+    /// The single outbound path for detach frames.
+    ///
+    /// The link bookkeeping (name and output handle) is released here for
+    /// both a locally initiated detach and the relay's reply to a
+    /// remote-initiated detach.
+    ///
+    /// `expects_echo` marks a locally initiated detach (engine-written
+    /// close/detach/drop/attach-error): the peer's response detach is
+    /// expected, so the output handle is recorded in `close_pending` to
+    /// recognize the echo. The relay's reply passes `false` — the peer sends
+    /// nothing back, and recording an entry it could never remove would let a
+    /// later detach on a recycled handle be misclassified as our own echo,
+    /// silencing the relay on a genuine peer close.
+    ///
+    /// Returns `None` (nothing is sent) when a locally initiated detach is a
+    /// duplicate: the bookkeeping is already gone because the relay answered
+    /// the remote's detach first, in which case the engine's own handshake
+    /// completes locally on the forwarded remote detach.
+    fn on_outgoing_detach(&mut self, detach: Detach, expects_echo: bool) -> Option<SessionFrame> {
+        let deallocated = self.deallocate_link(detach.handle.clone().into());
+        if expects_echo {
+            if !deallocated {
+                // A duplicate locally initiated detach: the relay already
+                // answered the remote-initiated detach for this link, so the
+                // engine's own close/detach handshake completes locally on the
+                // forwarded detach and nothing more is sent to the peer.
+                #[cfg(feature = "tracing")]
+                tracing::debug!("Suppressing duplicate locally initiated detach");
+                #[cfg(feature = "log")]
+                log::debug!("Suppressing duplicate locally initiated detach");
+                return None;
+            }
+            self.close_pending.insert(detach.handle.clone().into());
+        }
         let body = SessionFrameBody::Detach(detach);
-        SessionFrame::new(self.outgoing_channel, body)
+        Some(SessionFrame::new(self.outgoing_channel, body))
     }
 }
 

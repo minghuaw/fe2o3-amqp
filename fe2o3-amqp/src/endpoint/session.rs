@@ -57,7 +57,9 @@ pub(crate) trait Session {
         input_handle: InputHandle,
     ) -> Result<OutputHandle, Self::AllocError>;
 
-    fn deallocate_link(&mut self, output_handle: OutputHandle);
+    /// Release the link's bookkeeping (name and output handle). Returns
+    /// whether the bookkeeping was still present.
+    fn deallocate_link(&mut self, output_handle: OutputHandle) -> bool;
 
     fn on_incoming_begin(
         &mut self,
@@ -97,12 +99,14 @@ pub(crate) trait Session {
         disposition: Disposition,
     ) -> Result<Option<Vec<Disposition>>, Self::Error>;
 
-    /// Handle an incoming detach, returning the response detach frame to send
-    /// to the peer (e.g. the relay's reply to a remote-initiated detach).
+    /// Handle an incoming detach, returning the response detach for the peer
+    /// (the relay's reply to a remote-initiated detach) when one is owed. The
+    /// response is not sent here: the engine routes it through
+    /// [`Session::on_outgoing_detach`] with `expects_echo = false`.
     fn on_incoming_detach(
         &mut self,
         detach: Detach,
-    ) -> impl Future<Output = Result<Option<SessionFrame>, Self::Error>> + Send;
+    ) -> impl Future<Output = Result<Option<Detach>, Self::Error>> + Send;
 
     fn on_incoming_end(&mut self, channel: IncomingChannel, end: End)
         -> Result<(), Self::EndError>;
@@ -141,5 +145,15 @@ pub(crate) trait Session {
         disposition: Disposition,
     ) -> Result<SessionFrame, Self::Error>;
 
-    fn on_outgoing_detach(&mut self, detach: Detach) -> SessionFrame;
+    /// Send a detach frame out, releasing the link's bookkeeping, and record
+    /// whether the peer's response detach is expected.
+    ///
+    /// `expects_echo` is true for a locally initiated detach (engine-written
+    /// close/detach/drop/attach-error): the output handle is recorded so an
+    /// incoming detach on the link can be recognized as the peer's echo. It
+    /// is false for the relay's reply to a remote-initiated detach, for which
+    /// the peer sends nothing back. Returns `None` when a locally initiated
+    /// detach is a duplicate (the link's bookkeeping is already gone because
+    /// the relay answered the remote's detach first); nothing is sent then.
+    fn on_outgoing_detach(&mut self, detach: Detach, expects_echo: bool) -> Option<SessionFrame>;
 }
