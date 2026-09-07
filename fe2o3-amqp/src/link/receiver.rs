@@ -839,13 +839,16 @@ impl<L: endpoint::ReceiverLink> Drop for ReceiverInner<L> {
         // A remote detach/close may already have been forwarded into the
         // engine's channel by the relay (the relay replies to the peer on its
         // own, without the engine). Apply the terminal outcome here so the
-        // link state is not left stale, and suppress the closing detach this
-        // drop would otherwise send: replying a second time to the remote's
-        // detach would be a duplicate.
+        // link state is not left stale. Once any detach frame has been
+        // drained, the detach/close exchange with the peer is complete (the
+        // relay answered a remote-initiated detach at arrival; an echo
+        // answers the engine's own detach), so the closing detach this drop
+        // would otherwise send must be suppressed: replying a second time
+        // would be a duplicate.
+        let mut remote_detach_received = false;
         while let Ok(frame) = self.incoming.try_recv() {
             if let LinkFrame::Detach(detach) = frame {
-                // Applying the terminal outcome also releases the output
-                // handle, which suppresses the closing detach below.
+                remote_detach_received = true;
                 let _ = self.link.apply_remote_detach_outcome(detach);
             }
             // Any other frame (e.g. a partially received transfer or an attach
@@ -853,27 +856,29 @@ impl<L: endpoint::ReceiverLink> Drop for ReceiverInner<L> {
             // by the drop.
         }
 
-        if let Some(handle) = self.link.output_handle_mut().take() {
-            let detach = Detach {
-                handle: handle.into(),
-                closed: true,
-                error: None,
-            };
-            if let Err(_error) = self.outgoing.try_send(LinkFrame::Detach(detach)) {
-                #[cfg(any(feature = "log", feature = "tracing"))]
-                {
-                    let reason = match &_error {
-                        tokio::sync::mpsc::error::TrySendError::Full(_) => {
-                            "control channel is full"
-                        }
-                        tokio::sync::mpsc::error::TrySendError::Closed(_) => {
-                            "control channel is closed"
-                        }
-                    };
-                    #[cfg(feature = "tracing")]
-                    tracing::warn!(reason, "Failed to enqueue Detach frame on receiver drop");
-                    #[cfg(feature = "log")]
-                    log::warn!("Failed to enqueue Detach frame on receiver drop: {reason}");
+        if !remote_detach_received {
+            if let Some(handle) = self.link.output_handle_mut().take() {
+                let detach = Detach {
+                    handle: handle.into(),
+                    closed: true,
+                    error: None,
+                };
+                if let Err(_error) = self.outgoing.try_send(LinkFrame::Detach(detach)) {
+                    #[cfg(any(feature = "log", feature = "tracing"))]
+                    {
+                        let reason = match &_error {
+                            tokio::sync::mpsc::error::TrySendError::Full(_) => {
+                                "control channel is full"
+                            }
+                            tokio::sync::mpsc::error::TrySendError::Closed(_) => {
+                                "control channel is closed"
+                            }
+                        };
+                        #[cfg(feature = "tracing")]
+                        tracing::warn!(reason, "Failed to enqueue Detach frame on receiver drop");
+                        #[cfg(feature = "log")]
+                        log::warn!("Failed to enqueue Detach frame on receiver drop: {reason}");
+                    }
                 }
             }
         }
