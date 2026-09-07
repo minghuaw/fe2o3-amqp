@@ -146,16 +146,13 @@ where
     {
         use crate::util::Consume;
 
+        // The detach branch is polled first so that a remote detach that has
+        // already arrived is observed before a concurrently granted link-credit
+        // is consumed. Otherwise a send could race the remote closing the link,
+        // consuming credit and writing a transfer the relay can no longer
+        // forward.
         tokio::select! {
-            tag = self.flow_state.consume(1) => {
-                // link-credit is defined as
-                // "The current maximum number of messages that can be handled
-                // at the receiver endpoint of the link"
-
-                // Draining should already set the link credit to 0, causing
-                // sender to wait for new link credit
-                Ok(tag)
-            },
+            biased;
             frame = detached => { // cancel safe
                 match frame {
                     // If remote has detached the link. The response detach is
@@ -195,6 +192,15 @@ where
                         }
                     }
                 }
+            },
+            tag = self.flow_state.consume(1) => {
+                // link-credit is defined as
+                // "The current maximum number of messages that can be handled
+                // at the receiver endpoint of the link"
+
+                // Draining should already set the link credit to 0, causing
+                // sender to wait for new link credit
+                Ok(tag)
             }
         }
     }
