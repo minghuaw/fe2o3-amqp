@@ -836,6 +836,23 @@ pub(crate) struct ReceiverInner<L: endpoint::ReceiverLink> {
 
 impl<L: endpoint::ReceiverLink> Drop for ReceiverInner<L> {
     fn drop(&mut self) {
+        // A remote detach/close may already have been forwarded into the
+        // engine's channel by the relay (the relay replies to the peer on its
+        // own, without the engine). Apply the terminal outcome here so the
+        // link state is not left stale, and suppress the closing detach this
+        // drop would otherwise send: replying a second time to the remote's
+        // detach would be a duplicate.
+        while let Ok(frame) = self.incoming.try_recv() {
+            if let LinkFrame::Detach(detach) = frame {
+                // Applying the terminal outcome also releases the output
+                // handle, which suppresses the closing detach below.
+                let _ = self.link.apply_remote_detach_outcome(detach);
+            }
+            // Any other frame (e.g. a partially received transfer or an attach
+            // response left behind by an interrupted reattach) is superseded
+            // by the drop.
+        }
+
         if let Some(handle) = self.link.output_handle_mut().take() {
             let detach = Detach {
                 handle: handle.into(),

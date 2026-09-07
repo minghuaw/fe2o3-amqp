@@ -492,7 +492,10 @@ impl Sender {
 /// This is so that the transaction controller can re-use
 /// the sender
 #[derive(Debug)]
-pub(crate) struct SenderInner<L: endpoint::SenderLink> {
+pub(crate) struct SenderInner<L>
+where
+    L: endpoint::SenderLink + LinkExt<Unsettled = ArcSenderUnsettledMap>,
+{
     // The SenderLink manages the state
     pub(crate) link: L,
     pub(crate) buffer_size: usize,
@@ -505,29 +508,88 @@ pub(crate) struct SenderInner<L: endpoint::SenderLink> {
     pub(crate) incoming: mpsc::Receiver<LinkFrame>,
 }
 
-impl<L: endpoint::SenderLink> Drop for SenderInner<L> {
+impl<L> Drop for SenderInner<L>
+where
+    L: endpoint::SenderLink + LinkExt<Unsettled = ArcSenderUnsettledMap>,
+{
     fn drop(&mut self) {
+        // A remote detach/close may already have been forwarded into the
+        // engine's channel by the relay (the relay replies to the peer on its
+        // own, without the engine). Apply the terminal outcome here so the
+        // link state is not left stale, and suppress the closing detach this
+        // drop would otherwise send: replying a second time to the remote's
+        // detach would be a duplicate.
+        let mut detach_error: Option<LinkStateError> = None;
+        while let Ok(frame) = self.incoming.try_recv() {
+            if let LinkFrame::Detach(detach) = frame {
+                let closed = detach.closed;
+                let error = detach.error.clone();
+                // Applying the terminal outcome also releases the output
+                // handle, which suppresses the closing detach below.
+                if self.link.apply_remote_detach_outcome(detach).is_ok() {
+                    detach_error = Some(match (closed, error) {
+                        (true, Some(error)) => LinkStateError::RemoteClosedWithError(error),
+                        (true, None) => LinkStateError::RemoteClosed,
+                        (false, Some(error)) => LinkStateError::RemoteDetachedWithError(error),
+                        (false, None) => LinkStateError::RemoteDetached,
+                    });
+                }
+            }
+            // Any other frame (e.g. an attach response left behind by an
+            // interrupted reattach) is superseded by the drop.
+        }
+
+        // Whether the peer can still be reached with a closing detach
+        let mut detach_sent = false;
         if let Some(handle) = self.link.output_handle_mut().take() {
             let detach = Detach {
                 handle: handle.into(),
                 closed: true,
                 error: None,
             };
-            if let Err(_error) = self.outgoing.try_send(LinkFrame::Detach(detach)) {
-                #[cfg(any(feature = "log", feature = "tracing"))]
-                {
-                    let reason = match &_error {
-                        tokio::sync::mpsc::error::TrySendError::Full(_) => {
-                            "control channel is full"
-                        }
-                        tokio::sync::mpsc::error::TrySendError::Closed(_) => {
-                            "control channel is closed"
-                        }
-                    };
-                    #[cfg(feature = "tracing")]
-                    tracing::warn!(reason, "Failed to enqueue Detach frame on sender drop");
-                    #[cfg(feature = "log")]
-                    log::warn!("Failed to enqueue Detach frame on sender drop: {reason}");
+            match self.outgoing.try_send(LinkFrame::Detach(detach)) {
+                Ok(()) => detach_sent = true,
+                Err(_error) => {
+                    #[cfg(any(feature = "log", feature = "tracing"))]
+                    {
+                        let reason = match &_error {
+                            tokio::sync::mpsc::error::TrySendError::Full(_) => {
+                                "control channel is full"
+                            }
+                            tokio::sync::mpsc::error::TrySendError::Closed(_) => {
+                                "control channel is closed"
+                            }
+                        };
+                        #[cfg(feature = "tracing")]
+                        tracing::warn!(reason, "Failed to enqueue Detach frame on sender drop");
+                        #[cfg(feature = "log")]
+                        log::warn!("Failed to enqueue Detach frame on sender drop: {reason}");
+                    }
+                }
+            }
+        }
+
+        // Fail the outstanding deliveries that can no longer be settled by the
+        // peer: the remote closed/detached the link first (the relay may have
+        // already failed them; `take()` makes the drain exclusive), or the
+        // session (or its connection) stopped so the closing detach could not
+        // even be enqueued. Deliveries that are still pending on a live link
+        // are left alone: the relay keeps settling them from the peer's
+        // dispositions.
+        let error = detach_error.or_else(|| {
+            if detach_sent {
+                None
+            } else {
+                match self.link.session_stop_reason().get() {
+                    Some(reason) => Some(LinkStateError::SessionStopped(reason.clone())),
+                    None => Some(LinkStateError::IllegalState), // defensive: no stop reason recorded; failure is link-local
+                }
+            }
+        });
+        if let Some(error) = error {
+            if let Some(entries) = self.link.unsettled().write().take() {
+                for (_, entry) in entries {
+                    let _ = entry.fail(error.clone());
                 }
             }
         }

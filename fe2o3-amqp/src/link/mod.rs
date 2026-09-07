@@ -865,21 +865,22 @@ impl LinkRelay<OutputHandle> {
             } => {
                 // A send failure means the link endpoint was dropped; the
                 // response (if any) must still go out.
-                let _ = tx.send(frame).await;
+                let forward_result = tx.send(frame).await;
+
                 if !remote_initiated {
+                    // The detach is the response to our own detach/close. The
+                    // link endpoint's local handshake consumes the forwarded
+                    // frame — unless the endpoint was dropped, in which case
+                    // the forward fails and nothing else would fail the
+                    // deliveries that are still pending on the closed link.
+                    if forward_result.is_err() && detach.closed {
+                        fail_pending_unsettled(unsettled, &detach);
+                    }
                     return None;
                 }
 
                 if detach.closed {
-                    if let Some(entries) = unsettled.write().take() {
-                        for (_, entry) in entries {
-                            let error = match detach.error.clone() {
-                                Some(error) => LinkStateError::RemoteClosedWithError(error),
-                                None => LinkStateError::RemoteClosed,
-                            };
-                            let _ = entry.fail(error);
-                        }
-                    }
+                    fail_pending_unsettled(unsettled, &detach);
                 }
 
                 Some(Detach {
@@ -902,6 +903,22 @@ impl LinkRelay<OutputHandle> {
                     error: detach.error.clone(),
                 })
             }
+        }
+    }
+}
+
+/// Fail the pending unsettled deliveries of a sender link.
+///
+/// The entries are `take()`n out of the shared map so the drain is exclusive:
+/// the link endpoint's drop path and the relay cannot fail an entry twice.
+fn fail_pending_unsettled(unsettled: &ArcSenderUnsettledMap, detach: &Detach) {
+    if let Some(entries) = unsettled.write().take() {
+        for (_, entry) in entries {
+            let error = match detach.error.clone() {
+                Some(error) => LinkStateError::RemoteClosedWithError(error),
+                None => LinkStateError::RemoteClosed,
+            };
+            let _ = entry.fail(error);
         }
     }
 }
