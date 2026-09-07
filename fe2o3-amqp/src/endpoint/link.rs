@@ -34,6 +34,16 @@ pub(crate) trait LinkDetach {
         closed: bool,
         error: Option<Error>,
     ) -> Result<(), Self::DetachError>;
+
+    /// Apply the outcome of a remote detach/close whose response detach has
+    /// already been sent (by the relay).
+    ///
+    /// The link transitions straight to the terminal state that processing the
+    /// detach in the engine used to produce (`send_detach` followed by
+    /// `on_incoming_detach`), without writing anything to the wire: a closing
+    /// detach leaves the link `Closed` and a non-closing one leaves it
+    /// `Detached`; the output handle is released in both cases.
+    fn apply_remote_detach_outcome(&mut self, detach: Detach) -> Result<(), Self::DetachError>;
 }
 
 pub(crate) trait LinkAttach {

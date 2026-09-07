@@ -959,10 +959,7 @@ impl SenderInner<SenderLink<Target>> {
 
     async fn resend(&mut self, unsettled_message: UnsettledMessage) -> Result<(), SendError> {
         let detached_fut = self.incoming.recv();
-        let tag = self
-            .link
-            .get_delivery_tag_or_detached(&self.outgoing, detached_fut)
-            .await?;
+        let tag = self.link.get_delivery_tag_or_detached(detached_fut).await?;
         let new_delivery_tag = DeliveryTag::from(tag);
         let transfer = self.link.generate_non_resuming_transfer_performative(
             new_delivery_tag.clone(),

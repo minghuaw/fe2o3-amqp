@@ -97,10 +97,12 @@ pub(crate) trait Session {
         disposition: Disposition,
     ) -> Result<Option<Vec<Disposition>>, Self::Error>;
 
+    /// Handle an incoming detach, returning the response detach frame to send
+    /// to the peer (e.g. the relay's reply to a remote-initiated detach).
     fn on_incoming_detach(
         &mut self,
         detach: Detach,
-    ) -> impl Future<Output = Result<(), Self::Error>> + Send;
+    ) -> impl Future<Output = Result<Option<SessionFrame>, Self::Error>> + Send;
 
     fn on_incoming_end(&mut self, channel: IncomingChannel, end: End)
         -> Result<(), Self::EndError>;

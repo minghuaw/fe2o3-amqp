@@ -334,7 +334,6 @@ impl UnsettledMessage {
 
     /// Fail the pending settlement with a link-state error (e.g. the remote
     /// closed the link while the delivery was still unsettled).
-    #[allow(dead_code)] // used by the relay's unsettled-map drain
     pub fn fail(
         self,
         error: LinkStateError,

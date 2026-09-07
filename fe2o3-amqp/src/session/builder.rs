@@ -1,6 +1,6 @@
 //! Session builder
 
-use std::collections::{HashMap, VecDeque};
+use std::collections::{HashMap, HashSet, VecDeque};
 use std::sync::{Arc, OnceLock};
 
 use fe2o3_amqp_types::definitions::{Fields, Handle, TransferNumber};
@@ -125,6 +125,7 @@ cfg_transaction! {
                     link_name_by_output_handle: Slab::new(),
                     link_by_name: HashMap::new(),
                     link_by_input_handle: HashMap::new(),
+                    close_pending: HashSet::new(),
                     delivery_tag_by_id: HashMap::new(),
                 };
 
@@ -174,6 +175,7 @@ impl Builder {
             link_name_by_output_handle: Slab::new(),
             link_by_name: HashMap::new(),
             link_by_input_handle: HashMap::new(),
+            close_pending: HashSet::new(),
             delivery_tag_by_id: HashMap::new(),
         }
     }

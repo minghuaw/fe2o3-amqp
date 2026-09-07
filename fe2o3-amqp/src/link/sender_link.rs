@@ -139,7 +139,6 @@ where
 
     pub(crate) async fn get_delivery_tag_or_detached<Fut>(
         &mut self,
-        writer: &mpsc::Sender<LinkFrame>,
         detached: Fut,
     ) -> Result<[u8; 4], LinkStateError>
     where
@@ -159,13 +158,18 @@ where
             },
             frame = detached => { // cancel safe
                 match frame {
-                    // If remote has detached the link
+                    // If remote has detached the link. The response detach is
+                    // handled by the relay; only the local outcome is applied
+                    // here.
                     Some(LinkFrame::Detach(detach)) => {
-                        // FIXME: if the sender is not trying to send anything, this is
-                        // probably not responsive enough
+                        // If the session (or its connection) has already
+                        // stopped, the stop reason dominates over a link-level
+                        // detach frame.
+                        if let Some(reason) = self.session_stop_reason.get() {
+                            return Err(LinkStateError::SessionStopped(reason.clone()));
+                        }
                         let closed = detach.closed;
-                        self.send_detach(writer, closed, None).await?;
-                        let result = self.on_incoming_detach(detach);
+                        let result = self.apply_remote_detach_outcome(detach);
 
                         match (result, closed) {
                             (Ok(_), true) => Err(LinkStateError::RemoteClosed),
@@ -267,7 +271,7 @@ where
     where
         Fut: Future<Output = Option<LinkFrame>> + Send,
     {
-        let tag = self.get_delivery_tag_or_detached(writer, detached).await?;
+        let tag = self.get_delivery_tag_or_detached(detached).await?;
         // Delivery count is incremented when consuming credit
         let delivery_tag = DeliveryTag::from(tag);
 

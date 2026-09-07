@@ -1017,11 +1017,19 @@ where
         };
 
         match frame {
+            // The response detach is handled by the relay; only the local
+            // outcome is applied here.
             LinkFrame::Detach(detach) => {
+                // If the session (or its connection) has already stopped, the
+                // stop reason dominates over a link-level detach frame.
+                if let Some(reason) = self.link().session_stop_reason().get() {
+                    return Err(RecvError::LinkStateError(LinkStateError::SessionStopped(
+                        reason.clone(),
+                    )));
+                }
                 let closed = detach.closed;
-                self.link.send_detach(&self.outgoing, closed, None).await?; // cancel safe
                 self.link
-                    .on_incoming_detach(detach)
+                    .apply_remote_detach_outcome(detach)
                     .map_err(Into::into)
                     .and_then(|_| match closed {
                         true => Err(LinkStateError::RemoteClosed.into()),

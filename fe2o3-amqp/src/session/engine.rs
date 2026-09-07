@@ -243,7 +243,15 @@ where
                 }
             }
             SessionFrameBody::Detach(detach) => {
-                self.session.on_incoming_detach(detach).await?;
+                // A remote-initiated detach is answered by the relay: the
+                // returned frame is the response detach to send to the peer.
+                if let Some(frame) = self.session.on_incoming_detach(detach).await? {
+                    self.outgoing.send(frame).await.map_err(|_| {
+                        SessionInnerError::ConnectionStopped(connection_stop_reason_or_closed(
+                            self.session.connection_stop_reason(),
+                        ))
+                    })?;
+                }
             }
             SessionFrameBody::End(end) => {
                 let end_error = end.error.clone();

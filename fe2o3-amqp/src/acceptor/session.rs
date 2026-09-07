@@ -594,7 +594,10 @@ impl endpoint::Session for ListenerSession {
         self.session.on_incoming_disposition(disposition)
     }
 
-    async fn on_incoming_detach(&mut self, detach: Detach) -> Result<(), Self::Error> {
+    async fn on_incoming_detach(
+        &mut self,
+        detach: Detach,
+    ) -> Result<Option<SessionFrame>, Self::Error> {
         self.session.on_incoming_detach(detach).await
     }
 
