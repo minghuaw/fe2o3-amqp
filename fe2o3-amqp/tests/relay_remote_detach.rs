@@ -94,12 +94,8 @@ async fn pending_delivery_failed_by_close_echo_after_sender_dropped_without_clos
     let (mut server_connection, mut client_connection) = establish_connection_pair().await;
     let (mut listener_session, mut client_session) =
         establish_session_pair(&mut server_connection, &mut client_connection).await;
-    let (mut sender, _receiver) = establish_link_pair(
-        &mut listener_session,
-        &mut client_session,
-        "sender-drop-1",
-    )
-    .await;
+    let (mut sender, _receiver) =
+        establish_link_pair(&mut listener_session, &mut client_session, "sender-drop-1").await;
 
     let delivery = sender
         .send_batchable(Sendable::builder().message("hello").build())
@@ -120,10 +116,7 @@ async fn pending_delivery_failed_by_close_echo_after_sender_dropped_without_clos
     }
 
     // The session is still healthy: it must end cleanly.
-    client_session
-        .end()
-        .await
-        .expect("session end failed");
+    client_session.end().await.expect("session end failed");
     client_connection.close().await.expect("close failed");
 }
 
@@ -137,12 +130,8 @@ async fn remote_link_close_fails_pending_delivery_and_session_survives() {
     let (mut server_connection, mut client_connection) = establish_connection_pair().await;
     let (mut listener_session, mut client_session) =
         establish_session_pair(&mut server_connection, &mut client_connection).await;
-    let (mut sender, receiver) = establish_link_pair(
-        &mut listener_session,
-        &mut client_session,
-        "remote-close-1",
-    )
-    .await;
+    let (mut sender, receiver) =
+        establish_link_pair(&mut listener_session, &mut client_session, "remote-close-1").await;
 
     let delivery = sender
         .send_batchable(Sendable::builder().message("hello").build())
@@ -167,12 +156,8 @@ async fn remote_link_close_fails_pending_delivery_and_session_survives() {
     drop(sender);
 
     // The sessions must still be healthy: a fresh link pair round trips.
-    let (mut sender2, mut receiver2) = establish_link_pair(
-        &mut listener_session,
-        &mut client_session,
-        "remote-close-2",
-    )
-    .await;
+    let (mut sender2, mut receiver2) =
+        establish_link_pair(&mut listener_session, &mut client_session, "remote-close-2").await;
 
     let message = Message::from("still-alive");
     let send_task = tokio::spawn(async move {
