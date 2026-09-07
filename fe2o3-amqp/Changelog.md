@@ -31,6 +31,21 @@
 7. A send that wins the race against a concurrently arriving remote closing detach now
    fails with the detach outcome instead of consuming link-credit and writing a transfer
    the relay can no longer forward (the detach is polled before the credit).
+8. An in-flight receive or send reports the remote detach outcome (`RemoteClosed` /
+   `RemoteClosedWithError` / `RemoteDetached(WithError)`) when a real detach raced the
+   session or connection stop, instead of the stop reason dominating; the stop reason
+   surfaces through the channel closure and the subsequent operations.
+9. A non-closing remote detach that carries an error now surfaces as
+   `RemoteDetachedWithError` instead of losing the error.
+10. [`Sender::on_detach`] now transitions the link straight to its terminal state (`Closed`
+    / `Detached`, releasing the output handle) — the relay already answered the remote's
+    detach at arrival — so a subsequent `close()` completes cleanly instead of sending a
+    duplicate closing detach or failing with `DetachedByRemote`.
+11. Locally initiated detaches are only sent while the link's bookkeeping still exists: a
+    duplicate closing detach in the double-close race (both sides close concurrently and
+    the relay already answered the remote's detach) is suppressed by the session instead
+    of being sent to the peer and leaking a stale close-pending entry. All outgoing
+    detaches (engine-written and relay replies) now flow through the same outbound path.
 
 ## 0.17.0
 

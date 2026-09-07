@@ -5,8 +5,10 @@
 //!   (the link engine never writes a response), and the relay fails the
 //!   deliveries that are still pending on the link;
 //! - dropping a sender link without a clean close leaves its pending
-//!   deliveries unresolved (they are still settled by the peer's dispositions
-//!   through the relay) unless the delivery can no longer be settled.
+//!   deliveries to the peer's settlement, and the peer's close response fails
+//!   the stranded ones when the engine is gone;
+//! - `Sender::on_detach` observes a remote close in the terminal state, so a
+//!   subsequent `close()` is clean.
 //!
 //! These run over an in-memory `tokio::io::duplex` stream, so no broker or
 //! network is required.
@@ -20,7 +22,7 @@ use fe2o3_amqp::{
         ConnectionAcceptor, LinkAcceptor, LinkEndpoint, ListenerSessionHandle, SessionAcceptor,
     },
     connection::{Connection, ConnectionHandle},
-    link::{LinkStateError, SendError},
+    link::{DetachError, LinkStateError, SendError},
     session::{Session, SessionHandle},
     types::messaging::Message,
     Sendable, Sender,
@@ -158,6 +160,59 @@ async fn remote_link_close_fails_pending_delivery_and_session_survives() {
     // The sessions must still be healthy: a fresh link pair round trips.
     let (mut sender2, mut receiver2) =
         establish_link_pair(&mut listener_session, &mut client_session, "remote-close-2").await;
+
+    let message = Message::from("still-alive");
+    let send_task = tokio::spawn(async move {
+        let outcome = sender2.send(message).await.unwrap();
+        outcome.accepted_or("Not accepted").unwrap();
+        sender2.close().await.unwrap();
+    });
+
+    let received = tokio::time::timeout(Duration::from_secs(10), receiver2.recv::<String>())
+        .await
+        .expect("timed out waiting for message")
+        .expect("recv failed");
+    receiver2.accept(&received).await.unwrap();
+    assert_eq!(received.body(), "still-alive");
+    receiver2.close().await.unwrap();
+    send_task.await.unwrap();
+
+    client_session.close().await.unwrap();
+    client_connection.close().await.unwrap();
+}
+
+/// `Sender::on_detach` waits for the remote to end the link. The relay has
+/// already answered the remote's closing detach at arrival, so `on_detach`
+/// transitions the link straight to its terminal state and a subsequent
+/// `close()` completes without sending a duplicate closing detach.
+#[tokio::test]
+async fn on_detach_returns_after_remote_close_and_close_is_clean() {
+    let (mut server_connection, mut client_connection) = establish_connection_pair().await;
+    let (mut listener_session, mut client_session) =
+        establish_session_pair(&mut server_connection, &mut client_connection).await;
+    let (mut sender, receiver) =
+        establish_link_pair(&mut listener_session, &mut client_session, "on-detach-1").await;
+
+    let close_task = tokio::spawn(async move {
+        receiver.close().await.expect("receiver close failed");
+    });
+
+    let detached = tokio::time::timeout(Duration::from_secs(10), sender.on_detach())
+        .await
+        .expect("on_detach timed out");
+    match detached {
+        DetachError::ClosedByRemote => {}
+        other => panic!("expected ClosedByRemote, got {:?}", other),
+    }
+    close_task.await.unwrap();
+
+    // The link is already in its terminal state, so close() completes cleanly
+    // without writing another detach.
+    sender.close().await.expect("sender close failed");
+
+    // The sessions must still be healthy: a fresh link pair round trips.
+    let (mut sender2, mut receiver2) =
+        establish_link_pair(&mut listener_session, &mut client_session, "on-detach-2").await;
 
     let message = Message::from("still-alive");
     let send_task = tokio::spawn(async move {
