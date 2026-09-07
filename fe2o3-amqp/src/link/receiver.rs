@@ -845,7 +845,14 @@ impl<L: endpoint::ReceiverLink> Drop for ReceiverInner<L> {
         while let Ok(frame) = self.incoming.try_recv() {
             if let LinkFrame::Detach(detach) = frame {
                 remote_detach_received = true;
-                let _ = self.link.apply_remote_detach_outcome(detach);
+                // If the state change fails, ignore it: the engine is being
+                // dropped anyway.
+                if self.link.apply_remote_detach_outcome(detach).is_err() {
+                    #[cfg(feature = "tracing")]
+                    tracing::debug!("failed to apply remote detach outcome on receiver drop");
+                    #[cfg(feature = "log")]
+                    log::debug!("failed to apply remote detach outcome on receiver drop");
+                }
             }
             // Any other frame (e.g. a partially received transfer or an attach
             // response left behind by an interrupted reattach) is superseded
