@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.3.3
+
+1. Updated `convert_case` to `0.12`
+
 ## 0.3.2
 
 1. Updated `convert_case` to `0.11`

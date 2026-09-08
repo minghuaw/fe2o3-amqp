@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.18.0
+
+1. Bumped the version to "0.18.0" to match the updated `fe2o3-amqp`. This crate has no
+   change.
+
 ## 0.17.0
 
 1. Bumped version to "0.17.0" to track `fe2o3-amqp` 0.17.0. This crate has no

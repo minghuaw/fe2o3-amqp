@@ -1,6 +1,6 @@
 # Change Log
 
-## Unreleased
+## 0.18.0
 
 1. **Breaking**: `SendError` and `RecvError` gain a `MessageSizeExceeded` variant: the
    sender rejects oversized messages locally, and the receiver rejects deliveries
