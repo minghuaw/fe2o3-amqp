@@ -542,7 +542,8 @@ where
                 | LinkState::IncompleteAttachExchanged
                 | LinkState::IncompleteAttachSent
                 | LinkState::IncompleteAttachReceived
-                | LinkState::DetachSent => {
+                | LinkState::DetachSent
+                | LinkState::CloseSent => {
                     self.local_state = LinkState::Detached;
                     let _ = self.output_handle.take();
                     match detach.error {
