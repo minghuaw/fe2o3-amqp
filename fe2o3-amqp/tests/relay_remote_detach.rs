@@ -233,3 +233,63 @@ async fn on_detach_returns_after_remote_close_and_close_is_clean() {
     client_session.close().await.unwrap();
     client_connection.close().await.unwrap();
 }
+
+/// A remote **non-closing** detach (suspend) leaves the link `Detached`; a
+/// subsequent `close()` must complete without reattaching the link or writing
+/// another detach. The relay answers the peer's detach at arrival, so
+/// `on_detach` reports `DetachedByRemote` and `close()` is a no-op on the
+/// already-terminal link.
+#[tokio::test]
+async fn on_detach_returns_after_remote_suspend_and_close_does_not_reattach() {
+    let (mut server_connection, mut client_connection) = establish_connection_pair().await;
+    let (mut listener_session, mut client_session) =
+        establish_session_pair(&mut server_connection, &mut client_connection).await;
+    let (mut sender, receiver) = establish_link_pair(
+        &mut listener_session,
+        &mut client_session,
+        "on-detach-suspend-1",
+    )
+    .await;
+
+    let detach_task = tokio::spawn(async move { receiver.detach().await });
+
+    let detached = tokio::time::timeout(Duration::from_secs(10), sender.on_detach())
+        .await
+        .expect("on_detach timed out");
+    match detached {
+        DetachError::DetachedByRemote => {}
+        other => panic!("expected DetachedByRemote, got {:?}", other),
+    }
+    let _detached_receiver = detach_task.await.unwrap();
+
+    // The link is already terminal (Detached); close() must not reattach it
+    // or write another detach.
+    sender.close().await.expect("sender close failed");
+
+    // The sessions must still be healthy: a fresh link pair round trips.
+    let (mut sender2, mut receiver2) = establish_link_pair(
+        &mut listener_session,
+        &mut client_session,
+        "on-detach-suspend-2",
+    )
+    .await;
+
+    let message = Message::from("still-alive");
+    let send_task = tokio::spawn(async move {
+        let outcome = sender2.send(message).await.unwrap();
+        outcome.accepted_or("Not accepted").unwrap();
+        sender2.close().await.unwrap();
+    });
+
+    let received = tokio::time::timeout(Duration::from_secs(10), receiver2.recv::<String>())
+        .await
+        .expect("timed out waiting for message")
+        .expect("recv failed");
+    receiver2.accept(&received).await.unwrap();
+    assert_eq!(received.body(), "still-alive");
+    receiver2.close().await.unwrap();
+    send_task.await.unwrap();
+
+    client_session.close().await.unwrap();
+    client_connection.close().await.unwrap();
+}
