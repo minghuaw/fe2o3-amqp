@@ -41,17 +41,11 @@ pub enum LinkState {
     /// A non-closing detach frame has been sent
     DetachSent,
 
-    /// A non-closing detach frame has been received
-    DetachReceived,
-
     /// The link is detached
     Detached,
 
     /// A closing detach frame has been sent
     CloseSent,
-
-    /// A closing detach has arrived
-    CloseReceived,
 
     /// The link is closed
     Closed,

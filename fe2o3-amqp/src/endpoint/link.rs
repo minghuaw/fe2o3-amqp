@@ -49,10 +49,9 @@ pub(crate) trait LinkDetach {
     /// sent.
     ///
     /// The link becomes `Closed` or `Detached` and its output handle is
-    /// released, without the `CloseReceived` / `DetachReceived` states that
-    /// the engine uses while it still owes the peer a reply (see
-    /// [`Self::on_incoming_detach`]). An error on the detach is reported as
-    /// `RemoteClosedWithError` / `RemoteDetachedWithError`.
+    /// released (see [`Self::on_incoming_detach`] for the reply case). An
+    /// error on the detach is reported as `RemoteClosedWithError` /
+    /// `RemoteDetachedWithError`.
     fn apply_remote_detach_outcome(&mut self, detach: Detach) -> Result<(), Self::DetachError>;
 }
 

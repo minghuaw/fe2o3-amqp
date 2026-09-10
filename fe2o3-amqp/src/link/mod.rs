@@ -414,53 +414,29 @@ where
         #[cfg(feature = "log")]
         log::trace!("RECV detach = {:?}", detach);
 
-        match detach.closed {
-            true => match self.local_state {
-                LinkState::Attached
-                | LinkState::AttachSent
-                | LinkState::AttachReceived
-                | LinkState::IncompleteAttachExchanged
-                | LinkState::IncompleteAttachSent
-                | LinkState::IncompleteAttachReceived => {
-                    self.local_state = LinkState::CloseReceived;
-                    match detach.error {
-                        Some(error) => Err(DetachError::RemoteClosedWithError(error)),
-                        None => Ok(()),
-                    }
-                }
-                LinkState::DetachSent => {
-                    self.local_state = LinkState::CloseReceived;
-                    match detach.error {
-                        Some(error) => Err(DetachError::RemoteClosedWithError(error)),
-                        None => Err(DetachError::ClosedByRemote),
-                    }
-                }
-                LinkState::CloseSent => {
-                    self.local_state = LinkState::Closed;
-                    let _ = self.output_handle.take();
-                    match detach.error {
-                        Some(error) => Err(DetachError::RemoteClosedWithError(error)),
-                        None => Ok(()),
-                    }
-                }
-                _ => Err(DetachError::IllegalState),
-            },
-            false => {
-                match self.local_state {
-                    LinkState::Attached => self.local_state = LinkState::DetachReceived,
-                    LinkState::DetachSent => {
-                        self.local_state = LinkState::Detached;
-                        // Dropping output handle as it is already detached
-                        let _ = self.output_handle.take();
-                    }
-                    _ => return Err(DetachError::IllegalState),
-                }
-
+        // The engine only receives a detach here as the answer to a detach or
+        // close it sent itself: a peer-initiated detach is answered by the
+        // session relay at arrival and recorded via
+        // `apply_remote_detach_outcome`.
+        match self.local_state {
+            LinkState::DetachSent if !detach.closed => {
+                self.local_state = LinkState::Detached;
+                // Dropping output handle as it is already detached
+                let _ = self.output_handle.take();
                 match detach.error {
                     Some(error) => Err(DetachError::RemoteDetachedWithError(error)),
                     None => Ok(()),
                 }
             }
+            LinkState::CloseSent if detach.closed => {
+                self.local_state = LinkState::Closed;
+                let _ = self.output_handle.take();
+                match detach.error {
+                    Some(error) => Err(DetachError::RemoteClosedWithError(error)),
+                    None => Ok(()),
+                }
+            }
+            _ => Err(DetachError::IllegalState),
         }
     }
 
@@ -477,11 +453,7 @@ where
         // Change the state whether sending the detach frame succeeds or not
         match (&self.local_state, closed) {
             (LinkState::Attached, false) => self.local_state = LinkState::DetachSent,
-            (LinkState::DetachReceived, false) => self.local_state = LinkState::Detached,
-            (LinkState::CloseReceived, false) => return Err(DetachError::ClosedByRemote),
             (LinkState::Attached, true) => self.local_state = LinkState::CloseSent,
-            (LinkState::DetachReceived, true) => return Err(DetachError::DetachedByRemote),
-            (LinkState::CloseReceived, true) => self.local_state = LinkState::Closed,
             _ => return Err(DetachError::IllegalState),
         };
 

@@ -168,17 +168,12 @@ where
                     self.link_mut().on_incoming_detach(remote_detach)
                 }
             }
-            LinkState::DetachReceived => self.send_detach(false, error).await,
             LinkState::Detached => Ok(()),
             LinkState::CloseSent => {
                 // This should be impossible.
                 // FIXME: treat it as if remote closed
                 let _remote_detach = recv_remote_detach(self).await?;
                 reattach_and_then_close(self).await?;
-                Err(DetachError::ClosedByRemote)
-            }
-            LinkState::CloseReceived => {
-                self.send_detach(true, error).await?;
                 Err(DetachError::ClosedByRemote)
             }
             LinkState::Closed => Err(DetachError::ClosedByRemote),
@@ -239,10 +234,6 @@ where
                     }
                 }
             }
-            LinkState::DetachReceived => self
-                .send_detach(true, error)
-                .await // cancel safe
-                .map_err(|_| detach_error_from_stop_reason(self)),
             LinkState::Detached => Ok(()),
             LinkState::CloseSent => {
                 // Wait for remote detach
@@ -256,10 +247,6 @@ where
                     }
                 }
             }
-            LinkState::CloseReceived => self
-                .send_detach(true, error)
-                .await // cancel safe
-                .map_err(|_| detach_error_from_stop_reason(self)),
             LinkState::Closed => Ok(()),
         }
     }
