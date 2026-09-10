@@ -2167,17 +2167,23 @@ mod tests {
         assert_eq!(count, 100);
     }
 
-    fn make_receiver_inner(max_frame_size: usize) -> ReceiverInner<ReceiverLink<Target>> {
-        let (session_tx, _session_rx) = mpsc::channel::<SessionControl>(16);
-        let (outgoing_tx, _outgoing_rx) = mpsc::channel::<LinkFrame>(16);
+    fn make_receiver_inner_with_channels(
+        max_frame_size: usize,
+    ) -> (
+        ReceiverInner<ReceiverLink<Target>>,
+        mpsc::Receiver<SessionControl>,
+        mpsc::Receiver<LinkFrame>,
+        mpsc::Sender<LinkFrame>,
+    ) {
+        let (session_tx, session_rx) = mpsc::channel::<SessionControl>(16);
+        let (outgoing_tx, outgoing_rx) = mpsc::channel::<LinkFrame>(16);
         let (incoming_tx, incoming_rx) = mpsc::channel::<LinkFrame>(16);
-        let _ = incoming_tx; // the link relay side is not needed by the test
         let unsettled: ArcReceiverUnsettledMap = Arc::new(parking_lot::RwLock::new(None));
         let link = ReceiverLink::<Target> {
             role: std::marker::PhantomData,
             local_state: LinkState::Attached,
             name: String::from("test-receiver"),
-            output_handle: None,
+            output_handle: Some(OutputHandle(0)),
             input_handle: None,
             snd_settle_mode: SenderSettleMode::Mixed,
             rcv_settle_mode: ReceiverSettleMode::First,
@@ -2193,7 +2199,7 @@ mod tests {
             verify_incoming_source: true,
             verify_incoming_target: true,
         };
-        ReceiverInner {
+        let inner = ReceiverInner {
             link,
             buffer_size: 16,
             credit_mode: CreditMode::Auto(200),
@@ -2203,6 +2209,33 @@ mod tests {
             outgoing: outgoing_tx,
             incoming: incoming_rx,
             incomplete_transfer: None,
+        };
+        (inner, session_rx, outgoing_rx, incoming_tx)
+    }
+
+    fn make_receiver_inner(max_frame_size: usize) -> ReceiverInner<ReceiverLink<Target>> {
+        make_receiver_inner_with_channels(max_frame_size).0
+    }
+
+    /// The minimal `Attach` a sender peer sends for this receiver link: it
+    /// must carry a source and an initial delivery count so
+    /// `on_incoming_attach` accepts it.
+    fn peer_sender_attach() -> Attach {
+        Attach {
+            name: String::from("test-receiver"),
+            handle: Handle(0),
+            role: Role::Sender,
+            snd_settle_mode: SenderSettleMode::Mixed,
+            rcv_settle_mode: ReceiverSettleMode::First,
+            source: Some(Box::new(Source::default())),
+            target: None,
+            unsettled: None,
+            incomplete_unsettled: false,
+            initial_delivery_count: Some(0),
+            max_message_size: None,
+            offered_capabilities: None,
+            desired_capabilities: None,
+            properties: None,
         }
     }
 
@@ -2238,5 +2271,33 @@ mod tests {
         let is_reattaching = inner.switch_session(&session_b);
         assert!(!is_reattaching);
         assert_eq!(inner.link.max_frame_size, 1020);
+    }
+
+    /// A peer that suspends (non-closing detach) while this side is closing
+    /// forces the closing side to reattach and then send a closing detach
+    /// (AMQP 1.0 §2.6.6). The peer's frames are scripted, so this is
+    /// deterministic.
+    #[tokio::test]
+    async fn close_reattaches_and_closes_on_simultaneous_suspend() {
+        let (mut inner, session_rx, outgoing_rx, incoming_tx) =
+            make_receiver_inner_with_channels(4096);
+
+        let (result, (saw_attach, closing_detaches)) = tokio::join!(
+            inner.close_with_error(None),
+            crate::link::detach_test::play_peer(
+                session_rx,
+                outgoing_rx,
+                incoming_tx,
+                peer_sender_attach(),
+            ),
+        );
+
+        assert!(saw_attach, "the closing side must reattach");
+        assert_eq!(
+            closing_detaches, 2,
+            "expected a closing detach before and after the reattach"
+        );
+        assert!(matches!(result, Err(DetachError::DetachedByRemote)));
+        assert!(matches!(&inner.link.local_state, LinkState::Closed));
     }
 }

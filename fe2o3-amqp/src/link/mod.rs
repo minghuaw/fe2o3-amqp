@@ -913,6 +913,92 @@ pub(crate) fn get_max_message_size(local: u64, remote: Option<u64>) -> u64 {
 }
 
 #[cfg(test)]
+pub(crate) mod detach_test {
+    //! Deterministic peer/session harness for the AMQP 1.0 §2.6.6
+    //! simultaneous-detach race. The peer's frames are played in scripted
+    //! order off the frames the link under test emits, so no timing is
+    //! involved.
+
+    use fe2o3_amqp_types::{
+        definitions::Handle,
+        performatives::{Attach, Detach},
+    };
+    use tokio::sync::mpsc;
+
+    use crate::{
+        control::SessionControl, endpoint::OutputHandle, link::LinkFrame, link::LinkRelay,
+    };
+
+    /// Drive the peer side of a `close_with_error` race:
+    ///
+    /// 1. answer the link's `AllocateLink` (capturing the new incoming
+    ///    sender from the relay) so the reattach can proceed;
+    /// 2. on the link's first closing detach, reply with a **non-closing**
+    ///    detach (the peer suspended concurrently);
+    /// 3. on the link's `Attach`, reply with the peer's `Attach`;
+    /// 4. on the link's second closing detach, reply with a closing detach.
+    ///
+    /// Returns `(saw_attach, closing_detaches)`.
+    pub(crate) async fn play_peer(
+        mut session_rx: mpsc::Receiver<SessionControl>,
+        mut outgoing_rx: mpsc::Receiver<LinkFrame>,
+        initial_incoming_tx: mpsc::Sender<LinkFrame>,
+        peer_attach: Attach,
+    ) -> (bool, usize) {
+        let mut incoming_tx = initial_incoming_tx;
+        let mut saw_attach = false;
+        let mut closing_detaches = 0usize;
+
+        loop {
+            tokio::select! {
+                ctrl = session_rx.recv() => match ctrl {
+                    Some(SessionControl::AllocateLink {
+                        link_relay,
+                        responder,
+                        ..
+                    }) => {
+                        incoming_tx = match link_relay {
+                            LinkRelay::Sender { tx, .. } => tx,
+                            LinkRelay::Receiver { tx, .. } => tx,
+                        };
+                        let _ = responder.send(Ok(OutputHandle(1)));
+                    }
+                    Some(_) => {}
+                    None => break,
+                },
+                frame = outgoing_rx.recv() => match frame {
+                    Some(LinkFrame::Detach(detach)) if detach.closed => {
+                        closing_detaches += 1;
+                        // First closing detach: the peer suspended while we
+                        // were closing. Second: the peer's reply to the
+                        // closing detach we sent after reattaching.
+                        let closed = closing_detaches > 1;
+                        let _ = incoming_tx
+                            .send(LinkFrame::Detach(Detach {
+                                handle: Handle(0),
+                                closed,
+                                error: None,
+                            }))
+                            .await;
+                        if closing_detaches >= 2 {
+                            break;
+                        }
+                    }
+                    Some(LinkFrame::Attach(_)) => {
+                        saw_attach = true;
+                        let _ = incoming_tx.send(LinkFrame::Attach(peer_attach.clone())).await;
+                    }
+                    Some(_) => {}
+                    None => break,
+                },
+            }
+        }
+
+        (saw_attach, closing_detaches)
+    }
+}
+
+#[cfg(test)]
 mod tests {
     use crate::link::state::LinkFlowStateInner;
 
