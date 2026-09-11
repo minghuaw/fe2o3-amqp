@@ -916,10 +916,10 @@ pub(crate) fn get_max_message_size(local: u64, remote: Option<u64>) -> u64 {
 pub(crate) mod test_util {
     //! Shared test helpers for the link unit tests.
     //!
-    //! `play_peer` is a deterministic peer/session harness for the AMQP 1.0
-    //! §2.6.6 simultaneous-detach race: the peer's frames are played in
-    //! scripted order off the frames the link under test emits, so no timing
-    //! is involved.
+    //! `drive_simultaneous_detach_race` is a deterministic peer/session
+    //! harness for the AMQP 1.0 §2.6.6 simultaneous-detach race: the peer's
+    //! frames are played in scripted order off the frames the link under test
+    //! emits, so no timing is involved.
 
     use fe2o3_amqp_types::{
         definitions::Handle,
@@ -941,7 +941,7 @@ pub(crate) mod test_util {
     /// 4. on the link's second closing detach, reply with a closing detach.
     ///
     /// Returns `(saw_attach, closing_detaches)`.
-    pub(crate) async fn play_peer(
+    pub(crate) async fn drive_simultaneous_detach_race(
         mut session_rx: mpsc::Receiver<SessionControl>,
         mut outgoing_rx: mpsc::Receiver<LinkFrame>,
         initial_incoming_tx: mpsc::Sender<LinkFrame>,
