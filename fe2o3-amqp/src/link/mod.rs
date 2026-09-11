@@ -913,11 +913,13 @@ pub(crate) fn get_max_message_size(local: u64, remote: Option<u64>) -> u64 {
 }
 
 #[cfg(test)]
-pub(crate) mod detach_test {
-    //! Deterministic peer/session harness for the AMQP 1.0 §2.6.6
-    //! simultaneous-detach race. The peer's frames are played in scripted
-    //! order off the frames the link under test emits, so no timing is
-    //! involved.
+pub(crate) mod test_util {
+    //! Shared test helpers for the link unit tests.
+    //!
+    //! `play_peer` is a deterministic peer/session harness for the AMQP 1.0
+    //! §2.6.6 simultaneous-detach race: the peer's frames are played in
+    //! scripted order off the frames the link under test emits, so no timing
+    //! is involved.
 
     use fe2o3_amqp_types::{
         definitions::Handle,

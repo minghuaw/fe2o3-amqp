@@ -1460,7 +1460,7 @@ mod tests {
 
         let (result, (saw_attach, closing_detaches)) = tokio::join!(
             inner.close_with_error(None),
-            crate::link::detach_test::play_peer(
+            crate::link::test_util::play_peer(
                 session_rx,
                 outgoing_rx,
                 incoming_tx,
