@@ -144,16 +144,10 @@ where
 
                 let remote_detach = recv_remote_detach(self).await?;
                 if remote_detach.closed {
-                    // Note that one peer MAY send a closing detach while its partner is
-                    // sending a non-closing detach. In this case, the partner MUST
-                    // signal that it has closed the link by reattaching and then sending
-                    // a closing detach.
-                    reattach_and_then_close(self).await?;
-
-                    // A peer closes a link by sending the detach frame with the handle for the
-                    // specified link, and the closed flag set to true. The partner will destroy
-                    // the corresponding link endpoint, and reply with its own detach frame with
-                    // the closed flag set to true.
+                    // AMQP 1.0 §2.6.6: the peer sent a closing detach while we
+                    // were sending a non-closing detach, so we must reattach
+                    // and then send a closing detach.
+                    reattach_then_close(self).await?;
                     Err(DetachError::ClosedByRemote)
                 } else {
                     self.link_mut().on_incoming_detach(remote_detach)
@@ -162,23 +156,16 @@ where
             LinkState::DetachSent => {
                 let remote_detach = recv_remote_detach(self).await?;
                 if remote_detach.closed {
-                    reattach_and_then_close(self).await?;
+                    reattach_then_close(self).await?;
                     Err(DetachError::ClosedByRemote)
                 } else {
                     self.link_mut().on_incoming_detach(remote_detach)
                 }
             }
-            LinkState::DetachReceived => self.send_detach(false, error).await,
             LinkState::Detached => Ok(()),
             LinkState::CloseSent => {
-                // This should be impossible.
-                // FIXME: treat it as if remote closed
-                let _remote_detach = recv_remote_detach(self).await?;
-                reattach_and_then_close(self).await?;
-                Err(DetachError::ClosedByRemote)
-            }
-            LinkState::CloseReceived => {
-                self.send_detach(true, error).await?;
+                let remote_detach = recv_remote_detach(self).await?;
+                let _ = self.link_mut().apply_remote_detach_outcome(remote_detach);
                 Err(DetachError::ClosedByRemote)
             }
             LinkState::Closed => Err(DetachError::ClosedByRemote),
@@ -213,59 +200,62 @@ where
                     // back by `on_incoming_detach`
                     self.link_mut().on_incoming_detach(remote_detach)
                 } else {
-                    reattach_and_then_close(self).await // FIXME: cancel safe? if oneshot channel is cancel safe
+                    // Peer suspended while we were closing: record it, then
+                    // reattach (re-registers the link) and close (§2.6.6).
+                    let _ = self.link_mut().apply_remote_detach_outcome(remote_detach);
+                    reattach_then_close(self).await?;
+                    Err(DetachError::DetachedByRemote)
                 }
             }
             LinkState::DetachSent => {
-                // FIXME: this should be impossible
-                // Wait for remote detach
-                let _remote_detach = recv_remote_detach(self).await?; // cancel safe
-                reattach_and_then_close(self).await?; // FIXME: cancel safe? if oneshot channel is cancel safe
-                Err(DetachError::DetachedByRemote)
+                // We already sent a non-closing detach and `close()` is now
+                // called. Wait for the reply.
+                let remote_detach = recv_remote_detach(self).await?; // cancel safe
+                if remote_detach.closed {
+                    // §2.6.6: reattach and then send a closing detach.
+                    reattach_then_close(self).await?;
+                    Err(DetachError::ClosedByRemote)
+                } else {
+                    self.link_mut().apply_remote_detach_outcome(remote_detach)
+                }
             }
-            LinkState::DetachReceived => self
-                .send_detach(true, error)
-                .await // cancel safe
-                .map_err(|_| detach_error_from_stop_reason(self)),
-            LinkState::Detached => reattach_and_then_close(self).await, // FIXME: cancel safe? if oneshot channel is cancel safe
+            LinkState::Detached => Ok(()),
             LinkState::CloseSent => {
                 // Wait for remote detach
                 let remote_detach = recv_remote_detach(self).await?; // cancel safe
                 if remote_detach.closed {
                     self.link_mut().on_incoming_detach(remote_detach)
                 } else {
-                    reattach_and_then_close(self).await // FIXME: cancel safe? if oneshot channel is cancel safe
+                    // Peer suspended while we were closing: reattach
+                    // (re-registers the link) and close (§2.6.6).
+                    let _ = self.link_mut().apply_remote_detach_outcome(remote_detach);
+                    reattach_then_close(self).await?;
+                    Err(DetachError::DetachedByRemote)
                 }
             }
-            LinkState::CloseReceived => self
-                .send_detach(true, error)
-                .await // cancel safe
-                .map_err(|_| detach_error_from_stop_reason(self)),
             LinkState::Closed => Ok(()),
         }
     }
 }
 
+/// AMQP 1.0 §2.6.6: when one peer sends a closing detach while its partner
+/// is sending a non-closing detach, the partner MUST signal that it has
+/// closed the link by reattaching and then sending a closing detach.
+///
+/// Used on both sides of the race. The closing side reattaches too so the
+/// link is re-registered for the peer's crossed attach (it is released when
+/// the closing detach is sent); the crossed attach exchanges then converge
+/// symmetrically.
+///
 /// # Cancel safety
 ///
 /// This is cancel safe if oneshot channel is cancel safe
-async fn reattach_and_then_close<T>(link_inner: &mut T) -> Result<(), DetachError>
+async fn reattach_then_close<T>(link_inner: &mut T) -> Result<(), DetachError>
 where
     T: LinkEndpointInner + LinkEndpointInnerReattach + Send + Sync,
     T::Link: LinkDetach<DetachError = DetachError>,
     <T::Link as LinkAttach>::AttachError: From<AllocLinkError> + Sync,
 {
-    // Note that one peer MAY send a closing detach while its partner is
-    // sending a non-closing detach. In this case, the partner MUST
-    // signal that it has closed the link by reattaching and then sending
-    // a closing detach.
-
-    // Probably something like below
-    // 1. wait for incoming attach
-    // 2. send back attach
-    // 3. wait for incoming closing detach
-    // 4. detach
-
     link_inner
         .reattach_inner()
         .await // FIXME: cancel safe?
