@@ -919,7 +919,9 @@ pub(crate) mod test_util {
     //! `drive_simultaneous_detach_race` is a deterministic peer/session
     //! harness for the AMQP 1.0 §2.6.6 simultaneous-detach race: the peer's
     //! frames are played in scripted order off the frames the link under test
-    //! emits, so no timing is involved.
+    //! emits, so no timing is involved. The mock peer is passive: it replies
+    //! to the link's `Attach`/`Detach` rather than initiating its own
+    //! reattach, which is how the closing side is exercised.
 
     use fe2o3_amqp_types::{
         definitions::Handle,

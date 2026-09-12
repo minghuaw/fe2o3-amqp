@@ -2274,9 +2274,24 @@ mod tests {
     }
 
     /// A peer that suspends (non-closing detach) while this side is closing
-    /// forces the closing side to reattach and then send a closing detach
-    /// (AMQP 1.0 §2.6.6). The peer's frames are scripted, so this is
-    /// deterministic.
+    /// triggers the AMQP 1.0 §2.6.6 simultaneous-detach handshake.
+    ///
+    /// The spec assigns the reattach to the non-closing (suspending) side and
+    /// only requires the closing side to complete the exchange. This
+    /// implementation drives the reattach from both sides:
+    ///
+    /// - sending our closing detach releases the link from the session
+    ///   (`Session::on_outgoing_detach`), so the link must be reattached
+    ///   (`reattach_then_close` -> `reallocate_output_handle` ->
+    ///   `allocate_link`) to re-register it; otherwise the peer's crossed
+    ///   `Attach`/`Detach` could not be routed to the link and would end the
+    ///   session;
+    /// - with both sides reattaching, each side's attach exchange accepts the
+    ///   peer's `Attach` as its answer, so the crossed detaches converge
+    ///   symmetrically without depending on whether the peer drives its
+    ///   reattach.
+    ///
+    /// The peer's frames are scripted, so this is deterministic.
     #[tokio::test]
     async fn close_reattaches_and_closes_on_simultaneous_suspend() {
         let (mut inner, session_rx, outgoing_rx, incoming_tx) =

@@ -200,10 +200,8 @@ where
                     // back by `on_incoming_detach`
                     self.link_mut().on_incoming_detach(remote_detach)
                 } else {
-                    // The peer suspended (non-closing detach) while we were
-                    // closing. Record the detach (the link becomes Detached)
-                    // and then reattach and send a closing detach (AMQP 1.0
-                    // §2.6.6).
+                    // Peer suspended while we were closing: record it, then
+                    // reattach (re-registers the link) and close (§2.6.6).
                     let _ = self.link_mut().apply_remote_detach_outcome(remote_detach);
                     reattach_then_close(self).await?;
                     Err(DetachError::DetachedByRemote)
@@ -228,6 +226,8 @@ where
                 if remote_detach.closed {
                     self.link_mut().on_incoming_detach(remote_detach)
                 } else {
+                    // Peer suspended while we were closing: reattach
+                    // (re-registers the link) and close (§2.6.6).
                     let _ = self.link_mut().apply_remote_detach_outcome(remote_detach);
                     reattach_then_close(self).await?;
                     Err(DetachError::DetachedByRemote)
@@ -242,11 +242,10 @@ where
 /// is sending a non-closing detach, the partner MUST signal that it has
 /// closed the link by reattaching and then sending a closing detach.
 ///
-/// This is used on both sides of the simultaneous-detach race: by
-/// `detach_with_error` when the peer closes while this side is suspending,
-/// and by `close_with_error` when the peer suspends while this side is
-/// closing (the peer's non-closing detach is recorded first, leaving the
-/// link `Detached`, and this side reattaches and closes).
+/// Used on both sides of the race. The closing side reattaches too so the
+/// link is re-registered for the peer's crossed attach (it is released when
+/// the closing detach is sent); the crossed attach exchanges then converge
+/// symmetrically.
 ///
 /// # Cancel safety
 ///
