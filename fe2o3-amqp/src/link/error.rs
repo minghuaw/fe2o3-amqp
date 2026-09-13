@@ -70,6 +70,58 @@ pub enum DetachError {
     RemoteClosedWithError(definitions::Error),
 }
 
+/// Error from recording a peer-initiated detach with
+/// [`LinkDetach::apply_remote_detach_outcome`].
+///
+/// The `Remote*WithError` variants mean the outcome *was* recorded (the link
+/// has already moved to `Closed`/`Detached` and released its output handle);
+/// `IllegalState` means nothing was changed.
+#[derive(Debug, thiserror::Error)]
+pub(crate) enum ApplyRemoteDetachError {
+    /// The outcome *was* recorded (the link is now `Detached`, handle
+    /// released); the peer's detach carried this error.
+    #[error("Remote detached with an error: {}", .0)]
+    RemoteDetachedWithError(definitions::Error),
+
+    /// The outcome *was* recorded (the link is now `Closed`, handle
+    /// released); the peer's closing detach carried this error.
+    #[error("Remote peer closed the link with an error: {}", .0)]
+    RemoteClosedWithError(definitions::Error),
+
+    /// The outcome was *not* recorded: the link is `Unattached`, already
+    /// `Detached`, or already `Closed`, and nothing changed.
+    #[error("Illegal link state")]
+    IllegalState,
+}
+
+impl From<ApplyRemoteDetachError> for DetachError {
+    fn from(value: ApplyRemoteDetachError) -> Self {
+        match value {
+            ApplyRemoteDetachError::RemoteDetachedWithError(error) => {
+                DetachError::RemoteDetachedWithError(error)
+            }
+            ApplyRemoteDetachError::RemoteClosedWithError(error) => {
+                DetachError::RemoteClosedWithError(error)
+            }
+            ApplyRemoteDetachError::IllegalState => DetachError::IllegalState,
+        }
+    }
+}
+
+impl From<ApplyRemoteDetachError> for LinkStateError {
+    fn from(value: ApplyRemoteDetachError) -> Self {
+        match value {
+            ApplyRemoteDetachError::RemoteDetachedWithError(error) => {
+                LinkStateError::RemoteDetachedWithError(error)
+            }
+            ApplyRemoteDetachError::RemoteClosedWithError(error) => {
+                LinkStateError::RemoteClosedWithError(error)
+            }
+            ApplyRemoteDetachError::IllegalState => LinkStateError::IllegalState,
+        }
+    }
+}
+
 /// Errors associated with attaching a link as sender
 #[derive(Debug, thiserror::Error)]
 pub enum SenderAttachError {

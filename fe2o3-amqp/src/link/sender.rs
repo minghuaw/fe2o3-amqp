@@ -486,7 +486,7 @@ impl Sender {
                             DetachError::DetachedByRemote
                         }
                     }
-                    Err(err) => err,
+                    Err(err) => err.into(),
                 }
             }
             Err(err) => err,

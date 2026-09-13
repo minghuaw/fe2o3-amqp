@@ -245,7 +245,9 @@ where
                     reattach_then_close(self).await?;
                     Err(DetachError::ClosedByRemote)
                 } else {
-                    self.link_mut().apply_remote_detach_outcome(remote_detach)
+                    self.link_mut()
+                        .apply_remote_detach_outcome(remote_detach)
+                        .map_err(DetachError::from)
                 }
             }
             LinkState::Detached => Ok(()),

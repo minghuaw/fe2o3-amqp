@@ -429,6 +429,7 @@ where
             _ => return Err(DetachError::IllegalState),
         }
         self.apply_remote_detach_outcome(detach)
+            .map_err(DetachError::from)
     }
 
     /// # Cancel safety
@@ -479,44 +480,37 @@ where
 
     /// See [`endpoint::LinkDetach::apply_remote_detach_outcome`] for the
     /// documented contract of this method.
-    fn apply_remote_detach_outcome(&mut self, detach: Detach) -> Result<(), Self::DetachError> {
-        match detach.closed {
-            true => match self.local_state {
-                LinkState::Attached
-                | LinkState::AttachSent
-                | LinkState::AttachReceived
-                | LinkState::IncompleteAttachExchanged
-                | LinkState::IncompleteAttachSent
-                | LinkState::IncompleteAttachReceived
-                | LinkState::CloseSent
-                | LinkState::DetachSent => {
-                    self.local_state = LinkState::Closed;
-                    let _ = self.output_handle.take();
-                    match detach.error {
-                        Some(error) => Err(DetachError::RemoteClosedWithError(error)),
-                        None => Ok(()),
+    fn apply_remote_detach_outcome(
+        &mut self,
+        detach: Detach,
+    ) -> Result<(), ApplyRemoteDetachError> {
+        match self.local_state {
+            LinkState::Attached
+            | LinkState::AttachSent
+            | LinkState::AttachReceived
+            | LinkState::IncompleteAttachExchanged
+            | LinkState::IncompleteAttachSent
+            | LinkState::IncompleteAttachReceived
+            | LinkState::DetachSent
+            | LinkState::CloseSent => {
+                self.local_state = if detach.closed {
+                    LinkState::Closed
+                } else {
+                    LinkState::Detached
+                };
+                let _ = self.output_handle.take();
+                match (detach.closed, detach.error) {
+                    (true, Some(error)) => {
+                        Err(ApplyRemoteDetachError::RemoteClosedWithError(error))
                     }
-                }
-                _ => Err(DetachError::IllegalState),
-            },
-            false => match self.local_state {
-                LinkState::Attached
-                | LinkState::AttachSent
-                | LinkState::AttachReceived
-                | LinkState::IncompleteAttachExchanged
-                | LinkState::IncompleteAttachSent
-                | LinkState::IncompleteAttachReceived
-                | LinkState::DetachSent
-                | LinkState::CloseSent => {
-                    self.local_state = LinkState::Detached;
-                    let _ = self.output_handle.take();
-                    match detach.error {
-                        Some(error) => Err(DetachError::RemoteDetachedWithError(error)),
-                        None => Ok(()),
+                    (true, None) => Ok(()),
+                    (false, Some(error)) => {
+                        Err(ApplyRemoteDetachError::RemoteDetachedWithError(error))
                     }
+                    (false, None) => Ok(()),
                 }
-                _ => Err(DetachError::IllegalState),
-            },
+            }
+            _ => Err(ApplyRemoteDetachError::IllegalState),
         }
     }
 }
