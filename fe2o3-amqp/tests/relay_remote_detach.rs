@@ -237,8 +237,9 @@ async fn on_detach_returns_after_remote_close_and_close_is_clean() {
 /// A remote **non-closing** detach (suspend) leaves the link `Detached`; a
 /// subsequent `close()` must complete without reattaching the link or writing
 /// another detach. The relay answers the peer's detach at arrival, so
-/// `on_detach` reports `DetachedByRemote` and `close()` is a no-op on the
-/// already-terminal link.
+/// `on_detach` reports `DetachedByRemote` (deprecated; it will become a
+/// detach status type) and `close()` is a no-op on the already-terminal link.
+#[allow(deprecated)]
 #[tokio::test]
 async fn on_detach_returns_after_remote_suspend_and_close_does_not_reattach() {
     let (mut server_connection, mut client_connection) = establish_connection_pair().await;

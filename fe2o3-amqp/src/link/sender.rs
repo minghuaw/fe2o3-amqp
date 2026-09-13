@@ -473,6 +473,7 @@ impl Sender {
     /// The peer's detach has already been answered when this returns, so the
     /// link is left `Closed` or `Detached` (its output handle is released),
     /// and a later `close()` finishes without sending another detach.
+    #[allow(deprecated)]
     pub async fn on_detach(&mut self) -> DetachError {
         match recv_remote_detach(&mut self.inner).await {
             Ok(detach) => {

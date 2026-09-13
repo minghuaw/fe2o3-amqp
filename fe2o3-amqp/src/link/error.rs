@@ -54,6 +54,10 @@ pub enum DetachError {
     ClosedByRemote,
 
     /// Remote peer sent a non-closing detach when the local terminus is sending a closing detach
+    #[deprecated(
+        since = "0.18.1",
+        note = "the simultaneous close/suspend race now completes with `Ok(())`; this variant is still produced by `Sender::on_detach` and will be replaced by a detach status type"
+    )]
     #[error("Link will be closed by local terminus")]
     DetachedByRemote,
 
@@ -388,6 +392,7 @@ impl From<AllocLinkError> for SenderAttachError {
 impl TryFrom<DetachError> for SenderAttachError {
     type Error = DetachError;
 
+    #[allow(deprecated)]
     fn try_from(value: DetachError) -> Result<Self, Self::Error> {
         match value {
             DetachError::IllegalState => Ok(Self::IllegalState),
@@ -406,6 +411,7 @@ impl TryFrom<DetachError> for SenderAttachError {
 impl TryFrom<DetachError> for ReceiverAttachError {
     type Error = DetachError;
 
+    #[allow(deprecated)]
     fn try_from(value: DetachError) -> Result<Self, Self::Error> {
         match value {
             DetachError::IllegalState => Ok(Self::IllegalState),
@@ -486,6 +492,7 @@ pub enum LinkStateError {
 }
 
 impl From<DetachError> for LinkStateError {
+    #[allow(deprecated)]
     fn from(value: DetachError) -> Self {
         match value {
             DetachError::IllegalState => Self::IllegalState,
