@@ -1,5 +1,10 @@
 # Change Log
 
+## 0.18.1
+
+**Bugfix**: the AMQP 1.0 §2.6.6 close/suspend race now completes the reattach-then-close handshake
+and `close()` returns `Ok(())`; `DetachError::DetachedByRemote` is deprecated.
+
 ## 0.18.0
 
 1. **Breaking**: `SendError` and `RecvError` gain a `MessageSizeExceeded` variant: the
