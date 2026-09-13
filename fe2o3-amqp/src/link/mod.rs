@@ -921,7 +921,8 @@ pub(crate) mod test_util {
     //! frames are played in scripted order off the frames the link under test
     //! emits, so no timing is involved. The mock peer is passive: it replies
     //! to the link's `Attach`/`Detach` rather than initiating its own
-    //! reattach, which is how the closing side is exercised.
+    //! reattach. It drives either side of the race (the closing side via
+    //! `close_with_error` or the suspending side via `detach_with_error`).
 
     use fe2o3_amqp_types::{
         definitions::Handle,
@@ -933,16 +934,18 @@ pub(crate) mod test_util {
         control::SessionControl, endpoint::OutputHandle, link::LinkFrame, link::LinkRelay,
     };
 
-    /// Drive the peer side of a `close_with_error` race:
+    /// Drive the peer side of a §2.6.6 simultaneous-detach race, for either
+    /// direction: the closing side (`close_with_error`) or the suspending
+    /// side (`detach_with_error`).
     ///
     /// 1. answer the link's `AllocateLink` (capturing the new incoming
     ///    sender from the relay) so the reattach can proceed;
-    /// 2. on the link's first closing detach, reply with a **non-closing**
-    ///    detach (the peer suspended concurrently);
+    /// 2. on the link's first detach, reply with a detach whose `closed` flag
+    ///    is the opposite (the peer does the mirror action);
     /// 3. on the link's `Attach`, reply with the peer's `Attach`;
-    /// 4. on the link's second closing detach, reply with a closing detach.
+    /// 4. on the link's second detach, reply with a closing detach.
     ///
-    /// Returns `(saw_attach, closing_detaches)`.
+    /// Returns `(saw_attach, detaches)`.
     pub(crate) async fn drive_simultaneous_detach_race(
         mut session_rx: mpsc::Receiver<SessionControl>,
         mut outgoing_rx: mpsc::Receiver<LinkFrame>,
@@ -951,7 +954,7 @@ pub(crate) mod test_util {
     ) -> (bool, usize) {
         let mut incoming_tx = initial_incoming_tx;
         let mut saw_attach = false;
-        let mut closing_detaches = 0usize;
+        let mut detaches = 0usize;
 
         loop {
             tokio::select! {
@@ -971,12 +974,12 @@ pub(crate) mod test_util {
                     None => break,
                 },
                 frame = outgoing_rx.recv() => match frame {
-                    Some(LinkFrame::Detach(detach)) if detach.closed => {
-                        closing_detaches += 1;
-                        // First closing detach: the peer suspended while we
-                        // were closing. Second: the peer's reply to the
-                        // closing detach we sent after reattaching.
-                        let closed = closing_detaches > 1;
+                    Some(LinkFrame::Detach(detach)) => {
+                        detaches += 1;
+                        // First detach: the peer does the mirror action, so
+                        // reply with the opposite `closed`. Second: the reply
+                        // to the closing detach we sent after reattaching.
+                        let closed = if detaches == 1 { !detach.closed } else { true };
                         let _ = incoming_tx
                             .send(LinkFrame::Detach(Detach {
                                 handle: Handle(0),
@@ -984,7 +987,7 @@ pub(crate) mod test_util {
                                 error: None,
                             }))
                             .await;
-                        if closing_detaches >= 2 {
+                        if detaches >= 2 {
                             break;
                         }
                     }
@@ -998,7 +1001,7 @@ pub(crate) mod test_util {
             }
         }
 
-        (saw_attach, closing_detaches)
+        (saw_attach, detaches)
     }
 }
 

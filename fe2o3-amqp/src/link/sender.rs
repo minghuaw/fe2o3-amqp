@@ -1474,7 +1474,7 @@ mod tests {
         let (mut inner, session_rx, outgoing_rx, incoming_tx) =
             make_sender_inner_with_channels(4096);
 
-        let (result, (saw_attach, closing_detaches)) = tokio::join!(
+        let (result, (saw_attach, detaches)) = tokio::join!(
             inner.close_with_error(None),
             crate::link::test_util::drive_simultaneous_detach_race(
                 session_rx,
@@ -1486,10 +1486,41 @@ mod tests {
 
         assert!(saw_attach, "the closing side must reattach");
         assert_eq!(
-            closing_detaches, 2,
-            "expected a closing detach before and after the reattach"
+            detaches, 2,
+            "expected a detach before and after the reattach"
         );
         assert!(result.is_ok(), "close must complete: {result:?}");
+        assert!(matches!(&inner.link.local_state, LinkState::Closed));
+    }
+
+    /// A peer that closes (closing detach) while this side is suspending
+    /// triggers the AMQP 1.0 §2.6.6 simultaneous-detach handshake. The spec
+    /// assigns the reattach to this side (the non-closing/suspending side),
+    /// which reattaches and then sends a closing detach; the link ends
+    /// `Closed`, so the local detach fails with `ClosedByRemote`.
+    ///
+    /// The peer's frames are scripted, so this is deterministic.
+    #[tokio::test]
+    async fn detach_reattaches_and_closes_on_simultaneous_close() {
+        let (mut inner, session_rx, outgoing_rx, incoming_tx) =
+            make_sender_inner_with_channels(4096);
+
+        let (result, (saw_attach, detaches)) = tokio::join!(
+            inner.detach_with_error(None),
+            crate::link::test_util::drive_simultaneous_detach_race(
+                session_rx,
+                outgoing_rx,
+                incoming_tx,
+                peer_receiver_attach(),
+            ),
+        );
+
+        assert!(saw_attach, "the suspending side must reattach");
+        assert_eq!(
+            detaches, 2,
+            "expected a detach before and after the reattach"
+        );
+        assert!(matches!(result, Err(DetachError::ClosedByRemote)));
         assert!(matches!(&inner.link.local_state, LinkState::Closed));
     }
 }
