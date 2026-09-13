@@ -288,7 +288,24 @@ where
     T::Link: LinkDetach<DetachError = DetachError>,
     <T::Link as LinkAttach>::AttachError: From<AllocLinkError> + Sync,
 {
-    if link_inner.reattach_inner().await.is_err() {
+    if let Err(_attach_error) = link_inner.reattach_inner().await {
+        // The reattach that completes the AMQP 1.0 §2.6.6 handshake failed.
+        // This helper is generic over the link type, so the concrete
+        // `AttachError` cannot be inspected here and `DetachError` cannot
+        // carry it. The cause is derived from the shared session stop reason;
+        // with none recorded the error is `IllegalState`.
+        //
+        // The faithful mappings are `SessionStopped` -> `SessionStopped`,
+        // `IllegalState` -> `IllegalState`, and `RemoteClosedWithError` ->
+        // `RemoteClosedWithError`; every other attach error (e.g.
+        // `NonAttachFrameReceived`, attach validation) has no counterpart and
+        // also lands on `IllegalState`. In particular `RemoteClosedWithError`
+        // is currently lost when the session is still alive, because the stop
+        // reason carries no peer error.
+        //
+        // TODO(error-refactor): preserve the attach error (or give the
+        // fallback its own variant) when `DetachError`/`LinkStateError` are
+        // consolidated, so these cases become distinguishable.
         return Err(detach_error_from_stop_reason(link_inner));
     }
     link_inner.send_detach(true, None).await?; // cancel safe
