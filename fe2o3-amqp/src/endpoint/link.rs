@@ -26,14 +26,18 @@ use super::{OutputHandle, Settlement};
 pub(crate) trait LinkDetach {
     type DetachError: Send;
 
-    /// Handle a detach the peer sends in reply to a detach/close this link
-    /// sent itself (from `close()`, `detach()`, or the attach-error paths).
+    /// Handle a detach the peer sends **in reply to a detach/close this link
+    /// sent itself** (from `close()`, `detach()`, or the attach-error paths).
     ///
     /// The relay forwards such a reply without answering it; the link's own
-    /// close/detach procedure consumes the frame and completes here. A
-    /// detach the peer sends on its own is answered by the relay already,
-    /// so the engine handles it with [`Self::apply_remote_detach_outcome`]
-    /// instead.
+    /// close/detach procedure consumes the frame and completes here. Only the
+    /// matching reply transitions are accepted: `DetachSent` + non-closing →
+    /// `Detached`, `CloseSent` + closing → `Closed`. A crossing detach is
+    /// `IllegalState`.
+    ///
+    /// A detach the peer sends on its own is answered by the relay already,
+    /// so the engine records it with [`Self::apply_remote_detach_outcome`]
+    /// instead; that method accepts crossing detaches and any attached state.
     fn on_incoming_detach(&mut self, detach: Detach) -> Result<(), Self::DetachError>;
 
     async fn send_detach(
@@ -48,8 +52,10 @@ pub(crate) trait LinkDetach {
     /// already sent the reply, or the link is being dropped. Nothing is
     /// sent.
     ///
-    /// The link becomes `Closed` or `Detached` and its output handle is
-    /// released (see [`Self::on_incoming_detach`] for the reply case). An
+    /// Unlike [`Self::on_incoming_detach`], which only accepts the reply that
+    /// matches the detach/close this link sent, this accepts any attached
+    /// state — including a crossing detach — and moves the link to `Closed`
+    /// (closing) or `Detached` (non-closing), releasing the output handle. An
     /// error on the detach is reported as `RemoteClosedWithError` /
     /// `RemoteDetachedWithError`.
     fn apply_remote_detach_outcome(&mut self, detach: Detach) -> Result<(), Self::DetachError>;
