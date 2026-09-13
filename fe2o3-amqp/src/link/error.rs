@@ -49,7 +49,11 @@ pub enum DetachError {
     #[error("Remote detached with an error: {}", .0)]
     RemoteDetachedWithError(definitions::Error),
 
-    /// Remote peer sent a closing detach when the local terminus sent a non-closing detach
+    /// The remote peer closed the link with a closing detach (`closed=true`).
+    ///
+    /// When the closing detach answers a non-closing detach from this side, the
+    /// link is reattached and then closed, completing the handshake (AMQP 1.0
+    /// §2.6.6). The link is left `Closed`.
     #[error("Link closed by remote")]
     ClosedByRemote,
 
