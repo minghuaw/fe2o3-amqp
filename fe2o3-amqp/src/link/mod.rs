@@ -408,7 +408,7 @@ where
     type DetachError = DetachError;
 
     #[cfg_attr(feature = "tracing", tracing::instrument(skip_all))]
-    fn on_incoming_detach(&mut self, detach: Detach) -> Result<(), Self::DetachError> {
+    fn on_detach_reply(&mut self, detach: Detach) -> Result<(), Self::DetachError> {
         #[cfg(feature = "tracing")]
         tracing::trace!(detach = ?detach);
         #[cfg(feature = "log")]
@@ -418,26 +418,17 @@ where
         // close it sent itself: a peer-initiated detach is answered by the
         // session relay at arrival and recorded via
         // `apply_remote_detach_outcome`.
+        //
+        // A crossing detach (closed while DetachSent, or open while
+        // CloseSent) must not be applied here: the caller reattaches first
+        // (§2.6.6). Without this check `apply_remote_detach_outcome` would
+        // terminalize the link and break that handshake.
         match self.local_state {
-            LinkState::DetachSent if !detach.closed => {
-                self.local_state = LinkState::Detached;
-                // Dropping output handle as it is already detached
-                let _ = self.output_handle.take();
-                match detach.error {
-                    Some(error) => Err(DetachError::RemoteDetachedWithError(error)),
-                    None => Ok(()),
-                }
-            }
-            LinkState::CloseSent if detach.closed => {
-                self.local_state = LinkState::Closed;
-                let _ = self.output_handle.take();
-                match detach.error {
-                    Some(error) => Err(DetachError::RemoteClosedWithError(error)),
-                    None => Ok(()),
-                }
-            }
-            _ => Err(DetachError::IllegalState),
+            LinkState::DetachSent if !detach.closed => {}
+            LinkState::CloseSent if detach.closed => {}
+            _ => return Err(DetachError::IllegalState),
         }
+        self.apply_remote_detach_outcome(detach)
     }
 
     /// # Cancel safety

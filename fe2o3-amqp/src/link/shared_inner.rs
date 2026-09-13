@@ -150,7 +150,7 @@ where
                     reattach_then_close(self).await?;
                     Err(DetachError::ClosedByRemote)
                 } else {
-                    self.link_mut().on_incoming_detach(remote_detach)
+                    self.link_mut().on_detach_reply(remote_detach)
                 }
             }
             LinkState::DetachSent => {
@@ -159,7 +159,7 @@ where
                     reattach_then_close(self).await?;
                     Err(DetachError::ClosedByRemote)
                 } else {
-                    self.link_mut().on_incoming_detach(remote_detach)
+                    self.link_mut().on_detach_reply(remote_detach)
                 }
             }
             LinkState::Detached => Ok(()),
@@ -187,7 +187,7 @@ where
                 // closing handshake.
                 let remote_detach = recv_remote_detach(self).await?;
                 if remote_detach.closed {
-                    self.link_mut().on_incoming_detach(remote_detach)?;
+                    self.link_mut().on_detach_reply(remote_detach)?;
                 } else {
                     // The peer suspended: reattach and close so the link ends
                     // `Closed` (AMQP 1.0 §2.6.6).
@@ -225,8 +225,8 @@ where
                 let remote_detach = recv_remote_detach(self).await?; // cancel safe
                 if remote_detach.closed {
                     // If the remote detach contains an error, the error will be propagated
-                    // back by `on_incoming_detach`
-                    self.link_mut().on_incoming_detach(remote_detach)
+                    // back by `on_detach_reply`
+                    self.link_mut().on_detach_reply(remote_detach)
                 } else {
                     // Peer suspended while we were closing: record it, then
                     // reattach (re-registers the link) and close (§2.6.6).
@@ -253,7 +253,7 @@ where
                 // Wait for remote detach
                 let remote_detach = recv_remote_detach(self).await?; // cancel safe
                 if remote_detach.closed {
-                    self.link_mut().on_incoming_detach(remote_detach)
+                    self.link_mut().on_detach_reply(remote_detach)
                 } else {
                     // Peer suspended while we were closing: reattach
                     // (re-registers the link) and close (§2.6.6).
@@ -291,7 +291,7 @@ where
     }
     link_inner.send_detach(true, None).await?; // cancel safe
     let remote_detach = recv_remote_detach(link_inner).await?; // cancel safe
-    link_inner.link_mut().on_incoming_detach(remote_detach)?;
+    link_inner.link_mut().on_detach_reply(remote_detach)?;
     Ok(())
 }
 

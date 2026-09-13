@@ -942,7 +942,7 @@ where
         + Sync,
 {
     match reader.recv().await {
-        Some(LinkFrame::Detach(remote_detach)) => match link.on_incoming_detach(remote_detach) {
+        Some(LinkFrame::Detach(remote_detach)) => match link.on_detach_reply(remote_detach) {
             Ok(_) => err,
             Err(detach_error) => detach_error.try_into().unwrap_or(err),
         },
