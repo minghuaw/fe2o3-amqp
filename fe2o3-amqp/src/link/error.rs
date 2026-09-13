@@ -49,17 +49,77 @@ pub enum DetachError {
     #[error("Remote detached with an error: {}", .0)]
     RemoteDetachedWithError(definitions::Error),
 
-    /// Remote peer sent a closing detach when the local terminus sent a non-closing detach
+    /// The remote peer closed the link with a closing detach (`closed=true`).
+    ///
+    /// When the closing detach answers a non-closing detach from this side, the
+    /// link is reattached and then closed, completing the handshake (AMQP 1.0
+    /// §2.6.6). The link is left `Closed`.
     #[error("Link closed by remote")]
     ClosedByRemote,
 
     /// Remote peer sent a non-closing detach when the local terminus is sending a closing detach
+    #[deprecated(
+        since = "0.18.1",
+        note = "the simultaneous close/suspend race now completes with `Ok(())`; this variant is still produced by `Sender::on_detach` and will be replaced by a detach status type"
+    )]
     #[error("Link will be closed by local terminus")]
     DetachedByRemote,
 
     /// Remote peer closed the link with an error
     #[error("Remote peer closed the link with an error: {}", .0)]
     RemoteClosedWithError(definitions::Error),
+}
+
+/// Error from recording a peer-initiated detach with
+/// [`LinkDetach::apply_remote_detach_outcome`].
+///
+/// The `Remote*WithError` variants mean the outcome *was* recorded (the link
+/// has already moved to `Closed`/`Detached` and released its output handle);
+/// `IllegalState` means nothing was changed.
+#[derive(Debug, thiserror::Error)]
+pub(crate) enum ApplyRemoteDetachError {
+    /// The outcome *was* recorded (the link is now `Detached`, handle
+    /// released); the peer's detach carried this error.
+    #[error("Remote detached with an error: {}", .0)]
+    RemoteDetachedWithError(definitions::Error),
+
+    /// The outcome *was* recorded (the link is now `Closed`, handle
+    /// released); the peer's closing detach carried this error.
+    #[error("Remote peer closed the link with an error: {}", .0)]
+    RemoteClosedWithError(definitions::Error),
+
+    /// The outcome was *not* recorded: the link is `Unattached`, already
+    /// `Detached`, or already `Closed`, and nothing changed.
+    #[error("Illegal link state")]
+    IllegalState,
+}
+
+impl From<ApplyRemoteDetachError> for DetachError {
+    fn from(value: ApplyRemoteDetachError) -> Self {
+        match value {
+            ApplyRemoteDetachError::RemoteDetachedWithError(error) => {
+                DetachError::RemoteDetachedWithError(error)
+            }
+            ApplyRemoteDetachError::RemoteClosedWithError(error) => {
+                DetachError::RemoteClosedWithError(error)
+            }
+            ApplyRemoteDetachError::IllegalState => DetachError::IllegalState,
+        }
+    }
+}
+
+impl From<ApplyRemoteDetachError> for LinkStateError {
+    fn from(value: ApplyRemoteDetachError) -> Self {
+        match value {
+            ApplyRemoteDetachError::RemoteDetachedWithError(error) => {
+                LinkStateError::RemoteDetachedWithError(error)
+            }
+            ApplyRemoteDetachError::RemoteClosedWithError(error) => {
+                LinkStateError::RemoteClosedWithError(error)
+            }
+            ApplyRemoteDetachError::IllegalState => LinkStateError::IllegalState,
+        }
+    }
 }
 
 /// Errors associated with attaching a link as sender
@@ -388,6 +448,7 @@ impl From<AllocLinkError> for SenderAttachError {
 impl TryFrom<DetachError> for SenderAttachError {
     type Error = DetachError;
 
+    #[allow(deprecated)]
     fn try_from(value: DetachError) -> Result<Self, Self::Error> {
         match value {
             DetachError::IllegalState => Ok(Self::IllegalState),
@@ -406,6 +467,7 @@ impl TryFrom<DetachError> for SenderAttachError {
 impl TryFrom<DetachError> for ReceiverAttachError {
     type Error = DetachError;
 
+    #[allow(deprecated)]
     fn try_from(value: DetachError) -> Result<Self, Self::Error> {
         match value {
             DetachError::IllegalState => Ok(Self::IllegalState),
@@ -486,6 +548,7 @@ pub enum LinkStateError {
 }
 
 impl From<DetachError> for LinkStateError {
+    #[allow(deprecated)]
     fn from(value: DetachError) -> Self {
         match value {
             DetachError::IllegalState => Self::IllegalState,

@@ -408,60 +408,28 @@ where
     type DetachError = DetachError;
 
     #[cfg_attr(feature = "tracing", tracing::instrument(skip_all))]
-    fn on_incoming_detach(&mut self, detach: Detach) -> Result<(), Self::DetachError> {
+    fn on_detach_reply(&mut self, detach: Detach) -> Result<(), Self::DetachError> {
         #[cfg(feature = "tracing")]
         tracing::trace!(detach = ?detach);
         #[cfg(feature = "log")]
         log::trace!("RECV detach = {:?}", detach);
 
-        match detach.closed {
-            true => match self.local_state {
-                LinkState::Attached
-                | LinkState::AttachSent
-                | LinkState::AttachReceived
-                | LinkState::IncompleteAttachExchanged
-                | LinkState::IncompleteAttachSent
-                | LinkState::IncompleteAttachReceived => {
-                    self.local_state = LinkState::CloseReceived;
-                    match detach.error {
-                        Some(error) => Err(DetachError::RemoteClosedWithError(error)),
-                        None => Ok(()),
-                    }
-                }
-                LinkState::DetachSent => {
-                    self.local_state = LinkState::CloseReceived;
-                    match detach.error {
-                        Some(error) => Err(DetachError::RemoteClosedWithError(error)),
-                        None => Err(DetachError::ClosedByRemote),
-                    }
-                }
-                LinkState::CloseSent => {
-                    self.local_state = LinkState::Closed;
-                    let _ = self.output_handle.take();
-                    match detach.error {
-                        Some(error) => Err(DetachError::RemoteClosedWithError(error)),
-                        None => Ok(()),
-                    }
-                }
-                _ => Err(DetachError::IllegalState),
-            },
-            false => {
-                match self.local_state {
-                    LinkState::Attached => self.local_state = LinkState::DetachReceived,
-                    LinkState::DetachSent => {
-                        self.local_state = LinkState::Detached;
-                        // Dropping output handle as it is already detached
-                        let _ = self.output_handle.take();
-                    }
-                    _ => return Err(DetachError::IllegalState),
-                }
-
-                match detach.error {
-                    Some(error) => Err(DetachError::RemoteDetachedWithError(error)),
-                    None => Ok(()),
-                }
-            }
+        // The engine only receives a detach here as the answer to a detach or
+        // close it sent itself: a peer-initiated detach is answered by the
+        // session relay at arrival and recorded via
+        // `apply_remote_detach_outcome`.
+        //
+        // A crossing detach (closed while DetachSent, or open while
+        // CloseSent) must not be applied here: the caller reattaches first
+        // (§2.6.6). Without this check `apply_remote_detach_outcome` would
+        // terminalize the link and break that handshake.
+        match self.local_state {
+            LinkState::DetachSent if !detach.closed => {}
+            LinkState::CloseSent if detach.closed => {}
+            _ => return Err(DetachError::IllegalState),
         }
+        self.apply_remote_detach_outcome(detach)
+            .map_err(DetachError::from)
     }
 
     /// # Cancel safety
@@ -477,11 +445,7 @@ where
         // Change the state whether sending the detach frame succeeds or not
         match (&self.local_state, closed) {
             (LinkState::Attached, false) => self.local_state = LinkState::DetachSent,
-            (LinkState::DetachReceived, false) => self.local_state = LinkState::Detached,
-            (LinkState::CloseReceived, false) => return Err(DetachError::ClosedByRemote),
             (LinkState::Attached, true) => self.local_state = LinkState::CloseSent,
-            (LinkState::DetachReceived, true) => return Err(DetachError::DetachedByRemote),
-            (LinkState::CloseReceived, true) => self.local_state = LinkState::Closed,
             _ => return Err(DetachError::IllegalState),
         };
 
@@ -516,42 +480,37 @@ where
 
     /// See [`endpoint::LinkDetach::apply_remote_detach_outcome`] for the
     /// documented contract of this method.
-    fn apply_remote_detach_outcome(&mut self, detach: Detach) -> Result<(), Self::DetachError> {
-        match detach.closed {
-            true => match self.local_state {
-                LinkState::Attached
-                | LinkState::AttachSent
-                | LinkState::AttachReceived
-                | LinkState::IncompleteAttachExchanged
-                | LinkState::IncompleteAttachSent
-                | LinkState::IncompleteAttachReceived
-                | LinkState::CloseSent => {
-                    self.local_state = LinkState::Closed;
-                    let _ = self.output_handle.take();
-                    match detach.error {
-                        Some(error) => Err(DetachError::RemoteClosedWithError(error)),
-                        None => Ok(()),
+    fn apply_remote_detach_outcome(
+        &mut self,
+        detach: Detach,
+    ) -> Result<(), ApplyRemoteDetachError> {
+        match self.local_state {
+            LinkState::Attached
+            | LinkState::AttachSent
+            | LinkState::AttachReceived
+            | LinkState::IncompleteAttachExchanged
+            | LinkState::IncompleteAttachSent
+            | LinkState::IncompleteAttachReceived
+            | LinkState::DetachSent
+            | LinkState::CloseSent => {
+                self.local_state = if detach.closed {
+                    LinkState::Closed
+                } else {
+                    LinkState::Detached
+                };
+                let _ = self.output_handle.take();
+                match (detach.closed, detach.error) {
+                    (true, Some(error)) => {
+                        Err(ApplyRemoteDetachError::RemoteClosedWithError(error))
                     }
-                }
-                _ => Err(DetachError::IllegalState),
-            },
-            false => match self.local_state {
-                LinkState::Attached
-                | LinkState::AttachSent
-                | LinkState::AttachReceived
-                | LinkState::IncompleteAttachExchanged
-                | LinkState::IncompleteAttachSent
-                | LinkState::IncompleteAttachReceived
-                | LinkState::DetachSent => {
-                    self.local_state = LinkState::Detached;
-                    let _ = self.output_handle.take();
-                    match detach.error {
-                        Some(error) => Err(DetachError::RemoteDetachedWithError(error)),
-                        None => Ok(()),
+                    (true, None) => Ok(()),
+                    (false, Some(error)) => {
+                        Err(ApplyRemoteDetachError::RemoteDetachedWithError(error))
                     }
+                    (false, None) => Ok(()),
                 }
-                _ => Err(DetachError::IllegalState),
-            },
+            }
+            _ => Err(ApplyRemoteDetachError::IllegalState),
         }
     }
 }
@@ -935,6 +894,99 @@ pub(crate) fn get_max_message_size(local: u64, remote: Option<u64>) -> u64 {
                 u64::min(val, remote_max_msg_size)
             }
         }
+    }
+}
+
+#[cfg(test)]
+pub(crate) mod test_util {
+    //! Shared test helpers for the link unit tests.
+    //!
+    //! `drive_simultaneous_detach_race` is a deterministic peer/session
+    //! harness for the AMQP 1.0 §2.6.6 simultaneous-detach race: the peer's
+    //! frames are played in scripted order off the frames the link under test
+    //! emits, so no timing is involved. The mock peer is passive: it replies
+    //! to the link's `Attach`/`Detach` rather than initiating its own
+    //! reattach. It drives either side of the race (the closing side via
+    //! `close_with_error` or the suspending side via `detach_with_error`).
+
+    use fe2o3_amqp_types::{
+        definitions::Handle,
+        performatives::{Attach, Detach},
+    };
+    use tokio::sync::mpsc;
+
+    use crate::{
+        control::SessionControl, endpoint::OutputHandle, link::LinkFrame, link::LinkRelay,
+    };
+
+    /// Drive the peer side of a §2.6.6 simultaneous-detach race, for either
+    /// direction: the closing side (`close_with_error`) or the suspending
+    /// side (`detach_with_error`).
+    ///
+    /// 1. answer the link's `AllocateLink` (capturing the new incoming
+    ///    sender from the relay) so the reattach can proceed;
+    /// 2. on the link's first detach, reply with a detach whose `closed` flag
+    ///    is the opposite (the peer does the mirror action);
+    /// 3. on the link's `Attach`, reply with the peer's `Attach`;
+    /// 4. on the link's second detach, reply with a closing detach.
+    ///
+    /// Returns `(saw_attach, detaches)`.
+    pub(crate) async fn drive_simultaneous_detach_race(
+        mut session_rx: mpsc::Receiver<SessionControl>,
+        mut outgoing_rx: mpsc::Receiver<LinkFrame>,
+        initial_incoming_tx: mpsc::Sender<LinkFrame>,
+        peer_attach: Attach,
+    ) -> (bool, usize) {
+        let mut incoming_tx = initial_incoming_tx;
+        let mut saw_attach = false;
+        let mut detaches = 0usize;
+
+        loop {
+            tokio::select! {
+                ctrl = session_rx.recv() => match ctrl {
+                    Some(SessionControl::AllocateLink {
+                        link_relay,
+                        responder,
+                        ..
+                    }) => {
+                        incoming_tx = match link_relay {
+                            LinkRelay::Sender { tx, .. } => tx,
+                            LinkRelay::Receiver { tx, .. } => tx,
+                        };
+                        let _ = responder.send(Ok(OutputHandle(1)));
+                    }
+                    Some(_) => {}
+                    None => break,
+                },
+                frame = outgoing_rx.recv() => match frame {
+                    Some(LinkFrame::Detach(detach)) => {
+                        detaches += 1;
+                        // First detach: the peer does the mirror action, so
+                        // reply with the opposite `closed`. Second: the reply
+                        // to the closing detach we sent after reattaching.
+                        let closed = if detaches == 1 { !detach.closed } else { true };
+                        let _ = incoming_tx
+                            .send(LinkFrame::Detach(Detach {
+                                handle: Handle(0),
+                                closed,
+                                error: None,
+                            }))
+                            .await;
+                        if detaches >= 2 {
+                            break;
+                        }
+                    }
+                    Some(LinkFrame::Attach(_)) => {
+                        saw_attach = true;
+                        let _ = incoming_tx.send(LinkFrame::Attach(peer_attach.clone())).await;
+                    }
+                    Some(_) => {}
+                    None => break,
+                },
+            }
+        }
+
+        (saw_attach, detaches)
     }
 }
 
