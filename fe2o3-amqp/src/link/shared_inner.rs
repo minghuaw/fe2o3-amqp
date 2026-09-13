@@ -202,9 +202,10 @@ where
                 } else {
                     // Peer suspended while we were closing: record it, then
                     // reattach (re-registers the link) and close (§2.6.6).
+                    // The close completes, so this is not an error.
                     let _ = self.link_mut().apply_remote_detach_outcome(remote_detach);
                     reattach_then_close(self).await?;
-                    Err(DetachError::DetachedByRemote)
+                    Ok(())
                 }
             }
             LinkState::DetachSent => {
@@ -228,9 +229,10 @@ where
                 } else {
                     // Peer suspended while we were closing: reattach
                     // (re-registers the link) and close (§2.6.6).
+                    // The close completes, so this is not an error.
                     let _ = self.link_mut().apply_remote_detach_outcome(remote_detach);
                     reattach_then_close(self).await?;
-                    Err(DetachError::DetachedByRemote)
+                    Ok(())
                 }
             }
             LinkState::Closed => Ok(()),
@@ -256,10 +258,9 @@ where
     T::Link: LinkDetach<DetachError = DetachError>,
     <T::Link as LinkAttach>::AttachError: From<AllocLinkError> + Sync,
 {
-    link_inner
-        .reattach_inner()
-        .await // FIXME: cancel safe?
-        .map_err(|_| DetachError::DetachedByRemote)?;
+    if link_inner.reattach_inner().await.is_err() {
+        return Err(detach_error_from_stop_reason(link_inner));
+    }
     link_inner.send_detach(true, None).await?; // cancel safe
     let remote_detach = recv_remote_detach(link_inner).await?; // cancel safe
     link_inner.link_mut().on_incoming_detach(remote_detach)?;

@@ -2312,7 +2312,7 @@ mod tests {
             closing_detaches, 2,
             "expected a closing detach before and after the reattach"
         );
-        assert!(matches!(result, Err(DetachError::DetachedByRemote)));
+        assert!(result.is_ok(), "close must complete: {result:?}");
         assert!(matches!(&inner.link.local_state, LinkState::Closed));
     }
 }
