@@ -164,8 +164,36 @@ where
             }
             LinkState::Detached => Ok(()),
             LinkState::CloseSent => {
+                // A live handle is not normally left in `CloseSent` (the
+                // public close paths consume it, and dropping the close
+                // future drops it too). It can happen when
+                // `reattach_then_close` is cancelled after sending the
+                // closing detach but before its reply arrives, while the
+                // session is still alive; the handle survives because
+                // `detach_then_resume_on_session` takes `&mut self`. (If the
+                // session stopped instead, `recv_remote_detach` fails
+                // immediately and there is no reply to consume.)
+                #[cfg(feature = "tracing")]
+                tracing::warn!(
+                    "detach_with_error called on a link in CloseSent; completing the closing handshake"
+                );
+                #[cfg(feature = "log")]
+                log::warn!(
+                    "detach_with_error called on a link in CloseSent; completing the closing handshake"
+                );
+
+                // The link is already closing, so a detach cannot suspend
+                // it: consume the pending reply, if any, and complete the
+                // closing handshake.
                 let remote_detach = recv_remote_detach(self).await?;
-                let _ = self.link_mut().apply_remote_detach_outcome(remote_detach);
+                if remote_detach.closed {
+                    self.link_mut().on_incoming_detach(remote_detach)?;
+                } else {
+                    // The peer suspended: reattach and close so the link ends
+                    // `Closed` (AMQP 1.0 §2.6.6).
+                    let _ = self.link_mut().apply_remote_detach_outcome(remote_detach);
+                    reattach_then_close(self).await?;
+                }
                 Err(DetachError::ClosedByRemote)
             }
             LinkState::Closed => Err(DetachError::ClosedByRemote),
