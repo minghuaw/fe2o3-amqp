@@ -1071,16 +1071,10 @@ where
             // records the outcome here. Reported as-is even when the session
             // is stopping: a stop without a detach shows up as the channel
             // closing (`None` above).
-            LinkFrame::Detach(detach) => {
-                let closed = detach.closed;
-                self.link
-                    .apply_remote_detach_outcome(detach)
-                    .map_err(Into::into)
-                    .and_then(|_| match closed {
-                        true => Err(LinkStateError::RemoteClosed.into()),
-                        false => Err(LinkStateError::RemoteDetached.into()),
-                    })
-            }
+            LinkFrame::Detach(detach) => match self.link.apply_remote_detach_outcome(detach) {
+                Ok(status) => Err(RecvError::LinkEnded(status)),
+                Err(err) => Err(RecvError::LinkStateError(err.into())),
+            },
             LinkFrame::Transfer {
                 input_handle: _,
                 performative,
@@ -1099,7 +1093,9 @@ where
                     "Transactional acquisition is not implemented".to_string(),
                     None,
                 );
-                self.close_with_error(Some(error)).await?; // FIXME: cancel safe? if oneshot chanenl is cancel safe
+                // Best-effort close; the acquisition error below is what the
+                // caller sees.
+                let _ = self.close_with_error(Some(error)).await;
                 Err(RecvError::TransactionalAcquisitionIsNotImeplemented)
             }
         }

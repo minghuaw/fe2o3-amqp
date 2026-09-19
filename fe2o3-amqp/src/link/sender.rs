@@ -35,9 +35,10 @@ use super::{
     shared_inner::{
         recv_remote_detach, LinkEndpointInner, LinkEndpointInnerDetach, LinkEndpointInnerReattach,
     },
-    ArcSenderUnsettledMap, DetachThenResumeSenderError, LinkFrame, LinkRelay, LinkStateError,
-    MessageSizeExceeded, SendError, SenderAttachError, SenderAttachExchange, SenderFlowState,
-    SenderLink, SenderResumeError, SenderResumeErrorKind, SessionStopReason,
+    ArcSenderUnsettledMap, DeliveryFailure, DetachStatus, DetachThenResumeSenderError,
+    IllegalLinkStateError, LinkFrame, LinkRelay, LinkStateError, MessageSizeExceeded, SendError,
+    SenderAttachError, SenderAttachExchange, SenderFlowState, SenderLink, SenderResumeError,
+    SenderResumeErrorKind, SessionStopReason, TransferError,
 };
 
 #[cfg(docsrs)]
@@ -467,29 +468,23 @@ impl Sender {
             })
     }
 
-    /// Returns when the remote peer detach/close the link
+    /// Returns when the remote peer detaches or closes the link
     ///
     /// The peer's detach has already been answered when this returns, so the
-    /// link is left `Closed` or `Detached` (its output handle is released),
+    /// link is left `Detached` or `Closed` (its output handle is released),
     /// and a later `close()` finishes without sending another detach.
-    #[allow(deprecated)]
-    pub async fn on_detach(&mut self) -> DetachError {
-        match recv_remote_detach(&mut self.inner).await {
-            Ok(detach) => {
-                let closed = detach.closed;
-                match self.inner.link.apply_remote_detach_outcome(detach) {
-                    Ok(_) => {
-                        if closed {
-                            DetachError::ClosedByRemote
-                        } else {
-                            DetachError::DetachedByRemote
-                        }
-                    }
-                    Err(err) => err.into(),
-                }
-            }
-            Err(err) => err,
-        }
+    ///
+    /// # Errors
+    ///
+    /// [`IllegalLinkStateError::IllegalState`] if the link has already ended,
+    /// or [`IllegalLinkStateError::SessionStopped`] if the session (or its
+    /// connection) stopped first.
+    pub async fn on_detach(&mut self) -> Result<DetachStatus, IllegalLinkStateError> {
+        let detach = recv_remote_detach(&mut self.inner).await?;
+        self.inner
+            .link
+            .apply_remote_detach_outcome(detach)
+            .map_err(|_| IllegalLinkStateError::IllegalState)
     }
 }
 
@@ -523,7 +518,7 @@ where
         // the closing detach this drop would otherwise send would be a
         // duplicate.
         let mut remote_detach_received = false;
-        let mut detach_error: Option<LinkStateError> = None;
+        let mut detach_status: Option<DetachStatus> = None;
         while let Ok(frame) = self.incoming.try_recv() {
             if let LinkFrame::Detach(detach) = frame {
                 remote_detach_received = true;
@@ -538,11 +533,14 @@ where
                     #[cfg(feature = "log")]
                     log::debug!("failed to apply remote detach outcome on sender drop");
                 }
-                detach_error = Some(match (closed, error) {
-                    (true, Some(error)) => LinkStateError::RemoteClosedWithError(error),
-                    (true, None) => LinkStateError::RemoteClosed,
-                    (false, Some(error)) => LinkStateError::RemoteDetachedWithError(error),
-                    (false, None) => LinkStateError::RemoteDetached,
+                detach_status = Some(if closed {
+                    DetachStatus::Closed {
+                        remote_error: error,
+                    }
+                } else {
+                    DetachStatus::Detached {
+                        remote_error: error,
+                    }
                 });
             }
             // Any other frame (e.g. an attach response left behind by an
@@ -587,20 +585,22 @@ where
         // failed it), or the session stopped so the closing detach could not
         // be sent. Deliveries on a still-open link stay pending: the relay
         // settles them as the peer's dispositions arrive.
-        let error = detach_error.or_else(|| {
+        let failure = detach_status.map(DeliveryFailure::LinkEnded).or_else(|| {
             if detach_sent {
                 None
             } else {
                 match self.link.session_stop_reason().get() {
-                    Some(reason) => Some(LinkStateError::SessionStopped(reason.clone())),
-                    None => Some(LinkStateError::IllegalState), // defensive: no stop reason recorded; failure is link-local
+                    Some(reason) => Some(DeliveryFailure::LinkState(
+                        LinkStateError::SessionStopped(reason.clone()),
+                    )),
+                    None => Some(DeliveryFailure::LinkState(LinkStateError::IllegalState)), // defensive: no stop reason recorded; failure is link-local
                 }
             }
         });
-        if let Some(error) = error {
+        if let Some(failure) = failure {
             if let Some(entries) = self.link.unsettled().write().take() {
                 for (_, entry) in entries {
-                    let _ = entry.fail(error.clone());
+                    let _ = entry.fail(failure.clone());
                 }
             }
         }
@@ -709,7 +709,7 @@ where
 impl<L> SenderInner<L>
 where
     L: endpoint::SenderLink<
-            TransferError = LinkStateError,
+            TransferError = TransferError,
             AttachError = SenderAttachError,
             DetachError = DetachError,
         > + LinkExt<FlowState = SenderFlowState, Unsettled = ArcSenderUnsettledMap>
@@ -872,7 +872,7 @@ impl SenderInner<SenderLink<Target>> {
         &mut self,
         delivery_tag: DeliveryTag,
         message_format: MessageFormat,
-        sender: Option<oneshot::Sender<Result<Option<DeliveryState>, LinkStateError>>>,
+        sender: Option<oneshot::Sender<Result<Option<DeliveryState>, DeliveryFailure>>>,
     ) -> Result<(), SendError> {
         let handle = self
             .link
@@ -947,7 +947,7 @@ impl SenderInner<SenderLink<Target>> {
         message_format: MessageFormat,
         state: DeliveryState,
         payload: Payload,
-        sender: oneshot::Sender<Result<Option<DeliveryState>, LinkStateError>>,
+        sender: oneshot::Sender<Result<Option<DeliveryState>, DeliveryFailure>>,
     ) -> Result<(), SendError> {
         let handle = self
             .link

@@ -2,8 +2,8 @@ use fe2o3_amqp_types::messaging::{Accepted, DeliveryState, Outcome, Rejected};
 
 use crate::link::{
     delivery::{FromDeliveryFailure, FromDeliveryState, FromPreSettled},
-    DetachError, IllegalLinkStateError, LinkStateError, MessageSizeExceeded, SendError,
-    SenderAttachError, SessionStopReason,
+    DetachError, DetachStatus, DeliveryFailure, IllegalLinkStateError, LinkStateError,
+    MessageSizeExceeded, SendError, SenderAttachError, SessionStopReason, TransferError,
 };
 
 /// Errors with allocation of new transacation ID
@@ -95,6 +95,10 @@ pub enum ControllerSendError {
     #[error("Local error: {:?}", .0)]
     LinkStateError(#[from] LinkStateError),
 
+    /// The peer detached the link before the delivery was settled
+    #[error("The peer detached the link: {:?}", .0)]
+    LinkEnded(DetachStatus),
+
     /// The remote peer detached with error
     #[error("Link is detached {:?}", .0)]
     Detached(DetachError),
@@ -126,11 +130,20 @@ impl From<SendError> for ControllerSendError {
     fn from(value: SendError) -> Self {
         match value {
             SendError::LinkStateError(state) => Self::LinkStateError(state),
-            SendError::Detached(value) => Self::Detached(value),
+            SendError::LinkEnded(status) => Self::LinkEnded(status),
             SendError::NonTerminalDeliveryState => Self::NonTerminalDeliveryState,
             SendError::IllegalDeliveryState => Self::IllegalDeliveryState,
             SendError::MessageSizeExceeded(error) => Self::MessageSizeExceeded(error),
             SendError::MessageEncodeError => Self::MessageEncodeError,
+        }
+    }
+}
+
+impl From<DeliveryFailure> for ControllerSendError {
+    fn from(value: DeliveryFailure) -> Self {
+        match value {
+            DeliveryFailure::LinkState(error) => Self::LinkStateError(error),
+            DeliveryFailure::LinkEnded(status) => Self::LinkEnded(status),
         }
     }
 }
@@ -210,6 +223,10 @@ pub enum PostError {
     #[error("Local error: {:?}", .0)]
     LinkStateError(#[from] LinkStateError),
 
+    /// The peer detached the link before the delivery was settled
+    #[error("The peer detached the link: {:?}", .0)]
+    LinkEnded(DetachStatus),
+
     /// The remote peer detached with error
     #[error("Link is detached {:?}", .0)]
     Detached(DetachError),
@@ -242,6 +259,18 @@ impl From<serde_amqp::Error> for PostError {
 impl From<MessageSizeExceeded> for PostError {
     fn from(error: MessageSizeExceeded) -> Self {
         Self::MessageSizeExceeded(error)
+    }
+}
+
+impl From<TransferError> for PostError {
+    fn from(value: TransferError) -> Self {
+        match value {
+            TransferError::LinkState(error) => Self::LinkStateError(error),
+            TransferError::LinkEnded(status) => Self::LinkEnded(status),
+            TransferError::ExpectImmediateDetach => {
+                Self::LinkStateError(LinkStateError::ExpectImmediateDetach)
+            }
+        }
     }
 }
 
@@ -306,20 +335,35 @@ impl FromDeliveryFailure for PostResult {
     fn from_link_state_error(error: LinkStateError) -> Self {
         Err(PostError::LinkStateError(error))
     }
+
+    fn from_detach_status(status: DetachStatus) -> Self {
+        Err(PostError::LinkEnded(status))
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use fe2o3_amqp_types::definitions;
 
-    use super::{FromDeliveryFailure, LinkStateError, PostError, PostResult};
+    use super::{DetachStatus, FromDeliveryFailure, LinkStateError, PostError, PostResult};
 
     #[test]
     fn test_post_result_from_link_state_error() {
         let result =
-            <PostResult as FromDeliveryFailure>::from_link_state_error(LinkStateError::RemoteClosed);
+            <PostResult as FromDeliveryFailure>::from_link_state_error(LinkStateError::IllegalState);
         match result {
-            Err(PostError::LinkStateError(LinkStateError::RemoteClosed)) => {}
+            Err(PostError::LinkStateError(LinkStateError::IllegalState)) => {}
+            other => panic!("unexpected result: {:?}", other),
+        }
+    }
+
+    #[test]
+    fn test_post_result_from_detach_status() {
+        let result = <PostResult as FromDeliveryFailure>::from_detach_status(
+            DetachStatus::Closed { remote_error: None },
+        );
+        match result {
+            Err(PostError::LinkEnded(DetachStatus::Closed { remote_error: None })) => {}
             other => panic!("unexpected result: {:?}", other),
         }
 
@@ -328,11 +372,13 @@ mod tests {
             Some("remote closed".to_string()),
             None,
         );
-        let result = <PostResult as FromDeliveryFailure>::from_link_state_error(
-            LinkStateError::RemoteClosedWithError(error.clone()),
-        );
+        let result = <PostResult as FromDeliveryFailure>::from_detach_status(DetachStatus::Closed {
+            remote_error: Some(error.clone()),
+        });
         match result {
-            Err(PostError::LinkStateError(LinkStateError::RemoteClosedWithError(actual))) => {
+            Err(PostError::LinkEnded(DetachStatus::Closed {
+                remote_error: Some(actual),
+            })) => {
                 assert_eq!(actual, error);
             }
             other => panic!("unexpected result: {:?}", other),

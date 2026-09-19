@@ -12,6 +12,14 @@
    the sender now completes the resumption `Resume` exchange.
 4. Added `ErrorRecovery` and `recovery()` on `SendError`/`RecvError` to tell whether a failed
    link operation requires a reattach, a new session or connection, or a new link.
+5. **Breaking**: a peer-initiated link detach/close is now reported as an outcome instead of a
+   link-state error. `LinkStateError` no longer carries `RemoteDetached`, `RemoteDetachedWithError`,
+   `RemoteClosed` or `RemoteClosedWithError`; the new `DetachStatus` (`Detached`/`Closed` plus the
+   peer's optional error) is carried by `SendError::LinkEnded`, `RecvError::LinkEnded`,
+   `PostError::LinkEnded` and `ControllerSendError::LinkEnded`. `Sender::on_detach` returns
+   `Result<DetachStatus, IllegalLinkStateError>`; the deprecated `DetachError::DetachedByRemote` is
+   removed. The dead `SendError::Detached(DetachError)` and `From<DetachError> for SendError` are
+   removed as well.
 
 ## 0.18.2
 

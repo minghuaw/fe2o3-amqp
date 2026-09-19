@@ -429,6 +429,7 @@ where
             _ => return Err(DetachError::IllegalState),
         }
         self.apply_remote_detach_outcome(detach)
+            .map(|_| ())
             .map_err(DetachError::from)
     }
 
@@ -483,7 +484,7 @@ where
     fn apply_remote_detach_outcome(
         &mut self,
         detach: Detach,
-    ) -> Result<(), ApplyRemoteDetachError> {
+    ) -> Result<DetachStatus, ApplyRemoteDetachError> {
         match self.local_state {
             LinkState::Attached
             | LinkState::AttachSent
@@ -499,16 +500,16 @@ where
                     LinkState::Detached
                 };
                 let _ = self.output_handle.take();
-                match (detach.closed, detach.error) {
-                    (true, Some(error)) => {
-                        Err(ApplyRemoteDetachError::RemoteClosedWithError(error))
+                let status = if detach.closed {
+                    DetachStatus::Closed {
+                        remote_error: detach.error,
                     }
-                    (true, None) => Ok(()),
-                    (false, Some(error)) => {
-                        Err(ApplyRemoteDetachError::RemoteDetachedWithError(error))
+                } else {
+                    DetachStatus::Detached {
+                        remote_error: detach.error,
                     }
-                    (false, None) => Ok(()),
-                }
+                };
+                Ok(status)
             }
             _ => Err(ApplyRemoteDetachError::IllegalState),
         }
@@ -873,12 +874,11 @@ impl LinkRelay<OutputHandle> {
 /// drop path and the relay cannot fail the same delivery twice.
 fn fail_pending_unsettled(unsettled: &ArcSenderUnsettledMap, detach: &Detach) {
     if let Some(entries) = unsettled.write().take() {
+        let status = DetachStatus::Closed {
+            remote_error: detach.error.clone(),
+        };
         for (_, entry) in entries {
-            let error = match detach.error.clone() {
-                Some(error) => LinkStateError::RemoteClosedWithError(error),
-                None => LinkStateError::RemoteClosed,
-            };
-            let _ = entry.fail(error);
+            let _ = entry.fail(DeliveryFailure::LinkEnded(status.clone()));
         }
     }
 }

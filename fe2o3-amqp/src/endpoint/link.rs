@@ -15,7 +15,7 @@ use crate::{
     link::{
         delivery::{Delivery, DeliveryInfo},
         state::LinkState,
-        ApplyRemoteDetachError, LinkFrame, SessionStopReason,
+        ApplyRemoteDetachError, DetachStatus, LinkFrame, SessionStopReason,
     },
     util::{AsByteIterator, IntoReader},
     Payload,
@@ -65,12 +65,12 @@ pub(crate) trait LinkDetach {
     ///
     /// # Errors
     ///
-    /// See [`ApplyRemoteDetachError`]: `RemoteDetachedWithError` /
-    /// `RemoteClosedWithError` are returned after the outcome was recorded
-    /// (the link is already `Detached`/`Closed`); `IllegalState` means the
-    /// outcome was not recorded and nothing changed.
-    fn apply_remote_detach_outcome(&mut self, detach: Detach)
-        -> Result<(), ApplyRemoteDetachError>;
+    /// `IllegalState` means the outcome was not recorded and nothing changed
+    /// (the link is `Unattached`, already `Detached`, or already `Closed`).
+    fn apply_remote_detach_outcome(
+        &mut self,
+        detach: Detach,
+    ) -> Result<DetachStatus, ApplyRemoteDetachError>;
 }
 
 pub(crate) trait LinkAttach {

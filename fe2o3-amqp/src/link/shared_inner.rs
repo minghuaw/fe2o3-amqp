@@ -9,7 +9,9 @@ use crate::{
     session::{self, error::AllocLinkError},
 };
 
-use super::{state::LinkState, DetachError, LinkFrame, LinkRelay, SessionStopReason};
+use super::{
+    state::LinkState, DetachError, IllegalLinkStateError, LinkFrame, LinkRelay, SessionStopReason,
+};
 
 pub(crate) trait LinkEndpointInner
 where
@@ -247,6 +249,7 @@ where
                 } else {
                     self.link_mut()
                         .apply_remote_detach_outcome(remote_detach)
+                        .map(|_| ())
                         .map_err(DetachError::from)
                 }
             }
@@ -326,10 +329,25 @@ where
     }
 }
 
+/// The `IllegalLinkStateError` for a link operation that failed because the
+/// session (or its connection) stopped; `IllegalState` when no stop reason was
+/// recorded (defensive).
+fn illegal_link_state_from_stop_reason<T>(inner: &T) -> IllegalLinkStateError
+where
+    T: LinkEndpointInner + ?Sized,
+{
+    match inner.session_stop_reason().get() {
+        Some(reason) => IllegalLinkStateError::SessionStopped(reason.clone()),
+        None => IllegalLinkStateError::IllegalState, // defensive: no stop reason recorded; failure is link-local
+    }
+}
+
 /// # Cancel safety
 ///
 /// This is cancel safe because it only `.await` on `recv()` from a `tokio::mpsc::Receiver`
-pub(super) async fn recv_remote_detach<T>(link_inner: &mut T) -> Result<Detach, DetachError>
+pub(super) async fn recv_remote_detach<T>(
+    link_inner: &mut T,
+) -> Result<Detach, IllegalLinkStateError>
 where
     T: LinkEndpointInner + LinkEndpointInnerReattach + Send + Sync,
     T::Link: LinkDetach<DetachError = DetachError>,
@@ -340,7 +358,7 @@ where
             .reader_mut()
             .recv()
             .await // cancel safe
-            .ok_or_else(|| detach_error_from_stop_reason(link_inner))?
+            .ok_or_else(|| illegal_link_state_from_stop_reason(link_inner))?
         {
             LinkFrame::Detach(detach) => return Ok(detach),
             _frame => {
