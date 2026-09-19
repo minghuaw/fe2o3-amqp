@@ -228,14 +228,8 @@ where
 {
     fn get_unsettled_map(
         &self,
-        is_reattaching: bool,
         partial_unsettled: usize,
     ) -> Option<OrderedMap<DeliveryTag, Option<DeliveryState>>> {
-        // When reattaching (as opposed to resuming), the unsettled map MUST be null.
-        if is_reattaching {
-            return None;
-        }
-
         let guard = self.unsettled.read();
         let map = guard.as_ref()?;
         match (map.len(), partial_unsettled) {
@@ -258,17 +252,12 @@ where
         }
     }
 
-    fn as_complete_attach(&self, handle: OutputHandle, is_reattaching: bool) -> Attach {
-        self.as_attach_inner(handle, is_reattaching, 1)
+    fn as_complete_attach(&self, handle: OutputHandle) -> Attach {
+        self.as_attach_inner(handle, 1)
     }
 
-    fn as_attach_inner(
-        &self,
-        handle: OutputHandle,
-        is_reattaching: bool,
-        partial_unsettled: usize,
-    ) -> Attach {
-        let unsettled = self.get_unsettled_map(is_reattaching, partial_unsettled);
+    fn as_attach_inner(&self, handle: OutputHandle, partial_unsettled: usize) -> Attach {
+        let unsettled = self.get_unsettled_map(partial_unsettled);
 
         let max_message_size = match self.max_message_size {
             0 => None,
@@ -305,11 +294,10 @@ where
         &self,
         max_frame_size: usize,
         handle: OutputHandle,
-        is_reattaching: bool,
     ) -> Result<Attach, SendAttachErrorKind> {
         let mut denominator = 1usize; // This is going to be the denominator
 
-        let mut attach = self.as_attach_inner(handle.clone(), is_reattaching, denominator);
+        let mut attach = self.as_attach_inner(handle.clone(), denominator);
         // `SizeSerializer` computes the serialized size without allocating a
         // buffer; only the size is needed here.
         while serialized_size(&attach).map_err(|_| SendAttachErrorKind::IllegalState)? // This should not happen
@@ -317,7 +305,7 @@ where
         {
             denominator *= 2;
 
-            attach = self.as_attach_inner(handle.clone(), is_reattaching, denominator);
+            attach = self.as_attach_inner(handle.clone(), denominator);
         }
 
         Ok(attach)
@@ -330,7 +318,7 @@ where
     pub(crate) async fn send_attach_inner(
         &mut self,
         writer: &mpsc::Sender<LinkFrame>,
-        is_reattaching: bool,
+        _is_reattaching: bool,
     ) -> Result<(), SendAttachErrorKind> {
         // Create Attach frame
         let handle = match &self.output_handle {
@@ -338,27 +326,21 @@ where
             None => return Err(SendAttachErrorKind::IllegalState),
         };
 
-        let unsettled_map_len = if is_reattaching {
-            // If reattaching, the unsettled map MUST be null
-            //
-            // It is ok to clear the map here because link will always try to send attach
-            // before it handles the remote attach.
-            let mut guard = self.unsettled.write();
-            *guard = None;
-            None
-        } else {
+        // Advertise the unsettled map on (re)attach so the peer can reconcile
+        // outstanding deliveries; resumption re-sends them.
+        let unsettled_map_len = {
             let guard = self.unsettled.read();
             guard.as_ref().map(|m| m.len())
         };
 
         let attach = match unsettled_map_len {
-            Some(0) | None => self.as_complete_attach(handle, is_reattaching),
+            Some(0) | None => self.as_complete_attach(handle),
             Some(_) => {
                 // The connection engine publishes the negotiated encoder max
                 // frame size before the connection handle is created; links
                 // are only attached after the connection is opened, so the
                 // value is always populated.
-                self.as_maybe_incomplete_attach(self.max_frame_size, handle, is_reattaching)?
+                self.as_maybe_incomplete_attach(self.max_frame_size, handle)?
             }
         };
         let incomplete_unsettled = attach.incomplete_unsettled;
@@ -447,6 +429,12 @@ where
         match (&self.local_state, closed) {
             (LinkState::Attached, false) => self.local_state = LinkState::DetachSent,
             (LinkState::Attached, true) => self.local_state = LinkState::CloseSent,
+            // The incomplete-unsettled attach exchange has completed on both
+            // sides, so the link can be suspended for the AMQP 1.0 §2.6.13
+            // reduction's suspend-and-retry.
+            (LinkState::IncompleteAttachExchanged, false) => {
+                self.local_state = LinkState::DetachSent
+            }
             _ => return Err(DetachError::IllegalState),
         };
 

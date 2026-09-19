@@ -248,6 +248,10 @@ impl Sender {
     /// `DetachThenResumeSenderError::Resume` will be returned if the detach succeeds but re-attach
     /// fails. `DetachThenResumeSenderError::Detach` will be returned if both the detach and
     /// re-attach fails.
+    ///
+    /// Unsettled deliveries are carried over to the resumed link and re-sent;
+    /// the futures returned by [`send_batchable`](#method.send_batchable) for
+    /// those deliveries resolve once the peer's disposition arrives.
     pub async fn detach_then_resume_on_session<R>(
         &mut self,
         new_session: &SessionHandle<R>,
@@ -384,6 +388,15 @@ impl Sender {
     ///
     /// This function is cancel-safe. See [#22](https://github.com/minghuaw/fe2o3-amqp/issues/22)
     /// for more details.
+    ///
+    /// # Delivery settlement and resumption
+    ///
+    /// The outcome resolves once the peer's disposition arrives, which may be
+    /// after the link is resumed on another session or connection: an unsettled
+    /// delivery stays in the link's unsettled map and is re-sent on resumption.
+    /// Because this method borrows the sender while it waits, use
+    /// [`send_batchable`](#method.send_batchable) if the link may need to be
+    /// resumed (its future does not borrow the sender).
     pub async fn send<T: SerializableBody>(
         &mut self,
         sendable: impl Into<Sendable<T>>,
@@ -433,6 +446,12 @@ impl Sender {
     ///
     /// This will set the batchable field of the `Transfer` performative to true. Please see
     /// [`send()`](#method.send) for information on how to use custom type as argument.
+    ///
+    /// The returned future resolves with the peer's disposition, possibly only
+    /// after the link is resumed on another session or connection: the unsettled
+    /// delivery is re-sent on resumption. Unlike [`send()`](#method.send), it
+    /// does not borrow the sender, so the link can be detached and resumed while
+    /// the future is pending.
     ///
     /// # Example
     ///
@@ -1038,6 +1057,13 @@ impl SenderInner<SenderLink<Target>> {
                         self.handle_resuming_delivery(delivery_tag, resuming, &mut resend_buf)
                             .await?;
                     }
+
+                    // The unsettled map was incomplete. AMQP 1.0 §2.6.6: after
+                    // the reduction of state, the two parties suspend and
+                    // re-attempt to resume the link. The detach consumes the
+                    // output handle, so reallocate it for the retry.
+                    self.detach_with_error(None).await?;
+                    self.reallocate_output_handle().await?;
                 }
                 SenderAttachExchange::Resume(resuming_deliveries) => {
                     for (delivery_tag, resuming) in resuming_deliveries {
@@ -1045,16 +1071,14 @@ impl SenderInner<SenderLink<Target>> {
                             .await?;
                     }
 
-                    // Resend buffered payloads
+                    // Resend buffered payloads; the resumption is complete.
                     for unsettled_message in resend_buf.drain(..) {
                         self.resend(unsettled_message).await?;
                     }
 
-                    // Upon completion of this reduction of state, the two parties MUST suspend and
-                    // re-attempt to resume the link. The detach consumes the output handle,
-                    // so reallocate it for the retry.
-                    self.detach_with_error(None).await?;
-                    self.reallocate_output_handle().await?;
+                    // With complete unsettled maps the resumption is complete
+                    // once the buffered payloads are resent.
+                    break;
                 }
             }
         }
@@ -1131,6 +1155,10 @@ impl DetachedSender {
     }
 
     /// Resume the sender link on the original session
+    ///
+    /// Unsettled deliveries are re-sent on the resumed link; the futures
+    /// returned by [`Sender::send_batchable`] for those deliveries resolve once
+    /// the peer's disposition arrives.
     #[cfg_attr(feature = "tracing", tracing::instrument(skip(self)))]
     pub async fn resume(self) -> Result<Sender, SenderResumeError> {
         self.resume_inner(false).await
