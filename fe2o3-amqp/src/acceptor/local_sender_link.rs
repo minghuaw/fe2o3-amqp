@@ -171,10 +171,10 @@ where
         let outgoing = session.outgoing.clone();
 
         match link.on_incoming_attach(remote_attach) {
-            Ok(_) => link.send_attach(&outgoing, false).await?,
+            Ok(_) => link.send_attach(&outgoing).await?,
             Err(attach_error) => {
                 // Complete attach then detach should any error happen
-                link.send_attach(&outgoing, false).await?;
+                link.send_attach(&outgoing).await?;
                 match attach_error {
                     SenderAttachError::SndSettleModeNotSupported => {
                         // FIXME: The initiating side is responsible for checking whether the desired modes are supported?
