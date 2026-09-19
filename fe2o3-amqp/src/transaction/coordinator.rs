@@ -206,22 +206,18 @@ impl TxnCoordinator {
                     // TODO: detach instead of closing
                     Running::Stop
                 }
-                crate::link::LinkStateError::RemoteDetached
-                | crate::link::LinkStateError::RemoteClosed
-                | crate::link::LinkStateError::RemoteDetachedWithError(_)
-                | crate::link::LinkStateError::RemoteClosedWithError(_) => {
-                    self.inner
-                        .close_with_error(None)
-                        .await
-                        .unwrap_or_else(|_err| {
-                            #[cfg(feature = "tracing")]
-                            tracing::error!(detach_error = ?_err);
-                            #[cfg(feature = "log")]
-                            log::error!("detach_error = {:?}", _err);
-                        });
-                    Running::Stop
-                }
             },
+            RecvError::LinkDetached(_) => {
+                // The peer detached the link; the relay already answered its
+                // detach, so this only finishes the local close.
+                if let Err(_err) = self.inner.close_with_error(None).await {
+                    #[cfg(feature = "tracing")]
+                    tracing::error!(detach_error = ?_err);
+                    #[cfg(feature = "log")]
+                    log::error!("detach_error = {:?}", _err);
+                }
+                Running::Stop
+            }
             RecvError::TransferLimitExceeded => {
                 #[cfg(feature = "tracing")]
                 tracing::error!(?error);

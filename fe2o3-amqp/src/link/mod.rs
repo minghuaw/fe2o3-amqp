@@ -408,7 +408,7 @@ where
     type DetachError = DetachError;
 
     #[cfg_attr(feature = "tracing", tracing::instrument(skip_all))]
-    fn on_detach_reply(&mut self, detach: Detach) -> Result<(), Self::DetachError> {
+    fn on_detach_reply(&mut self, detach: Detach) -> Result<DetachStatus, Self::DetachError> {
         #[cfg(feature = "tracing")]
         tracing::trace!(detach = ?detach);
         #[cfg(feature = "log")]
@@ -442,10 +442,32 @@ where
         closed: bool,
         error: Option<definitions::Error>,
     ) -> Result<(), Self::DetachError> {
-        // Change the state whether sending the detach frame succeeds or not
+        // Change the state whether sending the detach frame succeeds or not.
+        //
+        // A detach is valid not only from `Attached`: it may also be sent while
+        // an attach exchange is still in progress (including the
+        // `IncompleteAttach*` states used by the AMQP 1.0 §2.6.13
+        // reduce/suspend/re-attempt cycle), matching the states accepted by
+        // `LinkEndpointInnerDetach::detach_with_error`.
         match (&self.local_state, closed) {
-            (LinkState::Attached, false) => self.local_state = LinkState::DetachSent,
-            (LinkState::Attached, true) => self.local_state = LinkState::CloseSent,
+            (
+                LinkState::Attached
+                | LinkState::AttachSent
+                | LinkState::AttachReceived
+                | LinkState::IncompleteAttachSent
+                | LinkState::IncompleteAttachReceived
+                | LinkState::IncompleteAttachExchanged,
+                false,
+            ) => self.local_state = LinkState::DetachSent,
+            (
+                LinkState::Attached
+                | LinkState::AttachSent
+                | LinkState::AttachReceived
+                | LinkState::IncompleteAttachSent
+                | LinkState::IncompleteAttachReceived
+                | LinkState::IncompleteAttachExchanged,
+                true,
+            ) => self.local_state = LinkState::CloseSent,
             _ => return Err(DetachError::IllegalState),
         };
 
@@ -483,7 +505,7 @@ where
     fn apply_remote_detach_outcome(
         &mut self,
         detach: Detach,
-    ) -> Result<(), ApplyRemoteDetachError> {
+    ) -> Result<DetachStatus, ApplyRemoteDetachError> {
         match self.local_state {
             LinkState::Attached
             | LinkState::AttachSent
@@ -499,16 +521,16 @@ where
                     LinkState::Detached
                 };
                 let _ = self.output_handle.take();
-                match (detach.closed, detach.error) {
-                    (true, Some(error)) => {
-                        Err(ApplyRemoteDetachError::RemoteClosedWithError(error))
+                let status = if detach.closed {
+                    DetachStatus::Closed {
+                        remote_error: detach.error,
                     }
-                    (true, None) => Ok(()),
-                    (false, Some(error)) => {
-                        Err(ApplyRemoteDetachError::RemoteDetachedWithError(error))
+                } else {
+                    DetachStatus::Detached {
+                        remote_error: detach.error,
                     }
-                    (false, None) => Ok(()),
-                }
+                };
+                Ok(status)
             }
             _ => Err(ApplyRemoteDetachError::IllegalState),
         }
@@ -873,12 +895,11 @@ impl LinkRelay<OutputHandle> {
 /// drop path and the relay cannot fail the same delivery twice.
 fn fail_pending_unsettled(unsettled: &ArcSenderUnsettledMap, detach: &Detach) {
     if let Some(entries) = unsettled.write().take() {
+        let status = DetachStatus::Closed {
+            remote_error: detach.error.clone(),
+        };
         for (_, entry) in entries {
-            let error = match detach.error.clone() {
-                Some(error) => LinkStateError::RemoteClosedWithError(error),
-                None => LinkStateError::RemoteClosed,
-            };
-            let _ = entry.fail(error);
+            let _ = entry.fail(DeliveryFailure::LinkDetached(status.clone()));
         }
     }
 }

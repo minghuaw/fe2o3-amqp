@@ -53,7 +53,7 @@ async fn main() {
         outcome.accepted_or_else(|outcome| outcome).unwrap();
     }
 
-    let detached = sender.detach().await.unwrap();
+    let (detached, _status) = sender.detach().await.unwrap();
 
     // Close the old session and create a new one
     session.close().await.unwrap();
