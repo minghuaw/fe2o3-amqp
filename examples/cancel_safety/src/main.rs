@@ -20,7 +20,7 @@ async fn sender_task(mut sender: Sender) {
         outcome.accepted_or_else(|outcome| outcome).unwrap();
     }
 
-    sender.close().await.unwrap()
+    sender.close().await.unwrap();
 }
 
 async fn receiver_task(mut receiver: Receiver) {
@@ -46,7 +46,7 @@ async fn receiver_task(mut receiver: Receiver) {
         }
     }
 
-    receiver.close().await.unwrap()
+    receiver.close().await.unwrap();
 }
 
 async fn process_delivery(delivery: Delivery<String>, tx: mpsc::Sender<DeliveryInfo>) {
