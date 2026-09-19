@@ -438,31 +438,35 @@ impl Receiver {
         new_session: &SessionHandle<R>,
     ) -> Result<ReceiverAttachExchange, DetachThenResumeReceiverError> {
         // detach the link
-        let detach_result = self
-            .inner
-            .detach_with_error(None)
-            .await
-            .map_err(DetachThenResumeReceiverError::from);
+        let detach_result = self.inner.detach_with_error(None).await;
+
+        // If the peer closed the link instead of suspending it, the link can
+        // no longer be resumed. The status is carried by the resume error.
+        if let Ok(status) = &detach_result {
+            if status.is_closed() {
+                return Err(DetachThenResumeReceiverError::Resume(
+                    ReceiverResumeErrorKind::LinkDetached(status.clone()),
+                ));
+            }
+        }
 
         // re-attach the link
-        let is_reattaching = self.inner.switch_session(new_session);
-        let exchange_result = self
-            .inner
-            .resume_incoming_attach(None, is_reattaching)
-            .await
-            .map_err(DetachThenResumeReceiverError::from);
+        self.inner.switch_session(new_session);
+        let exchange_result = self.inner.resume_incoming_attach(None).await;
 
         match (detach_result, exchange_result) {
             (_, Ok(exchange)) => Ok(exchange),
-            (Ok(_), Err(err)) => Err(err),
-            (Err(err), Err(_)) => Err(err),
+            (Ok(_), Err(err)) => Err(DetachThenResumeReceiverError::Resume(err)),
+            (Err(err), Err(_)) => Err(DetachThenResumeReceiverError::Detach(err)),
         }
     }
 
     /// Close the link.
     ///
     /// This will send a Detach performative with the `closed` field set to true.
-    pub async fn close(mut self) -> Result<(), DetachError> {
+    /// The returned [`DetachStatus`] carries the error the peer attached to
+    /// its closing detach, if any.
+    pub async fn close(mut self) -> Result<DetachStatus, DetachError> {
         self.inner.close_with_error(None).await
     }
 
@@ -958,10 +962,9 @@ where
 
     async fn exchange_attach(
         &mut self,
-        is_reattaching: bool,
     ) -> Result<ReceiverAttachExchange, <Self::Link as LinkAttach>::AttachError> {
         self.link
-            .exchange_attach(&self.outgoing, &mut self.incoming, is_reattaching)
+            .exchange_attach(&self.outgoing, &mut self.incoming)
             .await
     }
 
@@ -1539,29 +1542,24 @@ impl ReceiverInner<ReceiverLink<Target>> {
     /// The new session may belong to a different connection whose negotiated
     /// max frame size differs, so the link's `max_frame_size` is refreshed
     /// from the new session before any attach/transfer frame is sent.
-    pub(crate) fn switch_session<R>(&mut self, new_session: &SessionHandle<R>) -> bool {
-        let is_reattaching = !self.session.same_channel(&new_session.control);
+    pub(crate) fn switch_session<R>(&mut self, new_session: &SessionHandle<R>) {
         self.session = new_session.control.clone();
         self.outgoing = new_session.outgoing.clone();
         self.link.max_frame_size = new_session.max_frame_size();
-        is_reattaching
     }
 
     pub(crate) async fn resume_incoming_attach(
         &mut self,
         mut initial_remote_attach: Option<Attach>,
-        is_reattaching: bool,
     ) -> Result<ReceiverAttachExchange, ReceiverResumeErrorKind> {
         self.reallocate_output_handle().await?;
 
         let exchange = match initial_remote_attach.take() {
             Some(remote_attach) => {
-                self.link
-                    .send_attach(&self.outgoing, is_reattaching)
-                    .await?;
+                self.link.send_attach(&self.outgoing).await?;
                 self.link.on_incoming_attach(remote_attach)?
             }
-            None => self.exchange_attach(is_reattaching).await?,
+            None => self.exchange_attach().await?,
         };
         #[cfg(feature = "tracing")]
         tracing::debug!(?exchange);
@@ -1712,16 +1710,8 @@ impl DetachedReceiver {
         &mut self.inner.link.target
     }
 
-    async fn resume_inner(
-        mut self,
-        is_reattaching: bool,
-    ) -> Result<ResumingReceiver, ReceiverResumeError> {
-        let exchange = try_as_recver!(
-            self,
-            self.inner
-                .resume_incoming_attach(None, is_reattaching)
-                .await
-        );
+    async fn resume_inner(mut self) -> Result<ResumingReceiver, ReceiverResumeError> {
+        let exchange = try_as_recver!(self, self.inner.resume_incoming_attach(None).await);
         let receiver = Receiver { inner: *self.inner };
         let resuming_receiver = match exchange {
             ReceiverAttachExchange::Complete => ResumingReceiver::Complete(receiver),
@@ -1739,16 +1729,15 @@ impl DetachedReceiver {
     /// times if there are unsettled deliveries.
     #[cfg_attr(feature = "tracing", tracing::instrument(skip(self)))]
     pub async fn resume(self) -> Result<ResumingReceiver, ReceiverResumeError> {
-        self.resume_inner(false).await
+        self.resume_inner().await
     }
 
     cfg_not_wasm32! {
         async fn resume_with_timeout_inner(
             mut self,
             duration: Duration,
-            is_reattaching: bool,
         ) -> Result<ResumingReceiver, ReceiverResumeError> {
-            let fut = self.inner.resume_incoming_attach(None, is_reattaching);
+            let fut = self.inner.resume_incoming_attach(None);
 
             match tokio::time::timeout(duration, fut).await {
                 Ok(Ok(exchange)) => {
@@ -1799,9 +1788,9 @@ impl DetachedReceiver {
         mut self,
         session: &SessionHandle<R>,
     ) -> Result<ResumingReceiver, ReceiverResumeError> {
-        let is_reattaching = self.inner.switch_session(session);
+        self.inner.switch_session(session);
 
-        self.resume_inner(is_reattaching).await
+        self.resume_inner().await
     }
 
     /// Resume the receiver link on the original session with an Attach sent by the remote peer
@@ -1836,13 +1825,11 @@ impl DetachedReceiver {
         remote_attach: Attach,
         session: &SessionHandle<R>,
     ) -> Result<ResumingReceiver, ReceiverResumeError> {
-        let is_reattaching = self.inner.switch_session(session);
+        self.inner.switch_session(session);
 
         let exchange = try_as_recver!(
             self,
-            self.inner
-                .resume_incoming_attach(Some(remote_attach), is_reattaching)
-                .await
+            self.inner.resume_incoming_attach(Some(remote_attach)).await
         );
         let receiver = Receiver { inner: *self.inner };
         let resuming_receiver = match exchange {
@@ -1865,8 +1852,8 @@ impl DetachedReceiver {
             session: &SessionHandle<R>,
             duration: Duration,
         ) -> Result<ResumingReceiver, ReceiverResumeError> {
-            let is_reattaching = self.inner.switch_session(session);
-            self.resume_with_timeout_inner(duration, is_reattaching).await
+            self.inner.switch_session(session);
+            self.resume_with_timeout_inner(duration).await
         }
 
         /// Resume the receiver link on the original session with an Attach sent by the remote peer
@@ -1916,9 +1903,9 @@ impl DetachedReceiver {
             session: &SessionHandle<R>,
             duration: Duration,
         ) -> Result<ResumingReceiver, ReceiverResumeError> {
-            let is_reattaching = self.inner.switch_session(session);
+            self.inner.switch_session(session);
 
-            let fut = self.inner.resume_incoming_attach(Some(remote_attach), is_reattaching);
+            let fut = self.inner.resume_incoming_attach(Some(remote_attach));
 
             match tokio::time::timeout(duration, fut).await {
                 Ok(Ok(exchange)) => {
@@ -2397,15 +2384,13 @@ mod tests {
         let mut inner = make_receiver_inner(4092);
         let session_b = make_session_handle(1020);
 
-        // Switching to a different session marks the link as reattaching and
-        // refreshes the link's max frame size from the new session
-        let is_reattaching = inner.switch_session(&session_b);
-        assert!(is_reattaching);
+        // Switching to a different session refreshes the link's max frame
+        // size from the new session
+        inner.switch_session(&session_b);
         assert_eq!(inner.link.max_frame_size, 1020);
 
-        // Switching to the same session does not mark the link as reattaching
-        let is_reattaching = inner.switch_session(&session_b);
-        assert!(!is_reattaching);
+        // Switching to the same session is idempotent
+        inner.switch_session(&session_b);
         assert_eq!(inner.link.max_frame_size, 1020);
     }
 
@@ -3004,6 +2989,58 @@ mod tests {
                 ..
             }))
         ));
+    }
+
+    /// AMQP 1.0 §2.6.13: target-only deliveries (local unsettled entries
+    /// absent from a complete remote map) MUST be considered settled.
+    #[test]
+    fn receiver_reconciles_target_only_deliveries() {
+        let (mut inner, _session_rx, _outgoing_rx, _incoming_tx) =
+            make_receiver_inner_with_channels(4096);
+        seed_unsettled(&inner.link.unsettled, &[vec![1], vec![2]]);
+
+        // Remote map has only tag 1 (complete): tag 2 is target-only.
+        let mut remote = OrderedMap::new();
+        remote.insert(DeliveryTag::from(vec![1u8]), None);
+        let _ = inner.link.handle_unsettled_in_attach(Some(remote), false);
+
+        let lock = inner.link.unsettled.read();
+        let map = lock.as_ref().unwrap();
+        assert!(map.contains_key(&DeliveryTag::from(vec![1u8])));
+        assert!(!map.contains_key(&DeliveryTag::from(vec![2u8])));
+    }
+
+    /// An incomplete remote map is not evidence of settlement, so local
+    /// entries are left untouched.
+    #[test]
+    fn receiver_keeps_deliveries_on_incomplete_remote_map() {
+        let (mut inner, _session_rx, _outgoing_rx, _incoming_tx) =
+            make_receiver_inner_with_channels(4096);
+        seed_unsettled(&inner.link.unsettled, &[vec![1]]);
+
+        let _ = inner
+            .link
+            .handle_unsettled_in_attach(Some(OrderedMap::new()), true);
+
+        let lock = inner.link.unsettled.read();
+        assert!(lock
+            .as_ref()
+            .unwrap()
+            .contains_key(&DeliveryTag::from(vec![1u8])));
+    }
+
+    /// A `None` remote map (peer reattached without unsettled state) settles
+    /// every target-only delivery.
+    #[test]
+    fn receiver_clears_deliveries_on_missing_remote_map() {
+        let (mut inner, _session_rx, _outgoing_rx, _incoming_tx) =
+            make_receiver_inner_with_channels(4096);
+        seed_unsettled(&inner.link.unsettled, &[vec![1], vec![2]]);
+
+        let _ = inner.link.handle_unsettled_in_attach(None, false);
+
+        let lock = inner.link.unsettled.read();
+        assert!(lock.as_ref().unwrap().is_empty());
     }
 
     /// A peer that suspends (non-closing detach) while this side is closing

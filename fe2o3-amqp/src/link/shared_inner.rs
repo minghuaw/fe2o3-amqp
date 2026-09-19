@@ -38,7 +38,6 @@ where
 
     async fn exchange_attach(
         &mut self,
-        is_reattaching: bool,
     ) -> Result<<Self::Link as LinkAttach>::AttachExchange, <Self::Link as LinkAttach>::AttachError>;
 
     async fn handle_attach_error(

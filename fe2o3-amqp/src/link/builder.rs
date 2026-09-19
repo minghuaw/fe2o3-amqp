@@ -556,7 +556,7 @@ where
         );
 
         match link
-            .exchange_attach(&session.outgoing, &mut incoming_rx, false)
+            .exchange_attach(&session.outgoing, &mut incoming_rx)
             .await
         {
             Ok(exchange) => {
@@ -679,7 +679,7 @@ where
         );
 
         match link
-            .exchange_attach(&session.outgoing, &mut incoming_rx, false)
+            .exchange_attach(&session.outgoing, &mut incoming_rx)
             .await
         {
             Ok(outcome) => outcome.complete_or(ReceiverAttachError::IllegalState)?,

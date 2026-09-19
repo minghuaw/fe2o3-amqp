@@ -228,18 +228,24 @@ where
 {
     fn get_unsettled_map(
         &self,
-        is_reattaching: bool,
         partial_unsettled: usize,
+        is_resuming: bool,
     ) -> Option<OrderedMap<DeliveryTag, Option<DeliveryState>>> {
-        // When reattaching (as opposed to resuming), the unsettled map MUST be null.
-        if is_reattaching {
-            return None;
-        }
-
         let guard = self.unsettled.read();
-        let map = guard.as_ref()?;
+        let map = match guard.as_ref() {
+            Some(map) if !map.is_empty() => map,
+            // A resuming attach MUST carry a non-null unsettled field so it
+            // cannot be mistaken for a pipelined re-attach (AMQP 1.0 §2.6.5);
+            // an empty-but-present map is used when nothing is unsettled.
+            _ => {
+                return if is_resuming {
+                    Some(OrderedMap::new())
+                } else {
+                    None
+                };
+            }
+        };
         match (map.len(), partial_unsettled) {
-            (0, _) => None,
             (_, 0..=1) => {
                 let v = map
                     .iter()
@@ -258,17 +264,17 @@ where
         }
     }
 
-    fn as_complete_attach(&self, handle: OutputHandle, is_reattaching: bool) -> Attach {
-        self.as_attach_inner(handle, is_reattaching, 1)
+    fn as_complete_attach(&self, handle: OutputHandle, is_resuming: bool) -> Attach {
+        self.as_attach_inner(handle, 1, is_resuming)
     }
 
     fn as_attach_inner(
         &self,
         handle: OutputHandle,
-        is_reattaching: bool,
         partial_unsettled: usize,
+        is_resuming: bool,
     ) -> Attach {
-        let unsettled = self.get_unsettled_map(is_reattaching, partial_unsettled);
+        let unsettled = self.get_unsettled_map(partial_unsettled, is_resuming);
 
         let max_message_size = match self.max_message_size {
             0 => None,
@@ -305,11 +311,11 @@ where
         &self,
         max_frame_size: usize,
         handle: OutputHandle,
-        is_reattaching: bool,
+        is_resuming: bool,
     ) -> Result<Attach, SendAttachErrorKind> {
         let mut denominator = 1usize; // This is going to be the denominator
 
-        let mut attach = self.as_attach_inner(handle.clone(), is_reattaching, denominator);
+        let mut attach = self.as_attach_inner(handle.clone(), denominator, is_resuming);
         // `SizeSerializer` computes the serialized size without allocating a
         // buffer; only the size is needed here.
         while serialized_size(&attach).map_err(|_| SendAttachErrorKind::IllegalState)? // This should not happen
@@ -317,7 +323,7 @@ where
         {
             denominator *= 2;
 
-            attach = self.as_attach_inner(handle.clone(), is_reattaching, denominator);
+            attach = self.as_attach_inner(handle.clone(), denominator, is_resuming);
         }
 
         Ok(attach)
@@ -330,7 +336,6 @@ where
     pub(crate) async fn send_attach_inner(
         &mut self,
         writer: &mpsc::Sender<LinkFrame>,
-        is_reattaching: bool,
     ) -> Result<(), SendAttachErrorKind> {
         // Create Attach frame
         let handle = match &self.output_handle {
@@ -338,27 +343,28 @@ where
             None => return Err(SendAttachErrorKind::IllegalState),
         };
 
-        let unsettled_map_len = if is_reattaching {
-            // If reattaching, the unsettled map MUST be null
-            //
-            // It is ok to clear the map here because link will always try to send attach
-            // before it handles the remote attach.
-            let mut guard = self.unsettled.write();
-            *guard = None;
-            None
-        } else {
+        // A link that was previously attached is being resumed; its attach
+        // must carry a non-null unsettled map even when nothing is unsettled.
+        let is_resuming = matches!(
+            self.local_state,
+            LinkState::Detached | LinkState::DetachSent
+        );
+
+        // Advertise the unsettled map on (re)attach so the peer can reconcile
+        // outstanding deliveries; resumption re-sends them.
+        let unsettled_map_len = {
             let guard = self.unsettled.read();
             guard.as_ref().map(|m| m.len())
         };
 
         let attach = match unsettled_map_len {
-            Some(0) | None => self.as_complete_attach(handle, is_reattaching),
+            Some(0) | None => self.as_complete_attach(handle, is_resuming),
             Some(_) => {
                 // The connection engine publishes the negotiated encoder max
                 // frame size before the connection handle is created; links
                 // are only attached after the connection is opened, so the
                 // value is always populated.
-                self.as_maybe_incomplete_attach(self.max_frame_size, handle, is_reattaching)?
+                self.as_maybe_incomplete_attach(self.max_frame_size, handle, is_resuming)?
             }
         };
         let incomplete_unsettled = attach.incomplete_unsettled;

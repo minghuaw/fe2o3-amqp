@@ -1,6 +1,6 @@
 use std::sync::{Arc, OnceLock};
 
-use fe2o3_amqp_types::{definitions::Fields, messaging::MESSAGE_FORMAT};
+use fe2o3_amqp_types::definitions::Fields;
 use futures_util::Future;
 use serde_amqp::serialized_size;
 
@@ -204,7 +204,7 @@ where
                     // shows up as the channel closing (`None` below).
                     Some(LinkFrame::Detach(detach)) => {
                         match self.apply_remote_detach_outcome(detach) {
-                            Ok(status) => Err(TransferError::LinkEnded(status)),
+                            Ok(status) => Err(TransferError::LinkDetached(status)),
                             Err(err) => Err(TransferError::LinkState(err.into())),
                         }
                     },
@@ -544,7 +544,7 @@ async fn send_disposition(
 
 impl<T> SenderLink<T> {
     #[allow(clippy::needless_collect)]
-    fn handle_unsettled_in_attach(
+    pub(crate) fn handle_unsettled_in_attach(
         &mut self,
         remote_unsettled: Option<OrderedMap<DeliveryTag, Option<DeliveryState>>>,
     ) -> Result<SenderAttachExchange, SenderAttachError> {
@@ -556,19 +556,12 @@ impl<T> SenderLink<T> {
                     return Ok(SenderAttachExchange::Complete);
                 }
 
-                remote_map
-                    .into_keys()
-                    // Local is None, assume the message format is 0
-                    .map(|delivery_tag| {
-                        (
-                            delivery_tag,
-                            ResumingDelivery::Abort {
-                                message_format: MESSAGE_FORMAT,
-                                sender: None,
-                            },
-                        )
-                    })
-                    .collect()
+                // The peer considers these deliveries unsettled while this side
+                // has no record of them (target-only). AMQP 1.0 §2.6.13: the
+                // sender MUST ignore them, and §2.7.5 forbids sending resumed
+                // transfers for deliveries not in the local unsettled map. The
+                // receiver settles them by comparing the attach maps.
+                Vec::new()
             }
             (Some(local_map), None) => {
                 if local_map.is_empty() {
@@ -587,26 +580,17 @@ impl<T> SenderLink<T> {
                     return Ok(SenderAttachExchange::Complete);
                 }
 
-                let local: Vec<(DeliveryTag, ResumingDelivery)> = local_map
+                // `remote_map` retains only target-only deliveries after the
+                // local tags are removed. The sender MUST ignore them
+                // (AMQP 1.0 §2.6.13) and MUST NOT send resumed transfers for
+                // deliveries not in its local unsettled map (§2.7.5).
+                local_map
                     .into_iter()
                     .filter_map(|(tag, local)| {
                         let remote = remote_map.swap_remove(&tag);
                         resume_delivery(local, remote).map(|resume| (tag, resume))
                     })
-                    .collect();
-                let remote = remote_map
-                    .into_keys()
-                    // These are unsettled messages not found in the local map, assume the message format is 0
-                    .map(|tag| {
-                        (
-                            tag,
-                            ResumingDelivery::Abort {
-                                message_format: MESSAGE_FORMAT,
-                                sender: None,
-                            },
-                        )
-                    });
-                local.into_iter().chain(remote).collect()
+                    .collect()
             }
         };
 
@@ -745,9 +729,8 @@ where
     async fn send_attach(
         &mut self,
         writer: &mpsc::Sender<LinkFrame>,
-        is_reattaching: bool,
     ) -> Result<(), Self::AttachError> {
-        self.send_attach_inner(writer, is_reattaching).await?;
+        self.send_attach_inner(writer).await?;
         Ok(())
     }
 }
@@ -830,10 +813,9 @@ where
         &mut self,
         writer: &mpsc::Sender<LinkFrame>,
         reader: &mut mpsc::Receiver<LinkFrame>,
-        is_reattaching: bool,
     ) -> Result<Self::AttachExchange, SenderAttachError> {
         // Send out local attach
-        self.send_attach(writer, is_reattaching).await?;
+        self.send_attach(writer).await?;
 
         // Wait for remote attach
         let remote_attach =
@@ -864,7 +846,6 @@ where
             | SenderAttachError::SessionNotMapped
             | SenderAttachError::IllegalState
             | SenderAttachError::NonAttachFrameReceived
-            | SenderAttachError::ExpectImmediateDetach
             | SenderAttachError::RemoteClosedWithError(_) => attach_error,
 
             SenderAttachError::DuplicatedLinkName => {
@@ -930,8 +911,15 @@ where
             match link.send_detach(writer, true, Some(err)).await {
                 Ok(_) => match reader.recv().await {
                     Some(LinkFrame::Detach(remote_detach)) => {
-                        let _ = link.on_detach_reply(remote_detach); // FIXME: hadnle detach errors?
-                        attach_error
+                        match link.on_detach_reply(remote_detach) {
+                            Ok(status) => match status.remote_error() {
+                                Some(error) => {
+                                    SenderAttachError::RemoteClosedWithError(error.clone())
+                                }
+                                None => attach_error,
+                            },
+                            Err(detach_error) => SenderAttachError::from(detach_error),
+                        }
                     }
                     Some(_) => SenderAttachError::NonAttachFrameReceived,
                     None => match link.session_stop_reason().get() {
@@ -964,8 +952,11 @@ where
 {
     match reader.recv().await {
         Some(LinkFrame::Detach(remote_detach)) => match link.on_detach_reply(remote_detach) {
-            Ok(_) => err,
-            Err(detach_error) => detach_error.try_into().unwrap_or(err),
+            Ok(status) => match status.remote_error() {
+                Some(error) => SenderAttachError::RemoteClosedWithError(error.clone()),
+                None => err,
+            },
+            Err(detach_error) => SenderAttachError::from(detach_error),
         },
         Some(_) => SenderAttachError::NonAttachFrameReceived,
         None => match link.session_stop_reason.get() {
