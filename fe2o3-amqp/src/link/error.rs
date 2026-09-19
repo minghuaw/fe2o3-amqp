@@ -166,11 +166,8 @@ impl DetachStatus {
 /// outcome was *not* recorded: the link is `Unattached`, already `Detached`,
 /// or already `Closed`, and nothing changed.
 #[derive(Debug, thiserror::Error)]
-pub(crate) enum ApplyRemoteDetachError {
-    /// The outcome was not recorded and nothing changed.
-    #[error("Illegal link state")]
-    IllegalState,
-}
+#[error("Illegal link state")]
+pub(crate) struct ApplyRemoteDetachError;
 
 impl From<ApplyRemoteDetachError> for DetachError {
     fn from(_: ApplyRemoteDetachError) -> Self {
@@ -224,15 +221,6 @@ impl From<DeliveryFailure> for SendError {
         match value {
             DeliveryFailure::LinkState(error) => SendError::LinkStateError(error),
             DeliveryFailure::LinkEnded(status) => SendError::LinkEnded(status),
-        }
-    }
-}
-
-impl From<DeliveryFailure> for RecvError {
-    fn from(value: DeliveryFailure) -> Self {
-        match value {
-            DeliveryFailure::LinkState(error) => RecvError::LinkStateError(error),
-            DeliveryFailure::LinkEnded(status) => RecvError::LinkEnded(status),
         }
     }
 }

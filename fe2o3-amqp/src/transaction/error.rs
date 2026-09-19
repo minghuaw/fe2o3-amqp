@@ -99,10 +99,6 @@ pub enum ControllerSendError {
     #[error("The peer detached the link: {:?}", .0)]
     LinkEnded(DetachStatus),
 
-    /// The remote peer detached with error
-    #[error("Link is detached {:?}", .0)]
-    Detached(DetachError),
-
     /// The message was rejected
     #[error("Outcome Rejected: {:?}", .0)]
     Rejected(Rejected),

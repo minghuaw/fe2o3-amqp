@@ -511,7 +511,7 @@ where
                 };
                 Ok(status)
             }
-            _ => Err(ApplyRemoteDetachError::IllegalState),
+            _ => Err(ApplyRemoteDetachError),
         }
     }
 }
