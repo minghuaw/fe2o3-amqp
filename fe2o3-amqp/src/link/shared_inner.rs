@@ -342,25 +342,23 @@ where
     }
 }
 
-/// The `IllegalLinkStateError` for a link operation that failed because the
+/// The `LinkStateError` for a link operation that failed because the
 /// session (or its connection) stopped; `IllegalState` when no stop reason was
 /// recorded (defensive).
-fn illegal_link_state_from_stop_reason<T>(inner: &T) -> IllegalLinkStateError
+fn illegal_link_state_from_stop_reason<T>(inner: &T) -> LinkStateError
 where
     T: LinkEndpointInner + ?Sized,
 {
     match inner.session_stop_reason().get() {
-        Some(reason) => IllegalLinkStateError::SessionStopped(reason.clone()),
-        None => IllegalLinkStateError::IllegalState, // defensive: no stop reason recorded; failure is link-local
+        Some(reason) => LinkStateError::SessionStopped(reason.clone()),
+        None => LinkStateError::IllegalState, // defensive: no stop reason recorded; failure is link-local
     }
 }
 
 /// # Cancel safety
 ///
 /// This is cancel safe because it only `.await` on `recv()` from a `tokio::mpsc::Receiver`
-pub(super) async fn recv_remote_detach<T>(
-    link_inner: &mut T,
-) -> Result<Detach, IllegalLinkStateError>
+pub(super) async fn recv_remote_detach<T>(link_inner: &mut T) -> Result<Detach, LinkStateError>
 where
     T: LinkEndpointInner + LinkEndpointInnerReattach + Send + Sync,
     T::Link: LinkDetach<DetachError = DetachError>,
