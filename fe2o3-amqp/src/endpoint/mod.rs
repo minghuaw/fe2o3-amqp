@@ -27,7 +27,7 @@ use fe2o3_amqp_types::{
 };
 use tokio::sync::oneshot;
 
-use crate::link::LinkStateError;
+use crate::link::DeliveryFailure;
 
 mod connection;
 pub(crate) use self::connection::*;
@@ -149,6 +149,6 @@ pub(crate) enum Settlement {
     Settled(DeliveryTag),
     Unsettled {
         delivery_tag: DeliveryTag,
-        outcome: oneshot::Receiver<Result<Option<DeliveryState>, LinkStateError>>,
+        outcome: oneshot::Receiver<Result<Option<DeliveryState>, DeliveryFailure>>,
     },
 }
