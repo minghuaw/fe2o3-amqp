@@ -20,7 +20,7 @@ use crate::{
         delivery::DeliveryInfo,
         receiver::ReceiverInner,
         shared_inner::{LinkEndpointInner, LinkEndpointInnerDetach},
-        IllegalLinkStateError, LinkFrame, ReceiverAttachError, ReceiverLink, RecvError,
+        LinkStateError, LinkFrame, ReceiverAttachError, ReceiverLink, RecvError,
         SessionStopReason,
     },
     util::{Initialized, Running},
@@ -197,15 +197,6 @@ impl TxnCoordinator {
                     // Session must have already stopped
                     Running::Stop
                 }
-                crate::link::LinkStateError::ExpectImmediateDetach => {
-                    #[cfg(feature = "tracing")]
-                    tracing::error!(?error);
-                    #[cfg(feature = "log")]
-                    log::error!("error = {:?}", error);
-                    let _ = self.inner.close_with_error(None).await;
-                    // TODO: detach instead of closing
-                    Running::Stop
-                }
             },
             RecvError::LinkEnded(_) => {
                 // The peer detached the link; the relay already answered its
@@ -293,13 +284,13 @@ impl TxnCoordinator {
         match disposition_result {
             Ok(_) => Running::Continue,
             Err(disposition_error) => match disposition_error {
-                IllegalLinkStateError::IllegalState => {
+                LinkStateError::IllegalState => {
                     let error = definitions::Error::new(AmqpError::IllegalState, None, None);
                     // TODO: detach instead of closing
                     let _ = self.inner.close_with_error(Some(error)).await;
                     Running::Stop
                 }
-                IllegalLinkStateError::SessionStopped(_) => {
+                LinkStateError::SessionStopped(_) => {
                     // Session must have already dropped
                     Running::Stop
                 }
@@ -312,7 +303,7 @@ impl TxnCoordinator {
         delivery_info: DeliveryInfo,
         error: TransactionError,
         description: impl Into<Option<String>>,
-    ) -> Result<(), IllegalLinkStateError> {
+    ) -> Result<(), LinkStateError> {
         let error = definitions::Error::new(error, description, None);
         let state = DeliveryState::Rejected(Rejected { error: Some(error) });
 

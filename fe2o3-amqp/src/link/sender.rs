@@ -35,10 +35,10 @@ use super::{
     shared_inner::{
         recv_remote_detach, LinkEndpointInner, LinkEndpointInnerDetach, LinkEndpointInnerReattach,
     },
-    ArcSenderUnsettledMap, DeliveryFailure, DetachStatus, DetachThenResumeSenderError,
-    IllegalLinkStateError, LinkFrame, LinkRelay, LinkStateError, MessageSizeExceeded, SendError,
-    SenderAttachError, SenderAttachExchange, SenderFlowState, SenderLink, SenderResumeError,
-    SenderResumeErrorKind, SessionStopReason, TransferError,
+    ArcSenderUnsettledMap, DeliveryFailure, DetachStatus, DetachThenResumeSenderError, LinkFrame,
+    LinkRelay, LinkStateError, MessageSizeExceeded, SendError, SenderAttachError,
+    SenderAttachExchange, SenderFlowState, SenderLink, SenderResumeError, SenderResumeErrorKind,
+    SessionStopReason, TransferError,
 };
 
 #[cfg(docsrs)]
@@ -476,15 +476,15 @@ impl Sender {
     ///
     /// # Errors
     ///
-    /// [`IllegalLinkStateError::IllegalState`] if the link has already ended,
-    /// or [`IllegalLinkStateError::SessionStopped`] if the session (or its
+    /// [`LinkStateError::IllegalState`] if the link has already ended,
+    /// or [`LinkStateError::SessionStopped`] if the session (or its
     /// connection) stopped first.
-    pub async fn on_detach(&mut self) -> Result<DetachStatus, IllegalLinkStateError> {
+    pub async fn on_detach(&mut self) -> Result<DetachStatus, LinkStateError> {
         let detach = recv_remote_detach(&mut self.inner).await?;
         self.inner
             .link
             .apply_remote_detach_outcome(detach)
-            .map_err(|_| IllegalLinkStateError::IllegalState)
+            .map_err(|_| LinkStateError::IllegalState)
     }
 }
 

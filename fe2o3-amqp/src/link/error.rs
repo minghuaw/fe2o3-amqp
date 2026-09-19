@@ -205,9 +205,7 @@ impl From<TransferError> for SendError {
         match value {
             TransferError::LinkState(error) => SendError::LinkStateError(error),
             TransferError::LinkEnded(status) => SendError::LinkEnded(status),
-            TransferError::ExpectImmediateDetach => {
-                SendError::LinkStateError(LinkStateError::ExpectImmediateDetach)
-            }
+            TransferError::ExpectImmediateDetach => SendError::ExpectImmediateDetach,
         }
     }
 }
@@ -381,6 +379,10 @@ pub enum SendError {
     /// Error serializing message
     #[error("Error encoding message")]
     MessageEncodeError,
+
+    /// The peer was expected to detach immediately but another frame arrived
+    #[error("Expecting the peer to immediately detach")]
+    ExpectImmediateDetach,
 }
 
 impl From<serde_amqp::Error> for SendError {
@@ -632,11 +634,6 @@ pub enum LinkStateError {
     /// The session (or its connection) stopped before the link was detached or closed
     #[error("The session stopped before the link was detached or closed: {:?}", .0)]
     SessionStopped(SessionStopReason),
-
-    /// The link is expected to be detached immediately but didn't receive
-    /// an incoming Detach frame
-    #[error("Expecting an immediate detach")]
-    ExpectImmediateDetach,
 }
 
 /// Errors associated with receiving a transfer
@@ -776,72 +773,41 @@ impl RecvError {
 }
 
 /// Type alias for disposition error
-pub type DispositionError = IllegalLinkStateError;
+pub type DispositionError = LinkStateError;
 
 /// Type alias for flow error
-pub type FlowError = IllegalLinkStateError;
+pub type FlowError = LinkStateError;
 
-/// Errors associated with sending/handling Disposition
-#[derive(Debug, thiserror::Error)]
-pub enum IllegalLinkStateError {
-    /// ILlegal link state
-    #[error("Illegal local state")]
-    IllegalState,
+pub(crate) type SendAttachErrorKind = LinkStateError;
 
-    /// The session (or its connection) stopped before the link was detached or closed
-    #[error("The session stopped before the link was detached or closed: {:?}", .0)]
-    SessionStopped(SessionStopReason),
-}
+/// Deprecated alias for [`LinkStateError`], which `IllegalLinkStateError` was
+/// merged into.
+#[deprecated(note = "use `LinkStateError` instead")]
+pub type IllegalLinkStateError = LinkStateError;
 
-pub(crate) type SendAttachErrorKind = IllegalLinkStateError;
-
-impl From<IllegalLinkStateError> for LinkStateError {
-    fn from(value: IllegalLinkStateError) -> Self {
+impl From<LinkStateError> for ReceiverAttachError {
+    fn from(value: LinkStateError) -> Self {
         match value {
-            IllegalLinkStateError::IllegalState => LinkStateError::IllegalState,
-            IllegalLinkStateError::SessionStopped(reason) => LinkStateError::SessionStopped(reason),
+            LinkStateError::IllegalState => ReceiverAttachError::IllegalState,
+            LinkStateError::SessionStopped(reason) => ReceiverAttachError::SessionStopped(reason),
         }
     }
 }
 
-impl From<IllegalLinkStateError> for ReceiverAttachError {
-    fn from(value: IllegalLinkStateError) -> Self {
+impl From<LinkStateError> for SenderAttachError {
+    fn from(value: LinkStateError) -> Self {
         match value {
-            IllegalLinkStateError::IllegalState => ReceiverAttachError::IllegalState,
-            IllegalLinkStateError::SessionStopped(reason) => {
-                ReceiverAttachError::SessionStopped(reason)
-            }
+            LinkStateError::IllegalState => SenderAttachError::IllegalState,
+            LinkStateError::SessionStopped(reason) => SenderAttachError::SessionStopped(reason),
         }
     }
 }
 
-impl From<IllegalLinkStateError> for SenderAttachError {
-    fn from(value: IllegalLinkStateError) -> Self {
+impl From<LinkStateError> for DetachError {
+    fn from(value: LinkStateError) -> Self {
         match value {
-            IllegalLinkStateError::IllegalState => SenderAttachError::IllegalState,
-            IllegalLinkStateError::SessionStopped(reason) => {
-                SenderAttachError::SessionStopped(reason)
-            }
-        }
-    }
-}
-
-impl From<IllegalLinkStateError> for SendError {
-    fn from(value: IllegalLinkStateError) -> Self {
-        match value {
-            IllegalLinkStateError::IllegalState => LinkStateError::IllegalState.into(),
-            IllegalLinkStateError::SessionStopped(reason) => {
-                LinkStateError::SessionStopped(reason).into()
-            }
-        }
-    }
-}
-
-impl From<IllegalLinkStateError> for DetachError {
-    fn from(value: IllegalLinkStateError) -> Self {
-        match value {
-            IllegalLinkStateError::IllegalState => Self::IllegalState,
-            IllegalLinkStateError::SessionStopped(reason) => Self::SessionStopped(reason),
+            LinkStateError::IllegalState => Self::IllegalState,
+            LinkStateError::SessionStopped(reason) => Self::SessionStopped(reason),
         }
     }
 }
@@ -902,7 +868,7 @@ pub enum ReceiverResumeErrorKind {
 
     /// Error with sending flow
     #[error(transparent)]
-    FlowError(#[from] IllegalLinkStateError),
+    FlowError(#[from] LinkStateError),
 
     /// Detach/suspend error
     #[error(transparent)]

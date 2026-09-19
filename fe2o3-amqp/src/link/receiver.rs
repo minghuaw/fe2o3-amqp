@@ -34,11 +34,10 @@ use super::{
     receiver_link::count_number_of_sections_and_offset,
     role,
     shared_inner::{LinkEndpointInner, LinkEndpointInnerDetach, LinkEndpointInnerReattach},
-    ArcReceiverUnsettledMap, DetachThenResumeReceiverError, DispositionError, FlowError,
-    IllegalLinkStateError, LinkFrame, LinkRelay, LinkStateError, MessageSizeExceeded,
-    ReceiverAttachError, ReceiverAttachExchange, ReceiverFlowState, ReceiverLink,
-    ReceiverResumeError, ReceiverResumeErrorKind, ReceiverTransferError, RecvError,
-    SessionStopReason, DEFAULT_CREDIT,
+    ArcReceiverUnsettledMap, DetachThenResumeReceiverError, DispositionError, FlowError, LinkFrame,
+    LinkRelay, LinkStateError, MessageSizeExceeded, ReceiverAttachError, ReceiverAttachExchange,
+    ReceiverFlowState, ReceiverLink, ReceiverResumeError, ReceiverResumeErrorKind,
+    ReceiverTransferError, RecvError, SessionStopReason, DEFAULT_CREDIT,
 };
 
 cfg_transaction! {
@@ -347,7 +346,7 @@ impl Receiver {
     }
 
     /// Set the link credit. This will stop draining if the link is in a draining cycle
-    pub async fn set_credit(&mut self, credit: SequenceNo) -> Result<(), IllegalLinkStateError> {
+    pub async fn set_credit(&mut self, credit: SequenceNo) -> Result<(), LinkStateError> {
         self.inner.set_credit(credit).await
     }
 
@@ -355,7 +354,7 @@ impl Receiver {
     ///
     /// This will send a `Flow` performative with the `drain` field set to true.
     /// Setting the credit will set the `drain` field to false and stop draining
-    pub async fn drain(&mut self) -> Result<(), IllegalLinkStateError> {
+    pub async fn drain(&mut self) -> Result<(), LinkStateError> {
         self.inner.drain().await
     }
 
@@ -1018,9 +1017,9 @@ fn ensure_delivery_identity(transfer: &Transfer) -> Result<(), ReceiverTransferE
 impl<L> ReceiverInner<L>
 where
     L: endpoint::ReceiverLink<
-            FlowError = IllegalLinkStateError,
+            FlowError = LinkStateError,
             TransferError = ReceiverTransferError,
-            DispositionError = IllegalLinkStateError,
+            DispositionError = LinkStateError,
             AttachError = ReceiverAttachError,
             DetachError = DetachError,
         > + LinkExt<FlowState = ReceiverFlowState, Unsettled = ArcReceiverUnsettledMap>
@@ -1431,7 +1430,7 @@ where
     ///
     /// This is cancel safe as internanlly it only `.await` on sending over `tokio::mpsc::Sender`
     #[inline]
-    pub async fn set_credit(&mut self, credit: SequenceNo) -> Result<(), IllegalLinkStateError> {
+    pub async fn set_credit(&mut self, credit: SequenceNo) -> Result<(), LinkStateError> {
         self.processed.store(0, Ordering::Release);
         if let CreditMode::Auto(_) = self.credit_mode {
             self.credit_mode = CreditMode::Auto(credit)

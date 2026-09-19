@@ -2,7 +2,7 @@ use fe2o3_amqp_types::messaging::{Accepted, DeliveryState, Outcome, Rejected};
 
 use crate::link::{
     delivery::{FromDeliveryFailure, FromDeliveryState, FromPreSettled},
-    DetachError, DetachStatus, DeliveryFailure, IllegalLinkStateError, LinkStateError,
+    DetachError, DetachStatus, DeliveryFailure, LinkStateError,
     MessageSizeExceeded, SendError, SenderAttachError, SessionStopReason, TransferError,
 };
 
@@ -124,6 +124,10 @@ pub enum ControllerSendError {
     /// Error serializing message
     #[error("Error encoding message")]
     MessageEncodeError,
+
+    /// The peer was expected to detach immediately but another frame arrived
+    #[error("Expecting the peer to immediately detach")]
+    ExpectImmediateDetach,
 }
 
 impl From<SendError> for ControllerSendError {
@@ -135,6 +139,7 @@ impl From<SendError> for ControllerSendError {
             SendError::IllegalDeliveryState => Self::IllegalDeliveryState,
             SendError::MessageSizeExceeded(error) => Self::MessageSizeExceeded(error),
             SendError::MessageEncodeError => Self::MessageEncodeError,
+            SendError::ExpectImmediateDetach => Self::ExpectImmediateDetach,
         }
     }
 }
@@ -144,17 +149,6 @@ impl From<DeliveryFailure> for ControllerSendError {
         match value {
             DeliveryFailure::LinkState(error) => Self::LinkStateError(error),
             DeliveryFailure::LinkEnded(status) => Self::LinkEnded(status),
-        }
-    }
-}
-
-impl From<IllegalLinkStateError> for ControllerSendError {
-    fn from(value: IllegalLinkStateError) -> Self {
-        match value {
-            IllegalLinkStateError::IllegalState => LinkStateError::IllegalState.into(),
-            IllegalLinkStateError::SessionStopped(reason) => {
-                LinkStateError::SessionStopped(reason).into()
-            }
         }
     }
 }
@@ -207,8 +201,8 @@ impl From<DetachError> for OwnedDischargeError {
     }
 }
 
-impl From<IllegalLinkStateError> for OwnedDischargeError {
-    fn from(value: IllegalLinkStateError) -> Self {
+impl From<LinkStateError> for OwnedDischargeError {
+    fn from(value: LinkStateError) -> Self {
         Self::ControllerSendError(value.into())
     }
 }
@@ -248,6 +242,10 @@ pub enum PostError {
     /// Error serializing message
     #[error("Error encoding message")]
     MessageEncodeError,
+
+    /// The peer was expected to detach immediately but another frame arrived
+    #[error("Expecting the peer to immediately detach")]
+    ExpectImmediateDetach,
 }
 
 impl From<serde_amqp::Error> for PostError {
@@ -267,9 +265,7 @@ impl From<TransferError> for PostError {
         match value {
             TransferError::LinkState(error) => Self::LinkStateError(error),
             TransferError::LinkEnded(status) => Self::LinkEnded(status),
-            TransferError::ExpectImmediateDetach => {
-                Self::LinkStateError(LinkStateError::ExpectImmediateDetach)
-            }
+            TransferError::ExpectImmediateDetach => Self::ExpectImmediateDetach,
         }
     }
 }
@@ -277,17 +273,6 @@ impl From<TransferError> for PostError {
 impl From<DetachError> for PostError {
     fn from(error: DetachError) -> Self {
         Self::Detached(error)
-    }
-}
-
-impl From<IllegalLinkStateError> for PostError {
-    fn from(value: IllegalLinkStateError) -> Self {
-        match value {
-            IllegalLinkStateError::IllegalState => LinkStateError::IllegalState.into(),
-            IllegalLinkStateError::SessionStopped(reason) => {
-                LinkStateError::SessionStopped(reason).into()
-            }
-        }
     }
 }
 
