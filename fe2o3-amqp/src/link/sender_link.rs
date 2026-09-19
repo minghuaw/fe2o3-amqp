@@ -523,7 +523,7 @@ async fn send_disposition(
     state: Option<DeliveryState>,
     batchable: bool,
     session_stop_reason: &OnceLock<SessionStopReason>,
-) -> Result<(), IllegalLinkStateError> {
+) -> Result<(), LinkStateError> {
     let disposition = Disposition {
         role: Role::Sender,
         first,
@@ -537,8 +537,8 @@ async fn send_disposition(
         .send(frame)
         .await
         .map_err(|_| match session_stop_reason.get() {
-            Some(reason) => IllegalLinkStateError::SessionStopped(reason.clone()),
-            None => IllegalLinkStateError::IllegalState, // defensive: no stop reason recorded; failure is link-local
+            Some(reason) => LinkStateError::SessionStopped(reason.clone()),
+            None => LinkStateError::IllegalState, // defensive: no stop reason recorded; failure is link-local
         })
 }
 

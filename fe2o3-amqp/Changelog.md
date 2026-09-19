@@ -20,6 +20,10 @@
    `Result<DetachStatus, IllegalLinkStateError>`; the deprecated `DetachError::DetachedByRemote` is
    removed. The dead `SendError::Detached(DetachError)` and `From<DetachError> for SendError` are
    removed as well.
+2. **Breaking**: `IllegalLinkStateError` is merged into `LinkStateError`, which now carries only
+   `IllegalState` and `SessionStopped`; `DispositionError` and `FlowError` are aliases of it, and
+   `IllegalLinkStateError` is kept as a deprecated alias. `ExpectImmediateDetach` moved from
+   `LinkStateError` to `SendError`/`PostError`/`ControllerSendError`.
 
 ## 0.18.2
 
