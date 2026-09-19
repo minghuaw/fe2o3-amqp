@@ -254,6 +254,10 @@ impl Sender {
     /// `DetachThenResumeSenderError::Resume` will be returned if the detach succeeds but re-attach
     /// fails. `DetachThenResumeSenderError::Detach` will be returned if both the detach and
     /// re-attach fails.
+    ///
+    /// Unsettled deliveries are carried over to the resumed link and re-sent;
+    /// the futures returned by [`send_batchable`](#method.send_batchable) for
+    /// those deliveries resolve once the peer's disposition arrives.
     pub async fn detach_then_resume_on_session<R>(
         &mut self,
         new_session: &SessionHandle<R>,
@@ -261,32 +265,41 @@ impl Sender {
         // Detach the link
         let detach_result = self.inner.detach_with_error(None).await;
 
+        // If the peer closed the link instead of suspending it, the link can
+        // no longer be resumed. The status is carried by the resume error.
+        if let Ok(status) = &detach_result {
+            if status.is_closed() {
+                return Err(DetachThenResumeSenderError::Resume(
+                    SenderResumeErrorKind::LinkDetached(status.clone()),
+                ));
+            }
+        }
+
         // Re-attach the link
-        let is_reattaching = self.inner.switch_session(new_session);
-        let attach_result = self
-            .inner
-            .resume_incoming_attach(None, is_reattaching)
-            .await;
+        self.inner.switch_session(new_session);
+        let attach_result = self.inner.resume_incoming_attach(None).await;
 
         match (detach_result, attach_result) {
             (_, Ok(())) => Ok(()),
-            (Ok(()), Err(e)) => Err(DetachThenResumeSenderError::Resume(e)),
+            (Ok(_), Err(e)) => Err(DetachThenResumeSenderError::Resume(e)),
             (Err(e), Err(_)) => Err(DetachThenResumeSenderError::Detach(e)),
         }
     }
 
     /// Close the link.
     ///
-    /// This will set the `closed` field in the Detach performative to true
-    pub async fn close(mut self) -> Result<(), DetachError> {
+    /// This will set the `closed` field in the Detach performative to true.
+    /// The returned [`DetachStatus`] carries the error the peer attached to
+    /// its closing detach, if any.
+    pub async fn close(mut self) -> Result<DetachStatus, DetachError> {
         self.inner.close_with_error(None).await
     }
 
-    /// Detach the link with an error
+    /// Close the link with an error
     pub async fn close_with_error(
         mut self,
         error: impl Into<definitions::Error>,
-    ) -> Result<(), DetachError> {
+    ) -> Result<DetachStatus, DetachError> {
         self.inner.close_with_error(Some(error.into())).await
     }
 
@@ -390,6 +403,15 @@ impl Sender {
     ///
     /// This function is cancel-safe. See [#22](https://github.com/minghuaw/fe2o3-amqp/issues/22)
     /// for more details.
+    ///
+    /// # Delivery settlement and resumption
+    ///
+    /// The outcome resolves once the peer's disposition arrives, which may be
+    /// after the link is resumed on another session or connection: an unsettled
+    /// delivery stays in the link's unsettled map and is re-sent on resumption.
+    /// Because this method borrows the sender while it waits, use
+    /// [`send_batchable`](#method.send_batchable) if the link may need to be
+    /// resumed (its future does not borrow the sender).
     pub async fn send<T: SerializableBody>(
         &mut self,
         sendable: impl Into<Sendable<T>>,
@@ -439,6 +461,12 @@ impl Sender {
     ///
     /// This will set the batchable field of the `Transfer` performative to true. Please see
     /// [`send()`](#method.send) for information on how to use custom type as argument.
+    ///
+    /// The returned future resolves with the peer's disposition, possibly only
+    /// after the link is resumed on another session or connection: the unsettled
+    /// delivery is re-sent on resumption. Unlike [`send()`](#method.send), it
+    /// does not borrow the sender, so the link can be detached and resumed while
+    /// the future is pending.
     ///
     /// # Example
     ///
@@ -662,10 +690,9 @@ where
 
     async fn exchange_attach(
         &mut self,
-        is_reattaching: bool,
     ) -> Result<SenderAttachExchange, <Self::Link as LinkAttach>::AttachError> {
         self.link
-            .exchange_attach(&self.outgoing, &mut self.incoming, is_reattaching)
+            .exchange_attach(&self.outgoing, &mut self.incoming)
             .await
     }
 
@@ -825,19 +852,15 @@ where
 }
 
 impl SenderInner<SenderLink<Target>> {
-    /// Switch the link to a new session, returning whether the link is being
-    /// reattached (i.e. the new session is a different session from the
-    /// current one).
+    /// Switch the link to a new session.
     ///
     /// The new session may belong to a different connection whose negotiated
     /// max frame size differs, so the link's `max_frame_size` is refreshed
     /// from the new session before any attach/transfer frame is sent.
-    pub(crate) fn switch_session<R>(&mut self, new_session: &SessionHandle<R>) -> bool {
-        let is_reattaching = !self.session.same_channel(&new_session.control);
+    pub(crate) fn switch_session<R>(&mut self, new_session: &SessionHandle<R>) {
         self.session = new_session.control.clone();
         self.outgoing = new_session.outgoing.clone();
         self.link.max_frame_size = new_session.max_frame_size();
-        is_reattaching
     }
 
     /// Resumes a delivery with the given state and payload.
@@ -1046,6 +1069,13 @@ impl SenderInner<SenderLink<Target>> {
                         self.handle_resuming_delivery(delivery_tag, resuming, &mut resend_buf)
                             .await?;
                     }
+
+                    // The unsettled map was incomplete. AMQP 1.0 §2.6.6: after
+                    // the reduction of state, the two parties suspend and
+                    // re-attempt to resume the link. The detach consumes the
+                    // output handle, so reallocate it for the retry.
+                    self.detach_with_error(None).await?;
+                    self.reallocate_output_handle().await?;
                 }
                 SenderAttachExchange::Resume(resuming_deliveries) => {
                     for (delivery_tag, resuming) in resuming_deliveries {
@@ -1127,17 +1157,16 @@ impl DetachedSender {
         &mut self.inner.link.target
     }
 
-    async fn resume_inner(mut self, is_reattaching: bool) -> Result<Sender, SenderResumeError> {
-        try_as_sender!(
-            self,
-            self.inner
-                .resume_incoming_attach(None, is_reattaching)
-                .await
-        );
+    async fn resume_inner(mut self) -> Result<Sender, SenderResumeError> {
+        try_as_sender!(self, self.inner.resume_incoming_attach(None).await);
         Ok(Sender { inner: *self.inner })
     }
 
     /// Resume the sender link on the original session
+    ///
+    /// Unsettled deliveries are re-sent on the resumed link; the futures
+    /// returned by [`Sender::send_batchable`] for those deliveries resolve once
+    /// the peer's disposition arrives.
     #[cfg_attr(feature = "tracing", tracing::instrument(skip(self)))]
     pub async fn resume(self) -> Result<Sender, SenderResumeError> {
         self.resume_inner().await
@@ -1159,9 +1188,8 @@ impl DetachedSender {
         async fn resume_with_timeout_inner(
             mut self,
             duration: Duration,
-            is_reattaching: bool,
         ) -> Result<Sender, SenderResumeError> {
-            let fut = self.inner.resume_incoming_attach(None, is_reattaching);
+            let fut = self.inner.resume_incoming_attach(None);
 
             match tokio::time::timeout(duration, fut).await {
                 Ok(Ok(_)) => Ok(Sender { inner: *self.inner }),
@@ -1185,16 +1213,15 @@ impl DetachedSender {
             self,
             duration: Duration,
         ) -> Result<Sender, SenderResumeError> {
-            self.resume_with_timeout_inner(duration, false).await
+            self.resume_with_timeout_inner(duration).await
         }
 
         async fn resume_incoming_attach_with_timeout_inner(
             mut self,
             remote_attach: Attach,
             duration: Duration,
-            is_reattaching: bool,
         ) -> Result<Sender, SenderResumeError> {
-            let fut = self.inner.resume_incoming_attach(Some(remote_attach), is_reattaching);
+            let fut = self.inner.resume_incoming_attach(Some(remote_attach));
 
             match tokio::time::timeout(duration, fut).await {
                 Ok(Ok(_)) => Ok(Sender { inner: *self.inner }),
@@ -1228,8 +1255,8 @@ impl DetachedSender {
         mut self,
         session: &SessionHandle<R>,
     ) -> Result<Sender, SenderResumeError> {
-        let is_reattaching = self.inner.switch_session(session);
-        self.resume_inner(is_reattaching).await
+        self.inner.switch_session(session);
+        self.resume_inner().await
     }
 
     /// Resume the sender on a specific session
@@ -1238,13 +1265,11 @@ impl DetachedSender {
         remote_attach: Attach,
         session: &SessionHandle<R>,
     ) -> Result<Sender, SenderResumeError> {
-        let is_reattaching = self.inner.switch_session(session);
+        self.inner.switch_session(session);
 
         try_as_sender!(
             self,
-            self.inner
-                .resume_incoming_attach(Some(remote_attach), is_reattaching)
-                .await
+            self.inner.resume_incoming_attach(Some(remote_attach)).await
         );
         Ok(Sender { inner: *self.inner })
     }
@@ -1256,8 +1281,8 @@ impl DetachedSender {
             session: &SessionHandle<R>,
             duration: Duration,
         ) -> Result<Sender, SenderResumeError> {
-            let is_reattaching = self.inner.switch_session(session);
-            self.resume_with_timeout_inner(duration, is_reattaching).await
+            self.inner.switch_session(session);
+            self.resume_with_timeout_inner(duration).await
         }
 
         /// Resume the sender on a specific session with timeout
@@ -1267,8 +1292,8 @@ impl DetachedSender {
             session: &SessionHandle<R>,
             duration: Duration,
         ) -> Result<Sender, SenderResumeError> {
-            let is_reattaching = self.inner.switch_session(session);
-            self.resume_incoming_attach_with_timeout_inner(remote_attach, duration, is_reattaching)
+            self.inner.switch_session(session);
+            self.resume_incoming_attach_with_timeout_inner(remote_attach, duration)
                 .await
         }
     }
@@ -1395,16 +1420,51 @@ mod tests {
         let mut inner = make_sender_inner(4092);
         let session_b = make_session_handle(1020);
 
-        // Switching to a different session marks the link as reattaching and
-        // refreshes the link's max frame size from the new session
-        let is_reattaching = inner.switch_session(&session_b);
-        assert!(is_reattaching);
+        // Switching to a different session refreshes the link's max frame
+        // size from the new session
+        inner.switch_session(&session_b);
         assert_eq!(inner.link.max_frame_size, 1020);
 
-        // Switching to the same session does not mark the link as reattaching
-        let is_reattaching = inner.switch_session(&session_b);
-        assert!(!is_reattaching);
+        // Switching to the same session is idempotent
+        inner.switch_session(&session_b);
         assert_eq!(inner.link.max_frame_size, 1020);
+    }
+
+    /// A resuming attach carries a non-null (possibly empty) unsettled map so
+    /// it cannot be mistaken for a pipelined re-attach (AMQP 1.0 §2.6.5),
+    /// while a fresh attach leaves the field unset.
+    #[test]
+    fn resuming_attach_advertises_empty_unsettled_map() {
+        let inner = make_sender_inner(4092);
+        let handle = endpoint::OutputHandle(0);
+
+        let fresh = inner.link.as_complete_attach(handle.clone(), false);
+        assert!(fresh.unsettled.is_none());
+        assert!(!fresh.incomplete_unsettled);
+
+        let resuming = inner.link.as_complete_attach(handle, true);
+        assert!(resuming
+            .unsettled
+            .as_ref()
+            .is_some_and(|map| map.is_empty()));
+        assert!(!resuming.incomplete_unsettled);
+    }
+
+    /// Target-only deliveries (the peer considers them unsettled, this side
+    /// has no record) must not be answered with a resumed transfer: AMQP 1.0
+    /// §2.6.13 requires the sender to ignore them and §2.7.5 forbids resumed
+    /// transfers for deliveries outside the local unsettled map.
+    #[test]
+    fn target_only_deliveries_are_not_resumed() {
+        let mut inner = make_sender_inner(4092);
+
+        let mut remote = OrderedMap::new();
+        remote.insert(DeliveryTag::from(vec![0u8]), None);
+        let exchange = inner
+            .link
+            .handle_unsettled_in_attach(Some(remote))
+            .expect("attach handling failed");
+        assert!(matches!(exchange, SenderAttachExchange::Resume(v) if v.is_empty()));
     }
 
     /// A peer that suspends (non-closing detach) while this side is closing

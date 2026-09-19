@@ -351,6 +351,12 @@ impl AsDeliveryState for UnsettledMessage {
 pin_project! {
     /// A future for delivery that can be `.await`ed for the settlement
     /// from receiver
+    ///
+    /// An unsettled delivery is kept in the link's unsettled map, so this
+    /// future stays pending across a session/connection stop and resolves with
+    /// the peer's disposition after the link is resumed on another session or
+    /// connection. It resolves with an error only when the delivery can no
+    /// longer be settled (e.g. the link is closed).
     pub struct DeliveryFut<O> {
         #[pin]
         // Reserved for future use on actively sending disposition from Sender
