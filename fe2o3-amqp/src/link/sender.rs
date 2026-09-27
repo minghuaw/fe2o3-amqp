@@ -894,14 +894,10 @@ impl SenderInner<SenderLink<Target>> {
             batchable: false,
         };
         let payload = Bytes::new();
+        let settled = self.link.is_settled_on_send(&transfer);
 
-        match sender {
-            Some(sender) => {
-                let unsettled = UnsettledMessage::new(payload, None, message_format, sender);
-                self.send_transfer_with_outcome(transfer, delivery_tag, unsettled)
-                    .await
-            }
-            None => {
+        match (settled, sender) {
+            (true, Some(sender)) => {
                 self.link
                     .send_transfer_without_modifying_unsettled_map(
                         &self.outgoing,
@@ -909,9 +905,34 @@ impl SenderInner<SenderLink<Target>> {
                         payload,
                     )
                     .await?;
-                Ok(())
+                let _ = sender.send(Ok(None));
+            }
+            (false, Some(sender)) => {
+                let unsettled =
+                    UnsettledMessage::new(payload.clone(), None, message_format, sender);
+                self.link
+                    .send_unsettled_transfer(
+                        &self.outgoing,
+                        transfer,
+                        payload,
+                        delivery_tag,
+                        unsettled,
+                    )
+                    .await?;
+            }
+            // A delivery known only from the remote unsettled map has no local outcome to resolve
+            (_, None) => {
+                self.link
+                    .send_transfer_without_modifying_unsettled_map(
+                        &self.outgoing,
+                        transfer,
+                        payload,
+                    )
+                    .await?;
             }
         }
+
+        Ok(())
     }
 
     async fn resume(
