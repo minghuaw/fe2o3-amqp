@@ -1,5 +1,9 @@
 # Change Log
 
+## 0.18.2
+
+**Bugfix**: an unsettled delivery is now registered before its transfer reaches the session, preventing `send` from hanging when the peer settles immediately.
+
 ## 0.18.1
 
 **Bugfix**: the AMQP 1.0 §2.6.6 close/suspend race now completes the reattach-then-close handshake
