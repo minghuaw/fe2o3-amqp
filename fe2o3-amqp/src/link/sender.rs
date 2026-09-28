@@ -17,7 +17,6 @@ use fe2o3_amqp_types::{
         Source, Target,
     },
     performatives::{Attach, Detach, Transfer},
-    primitives::OrderedMap,
 };
 
 use crate::{
@@ -895,30 +894,41 @@ impl SenderInner<SenderLink<Target>> {
             batchable: false,
         };
         let payload = Bytes::new();
+        let settled = self.link.is_settled_on_send(&transfer);
 
-        let settled = self
-            .link
-            .send_transfer_without_modifying_unsettled_map(
-                &self.outgoing,
-                transfer,
-                payload.clone(),
-            )
-            .await?;
-
-        match settled {
-            true => {
-                if let Some(sender) = sender {
-                    let _ = sender.send(Ok(None));
-                }
+        match (settled, sender) {
+            (true, Some(sender)) => {
+                self.link
+                    .send_transfer_without_modifying_unsettled_map(
+                        &self.outgoing,
+                        transfer,
+                        payload,
+                    )
+                    .await?;
+                let _ = sender.send(Ok(None));
             }
-            false => {
-                if let Some(sender) = sender {
-                    let unsettled = UnsettledMessage::new(payload, None, message_format, sender);
-                    let mut guard = self.link.unsettled.write();
-                    guard
-                        .get_or_insert(OrderedMap::new())
-                        .insert(delivery_tag, unsettled);
-                }
+            (false, Some(sender)) => {
+                let unsettled =
+                    UnsettledMessage::new(payload.clone(), None, message_format, sender);
+                self.link
+                    .send_unsettled_transfer(
+                        &self.outgoing,
+                        transfer,
+                        payload,
+                        delivery_tag,
+                        unsettled,
+                    )
+                    .await?;
+            }
+            // A delivery known only from the remote unsettled map has no local outcome to resolve
+            (_, None) => {
+                self.link
+                    .send_transfer_without_modifying_unsettled_map(
+                        &self.outgoing,
+                        transfer,
+                        payload,
+                    )
+                    .await?;
             }
         }
 
@@ -955,27 +965,8 @@ impl SenderInner<SenderLink<Target>> {
             batchable: false,
         };
 
-        let settled = self
-            .link
-            .send_transfer_without_modifying_unsettled_map(
-                &self.outgoing,
-                transfer,
-                unsettled_message.payload.clone(),
-            )
-            .await?;
-
-        match settled {
-            true => {
-                let _ = unsettled_message.settle();
-            }
-            false => {
-                let mut guard = self.link.unsettled.write();
-                guard
-                    .get_or_insert(OrderedMap::new())
-                    .insert(delivery_tag, unsettled_message);
-            }
-        }
-        Ok(())
+        self.send_transfer_with_outcome(transfer, delivery_tag, unsettled_message)
+            .await
     }
 
     async fn restate_outcome(
@@ -1006,29 +997,9 @@ impl SenderInner<SenderLink<Target>> {
             batchable: false,
         };
 
-        let settled = self
-            .link
-            .send_transfer_without_modifying_unsettled_map(
-                &self.outgoing,
-                transfer,
-                payload.clone(),
-            )
-            .await?;
-
-        match settled {
-            true => {
-                let _ = sender.send(Ok(None));
-            }
-            false => {
-                let unsettled = UnsettledMessage::new(payload, None, message_format, sender);
-                let mut guard = self.link.unsettled.write();
-                guard
-                    .get_or_insert(OrderedMap::new())
-                    .insert(delivery_tag, unsettled);
-            }
-        }
-
-        Ok(())
+        let unsettled = UnsettledMessage::new(payload, None, message_format, sender);
+        self.send_transfer_with_outcome(transfer, delivery_tag, unsettled)
+            .await
     }
 
     async fn resend(&mut self, unsettled_message: UnsettledMessage) -> Result<(), SendError> {
@@ -1043,27 +1014,29 @@ impl SenderInner<SenderLink<Target>> {
             false,
         )?;
 
-        let settled = self
-            .link
-            .send_transfer_without_modifying_unsettled_map(
-                &self.outgoing,
-                transfer,
-                unsettled_message.payload.clone(),
-            )
-            .await?;
+        self.send_transfer_with_outcome(transfer, new_delivery_tag, unsettled_message)
+            .await
+    }
 
-        match settled {
-            true => {
-                let _ = unsettled_message.settle();
-            }
-            false => {
-                let mut guard = self.link.unsettled.write();
-                guard
-                    .get_or_insert(OrderedMap::new())
-                    .insert(new_delivery_tag, unsettled_message);
-            }
+    /// Sends a transfer and resolves `unsettled` with its outcome: at once when the transfer goes
+    /// out settled, otherwise when the peer settles it, through the unsettled map.
+    async fn send_transfer_with_outcome(
+        &self,
+        transfer: Transfer,
+        delivery_tag: DeliveryTag,
+        unsettled: UnsettledMessage,
+    ) -> Result<(), SendError> {
+        let payload = unsettled.payload.clone();
+        if self.link.is_settled_on_send(&transfer) {
+            self.link
+                .send_transfer_without_modifying_unsettled_map(&self.outgoing, transfer, payload)
+                .await?;
+            let _ = unsettled.settle();
+        } else {
+            self.link
+                .send_unsettled_transfer(&self.outgoing, transfer, payload, delivery_tag, unsettled)
+                .await?;
         }
-
         Ok(())
     }
 
@@ -1331,6 +1304,7 @@ mod tests {
     use tokio::sync::Notify;
 
     use super::*;
+    use crate::endpoint::SenderLink as _;
     use crate::{
         link::state::{LinkFlowState, LinkFlowStateInner, LinkState},
         util::Consumer,
@@ -1522,5 +1496,114 @@ mod tests {
         );
         assert!(matches!(result, Err(DetachError::ClosedByRemote)));
         assert!(matches!(&inner.link.local_state, LinkState::Closed));
+    }
+
+    /// A sender ready to send: attached, with a peer handle.
+    fn sendable_sender() -> SenderInner<SenderLink<Target>> {
+        let mut inner = make_sender_inner(4096);
+        inner.link.input_handle = Some(endpoint::InputHandle(0));
+        inner
+    }
+
+    fn is_registered(link: &SenderLink<Target>, tag: &DeliveryTag) -> bool {
+        link.unsettled
+            .read()
+            .as_ref()
+            .is_some_and(|map| map.contains_key(tag))
+    }
+
+    /// A channel to the session with no room left, so a hand-over stays pending until the
+    /// session takes the frame in front of it.
+    async fn full_session_channel() -> (mpsc::Sender<LinkFrame>, mpsc::Receiver<LinkFrame>) {
+        let (writer, session) = mpsc::channel::<LinkFrame>(1);
+        let placeholder = Detach {
+            handle: fe2o3_amqp_types::definitions::Handle(1),
+            closed: false,
+            error: None,
+        };
+        writer
+            .send(LinkFrame::Detach(placeholder))
+            .await
+            .expect("the session end is open");
+        (writer, session)
+    }
+
+    /// The session engine is a task of its own: it can write a transfer, receive the peer's
+    /// settled disposition and look the delivery up in the unsettled map before the sending task
+    /// resumes. A disposition that finds no entry is dropped and the outcome never resolves, so
+    /// the delivery has to be registered before its transfer can reach the session.
+    ///
+    /// The session's channel is full, so the hand-over is pending when the first poll returns:
+    /// that is the point where the session could otherwise overtake the registration.
+    #[tokio::test]
+    async fn delivery_is_registered_before_its_transfer_reaches_the_session() {
+        let inner = sendable_sender();
+        let link = &inner.link;
+        let (writer, mut session) = full_session_channel().await;
+        let tag = DeliveryTag::from(b"tag0".to_vec());
+        let transfer = link
+            .generate_non_resuming_transfer_performative(tag.clone(), 0, None, None, false)
+            .expect("the link is attached");
+
+        let send =
+            link.send_payload_with_transfer(&writer, 0, transfer, Payload::from_static(b"m"));
+        tokio::pin!(send);
+        assert!(futures_util::poll!(&mut send).is_pending());
+        assert!(
+            is_registered(link, &tag),
+            "the transfer can reach the session before the delivery is registered"
+        );
+
+        assert!(matches!(session.recv().await, Some(LinkFrame::Detach(_))));
+        let settlement = send.await.expect("the transfer is handed over");
+        assert!(matches!(settlement, Settlement::Unsettled { .. }));
+        assert!(matches!(
+            session.recv().await,
+            Some(LinkFrame::Transfer { .. })
+        ));
+        assert!(is_registered(link, &tag));
+    }
+
+    /// A send dropped before its transfer was handed over leaves nothing behind: the peer never
+    /// saw the delivery, so no outcome will come for it.
+    #[tokio::test]
+    async fn a_send_dropped_before_the_hand_over_withdraws_its_delivery() {
+        let inner = sendable_sender();
+        let link = &inner.link;
+        let (writer, _session) = full_session_channel().await;
+        let tag = DeliveryTag::from(b"tag0".to_vec());
+        let transfer = link
+            .generate_non_resuming_transfer_performative(tag.clone(), 0, None, None, false)
+            .expect("the link is attached");
+
+        {
+            let send =
+                link.send_payload_with_transfer(&writer, 0, transfer, Payload::from_static(b"m"));
+            tokio::pin!(send);
+            assert!(futures_util::poll!(&mut send).is_pending());
+            assert!(is_registered(link, &tag));
+        }
+
+        assert!(!is_registered(link, &tag));
+    }
+
+    /// A send that fails to reach the session withdraws its delivery the same way.
+    #[tokio::test]
+    async fn a_send_that_fails_withdraws_its_delivery() {
+        let inner = sendable_sender();
+        let link = &inner.link;
+        let (writer, session) = mpsc::channel::<LinkFrame>(1);
+        drop(session);
+        let tag = DeliveryTag::from(b"tag0".to_vec());
+        let transfer = link
+            .generate_non_resuming_transfer_performative(tag.clone(), 0, None, None, false)
+            .expect("the link is attached");
+
+        let result = link
+            .send_payload_with_transfer(&writer, 0, transfer, Payload::from_static(b"m"))
+            .await;
+
+        assert!(result.is_err());
+        assert!(!is_registered(link, &tag));
     }
 }
