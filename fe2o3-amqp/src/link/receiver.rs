@@ -1367,8 +1367,7 @@ where
                 return self.close_on_malformed_delivery(error).await.map(|()| None);
             }
 
-            let (performative, buffer, section_number, section_offset) =
-                incomplete.into_assembled();
+            let (performative, buffer, section_number, section_offset) = incomplete.into_parts();
             self.link
                 .on_complete_transfer(performative, buffer, section_number, section_offset)?
         } else {

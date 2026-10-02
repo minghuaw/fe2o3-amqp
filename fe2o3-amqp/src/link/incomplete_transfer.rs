@@ -166,7 +166,7 @@ impl IncompleteTransfer {
 
     /// Consume the buffered transfer for assembly, yielding the merged
     /// performative, the buffered payload and the section position.
-    pub fn into_assembled(self) -> (Transfer, Vec<Payload>, u32, u64) {
+    pub fn into_parts(self) -> (Transfer, Vec<Payload>, u32, u64) {
         (
             self.performative,
             self.buffer,
