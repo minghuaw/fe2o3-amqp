@@ -31,6 +31,66 @@ pub enum SessionStopReason {
     ConnectionStopped(ConnectionStopReason),
 }
 
+/// The recovery action for a session that stopped.
+fn session_stop_recovery(reason: &SessionStopReason) -> ErrorRecovery {
+    match reason {
+        SessionStopReason::ConnectionStopped(_) => ErrorRecovery::ReconnectConnection,
+        _ => ErrorRecovery::ReconnectSession,
+    }
+}
+
+/// What a caller can do with a link after an operation failed.
+///
+/// Returned by the `recovery()` method on [`LinkStateError`], [`DetachError`],
+/// [`SendError`] and [`RecvError`]. The action is derived from the error alone;
+/// defensive errors that can cover several link states are classified
+/// conservatively.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum ErrorRecovery {
+    /// The link is still attached and usable; the error is scoped to the
+    /// operation or delivery.
+    UseLink,
+
+    /// The link is detached and can be resumed: `detach()` (idempotent) then
+    /// `resume()`, `resume_on_session()`, or `detach_then_resume_on_session()`.
+    ReattachLink,
+
+    /// The session stopped; obtain a new session and resume the link on it
+    /// with `resume_on_session()` or `detach_then_resume_on_session()`.
+    ReconnectSession,
+
+    /// The connection stopped too; obtain a new connection and session and
+    /// resume the link on the new session.
+    ReconnectConnection,
+
+    /// The link was closed or destroyed, or the error left its state
+    /// indeterminate (the defensive `IllegalState`/`ExpectImmediateDetach`
+    /// variants): create a new link.
+    NewLink,
+}
+
+impl ErrorRecovery {
+    /// Whether the link can still be used as-is.
+    pub fn link_is_usable(self) -> bool {
+        matches!(self, Self::UseLink)
+    }
+
+    /// Whether the link must be resumed, possibly on a new session or
+    /// connection, before it can be used again.
+    pub fn requires_reattach(self) -> bool {
+        matches!(
+            self,
+            Self::ReattachLink | Self::ReconnectSession | Self::ReconnectConnection
+        )
+    }
+
+    /// Whether the link is gone and a new link must be created.
+    pub fn requires_new_link(self) -> bool {
+        matches!(self, Self::NewLink)
+    }
+}
+
 /// Error associated with detaching
 #[derive(Debug, thiserror::Error)]
 pub enum DetachError {
@@ -68,6 +128,22 @@ pub enum DetachError {
     /// Remote peer closed the link with an error
     #[error("Remote peer closed the link with an error: {}", .0)]
     RemoteClosedWithError(definitions::Error),
+}
+
+impl DetachError {
+    /// Classifies what the caller can do with the link after this error.
+    #[allow(deprecated)]
+    pub fn recovery(&self) -> ErrorRecovery {
+        match self {
+            Self::SessionStopped(reason) => session_stop_recovery(reason),
+            Self::RemoteDetachedWithError(_) | Self::DetachedByRemote => {
+                ErrorRecovery::ReattachLink
+            }
+            Self::ClosedByRemote | Self::RemoteClosedWithError(_) | Self::IllegalState => {
+                ErrorRecovery::NewLink
+            }
+        }
+    }
 }
 
 /// Error from recording a peer-initiated detach with
@@ -281,6 +357,20 @@ impl From<MessageSizeExceeded> for SendError {
 impl From<DetachError> for SendError {
     fn from(error: DetachError) -> Self {
         Self::Detached(error)
+    }
+}
+
+impl SendError {
+    /// Classifies what the caller can do with the link after this error.
+    pub fn recovery(&self) -> ErrorRecovery {
+        match self {
+            Self::LinkStateError(error) => error.recovery(),
+            Self::Detached(error) => error.recovery(),
+            Self::NonTerminalDeliveryState
+            | Self::IllegalDeliveryState
+            | Self::MessageSizeExceeded(_)
+            | Self::MessageEncodeError => ErrorRecovery::UseLink,
+        }
     }
 }
 
@@ -560,6 +650,20 @@ impl From<DetachError> for LinkStateError {
     }
 }
 
+impl LinkStateError {
+    /// Classifies what the caller can do with the link after this error.
+    pub fn recovery(&self) -> ErrorRecovery {
+        match self {
+            Self::RemoteDetached | Self::RemoteDetachedWithError(_) => ErrorRecovery::ReattachLink,
+            Self::SessionStopped(reason) => session_stop_recovery(reason),
+            Self::RemoteClosed
+            | Self::RemoteClosedWithError(_)
+            | Self::IllegalState
+            | Self::ExpectImmediateDetach => ErrorRecovery::NewLink,
+        }
+    }
+}
+
 /// Errors associated with receiving a transfer
 #[derive(Debug, thiserror::Error)]
 pub(crate) enum ReceiverTransferError {
@@ -671,6 +775,23 @@ impl From<ReceiverTransferError> for RecvError {
             ReceiverTransferError::IllegalState => {
                 RecvError::LinkStateError(LinkStateError::IllegalState)
             }
+        }
+    }
+}
+
+impl RecvError {
+    /// Classifies what the caller can do with the link after this error.
+    pub fn recovery(&self) -> ErrorRecovery {
+        match self {
+            Self::LinkStateError(error) => error.recovery(),
+            Self::TransferLimitExceeded
+            | Self::MessageDecode(_)
+            | Self::IllegalRcvSettleModeInTransfer => ErrorRecovery::UseLink,
+            Self::DeliveryIdIsNone
+            | Self::DeliveryTagIsNone
+            | Self::MessageSizeExceeded(_)
+            | Self::InconsistentFieldInMultiFrameDelivery
+            | Self::TransactionalAcquisitionIsNotImeplemented => ErrorRecovery::NewLink,
         }
     }
 }
@@ -882,4 +1003,192 @@ pub enum DetachThenResumeReceiverError {
     /// Error with resuming the receiver
     #[error(transparent)]
     Resume(#[from] ReceiverResumeErrorKind),
+}
+
+#[cfg(test)]
+mod tests {
+    use fe2o3_amqp_types::definitions::DeliveryTag;
+
+    use super::*;
+    use crate::util::Sealed;
+
+    fn test_error() -> definitions::Error {
+        definitions::Error::new(definitions::AmqpError::InternalError, None, None)
+    }
+
+    fn message_decode_error() -> MessageDecodeError {
+        let info = DeliveryInfo {
+            delivery_id: 0,
+            delivery_tag: DeliveryTag::from(vec![0x01]),
+            rcv_settle_mode: None,
+            _sealed: Sealed {},
+        };
+        let source = serde_amqp::from_slice::<String>(&[]).unwrap_err();
+        MessageDecodeError { info, source }
+    }
+
+    #[test]
+    fn link_state_error_recovery() {
+        assert_eq!(
+            LinkStateError::RemoteDetached.recovery(),
+            ErrorRecovery::ReattachLink
+        );
+        assert_eq!(
+            LinkStateError::RemoteDetachedWithError(test_error()).recovery(),
+            ErrorRecovery::ReattachLink
+        );
+        assert_eq!(
+            LinkStateError::RemoteClosed.recovery(),
+            ErrorRecovery::NewLink
+        );
+        assert_eq!(
+            LinkStateError::RemoteClosedWithError(test_error()).recovery(),
+            ErrorRecovery::NewLink
+        );
+        assert_eq!(
+            LinkStateError::IllegalState.recovery(),
+            ErrorRecovery::NewLink
+        );
+        assert_eq!(
+            LinkStateError::ExpectImmediateDetach.recovery(),
+            ErrorRecovery::NewLink
+        );
+        assert_eq!(
+            LinkStateError::SessionStopped(SessionStopReason::Ended).recovery(),
+            ErrorRecovery::ReconnectSession
+        );
+        assert_eq!(
+            LinkStateError::SessionStopped(SessionStopReason::ConnectionStopped(
+                ConnectionStopReason::Closed
+            ))
+            .recovery(),
+            ErrorRecovery::ReconnectConnection
+        );
+    }
+
+    #[test]
+    #[allow(deprecated)]
+    fn detach_error_recovery() {
+        assert_eq!(
+            DetachError::SessionStopped(SessionStopReason::RemoteEnded).recovery(),
+            ErrorRecovery::ReconnectSession
+        );
+        assert_eq!(
+            DetachError::SessionStopped(SessionStopReason::ConnectionStopped(
+                ConnectionStopReason::RemoteClosed
+            ))
+            .recovery(),
+            ErrorRecovery::ReconnectConnection
+        );
+        assert_eq!(
+            DetachError::RemoteDetachedWithError(test_error()).recovery(),
+            ErrorRecovery::ReattachLink
+        );
+        assert_eq!(
+            DetachError::ClosedByRemote.recovery(),
+            ErrorRecovery::NewLink
+        );
+        assert_eq!(
+            DetachError::RemoteClosedWithError(test_error()).recovery(),
+            ErrorRecovery::NewLink
+        );
+        assert_eq!(DetachError::IllegalState.recovery(), ErrorRecovery::NewLink);
+        assert_eq!(
+            DetachError::DetachedByRemote.recovery(),
+            ErrorRecovery::ReattachLink
+        );
+    }
+
+    #[test]
+    fn send_error_recovery() {
+        assert_eq!(
+            SendError::LinkStateError(LinkStateError::RemoteDetached).recovery(),
+            ErrorRecovery::ReattachLink
+        );
+        assert_eq!(
+            SendError::Detached(DetachError::ClosedByRemote).recovery(),
+            ErrorRecovery::NewLink
+        );
+        assert_eq!(
+            SendError::NonTerminalDeliveryState.recovery(),
+            ErrorRecovery::UseLink
+        );
+        assert_eq!(
+            SendError::IllegalDeliveryState.recovery(),
+            ErrorRecovery::UseLink
+        );
+        assert_eq!(
+            SendError::MessageSizeExceeded(MessageSizeExceeded {
+                size: 10,
+                max_size: 1
+            })
+            .recovery(),
+            ErrorRecovery::UseLink
+        );
+        assert_eq!(
+            SendError::MessageEncodeError.recovery(),
+            ErrorRecovery::UseLink
+        );
+    }
+
+    #[test]
+    fn recv_error_recovery() {
+        assert_eq!(
+            RecvError::LinkStateError(LinkStateError::SessionStopped(
+                SessionStopReason::ConnectionStopped(ConnectionStopReason::Closed)
+            ))
+            .recovery(),
+            ErrorRecovery::ReconnectConnection
+        );
+        assert_eq!(
+            RecvError::TransferLimitExceeded.recovery(),
+            ErrorRecovery::UseLink
+        );
+        assert_eq!(
+            RecvError::MessageDecode(message_decode_error()).recovery(),
+            ErrorRecovery::UseLink
+        );
+        assert_eq!(
+            RecvError::IllegalRcvSettleModeInTransfer.recovery(),
+            ErrorRecovery::UseLink
+        );
+        assert_eq!(
+            RecvError::DeliveryIdIsNone.recovery(),
+            ErrorRecovery::NewLink
+        );
+        assert_eq!(
+            RecvError::DeliveryTagIsNone.recovery(),
+            ErrorRecovery::NewLink
+        );
+        assert_eq!(
+            RecvError::MessageSizeExceeded(MessageSizeExceeded {
+                size: 10,
+                max_size: 1
+            })
+            .recovery(),
+            ErrorRecovery::NewLink
+        );
+        assert_eq!(
+            RecvError::InconsistentFieldInMultiFrameDelivery.recovery(),
+            ErrorRecovery::NewLink
+        );
+        assert_eq!(
+            RecvError::TransactionalAcquisitionIsNotImeplemented.recovery(),
+            ErrorRecovery::NewLink
+        );
+    }
+
+    #[test]
+    fn recovery_predicates() {
+        assert!(ErrorRecovery::UseLink.link_is_usable());
+        assert!(!ErrorRecovery::UseLink.requires_reattach());
+        assert!(!ErrorRecovery::UseLink.requires_new_link());
+
+        assert!(ErrorRecovery::ReattachLink.requires_reattach());
+        assert!(ErrorRecovery::ReconnectSession.requires_reattach());
+        assert!(ErrorRecovery::ReconnectConnection.requires_reattach());
+
+        assert!(ErrorRecovery::NewLink.requires_new_link());
+        assert!(!ErrorRecovery::NewLink.link_is_usable());
+    }
 }
