@@ -1186,10 +1186,16 @@ where
         Ok(())
     }
 
+    /// Complete a reassociated delivery that has no buffered chunks, leaving
+    /// any other buffered delivery untouched.
+    ///
+    /// The tag is known to be in the local unsettled map: resumed deliveries
+    /// that are not are ignored before dispatch.
+    ///
     /// # Cancel safety
     ///
     /// This is cancel safe because all internal `.await` point(s) are cancel safe
-    async fn on_resuming_transfer<T>(
+    async fn on_reassociated_transfer<T>(
         &mut self,
         transfer: Transfer,
         payload: Payload,
@@ -1197,34 +1203,19 @@ where
     where
         for<'de> T: FromBody<'de> + Send,
     {
-        // The tag is known to be in the local unsettled map: resumed
-        // deliveries that are not are ignored before dispatch.
-        let matches_buffer = self
-            .incomplete_transfer
-            .as_ref()
-            .is_some_and(|incomplete| incomplete.is_same_delivery_as(&transfer));
+        // A different, previously unsettled delivery is being reassociated
+        let (section_number, section_offset) = count_number_of_sections_and_offset(&payload);
+        let delivery =
+            self.link
+                .on_complete_transfer(transfer, &payload, section_number, section_offset)?;
 
-        if matches_buffer {
-            // The transfer belongs to the buffered incomplete transfer
-            self.on_complete_transfer(transfer, payload).await // cancel safe
-        } else {
-            // A different, previously unsettled delivery is being reassociated
-            let (section_number, section_offset) = count_number_of_sections_and_offset(&payload);
-            let delivery = self.link.on_complete_transfer(
-                transfer,
-                &payload,
-                section_number,
-                section_offset,
-            )?;
-
-            // Auto accept the message and leave settled to be determined based on rcv_settle_mode
-            if self.auto_accept {
-                self.dispose(&delivery, None, Accepted {}.into()).await?;
-                // cancel safe
-            }
-
-            Ok(Some(delivery))
+        // Auto accept the message and leave settled to be determined based on rcv_settle_mode
+        if self.auto_accept {
+            self.dispose(&delivery, None, Accepted {}.into()).await?;
+            // cancel safe
         }
+
+        Ok(Some(delivery))
     }
 
     /// The bytes of the delivery accumulated so far that belong to the same
@@ -1457,10 +1448,13 @@ where
             self.on_incomplete_transfer(transfer, payload)
                 .await
                 .map(|()| None)
-        } else if transfer.resume {
-            self.on_resuming_transfer(transfer, payload).await // cancel safe
+        } else if transfer.resume && !matches_buffer {
+            // A resumed delivery that does not continue the buffered one was
+            // reassociated from a dissociated link endpoint
+            self.on_reassociated_transfer(transfer, payload).await
         } else {
-            // Final transfer of the delivery
+            // Final transfer of the delivery, including a resumed transfer
+            // that continues the buffered delivery
             self.on_complete_transfer(transfer, payload).await // cancel safe
         }
     }
