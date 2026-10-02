@@ -1455,10 +1455,10 @@ where
         }
 
         if transfer.more {
-            // Partial transfer of the delivery
-            self.on_incomplete_transfer(transfer, payload).await?;
-            // Partial delivery doesn't yield a complete message
-            Ok(None)
+            // Partial transfer of the delivery; it does not yield a message
+            self.on_incomplete_transfer(transfer, payload)
+                .await
+                .map(|()| None)
         } else if transfer.resume {
             self.on_resuming_transfer(transfer, payload).await // cancel safe
         } else {
