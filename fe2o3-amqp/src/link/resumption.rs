@@ -6,12 +6,12 @@ use tokio::sync::oneshot;
 
 use crate::Payload;
 
-use super::{delivery::UnsettledMessage, error::LinkStateError, receiver_link::is_section_header};
+use super::{delivery::UnsettledMessage, receiver_link::is_section_header, DeliveryFailure};
 
 pub(crate) enum ResumingDelivery {
     Abort {
         message_format: MessageFormat,
-        sender: Option<oneshot::Sender<Result<Option<DeliveryState>, LinkStateError>>>,
+        sender: Option<oneshot::Sender<Result<Option<DeliveryState>, DeliveryFailure>>>,
     },
     Resend(UnsettledMessage),
     Resume(UnsettledMessage),
@@ -19,7 +19,7 @@ pub(crate) enum ResumingDelivery {
         payload: Payload,
         local_state: DeliveryState,
         message_format: MessageFormat,
-        sender: oneshot::Sender<Result<Option<DeliveryState>, LinkStateError>>,
+        sender: oneshot::Sender<Result<Option<DeliveryState>, DeliveryFailure>>,
     },
 }
 
@@ -240,7 +240,7 @@ mod tests {
         state: Option<DeliveryState>,
     ) -> (
         UnsettledMessage,
-        oneshot::Receiver<Result<Option<DeliveryState>, LinkStateError>>,
+        oneshot::Receiver<Result<Option<DeliveryState>, DeliveryFailure>>,
     ) {
         let (sender, receiver) = oneshot::channel();
         (

@@ -13,7 +13,7 @@ use crate::{
         role,
         sender::SenderInner,
         shared_inner::LinkEndpointInnerDetach,
-        LinkStateError, SendError, SenderAttachError, SenderLink,
+        DeliveryFailure, LinkStateError, SendError, SenderAttachError, SenderLink,
     },
     session::SessionHandle,
     Sendable,
@@ -48,7 +48,7 @@ pub struct Controller {
 async fn send_on_control_link<T>(
     sender: &mut SenderInner<ControlLink>,
     sendable: Sendable<T>,
-) -> Result<oneshot::Receiver<Result<Option<DeliveryState>, LinkStateError>>, link::SendError>
+) -> Result<oneshot::Receiver<Result<Option<DeliveryState>, DeliveryFailure>>, link::SendError>
 where
     T: SerializableBody,
 {

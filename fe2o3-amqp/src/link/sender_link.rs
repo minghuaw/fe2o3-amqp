@@ -183,7 +183,7 @@ where
     pub(crate) async fn get_delivery_tag_or_detached<Fut>(
         &mut self,
         detached: Fut,
-    ) -> Result<[u8; 4], LinkStateError>
+    ) -> Result<[u8; 4], TransferError>
     where
         Fut: Future<Output = Option<LinkFrame>> + Send,
     {
@@ -203,13 +203,9 @@ where
                     // when the session is stopping: a stop without a detach
                     // shows up as the channel closing (`None` below).
                     Some(LinkFrame::Detach(detach)) => {
-                        let closed = detach.closed;
-                        let result = self.apply_remote_detach_outcome(detach);
-
-                        match (result, closed) {
-                            (Ok(_), true) => Err(LinkStateError::RemoteClosed),
-                            (Ok(_), false) => Err(LinkStateError::RemoteDetached),
-                            (Err(err), _) => Err(LinkStateError::from(err)),
+                        match self.apply_remote_detach_outcome(detach) {
+                            Ok(status) => Err(TransferError::LinkEnded(status)),
+                            Err(err) => Err(TransferError::LinkState(err.into())),
                         }
                     },
                     Some(_frame) => {
@@ -219,14 +215,18 @@ where
                         #[cfg(feature = "log")]
                         log::error!("Unexpected frame: {:?}", _frame);
 
-                        Err(LinkStateError::ExpectImmediateDetach)
+                        Err(TransferError::ExpectImmediateDetach)
                     }
                     None => {
                         // The channel closed without a frame: the session (or its
                         // connection) stopped and the engine dropped the relay.
                         match self.session_stop_reason.get() {
-                            Some(reason) => Err(LinkStateError::SessionStopped(reason.clone())),
-                            None => Err(LinkStateError::ExpectImmediateDetach), // defensive: no stop reason recorded; failure is link-local
+                            Some(reason) => {
+                                Err(TransferError::LinkState(
+                                    LinkStateError::SessionStopped(reason.clone()),
+                                ))
+                            }
+                            None => Err(TransferError::ExpectImmediateDetach), // defensive: no stop reason recorded; failure is link-local
                         }
                     }
                 }
@@ -299,7 +299,7 @@ where
         + Sync,
 {
     type FlowError = FlowError;
-    type TransferError = LinkStateError;
+    type TransferError = TransferError;
     type DispositionError = DispositionError;
 
     async fn send_payload<Fut>(
@@ -523,7 +523,7 @@ async fn send_disposition(
     state: Option<DeliveryState>,
     batchable: bool,
     session_stop_reason: &OnceLock<SessionStopReason>,
-) -> Result<(), IllegalLinkStateError> {
+) -> Result<(), LinkStateError> {
     let disposition = Disposition {
         role: Role::Sender,
         first,
@@ -537,8 +537,8 @@ async fn send_disposition(
         .send(frame)
         .await
         .map_err(|_| match session_stop_reason.get() {
-            Some(reason) => IllegalLinkStateError::SessionStopped(reason.clone()),
-            None => IllegalLinkStateError::IllegalState, // defensive: no stop reason recorded; failure is link-local
+            Some(reason) => LinkStateError::SessionStopped(reason.clone()),
+            None => LinkStateError::IllegalState, // defensive: no stop reason recorded; failure is link-local
         })
 }
 

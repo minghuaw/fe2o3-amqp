@@ -12,6 +12,23 @@
    the sender now completes the resumption `Resume` exchange.
 4. Added `ErrorRecovery` and `recovery()` on `SendError`/`RecvError` to tell whether a failed
    link operation requires a reattach, a new session or connection, or a new link.
+5. **Breaking**: a peer-initiated link detach/close is now reported as an outcome instead of a
+   link-state error. `LinkStateError` no longer carries `RemoteDetached`, `RemoteDetachedWithError`,
+   `RemoteClosed` or `RemoteClosedWithError`; the new `DetachStatus` (`Detached`/`Closed` plus the
+   peer's optional error) is carried by `SendError::LinkEnded`, `RecvError::LinkEnded`,
+   `PostError::LinkEnded` and `ControllerSendError::LinkEnded`. `Sender::on_detach` returns
+   `Result<DetachStatus, LinkStateError>`; the deprecated `DetachError::DetachedByRemote` is
+   removed. The dead `SendError::Detached(DetachError)` and `From<DetachError> for SendError` are
+   removed as well.
+2. **Breaking**: `IllegalLinkStateError` is merged into `LinkStateError`, which now carries only
+   `IllegalState` and `SessionStopped`; `DispositionError` and `FlowError` are aliases of it, and
+   `IllegalLinkStateError` is kept as a deprecated alias. `ExpectImmediateDetach` moved from
+   `LinkStateError` to `SendError`/`PostError`/`ControllerSendError`.
+3. **Bugfix**: link resumption now carries unsettled deliveries. The sender advertises its unsettled
+   map on (re)attach and re-sends the deliveries after the link is resumed on another session or
+   connection, so a `send_batchable` future resolves with the peer's disposition instead of failing
+   with `SessionStopped`. Same-session resume (`DetachedSender::resume()`) now completes instead of
+   returning an `IllegalState` attach error when there are unsettled deliveries (#396).
 
 ## 0.18.2
 
