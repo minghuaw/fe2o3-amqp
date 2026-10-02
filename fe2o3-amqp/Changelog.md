@@ -1,5 +1,16 @@
 # Change Log
 
+## Unreleased
+
+1. **Bugfix**: receive-side `max-message-size` enforcement now counts the buffered payload
+   of tagless continuation frames, and an oversized delivery detaches the link with
+   `amqp:link:message-size-exceeded` instead of leaving the link usable.
+2. **Bugfix**: malformed deliveries (missing mandatory delivery-id/delivery-tag, differing
+   continuation fields, or a tagless state transfer without a buffered delivery) detach the
+   link with `amqp:not-allowed`; resumed deliveries not in the local unsettled map are ignored.
+3. **Bugfix**: aborted deliveries are settled and discarded consistently on both sides, and
+   the sender now completes the resumption `Resume` exchange.
+
 ## 0.18.2
 
 **Bugfix**: an unsettled delivery is now registered before its transfer reaches the session, preventing `send` from hanging when the peer settles immediately.

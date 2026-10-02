@@ -232,6 +232,29 @@ fn split_off_at_section_and_offset(
 
 #[cfg(test)]
 mod tests {
+    use fe2o3_amqp_types::messaging::{Accepted, Modified, Rejected, Released};
+
+    use super::*;
+
+    fn unsettled_with_state(
+        state: Option<DeliveryState>,
+    ) -> (
+        UnsettledMessage,
+        oneshot::Receiver<Result<Option<DeliveryState>, LinkStateError>>,
+    ) {
+        let (sender, receiver) = oneshot::channel();
+        (
+            UnsettledMessage::new(Payload::new(), state, 0, sender),
+            receiver,
+        )
+    }
+
+    fn received(section_number: u32, section_offset: u64) -> DeliveryState {
+        DeliveryState::Received(Received {
+            section_number,
+            section_offset,
+        })
+    }
 
     #[test]
     fn test_zipped_iter() {
@@ -246,5 +269,60 @@ mod tests {
             assert_eq!(b1, &src[i + 1]);
             assert_eq!(b2, &src[i + 2]);
         }
+    }
+
+    /// A terminal local state while the peer reports only partial receipt
+    /// cannot be resumed, so the sender aborts the delivery.
+    #[test]
+    fn terminal_local_with_remote_received_aborts() {
+        for state in [
+            DeliveryState::Accepted(Accepted {}),
+            DeliveryState::Modified(Modified {
+                delivery_failed: None,
+                undeliverable_here: None,
+                message_annotations: None,
+            }),
+            DeliveryState::Rejected(Rejected { error: None }),
+            DeliveryState::Released(Released {}),
+        ] {
+            let (local, _rx) = unsettled_with_state(Some(state));
+            let resuming = resume_delivery(local, Some(Some(received(0, 0))));
+            assert!(matches!(
+                resuming,
+                Some(ResumingDelivery::Abort {
+                    message_format: 0,
+                    sender: Some(_)
+                })
+            ));
+        }
+    }
+
+    /// The peer received less than the sender knows was received (the sender
+    /// recorded a further section/offset), so the delivery must be aborted.
+    #[test]
+    fn local_received_beyond_remote_aborts() {
+        let (local, _rx) = unsettled_with_state(Some(received(1, 5)));
+        let resuming = resume_delivery(local, Some(Some(received(1, 2))));
+        assert!(matches!(resuming, Some(ResumingDelivery::Abort { .. })));
+    }
+
+    /// The peer received at least as much as the sender: resume the remainder.
+    #[test]
+    fn local_received_up_to_remote_resumes() {
+        let (local, _rx) = unsettled_with_state(Some(received(1, 2)));
+        let resuming = resume_delivery(local, Some(Some(received(1, 2))));
+        assert!(matches!(resuming, Some(ResumingDelivery::Resume(_))));
+    }
+
+    #[cfg(feature = "transaction")]
+    #[test]
+    fn remote_declared_aborts() {
+        use fe2o3_amqp_types::{primitives::Binary, transaction::Declared};
+
+        let txn_id = Binary::from(vec![0u8; 4]);
+        let remote = Some(Some(DeliveryState::Declared(Declared { txn_id })));
+        let (local, _rx) = unsettled_with_state(None);
+        let resuming = resume_delivery(local, remote);
+        assert!(matches!(resuming, Some(ResumingDelivery::Abort { .. })));
     }
 }
