@@ -1189,26 +1189,43 @@ where
         }
     }
 
+    /// Whether `transfer` is the buffered incomplete delivery or a
+    /// continuation of it.
+    ///
+    /// A continuation transfer may omit the delivery tag (AMQP 1.0 §2.7.5),
+    /// so an omitted tag belongs to the buffered delivery. An explicitly
+    /// different tag identifies another delivery.
+    fn matches_incomplete_transfer(&self, transfer: &Transfer) -> bool {
+        match &self.incomplete_transfer {
+            None => false,
+            Some(incomplete) => match (
+                &incomplete.performative.delivery_tag,
+                &transfer.delivery_tag,
+            ) {
+                (Some(local), Some(remote)) => local == remote,
+                _ => true,
+            },
+        }
+    }
+
     /// The bytes of the delivery accumulated so far that belong to the same
     /// delivery as `transfer` (i.e. the buffered chunks of the incomplete
     /// multi-frame delivery, when the transfer is a continuation of it).
     fn accumulated_message_size(&self, transfer: &Transfer) -> u64 {
-        match &self.incomplete_transfer {
-            Some(incomplete) if incomplete.performative.delivery_tag == transfer.delivery_tag => {
-                incomplete
-                    .buffer
-                    .iter()
-                    .map(|p| p.len() as u64)
-                    .sum::<u64>()
-            }
-            _ => 0,
+        if self.matches_incomplete_transfer(transfer) {
+            self.incomplete_transfer
+                .as_ref()
+                .map(|incomplete| incomplete.accumulated_payload_size)
+                .unwrap_or(0)
+        } else {
+            0
         }
     }
 
     /// Reject a delivery that exceeds the negotiated max-message-size of the
     /// link with the `amqp:link:message-size-exceeded` error condition and
-    /// discard the buffered chunks, so the oversized message is neither
-    /// buffered further nor surfaced to the application.
+    /// discard the buffered chunks when they belong to it, so the oversized
+    /// message is neither buffered further nor surfaced to the application.
     ///
     /// If the sender pre-settled the delivery there is nothing to reply with;
     /// otherwise a terminal `Rejected` disposition is sent. The
@@ -1244,8 +1261,12 @@ where
                 .and_then(|i| i.performative.delivery_tag.clone())
         });
 
-        // Discard the buffered chunks of the oversized delivery
-        self.incomplete_transfer.take();
+        // Discard the buffered chunks of the oversized delivery. A transfer
+        // with an explicitly different delivery tag (e.g. a resumed delivery)
+        // must not drop the buffered delivery.
+        if self.matches_incomplete_transfer(&transfer) {
+            self.incomplete_transfer.take();
+        }
 
         // If the sender pre-settled the delivery, there is nothing to reply with
         if !transfer.settled.unwrap_or(false) {
@@ -1302,17 +1323,6 @@ where
     where
         for<'de> T: FromBody<'de> + Send,
     {
-        // Enforce the negotiated max-message-size of the link before
-        // assembling the delivery
-        if let Some(max_size) = self.link.max_message_size() {
-            let total = self.accumulated_message_size(&transfer) + payload.len() as u64;
-            if total > max_size {
-                return self
-                    .reject_oversized_message(transfer, total, max_size)
-                    .await;
-            }
-        }
-
         let delivery = match self.incomplete_transfer.take() {
             Some(mut incomplete) => {
                 incomplete.or_assign(transfer)?;
@@ -1373,21 +1383,21 @@ where
             self.on_transfer_state(&transfer.delivery_tag, transfer.settled, state)?;
         }
 
-        if transfer.more {
-            // Enforce the negotiated max-message-size of the link: reject the
-            // delivery with the `amqp:link:message-size-exceeded` error
-            // condition once the accumulated message size would exceed it,
-            // discarding the buffered chunks instead of buffering the
-            // oversized message.
-            if let Some(max_size) = self.link.max_message_size() {
-                let total = self.accumulated_message_size(&transfer) + payload.len() as u64;
-                if total > max_size {
-                    return self
-                        .reject_oversized_message(transfer, total, max_size)
-                        .await;
-                }
+        // Enforce the negotiated max-message-size of the link on every
+        // transfer frame: reject the delivery with the
+        // `amqp:link:message-size-exceeded` error condition as soon as the
+        // accumulated message size would exceed it, discarding the buffered
+        // chunks instead of buffering (or assembling) the oversized message.
+        if let Some(max_size) = self.link.max_message_size() {
+            let total = self.accumulated_message_size(&transfer) + payload.len() as u64;
+            if total > max_size {
+                return self
+                    .reject_oversized_message(transfer, total, max_size)
+                    .await;
             }
+        }
 
+        if transfer.more {
             // Partial transfer of the delivery
             // There is only ONE incomplet transfer locally, so the partial transfer must belong to the
             // same delivery
@@ -2217,6 +2227,72 @@ mod tests {
         make_receiver_inner_with_channels(max_frame_size).0
     }
 
+    fn make_incoming_transfer(
+        delivery_id: u32,
+        delivery_tag: Option<Vec<u8>>,
+        more: bool,
+        settled: bool,
+    ) -> Transfer {
+        Transfer {
+            handle: Handle(0),
+            delivery_id: Some(delivery_id),
+            delivery_tag: delivery_tag.map(DeliveryTag::from),
+            message_format: Some(0),
+            settled: Some(settled),
+            more,
+            rcv_settle_mode: None,
+            state: None,
+            resume: false,
+            aborted: false,
+            batchable: false,
+        }
+    }
+
+    fn make_link_frame(transfer: Transfer, payload: Payload) -> LinkFrame {
+        LinkFrame::Transfer {
+            input_handle: crate::endpoint::InputHandle(0),
+            performative: transfer,
+            payload,
+        }
+    }
+
+    fn encoded_message_payload(body: &str) -> Payload {
+        use fe2o3_amqp_types::messaging::{message::__private::Serializable, Message};
+        let message = Message::from(body.to_string());
+        Payload::from(serde_amqp::to_vec(&Serializable(message)).unwrap())
+    }
+
+    /// Assert that the next outgoing frame is a `Rejected` disposition
+    /// carrying `amqp:link:message-size-exceeded`.
+    fn assert_rejected_disposition(outgoing: &mut mpsc::Receiver<LinkFrame>) {
+        match outgoing.try_recv().expect("expected a disposition") {
+            LinkFrame::Disposition(d) => match d.state {
+                Some(DeliveryState::Rejected(rejected)) => {
+                    let error = rejected
+                        .error
+                        .as_ref()
+                        .expect("rejection must carry an error");
+                    assert_eq!(
+                        error.condition,
+                        definitions::ErrorCondition::from(LinkError::MessageSizeExceeded)
+                    );
+                }
+                other => panic!("expected Rejected state, got {other:?}"),
+            },
+            other => panic!("expected Disposition, got {other:?}"),
+        }
+    }
+
+    fn assert_message_size_exceeded(error: RecvError, expected_size: u64, expected_max: u64) {
+        match error {
+            RecvError::MessageSizeExceeded(e) => {
+                assert_eq!(e.size, expected_size);
+                assert_eq!(e.max_size, expected_max);
+            }
+            other => panic!("expected MessageSizeExceeded, got {other:?}"),
+        }
+    }
+
     /// The minimal `Attach` a sender peer sends for this receiver link: it
     /// must carry a source and an initial delivery count so
     /// `on_incoming_attach` accepts it.
@@ -2271,6 +2347,158 @@ mod tests {
         let is_reattaching = inner.switch_session(&session_b);
         assert!(!is_reattaching);
         assert_eq!(inner.link.max_frame_size, 1020);
+    }
+
+    /// The accumulated size must count the buffered chunks for a tagless
+    /// continuation (AMQP 1.0 §2.7.5) while an explicit tag of another
+    /// delivery does not.
+    #[tokio::test]
+    async fn accumulated_size_counts_tagless_continuation_but_not_other_delivery() {
+        let mut inner = make_receiver_inner(4096);
+        inner
+            .on_incoming_transfer::<String>(
+                make_incoming_transfer(1, Some(vec![0x01]), true, false),
+                Payload::from(vec![0u8; 60]),
+            )
+            .await
+            .unwrap();
+
+        let continuation = make_incoming_transfer(1, None, true, false);
+        assert_eq!(inner.accumulated_message_size(&continuation), 60);
+
+        let other_delivery = make_incoming_transfer(2, Some(vec![0x02]), true, false);
+        assert_eq!(inner.accumulated_message_size(&other_delivery), 0);
+    }
+
+    /// A delivery spanning exactly two frames whose total size exceeds the
+    /// link's max-message-size must be rejected on the tagless final frame,
+    /// and the link must remain usable afterwards.
+    #[tokio::test]
+    async fn two_frame_delivery_exceeding_max_message_size_is_rejected_on_final_frame() {
+        let (mut inner, _session_rx, mut outgoing_rx, incoming_tx) =
+            make_receiver_inner_with_channels(4096);
+        inner.link.max_message_size = 100;
+
+        // The first frame carries the delivery tag, the final continuation
+        // omits it.
+        incoming_tx
+            .send(make_link_frame(
+                make_incoming_transfer(1, Some(vec![0x01]), true, false),
+                Payload::from(vec![0u8; 60]),
+            ))
+            .await
+            .unwrap();
+        incoming_tx
+            .send(make_link_frame(
+                make_incoming_transfer(1, None, false, false),
+                Payload::from(vec![0u8; 60]),
+            ))
+            .await
+            .unwrap();
+
+        let error = inner
+            .recv::<String>()
+            .await
+            .expect_err("oversized delivery must be rejected");
+        assert_message_size_exceeded(error, 120, 100);
+        assert!(inner.incomplete_transfer.is_none());
+        assert_rejected_disposition(&mut outgoing_rx);
+
+        // The link must remain usable: a subsequent in-limit message is
+        // delivered.
+        let body = "still usable";
+        incoming_tx
+            .send(make_link_frame(
+                make_incoming_transfer(2, Some(vec![0x02]), false, false),
+                encoded_message_payload(body),
+            ))
+            .await
+            .unwrap();
+        let delivery = inner
+            .recv::<String>()
+            .await
+            .expect("link should remain usable");
+        assert_eq!(delivery.body(), body);
+    }
+
+    /// A delivery spanning three or more frames must be rejected as soon as
+    /// an intermediate `more=true` frame pushes the accumulated size over the
+    /// limit, before the final frame arrives.
+    #[tokio::test]
+    async fn multi_frame_delivery_exceeding_max_message_size_is_rejected_on_intermediate_frame() {
+        let (mut inner, _session_rx, mut outgoing_rx, incoming_tx) =
+            make_receiver_inner_with_channels(4096);
+        inner.link.max_message_size = 100;
+
+        // 50 + 50 reaches the limit but does not exceed it.
+        incoming_tx
+            .send(make_link_frame(
+                make_incoming_transfer(1, Some(vec![0x01]), true, false),
+                Payload::from(vec![0u8; 50]),
+            ))
+            .await
+            .unwrap();
+        incoming_tx
+            .send(make_link_frame(
+                make_incoming_transfer(1, None, true, false),
+                Payload::from(vec![0u8; 50]),
+            ))
+            .await
+            .unwrap();
+        // The next intermediate frame exceeds the limit.
+        incoming_tx
+            .send(make_link_frame(
+                make_incoming_transfer(1, None, true, false),
+                Payload::from(vec![0u8; 1]),
+            ))
+            .await
+            .unwrap();
+
+        let error = inner
+            .recv::<String>()
+            .await
+            .expect_err("oversized delivery must be rejected");
+        assert_message_size_exceeded(error, 101, 100);
+        assert!(inner.incomplete_transfer.is_none());
+        assert_rejected_disposition(&mut outgoing_rx);
+    }
+
+    /// A tagless-continuation delivery whose total size is exactly the limit
+    /// is accepted and decoded.
+    #[tokio::test]
+    async fn in_limit_multi_frame_delivery_is_delivered() {
+        let (mut inner, _session_rx, _outgoing_rx, incoming_tx) =
+            make_receiver_inner_with_channels(4096);
+
+        let body = "in-limit multi-frame message";
+        let payload = encoded_message_payload(body);
+        let total = payload.len() as u64;
+        // Exactly at the limit: the enforcement uses `>` and must not reject.
+        inner.link.max_message_size = total;
+
+        let split = payload.len() / 2;
+        let first = payload.slice(..split);
+        let second = payload.slice(split..);
+        incoming_tx
+            .send(make_link_frame(
+                make_incoming_transfer(1, Some(vec![0x01]), true, false),
+                first,
+            ))
+            .await
+            .unwrap();
+        incoming_tx
+            .send(make_link_frame(
+                make_incoming_transfer(1, None, false, false),
+                second,
+            ))
+            .await
+            .unwrap();
+
+        let delivery = inner
+            .recv::<String>()
+            .await
+            .expect("in-limit delivery must be accepted");
+        assert_eq!(delivery.body(), body);
     }
 
     /// A peer that suspends (non-closing detach) while this side is closing

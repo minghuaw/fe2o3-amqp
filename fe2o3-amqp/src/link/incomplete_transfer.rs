@@ -34,16 +34,22 @@ pub(crate) struct IncompleteTransfer {
     pub buffer: Vec<Payload>,
     pub section_number: Option<u32>,
     pub section_offset: u64,
+    /// Sum of the lengths of the chunks in `buffer`, kept in sync so that
+    /// max-message-size enforcement does not have to re-sum the buffer for
+    /// every incoming transfer frame.
+    pub accumulated_payload_size: u64,
 }
 
 impl IncompleteTransfer {
     pub fn new(transfer: Transfer, partial_payload: Payload) -> Self {
         let (number, offset) = count_number_of_sections_and_offset(&partial_payload);
+        let accumulated_payload_size = partial_payload.len() as u64;
         Self {
             performative: transfer,
             buffer: vec![partial_payload], // TODO: handle payload split across re-attachment
             section_number: Some(number),
             section_offset: offset,
+            accumulated_payload_size,
         }
     }
 
@@ -112,6 +118,7 @@ impl IncompleteTransfer {
             }
         }
 
+        self.accumulated_payload_size += other.len() as u64;
         self.buffer.push(other);
     }
 
@@ -160,6 +167,89 @@ impl IncompleteTransfer {
                     let _ = chunk.split_off(index);
                 }
             }
+
+            // The buffer was truncated, so recompute the cached size.
+            self.accumulated_payload_size = self.buffer.iter().map(|p| p.len() as u64).sum();
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use fe2o3_amqp_types::{
+        definitions::{DeliveryTag, Handle},
+        messaging::{message::__private::Serializable, AmqpValue, Body, Header, Message},
+        primitives::Value,
+    };
+    use serde_amqp::to_vec;
+
+    use super::*;
+
+    fn test_transfer(more: bool) -> Transfer {
+        Transfer {
+            handle: Handle(0),
+            delivery_id: Some(0),
+            delivery_tag: Some(DeliveryTag::from(vec![0x01])),
+            message_format: Some(0),
+            settled: Some(false),
+            more,
+            rcv_settle_mode: None,
+            state: None,
+            resume: false,
+            aborted: false,
+            batchable: false,
+        }
+    }
+
+    /// An encoded message with a header and a body section, so that
+    /// section numbering can locate the body (`section_number == 2`).
+    fn encoded_message() -> Payload {
+        let message = Message {
+            header: Some(Header {
+                durable: true,
+                ..Default::default()
+            }),
+            delivery_annotations: None,
+            message_annotations: None,
+            properties: None,
+            application_properties: None,
+            body: Body::Value(AmqpValue(Value::Bool(true))),
+            footer: None,
+        };
+        Payload::from(to_vec(&Serializable(message)).unwrap())
+    }
+
+    #[test]
+    fn new_and_append_track_accumulated_payload_size() {
+        let payload = encoded_message();
+        let len = payload.len() as u64;
+
+        let mut incomplete = IncompleteTransfer::new(test_transfer(true), payload);
+        assert_eq!(incomplete.accumulated_payload_size, len);
+
+        let extra = Payload::from(vec![0u8; 17]);
+        incomplete.append(extra);
+        assert_eq!(incomplete.accumulated_payload_size, len + 17);
+    }
+
+    #[test]
+    fn keep_buffer_updates_accumulated_payload_size() {
+        let payload = encoded_message();
+        let split = payload.len() / 2;
+        let first = payload.slice(..split);
+        let second = payload.slice(split..);
+
+        let mut incomplete = IncompleteTransfer::new(test_transfer(true), first);
+        incomplete.append(second);
+
+        // The body section descriptor must be present for the truncation to
+        // actually run.
+        assert!(incomplete
+            .position_of_section_number_and_offset(2, 0)
+            .is_some());
+        incomplete.keep_buffer_till_section_number_and_offset(2, 0);
+
+        let actual: u64 = incomplete.buffer.iter().map(|p| p.len() as u64).sum();
+        assert_eq!(incomplete.accumulated_payload_size, actual);
     }
 }
