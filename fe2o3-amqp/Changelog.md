@@ -1,16 +1,15 @@
 # Change Log
 
-## Unreleased
+## 0.18.3
 
-1. **Bugfix**: receive-side `max-message-size` enforcement now counts the buffered payload
-   of tagless continuation frames, and an oversized delivery detaches the link with
-   `amqp:link:message-size-exceeded` instead of leaving the link usable.
-2. **Bugfix**: malformed deliveries (missing mandatory delivery-id/delivery-tag, differing
-   continuation fields, or a tagless state transfer without a buffered delivery) detach the
-   link with `amqp:not-allowed`; resumed deliveries not in the local unsettled map are ignored.
-3. **Bugfix**: aborted deliveries are settled and discarded consistently on both sides, and
-   the sender now completes the resumption `Resume` exchange.
-4. Added `ErrorRecovery` and `recovery()` on `SendError`/`RecvError` to tell whether a failed
+1. **Breaking behavior**: oversized and malformed deliveries now detach the link with
+   `amqp:link:message-size-exceeded` and `amqp:not-allowed` instead of returning a recoverable
+   error; callers must resume or recreate the link. `max-message-size` enforcement now also
+   counts tagless continuation frames.
+2. **Bugfix**: resumed deliveries not in the local unsettled map are ignored, and aborted
+   deliveries are settled and discarded consistently on both sides (the sender completes the
+   resumption `Resume` exchange).
+3. Added `ErrorRecovery` and `recovery()` on `SendError`/`RecvError` to tell whether a failed
    link operation requires a reattach, a new session or connection, or a new link.
 
 ## 0.18.2
