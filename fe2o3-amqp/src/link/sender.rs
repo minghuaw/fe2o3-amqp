@@ -1648,6 +1648,12 @@ mod tests {
         let (mut inner, mut session_rx, mut outgoing_rx, _incoming_tx) =
             make_sender_inner_with_channels(4096);
 
+        // The terminal local state is seeded directly: `resume_delivery`
+        // handles the spec's resumption "spontaneous terminal outcome" case
+        // (delivery-tag 11/14 in §2.6.13's examples), where the sender reached
+        // a terminal outcome while the receiver reports partial receipt. The
+        // public API does not produce that combination today; the reachable
+        // abort arm is `Received(local) > Received(remote)`.
         let tag = DeliveryTag::from(vec![0x01]);
         let (sender, mut settled) = oneshot::channel();
         let _ = inner
