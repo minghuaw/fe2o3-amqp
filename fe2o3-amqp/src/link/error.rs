@@ -217,10 +217,9 @@ pub enum SenderAttachError {
 ///   `amqp:link:message-size-exceeded` error condition in this case).
 /// - On the **receiver** side, [`Receiver::recv`](crate::Receiver::recv)
 ///   returns this error when the peer sends a delivery larger than the
-///   advertised `max_message_size`. The delivery is rejected with a
-///   `Rejected` disposition carrying `amqp:link:message-size-exceeded`, but
-///   the link is **not** detached: only the oversized delivery is discarded
-///   and the receiver can be used to receive subsequent messages.
+///   advertised `max_message_size`. Receiving an oversized message is a link
+///   error (AMQP 1.0 §2.7.3, §2.8.18), so the link is detached with
+///   `amqp:link:message-size-exceeded` and must be resumed to be used again.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct MessageSizeExceeded {
     /// Size of the encoded message in bytes
@@ -645,12 +644,9 @@ pub enum RecvError {
     InconsistentFieldInMultiFrameDelivery,
 
     /// A delivery larger than the negotiated `max_message_size` of the link
-    /// was rejected with the `amqp:link:message-size-exceeded` error
-    /// condition.
-    ///
-    /// The rejection is delivery-scoped: the link is **not** detached and
-    /// remains usable, so subsequent [`Receiver::recv`](crate::Receiver::recv)
-    /// calls continue to receive normally.
+    /// was received. The link is detached with the
+    /// `amqp:link:message-size-exceeded` error condition (AMQP 1.0 §2.6.5) and
+    /// can only be restored by resuming it.
     #[error(transparent)]
     MessageSizeExceeded(MessageSizeExceeded),
 

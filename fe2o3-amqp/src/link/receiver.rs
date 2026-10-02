@@ -11,7 +11,6 @@ use fe2o3_amqp_types::{
         Accepted, Address, DeliveryState, FromBody, Modified, Rejected, Released, Source, Target,
     },
     performatives::{Attach, Detach, Disposition, Transfer},
-    primitives::OrderedMap,
 };
 use tokio::sync::mpsc;
 
@@ -24,7 +23,6 @@ use crate::{
     control::SessionControl,
     endpoint::{self, LinkAttach, LinkDetach, LinkExt, LinkFlow, OutputHandle},
     session::SessionHandle,
-    util::Sealed,
     Payload,
 };
 
@@ -317,12 +315,10 @@ impl Receiver {
     ///
     /// When the link advertises a `max_message_size` (see
     /// [`max_message_size`](#method.max_message_size)) and the peer sends a
-    /// delivery larger than it, the receiver rejects the delivery with a
-    /// `Rejected` disposition carrying `amqp:link:message-size-exceeded` and
-    /// this method returns [`RecvError::MessageSizeExceeded`]. The rejection
-    /// is delivery-scoped: **the link is not detached** — only the oversized
-    /// delivery is discarded, and subsequent calls to this method continue to
-    /// receive normally.
+    /// delivery larger than it, the link is detached with the
+    /// `amqp:link:message-size-exceeded` error condition (AMQP 1.0 §2.6.5) and
+    /// this method returns [`RecvError::MessageSizeExceeded`]. The link can
+    /// only be restored by resuming it.
     ///
     /// # Malformed multi-frame deliveries
     ///
@@ -1244,96 +1240,40 @@ where
         })
     }
 
-    /// Reject a delivery that exceeds the negotiated max-message-size of the
-    /// link with the `amqp:link:message-size-exceeded` error condition and
-    /// discard the buffered chunks when they belong to it, so the oversized
-    /// message is neither buffered further nor surfaced to the application.
-    ///
-    /// If the sender pre-settled the delivery there is nothing to reply with;
-    /// otherwise a terminal `Rejected` disposition is sent. The
-    /// [`RecvError::MessageSizeExceeded`] error is returned in both cases so
-    /// `recv()` observes the rejected delivery; the link itself is not
-    /// detached and remains usable.
-    async fn reject_oversized_message<T>(
+    /// Detach the link because a delivery exceeds the negotiated
+    /// max-message-size, as required for a `message-size-exceeded` link error
+    /// (AMQP 1.0 §2.6.5). The buffered chunks are discarded and the link can
+    /// only be restored by resuming it.
+    async fn close_on_message_size_exceeded(
         &mut self,
-        transfer: Transfer,
         total_size: u64,
         max_size: u64,
-    ) -> Result<Option<Delivery<T>>, RecvError>
-    where
-        for<'de> T: FromBody<'de> + Send,
-    {
+    ) -> RecvError {
         #[cfg(feature = "tracing")]
         tracing::warn!(
-            "Rejected delivery of {total_size} bytes: exceeds the link's max message size of {max_size}"
+            "Detaching link: received message of {total_size} bytes exceeds the max message size of {max_size}"
         );
         #[cfg(feature = "log")]
         log::warn!(
-            "Rejected delivery of {total_size} bytes: exceeds the link's max message size of {max_size}"
+            "Detaching link: received message of {total_size} bytes exceeds the max message size of {max_size}"
         );
 
-        let delivery_id = transfer
-            .delivery_id
-            .or_else(|| self.incomplete_transfer.as_ref().map(|i| i.delivery_id()));
-        let delivery_tag = transfer.delivery_tag.clone().or_else(|| {
-            self.incomplete_transfer
-                .as_ref()
-                .map(|i| i.delivery_tag().clone())
-        });
+        self.incomplete_transfer.take();
 
-        // Discard the buffered chunks of the oversized delivery. A transfer
-        // with an explicitly different delivery tag (e.g. a resumed delivery)
-        // must not drop the buffered delivery.
-        if self
-            .incomplete_transfer
-            .as_ref()
-            .is_some_and(|incomplete| incomplete.is_same_delivery_as(&transfer))
-        {
-            self.incomplete_transfer.take();
+        let error = definitions::Error::new(
+            LinkError::MessageSizeExceeded,
+            Some(format!(
+                "received message larger than max size of {max_size}"
+            )),
+            None,
+        );
+        match self.close_with_error(Some(error)).await {
+            Ok(()) => RecvError::MessageSizeExceeded(MessageSizeExceeded {
+                size: total_size,
+                max_size,
+            }),
+            Err(detach_error) => detach_error.into(),
         }
-
-        // If the sender pre-settled the delivery, there is nothing to reply with
-        if !transfer.settled.unwrap_or(false) {
-            if let (Some(delivery_id), Some(delivery_tag)) = (delivery_id, delivery_tag) {
-                let error = definitions::Error::new(LinkError::MessageSizeExceeded, None, None);
-                let state = DeliveryState::Rejected(Rejected { error: Some(error) });
-                let info = DeliveryInfo {
-                    delivery_id,
-                    delivery_tag,
-                    rcv_settle_mode: None,
-                    _sealed: Sealed {},
-                };
-                // Track the delivery: `link.dispose` only sends the disposition when
-                // the delivery is in the unsettled map. First/single frames aren't
-                // tracked yet: the entry is only inserted by
-                // `ReceiverLink::on_incomplete_transfer` (first partial frame of a
-                // multi-frame delivery) or `ReceiverLink::on_complete_transfer` (final
-                // assembly), and this size check runs before either of those.
-                {
-                    let mut lock = self.link.unsettled().write();
-                    lock.get_or_insert(OrderedMap::new())
-                        .insert(info.delivery_tag.clone(), Some(state.clone()));
-                }
-                self.dispose(info, Some(true), state).await?;
-            } else {
-                // The frame could not be identified (missing delivery-id and
-                // delivery-tag), so no disposition can be sent. This should not
-                // happen with a well-behaved peer.
-                #[cfg(feature = "tracing")]
-                tracing::warn!(
-                    "Cannot send rejection disposition: missing delivery-id or delivery-tag"
-                );
-                #[cfg(feature = "log")]
-                log::warn!(
-                    "Cannot send rejection disposition: missing delivery-id or delivery-tag"
-                );
-            }
-        }
-
-        Err(RecvError::MessageSizeExceeded(MessageSizeExceeded {
-            size: total_size,
-            max_size,
-        }))
     }
 
     /// # Cancel safety
@@ -1430,16 +1370,13 @@ where
         }
 
         // Enforce the negotiated max-message-size of the link on every
-        // transfer frame: reject the delivery with the
+        // transfer frame: detach the link with the
         // `amqp:link:message-size-exceeded` error condition as soon as the
-        // accumulated message size would exceed it, discarding the buffered
-        // chunks instead of buffering (or assembling) the oversized message.
+        // accumulated message size would exceed it.
         if let Some(max_size) = self.link.max_message_size() {
             let total = self.accumulated_message_size(&transfer) + payload.len() as u64;
             if total > max_size {
-                return self
-                    .reject_oversized_message(transfer, total, max_size)
-                    .await;
+                return Err(self.close_on_message_size_exceeded(total, max_size).await);
             }
         }
 
@@ -2331,27 +2268,6 @@ mod tests {
         Payload::from(serde_amqp::to_vec(&Serializable(message)).unwrap())
     }
 
-    /// Assert that the next outgoing frame is a `Rejected` disposition
-    /// carrying `amqp:link:message-size-exceeded`.
-    fn assert_rejected_disposition(outgoing: &mut mpsc::Receiver<LinkFrame>) {
-        match outgoing.try_recv().expect("expected a disposition") {
-            LinkFrame::Disposition(d) => match d.state {
-                Some(DeliveryState::Rejected(rejected)) => {
-                    let error = rejected
-                        .error
-                        .as_ref()
-                        .expect("rejection must carry an error");
-                    assert_eq!(
-                        error.condition,
-                        definitions::ErrorCondition::from(LinkError::MessageSizeExceeded)
-                    );
-                }
-                other => panic!("expected Rejected state, got {other:?}"),
-            },
-            other => panic!("expected Disposition, got {other:?}"),
-        }
-    }
-
     fn assert_message_size_exceeded(error: RecvError, expected_size: u64, expected_max: u64) {
         match error {
             RecvError::MessageSizeExceeded(e) => {
@@ -2362,13 +2278,14 @@ mod tests {
         }
     }
 
-    /// Drive the closing-detach handshake while `recv()` processes malformed
-    /// transfers: assert that the detach closes the link with
-    /// `amqp:not-allowed`, answer it, and return the error `recv()` produced.
+    /// Drive the closing-detach handshake while `recv()` processes a malformed
+    /// or oversized transfer: assert that the detach closes the link with the
+    /// expected condition, answer it, and return the error `recv()` produced.
     async fn recv_expecting_fatal_close(
         inner: &mut ReceiverInner<ReceiverLink<Target>>,
         outgoing_rx: &mut mpsc::Receiver<LinkFrame>,
         incoming_tx: &mpsc::Sender<LinkFrame>,
+        expected_condition: definitions::ErrorCondition,
     ) -> RecvError {
         let (result, ()) = tokio::join!(inner.recv::<String>(), async {
             match outgoing_rx.recv().await.expect("expected a closing detach") {
@@ -2378,10 +2295,7 @@ mod tests {
                         .error
                         .as_ref()
                         .expect("the detach must carry the error");
-                    assert_eq!(
-                        error.condition,
-                        definitions::ErrorCondition::from(definitions::AmqpError::NotAllowed)
-                    );
+                    assert_eq!(error.condition, expected_condition);
                 }
                 other => panic!("expected Detach, got {other:?}"),
             }
@@ -2478,8 +2392,8 @@ mod tests {
     }
 
     /// A delivery spanning exactly two frames whose total size exceeds the
-    /// link's max-message-size must be rejected on the tagless final frame,
-    /// and the link must remain usable afterwards.
+    /// link's max-message-size must detach the link on the tagless final frame
+    /// (AMQP 1.0 §2.6.5, `amqp:link:message-size-exceeded`).
     #[tokio::test]
     async fn two_frame_delivery_exceeding_max_message_size_is_rejected_on_final_frame() {
         let (mut inner, _session_rx, mut outgoing_rx, incoming_tx) =
@@ -2503,34 +2417,23 @@ mod tests {
             .await
             .unwrap();
 
-        let error = inner
-            .recv::<String>()
-            .await
-            .expect_err("oversized delivery must be rejected");
+        // An oversized message is a link error: the link is detached with
+        // `amqp:link:message-size-exceeded` and destroyed.
+        let error = recv_expecting_fatal_close(
+            &mut inner,
+            &mut outgoing_rx,
+            &incoming_tx,
+            definitions::ErrorCondition::from(LinkError::MessageSizeExceeded),
+        )
+        .await;
         assert_message_size_exceeded(error, 120, 100);
         assert!(inner.incomplete_transfer.is_none());
-        assert_rejected_disposition(&mut outgoing_rx);
-
-        // The link must remain usable: a subsequent in-limit message is
-        // delivered.
-        let body = "still usable";
-        incoming_tx
-            .send(make_link_frame(
-                make_incoming_transfer(2, Some(vec![0x02]), false, false),
-                encoded_message_payload(body),
-            ))
-            .await
-            .unwrap();
-        let delivery = inner
-            .recv::<String>()
-            .await
-            .expect("link should remain usable");
-        assert_eq!(delivery.body(), body);
+        assert!(matches!(inner.link.local_state, LinkState::Closed));
     }
 
-    /// A delivery spanning three or more frames must be rejected as soon as
-    /// an intermediate `more=true` frame pushes the accumulated size over the
-    /// limit, before the final frame arrives.
+    /// A delivery spanning three or more frames must detach the link as soon
+    /// as an intermediate `more=true` frame pushes the accumulated size over
+    /// the limit, before the final frame arrives.
     #[tokio::test]
     async fn multi_frame_delivery_exceeding_max_message_size_is_rejected_on_intermediate_frame() {
         let (mut inner, _session_rx, mut outgoing_rx, incoming_tx) =
@@ -2561,13 +2464,16 @@ mod tests {
             .await
             .unwrap();
 
-        let error = inner
-            .recv::<String>()
-            .await
-            .expect_err("oversized delivery must be rejected");
+        let error = recv_expecting_fatal_close(
+            &mut inner,
+            &mut outgoing_rx,
+            &incoming_tx,
+            definitions::ErrorCondition::from(LinkError::MessageSizeExceeded),
+        )
+        .await;
         assert_message_size_exceeded(error, 101, 100);
         assert!(inner.incomplete_transfer.is_none());
-        assert_rejected_disposition(&mut outgoing_rx);
+        assert!(matches!(inner.link.local_state, LinkState::Closed));
     }
 
     /// A tagless-continuation delivery whose total size is exactly the limit
@@ -2623,7 +2529,13 @@ mod tests {
             ))
             .await
             .unwrap();
-        let error = recv_expecting_fatal_close(&mut inner, &mut outgoing_rx, &incoming_tx).await;
+        let error = recv_expecting_fatal_close(
+            &mut inner,
+            &mut outgoing_rx,
+            &incoming_tx,
+            definitions::ErrorCondition::from(definitions::AmqpError::NotAllowed),
+        )
+        .await;
         assert!(matches!(error, RecvError::DeliveryTagIsNone));
         assert!(matches!(inner.link.local_state, LinkState::Closed));
 
@@ -2636,7 +2548,13 @@ mod tests {
             .send(make_link_frame(missing_id, Payload::from(vec![0u8; 8])))
             .await
             .unwrap();
-        let error = recv_expecting_fatal_close(&mut inner, &mut outgoing_rx, &incoming_tx).await;
+        let error = recv_expecting_fatal_close(
+            &mut inner,
+            &mut outgoing_rx,
+            &incoming_tx,
+            definitions::ErrorCondition::from(definitions::AmqpError::NotAllowed),
+        )
+        .await;
         assert!(matches!(error, RecvError::DeliveryIdIsNone));
         assert!(matches!(inner.link.local_state, LinkState::Closed));
     }
@@ -2663,7 +2581,13 @@ mod tests {
             .await
             .unwrap();
 
-        let error = recv_expecting_fatal_close(&mut inner, &mut outgoing_rx, &incoming_tx).await;
+        let error = recv_expecting_fatal_close(
+            &mut inner,
+            &mut outgoing_rx,
+            &incoming_tx,
+            definitions::ErrorCondition::from(definitions::AmqpError::NotAllowed),
+        )
+        .await;
         assert!(matches!(
             error,
             RecvError::InconsistentFieldInMultiFrameDelivery
@@ -2696,7 +2620,13 @@ mod tests {
             .await
             .unwrap();
 
-        let error = recv_expecting_fatal_close(&mut inner, &mut outgoing_rx, &incoming_tx).await;
+        let error = recv_expecting_fatal_close(
+            &mut inner,
+            &mut outgoing_rx,
+            &incoming_tx,
+            definitions::ErrorCondition::from(definitions::AmqpError::NotAllowed),
+        )
+        .await;
         assert!(matches!(
             error,
             RecvError::InconsistentFieldInMultiFrameDelivery
@@ -2843,7 +2773,13 @@ mod tests {
             .await
             .unwrap();
 
-        let error = recv_expecting_fatal_close(&mut inner, &mut outgoing_rx, &incoming_tx).await;
+        let error = recv_expecting_fatal_close(
+            &mut inner,
+            &mut outgoing_rx,
+            &incoming_tx,
+            definitions::ErrorCondition::from(definitions::AmqpError::NotAllowed),
+        )
+        .await;
         assert!(matches!(
             error,
             RecvError::InconsistentFieldInMultiFrameDelivery

@@ -1,7 +1,4 @@
-use fe2o3_amqp_types::{
-    definitions::{DeliveryNumber, DeliveryTag},
-    performatives::Transfer,
-};
+use fe2o3_amqp_types::{definitions::DeliveryTag, performatives::Transfer};
 
 use crate::{util::AsByteIterator, Payload};
 
@@ -34,8 +31,7 @@ macro_rules! or_assign {
 #[derive(Debug)]
 pub(crate) struct IncompleteTransfer {
     performative: Transfer,
-    /// Validated by `start`; continuation merges never change them.
-    delivery_id: DeliveryNumber,
+    /// Validated by `start`; continuation merges never change it.
     delivery_tag: DeliveryTag,
     buffer: Vec<Payload>,
     section_number: u32,
@@ -57,9 +53,9 @@ impl IncompleteTransfer {
         transfer: Transfer,
         partial_payload: Payload,
     ) -> Result<Self, ReceiverTransferError> {
-        let delivery_id = transfer
-            .delivery_id
-            .ok_or(ReceiverTransferError::DeliveryIdIsNone)?;
+        if transfer.delivery_id.is_none() {
+            return Err(ReceiverTransferError::DeliveryIdIsNone);
+        }
         let delivery_tag = transfer
             .delivery_tag
             .clone()
@@ -69,7 +65,6 @@ impl IncompleteTransfer {
         let accumulated_payload_size = partial_payload.len() as u64;
         Ok(Self {
             performative: transfer,
-            delivery_id,
             delivery_tag,
             buffer: vec![partial_payload], // TODO: handle payload split across re-attachment
             section_number: number,
@@ -148,11 +143,6 @@ impl IncompleteTransfer {
             Some(remote) => remote == &self.delivery_tag,
             None => true,
         }
-    }
-
-    /// The delivery id validated by `start`; continuation merges never change it.
-    pub fn delivery_id(&self) -> DeliveryNumber {
-        self.delivery_id
     }
 
     /// The delivery tag validated by `start`; continuation merges never change it.
@@ -357,7 +347,6 @@ mod tests {
             .unwrap();
 
         assert_eq!(incomplete.accumulated_payload_size, len + 17);
-        assert_eq!(incomplete.delivery_id(), 0);
         assert_eq!(incomplete.delivery_tag(), &DeliveryTag::from(vec![0x01]));
     }
 
