@@ -1669,8 +1669,9 @@ mod tests {
 
     /// Full resume→abort flow with a scripted peer: the local delivery is
     /// terminal (`Accepted`) while the peer's attach reports it as partially
-    /// received, so the sender aborts it, settles the application future, and
-    /// completes the mandatory detach/re-attach cycle.
+    /// received, so the sender aborts it and settles the application future.
+    /// The peer's unsettled map was complete (`Resume`), so the resumption
+    /// completes on the same attach exchange without a detach.
     #[tokio::test]
     async fn resuming_a_terminal_delivery_against_remote_received_aborts() {
         let (mut inner, mut session_rx, mut outgoing_rx, _incoming_tx) =
@@ -1712,68 +1713,39 @@ mod tests {
         remote_attach.unsettled = Some(remote_unsettled);
 
         let driver = async move {
-            let mut incoming_tx: Option<mpsc::Sender<LinkFrame>> = None;
             let mut attaches = 0usize;
-            let mut detaches = 0usize;
             let mut saw_abort = false;
 
             loop {
                 tokio::select! {
                     ctrl = session_rx.recv() => match ctrl {
-                        Some(SessionControl::AllocateLink {
-                            link_relay,
-                            responder,
-                            ..
-                        }) => {
-                            incoming_tx = Some(match link_relay {
-                                LinkRelay::Sender { tx, .. } => tx,
-                                LinkRelay::Receiver { tx, .. } => tx,
-                            });
+                        Some(SessionControl::AllocateLink { responder, .. }) => {
                             let _ = responder.send(Ok(OutputHandle(1)));
                         }
                         Some(_) => {}
                         None => break,
                     },
                     frame = outgoing_rx.recv() => match frame {
-                        Some(LinkFrame::Attach(_)) => {
-                            attaches += 1;
-                            // The first attach is answered by
-                            // `initial_remote_attach`; the second is the
-                            // re-attach after the Resume exchange.
-                            if attaches == 2 {
-                                let tx =
-                                    incoming_tx.as_ref().expect("allocate was answered");
-                                let _ = tx
-                                    .send(LinkFrame::Attach(peer_receiver_attach()))
-                                    .await;
-                            }
-                        }
+                        Some(LinkFrame::Attach(_)) => attaches += 1,
                         Some(LinkFrame::Transfer { performative, .. }) => {
                             assert!(performative.aborted);
                             assert!(performative.resume);
                             saw_abort = true;
                         }
-                        Some(LinkFrame::Detach(detach)) => {
-                            assert!(!detach.closed);
-                            detaches += 1;
-                            let tx = incoming_tx.as_ref().expect("allocate was answered");
-                            let _ = tx
-                                .send(LinkFrame::Detach(Detach {
-                                    handle: fe2o3_amqp_types::definitions::Handle(0),
-                                    closed: false,
-                                    error: None,
-                                }))
-                                .await;
+                        Some(LinkFrame::Detach(_)) => {
+                            panic!("a complete Resume exchange must not detach the link")
                         }
                         Some(_) => {}
                         None => break,
                     },
                 }
 
-                if saw_abort && detaches >= 1 && attaches >= 2 {
+                if saw_abort {
                     break;
                 }
             }
+
+            assert_eq!(attaches, 1);
         };
 
         let (result, ()) = tokio::time::timeout(std::time::Duration::from_secs(10), async {

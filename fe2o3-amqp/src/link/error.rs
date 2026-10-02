@@ -743,11 +743,59 @@ impl From<ReceiverTransferError> for RecvError {
     }
 }
 
+/// The recovery action for a peer detach: a suspended link can be resumed, a
+/// destroyed one cannot.
+fn detach_status_recovery(status: &DetachStatus) -> ErrorRecovery {
+    if status.is_closed() {
+        ErrorRecovery::NewLink
+    } else {
+        ErrorRecovery::ReattachLink
+    }
+}
+
+impl LinkStateError {
+    /// Classifies what the caller can do with the link after this error.
+    pub fn recovery(&self) -> ErrorRecovery {
+        match self {
+            Self::IllegalState => ErrorRecovery::NewLink,
+            Self::SessionStopped(reason) => session_stop_recovery(reason),
+        }
+    }
+}
+
+impl DetachError {
+    /// Classifies what the caller can do with the link after this error.
+    pub fn recovery(&self) -> ErrorRecovery {
+        match self {
+            Self::IllegalState => ErrorRecovery::NewLink,
+            Self::SessionStopped(reason) => session_stop_recovery(reason),
+            Self::RemoteDetachedWithError(_) => ErrorRecovery::ReattachLink,
+            Self::ClosedByRemote | Self::RemoteClosedWithError(_) => ErrorRecovery::NewLink,
+        }
+    }
+}
+
+impl SendError {
+    /// Classifies what the caller can do with the link after this error.
+    pub fn recovery(&self) -> ErrorRecovery {
+        match self {
+            Self::LinkStateError(error) => error.recovery(),
+            Self::LinkEnded(status) => detach_status_recovery(status),
+            Self::NonTerminalDeliveryState
+            | Self::IllegalDeliveryState
+            | Self::MessageSizeExceeded(_)
+            | Self::MessageEncodeError => ErrorRecovery::UseLink,
+            Self::ExpectImmediateDetach => ErrorRecovery::NewLink,
+        }
+    }
+}
+
 impl RecvError {
     /// Classifies what the caller can do with the link after this error.
     pub fn recovery(&self) -> ErrorRecovery {
         match self {
             Self::LinkStateError(error) => error.recovery(),
+            Self::LinkEnded(status) => detach_status_recovery(status),
             Self::TransferLimitExceeded
             | Self::MessageDecode(_)
             | Self::IllegalRcvSettleModeInTransfer => ErrorRecovery::UseLink,
@@ -756,6 +804,30 @@ impl RecvError {
             | Self::MessageSizeExceeded(_)
             | Self::InconsistentFieldInMultiFrameDelivery
             | Self::TransactionalAcquisitionIsNotImeplemented => ErrorRecovery::NewLink,
+        }
+    }
+}
+
+impl From<DetachError> for RecvError {
+    fn from(value: DetachError) -> Self {
+        match value {
+            DetachError::IllegalState => RecvError::LinkStateError(LinkStateError::IllegalState),
+            DetachError::SessionStopped(reason) => {
+                RecvError::LinkStateError(LinkStateError::SessionStopped(reason))
+            }
+            DetachError::RemoteDetachedWithError(remote_error) => {
+                RecvError::LinkEnded(DetachStatus::Detached {
+                    remote_error: Some(remote_error),
+                })
+            }
+            DetachError::ClosedByRemote => {
+                RecvError::LinkEnded(DetachStatus::Closed { remote_error: None })
+            }
+            DetachError::RemoteClosedWithError(remote_error) => {
+                RecvError::LinkEnded(DetachStatus::Closed {
+                    remote_error: Some(remote_error),
+                })
+            }
         }
     }
 }
@@ -963,27 +1035,7 @@ mod tests {
     #[test]
     fn link_state_error_recovery() {
         assert_eq!(
-            LinkStateError::RemoteDetached.recovery(),
-            ErrorRecovery::ReattachLink
-        );
-        assert_eq!(
-            LinkStateError::RemoteDetachedWithError(test_error()).recovery(),
-            ErrorRecovery::ReattachLink
-        );
-        assert_eq!(
-            LinkStateError::RemoteClosed.recovery(),
-            ErrorRecovery::NewLink
-        );
-        assert_eq!(
-            LinkStateError::RemoteClosedWithError(test_error()).recovery(),
-            ErrorRecovery::NewLink
-        );
-        assert_eq!(
             LinkStateError::IllegalState.recovery(),
-            ErrorRecovery::NewLink
-        );
-        assert_eq!(
-            LinkStateError::ExpectImmediateDetach.recovery(),
             ErrorRecovery::NewLink
         );
         assert_eq!(
@@ -1000,7 +1052,6 @@ mod tests {
     }
 
     #[test]
-    #[allow(deprecated)]
     fn detach_error_recovery() {
         assert_eq!(
             DetachError::SessionStopped(SessionStopReason::RemoteEnded).recovery(),
@@ -1026,20 +1077,30 @@ mod tests {
             ErrorRecovery::NewLink
         );
         assert_eq!(DetachError::IllegalState.recovery(), ErrorRecovery::NewLink);
-        assert_eq!(
-            DetachError::DetachedByRemote.recovery(),
-            ErrorRecovery::ReattachLink
-        );
     }
 
     #[test]
     fn send_error_recovery() {
         assert_eq!(
-            SendError::LinkStateError(LinkStateError::RemoteDetached).recovery(),
+            SendError::LinkStateError(LinkStateError::SessionStopped(
+                SessionStopReason::RemoteEnded
+            ))
+            .recovery(),
+            ErrorRecovery::ReconnectSession
+        );
+        assert_eq!(
+            SendError::LinkEnded(DetachStatus::Detached {
+                remote_error: Some(test_error())
+            })
+            .recovery(),
             ErrorRecovery::ReattachLink
         );
         assert_eq!(
-            SendError::Detached(DetachError::ClosedByRemote).recovery(),
+            SendError::LinkEnded(DetachStatus::Closed { remote_error: None }).recovery(),
+            ErrorRecovery::NewLink
+        );
+        assert_eq!(
+            SendError::ExpectImmediateDetach.recovery(),
             ErrorRecovery::NewLink
         );
         assert_eq!(
@@ -1072,6 +1133,28 @@ mod tests {
             ))
             .recovery(),
             ErrorRecovery::ReconnectConnection
+        );
+        assert_eq!(
+            RecvError::LinkEnded(DetachStatus::Detached { remote_error: None }).recovery(),
+            ErrorRecovery::ReattachLink
+        );
+        assert_eq!(
+            RecvError::LinkEnded(DetachStatus::Detached {
+                remote_error: Some(test_error())
+            })
+            .recovery(),
+            ErrorRecovery::ReattachLink
+        );
+        assert_eq!(
+            RecvError::LinkEnded(DetachStatus::Closed { remote_error: None }).recovery(),
+            ErrorRecovery::NewLink
+        );
+        assert_eq!(
+            RecvError::LinkEnded(DetachStatus::Closed {
+                remote_error: Some(test_error())
+            })
+            .recovery(),
+            ErrorRecovery::NewLink
         );
         assert_eq!(
             RecvError::TransferLimitExceeded.recovery(),
