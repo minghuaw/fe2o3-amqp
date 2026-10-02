@@ -240,7 +240,7 @@ mod tests {
         state: Option<DeliveryState>,
     ) -> (
         UnsettledMessage,
-        oneshot::Receiver<Result<Option<DeliveryState>, LinkStateError>>,
+        oneshot::Receiver<Result<Option<DeliveryState>, DeliveryFailure>>,
     ) {
         let (sender, receiver) = oneshot::channel();
         (
