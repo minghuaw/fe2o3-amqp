@@ -1189,36 +1189,13 @@ where
         }
     }
 
-    /// Whether `transfer` is the buffered incomplete delivery or a
-    /// continuation of it.
-    ///
-    /// A continuation transfer may omit the delivery tag (AMQP 1.0 §2.7.5),
-    /// so an omitted tag belongs to the buffered delivery. An explicitly
-    /// different tag identifies another delivery.
-    fn matches_incomplete_transfer(&self, transfer: &Transfer) -> bool {
-        match &self.incomplete_transfer {
-            None => false,
-            Some(incomplete) => match (
-                &incomplete.performative.delivery_tag,
-                &transfer.delivery_tag,
-            ) {
-                (Some(local), Some(remote)) => local == remote,
-                _ => true,
-            },
-        }
-    }
-
     /// The bytes of the delivery accumulated so far that belong to the same
     /// delivery as `transfer` (i.e. the buffered chunks of the incomplete
     /// multi-frame delivery, when the transfer is a continuation of it).
     fn accumulated_message_size(&self, transfer: &Transfer) -> u64 {
-        if self.matches_incomplete_transfer(transfer) {
-            self.incomplete_transfer
-                .as_ref()
-                .map(|incomplete| incomplete.accumulated_payload_size)
-                .unwrap_or(0)
-        } else {
-            0
+        match &self.incomplete_transfer {
+            Some(incomplete) if incomplete.matches(transfer) => incomplete.accumulated_payload_size,
+            _ => 0,
         }
     }
 
@@ -1264,7 +1241,11 @@ where
         // Discard the buffered chunks of the oversized delivery. A transfer
         // with an explicitly different delivery tag (e.g. a resumed delivery)
         // must not drop the buffered delivery.
-        if self.matches_incomplete_transfer(&transfer) {
+        if self
+            .incomplete_transfer
+            .as_ref()
+            .is_some_and(|incomplete| incomplete.matches(&transfer))
+        {
             self.incomplete_transfer.take();
         }
 

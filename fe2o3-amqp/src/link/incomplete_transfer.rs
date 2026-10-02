@@ -97,6 +97,15 @@ impl IncompleteTransfer {
         Ok(())
     }
 
+    /// Whether `transfer` continues this delivery: it repeats the tag or omits it
+    /// (AMQP 1.0 §2.7.5). Only an explicitly different delivery tag is rejected.
+    pub fn matches(&self, transfer: &Transfer) -> bool {
+        match (&self.performative.delivery_tag, &transfer.delivery_tag) {
+            (Some(local), Some(remote)) => local == remote,
+            _ => true,
+        }
+    }
+
     /// Append to the buffered payload
     pub fn append(&mut self, other: Payload) {
         // Count section numbers
@@ -251,5 +260,21 @@ mod tests {
 
         let actual: u64 = incomplete.buffer.iter().map(|p| p.len() as u64).sum();
         assert_eq!(incomplete.accumulated_payload_size, actual);
+    }
+
+    #[test]
+    fn matches_accepts_same_or_omitted_tag_and_rejects_other() {
+        let incomplete = IncompleteTransfer::new(test_transfer(true), encoded_message());
+
+        let same_tag = test_transfer(true);
+        assert!(incomplete.matches(&same_tag));
+
+        let mut omitted_tag = test_transfer(true);
+        omitted_tag.delivery_tag = None;
+        assert!(incomplete.matches(&omitted_tag));
+
+        let mut other_tag = test_transfer(true);
+        other_tag.delivery_tag = Some(DeliveryTag::from(vec![0x02]));
+        assert!(!incomplete.matches(&other_tag));
     }
 }
