@@ -10,6 +10,8 @@
    link with `amqp:not-allowed`; resumed deliveries not in the local unsettled map are ignored.
 3. **Bugfix**: aborted deliveries are settled and discarded consistently on both sides, and
    the sender now completes the resumption `Resume` exchange.
+4. Added `ErrorRecovery` and `recovery()` on `SendError`/`RecvError` to tell whether a failed
+   link operation requires a reattach, a new session or connection, or a new link.
 
 ## 0.18.2
 
