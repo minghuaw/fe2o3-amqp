@@ -324,6 +324,19 @@ impl Receiver {
     /// delivery is discarded, and subsequent calls to this method continue to
     /// receive normally.
     ///
+    /// # Malformed multi-frame deliveries
+    ///
+    /// The delivery-id and delivery-tag MUST be present on the first transfer
+    /// of a multi-transfer delivery, and a continuation that carries them MUST
+    /// repeat the same values (AMQP 1.0 §2.7.5). A violation detaches the link
+    /// with `amqp:not-allowed` (AMQP 1.0 §2.6.5), so this method returns an
+    /// error and the link is no longer usable.
+    ///
+    /// # Resumed deliveries
+    ///
+    /// A resumed delivery whose tag is not in the link's local unsettled map
+    /// is ignored (AMQP 1.0 §2.6.13).
+    ///
     /// # Cancel safety
     ///
     /// This function is cancel-safe. See [#22](https://github.com/minghuaw/fe2o3-amqp/issues/22)
@@ -1080,14 +1093,33 @@ where
         }
     }
 
+    /// Adjust the buffered incomplete delivery and the link's unsettled map
+    /// for a transfer that carries a delivery state.
+    ///
+    /// A continuation transfer may omit the delivery tag; when it does, the
+    /// buffered delivery's tag is used so that the state is attributed to the
+    /// delivery being assembled.
     fn on_transfer_state(
         &mut self,
         delivery_tag: &Option<DeliveryTag>,
         settled: Option<bool>,
         state: DeliveryState,
     ) -> Result<(), RecvError> {
-        match &mut self.incomplete_transfer {
-            Some(incomplete) if *delivery_tag == incomplete.performative.delivery_tag => {
+        let effective_tag = match delivery_tag {
+            Some(tag) => Some(tag.clone()),
+            None => self
+                .incomplete_transfer
+                .as_ref()
+                .and_then(|incomplete| incomplete.delivery_tag().cloned()),
+        };
+
+        if let Some(incomplete) = &mut self.incomplete_transfer {
+            let belongs = match (incomplete.delivery_tag(), delivery_tag.as_ref()) {
+                (Some(_), None) => true,
+                (Some(local), Some(remote)) => local == remote,
+                _ => false,
+            };
+            if belongs {
                 if let DeliveryState::Received(received) = &state {
                     incomplete.keep_buffer_till_section_number_and_offset(
                         received.section_number,
@@ -1095,47 +1127,63 @@ where
                     );
                 }
             }
-            Some(_) | None => {}
         }
 
         self.link
-            .on_transfer_state(delivery_tag, settled, state)
+            .on_transfer_state(&effective_tag, settled, state)
             .map_err(Into::into)
     }
 
-    fn on_incomplete_transfer(
+    /// Close the link because a transfer violated the multi-frame delivery
+    /// rules. AMQP 1.0 §2.6.5 requires the endpoint to be detached with error
+    /// information and then destroyed.
+    async fn close_on_malformed_delivery(
+        &mut self,
+        error: ReceiverTransferError,
+    ) -> Result<(), RecvError> {
+        let detach_error = definitions::Error::new(
+            definitions::AmqpError::NotAllowed,
+            Some(error.to_string()),
+            None,
+        );
+        self.close_with_error(Some(detach_error)).await?;
+        Err(error.into())
+    }
+
+    async fn on_incomplete_transfer(
         &mut self,
         transfer: Transfer,
         payload: Payload,
     ) -> Result<(), RecvError> {
         // Partial transfer of the delivery
-        match &mut self.incomplete_transfer {
-            Some(incomplete) => {
-                incomplete.or_assign(transfer)?;
-                incomplete.append(payload);
-
-                if let Some(delivery_tag) = incomplete.performative.delivery_tag.clone() {
-                    // Update unsettled map in the link
-                    self.link.on_incomplete_transfer(
-                        delivery_tag,
-                        incomplete.section_number.unwrap_or(0),
-                        incomplete.section_offset,
-                    );
-                }
+        if let Some(incomplete) = &mut self.incomplete_transfer {
+            if let Err(error) = incomplete.try_append(transfer, payload) {
+                return self.close_on_malformed_delivery(error).await;
             }
-            None => {
-                let incomplete = IncompleteTransfer::new(transfer, payload);
-                if let Some(delivery_tag) = incomplete.performative.delivery_tag.clone() {
-                    // Update unsettled map in the link
-                    self.link.on_incomplete_transfer(
-                        delivery_tag,
-                        incomplete.section_number.unwrap_or(0),
-                        incomplete.section_offset,
-                    );
-                }
-                self.incomplete_transfer = Some(Box::new(incomplete));
+        } else {
+            match IncompleteTransfer::start(transfer, payload) {
+                Ok(incomplete) => self.incomplete_transfer = Some(Box::new(incomplete)),
+                Err(error) => return self.close_on_malformed_delivery(error).await,
             }
         }
+
+        let (delivery_tag, section_number, section_offset) = {
+            let incomplete = self
+                .incomplete_transfer
+                .as_ref()
+                .expect("the incomplete transfer was just stored");
+            (
+                incomplete
+                    .delivery_tag()
+                    .cloned()
+                    .expect("start validated the delivery tag"),
+                incomplete.section_number().unwrap_or(0),
+                incomplete.section_offset(),
+            )
+        };
+        // Update the unsettled map in the link
+        self.link
+            .on_incomplete_transfer(delivery_tag, section_number, section_offset);
 
         Ok(())
     }
@@ -1151,41 +1199,33 @@ where
     where
         for<'de> T: FromBody<'de> + Send,
     {
-        // need to check whether the incoming transfer matches
-        match (
-            &transfer.delivery_tag,
-            self.incomplete_transfer
-                .as_ref()
-                .map(|i| &i.performative.delivery_tag),
-        ) {
-            (Some(remote), Some(Some(local))) => {
-                // The transfer does not belong to the buffer incomplete transfer
-                if remote != local {
-                    let (section_number, section_offset) =
-                        count_number_of_sections_and_offset(&payload);
-                    let delivery = self.link.on_complete_transfer(
-                        transfer,
-                        &payload,
-                        section_number,
-                        section_offset,
-                    )?;
+        // The tag is known to be in the local unsettled map: resumed
+        // deliveries that are not are ignored before dispatch.
+        let matches_buffer = self
+            .incomplete_transfer
+            .as_ref()
+            .is_some_and(|incomplete| incomplete.is_same_delivery_as(&transfer));
 
-                    // Auto accept the message and leave settled to be determined based on rcv_settle_mode
-                    if self.auto_accept {
-                        self.dispose(&delivery, None, Accepted {}.into()).await?;
-                        // cancel safe
-                    }
+        if matches_buffer {
+            // The transfer belongs to the buffered incomplete transfer
+            self.on_complete_transfer(transfer, payload).await // cancel safe
+        } else {
+            // A different, previously unsettled delivery is being reassociated
+            let (section_number, section_offset) = count_number_of_sections_and_offset(&payload);
+            let delivery = self.link.on_complete_transfer(
+                transfer,
+                &payload,
+                section_number,
+                section_offset,
+            )?;
 
-                    Ok(Some(delivery))
-                } else {
-                    // The new Transfer belongs to the buffered incomplete transfer
-                    self.on_complete_transfer(transfer, payload).await // cancel safe
-                }
+            // Auto accept the message and leave settled to be determined based on rcv_settle_mode
+            if self.auto_accept {
+                self.dispose(&delivery, None, Accepted {}.into()).await?;
+                // cancel safe
             }
-            _ => {
-                // The new Transfer belongs to the buffered incomplete transfer that there isn't an incomplete_transfer
-                self.on_complete_transfer(transfer, payload).await // cancel safe
-            }
+
+            Ok(Some(delivery))
         }
     }
 
@@ -1195,10 +1235,24 @@ where
     fn accumulated_message_size(&self, transfer: &Transfer) -> u64 {
         match &self.incomplete_transfer {
             Some(incomplete) if incomplete.is_same_delivery_as(transfer) => {
-                incomplete.accumulated_payload_size
+                incomplete.accumulated_payload_size()
             }
             _ => 0,
         }
+    }
+
+    /// Whether the transfer names a delivery in the local unsettled map with a
+    /// non-terminal state. AMQP 1.0 §2.6.13 requires the receiver to ignore
+    /// resumed deliveries that are not in its local unsettled map.
+    fn is_known_unsettled(&self, transfer: &Transfer) -> bool {
+        let Some(tag) = transfer.delivery_tag.as_ref() else {
+            return false;
+        };
+        let guard = self.link.unsettled().read();
+        guard.as_ref().is_some_and(|map| {
+            map.get(tag)
+                .is_some_and(|state| state.as_ref().is_none_or(|state| !state.is_terminal()))
+        })
     }
 
     /// Reject a delivery that exceeds the negotiated max-message-size of the
@@ -1232,12 +1286,12 @@ where
         let delivery_id = transfer.delivery_id.or_else(|| {
             self.incomplete_transfer
                 .as_ref()
-                .and_then(|i| i.performative.delivery_id)
+                .and_then(|i| i.delivery_id())
         });
         let delivery_tag = transfer.delivery_tag.clone().or_else(|| {
             self.incomplete_transfer
                 .as_ref()
-                .and_then(|i| i.performative.delivery_tag.clone())
+                .and_then(|i| i.delivery_tag().cloned())
         });
 
         // Discard the buffered chunks of the oversized delivery. A transfer
@@ -1306,28 +1360,21 @@ where
     where
         for<'de> T: FromBody<'de> + Send,
     {
-        let delivery = match self.incomplete_transfer.take() {
-            Some(mut incomplete) => {
-                incomplete.or_assign(transfer)?;
-                incomplete.append(payload); // This also computes the section number and offset incrementally
+        let delivery = if let Some(mut incomplete) = self.incomplete_transfer.take() {
+            // A final transfer that does not belong to the buffered delivery
+            // is rejected (AMQP 1.0 §2.6.14 forbids interleaving on a link).
+            if let Err(error) = incomplete.try_append(transfer, payload) {
+                return self.close_on_malformed_delivery(error).await.map(|()| None);
+            }
 
-                self.link.on_complete_transfer(
-                    incomplete.performative,
-                    incomplete.buffer,
-                    incomplete.section_number.unwrap_or(0),
-                    incomplete.section_offset,
-                )?
-            }
-            None => {
-                let (section_number, section_offset) =
-                    count_number_of_sections_and_offset(&payload);
-                self.link.on_complete_transfer(
-                    transfer,
-                    &payload,
-                    section_number,
-                    section_offset,
-                )?
-            }
+            let (performative, buffer, section_number, section_offset) =
+                incomplete.into_assembled();
+            self.link
+                .on_complete_transfer(performative, buffer, section_number, section_offset)?
+        } else {
+            let (section_number, section_offset) = count_number_of_sections_and_offset(&payload);
+            self.link
+                .on_complete_transfer(transfer, &payload, section_number, section_offset)?
         };
 
         // Auto accept the message and leave settled to be determined based on rcv_settle_mode
@@ -1350,11 +1397,32 @@ where
     where
         for<'de> T: FromBody<'de> + Send,
     {
+        let matches_buffer = self
+            .incomplete_transfer
+            .as_ref()
+            .is_some_and(|incomplete| incomplete.is_same_delivery_as(&transfer));
+
         // Aborted messages SHOULD be discarded by the recipient (any payload
         // within the frame carrying the performative MUST be ignored). An aborted
         // message is implicitly settled
         if transfer.aborted {
+            // An aborted transfer that explicitly names a different delivery
+            // while one is being assembled violates AMQP 1.0 §2.6.14.
+            if self.incomplete_transfer.is_some() && !matches_buffer {
+                return self
+                    .close_on_malformed_delivery(
+                        ReceiverTransferError::InconsistentFieldInMultiFrameDelivery,
+                    )
+                    .await
+                    .map(|()| None);
+            }
             let _ = self.incomplete_transfer.take();
+            return Ok(None);
+        }
+
+        // AMQP 1.0 §2.6.13: the receiver MUST ignore resumed deliveries that
+        // are not in its local unsettled map.
+        if transfer.resume && !matches_buffer && !self.is_known_unsettled(&transfer) {
             return Ok(None);
         }
 
@@ -1382,9 +1450,7 @@ where
 
         if transfer.more {
             // Partial transfer of the delivery
-            // There is only ONE incomplet transfer locally, so the partial transfer must belong to the
-            // same delivery
-            self.on_incomplete_transfer(transfer, payload)?;
+            self.on_incomplete_transfer(transfer, payload).await?;
             // Partial delivery doesn't yield a complete message
             Ok(None)
         } else if transfer.resume {
@@ -1916,7 +1982,7 @@ mod tests {
     use crate::endpoint::OutputHandle;
     use crate::link::state::{LinkFlowState, LinkFlowStateInner, LinkState};
     use crate::util::Sealed;
-    use fe2o3_amqp_types::definitions::SenderSettleMode;
+    use fe2o3_amqp_types::{definitions::SenderSettleMode, messaging::Received};
     use tokio::sync::oneshot;
 
     fn make_flow_state(link_credit: u32) -> ReceiverFlowState {
@@ -2245,6 +2311,28 @@ mod tests {
         Payload::from(serde_amqp::to_vec(&Serializable(message)).unwrap())
     }
 
+    /// An encoded message with a header and a body section, so that section
+    /// numbering can locate the body (`section_number == 2`).
+    fn encoded_sectioned_payload() -> Payload {
+        use fe2o3_amqp_types::{
+            messaging::{message::__private::Serializable, AmqpValue, Body, Header, Message},
+            primitives::Value,
+        };
+        let message = Message {
+            header: Some(Header {
+                durable: true,
+                ..Default::default()
+            }),
+            delivery_annotations: None,
+            message_annotations: None,
+            properties: None,
+            application_properties: None,
+            body: Body::Value(AmqpValue(Value::Bool(true))),
+            footer: None,
+        };
+        Payload::from(serde_amqp::to_vec(&Serializable(message)).unwrap())
+    }
+
     /// Assert that the next outgoing frame is a `Rejected` disposition
     /// carrying `amqp:link:message-size-exceeded`.
     fn assert_rejected_disposition(outgoing: &mut mpsc::Receiver<LinkFrame>) {
@@ -2274,6 +2362,44 @@ mod tests {
             }
             other => panic!("expected MessageSizeExceeded, got {other:?}"),
         }
+    }
+
+    /// Drive the closing-detach handshake while `recv()` processes malformed
+    /// transfers: assert that the detach closes the link with
+    /// `amqp:not-allowed`, answer it, and return the error `recv()` produced.
+    async fn recv_expecting_fatal_close(
+        inner: &mut ReceiverInner<ReceiverLink<Target>>,
+        outgoing_rx: &mut mpsc::Receiver<LinkFrame>,
+        incoming_tx: &mpsc::Sender<LinkFrame>,
+    ) -> RecvError {
+        let (result, ()) = tokio::join!(inner.recv::<String>(), async {
+            match outgoing_rx.recv().await.expect("expected a closing detach") {
+                LinkFrame::Detach(detach) => {
+                    assert!(detach.closed, "the error detach must close the link");
+                    let error = detach
+                        .error
+                        .as_ref()
+                        .expect("the detach must carry the error");
+                    assert_eq!(
+                        error.condition,
+                        definitions::ErrorCondition::from(definitions::AmqpError::NotAllowed)
+                    );
+                }
+                other => panic!("expected Detach, got {other:?}"),
+            }
+
+            // Answer the closing detach to complete the handshake.
+            incoming_tx
+                .send(LinkFrame::Detach(Detach {
+                    handle: Handle(0),
+                    closed: true,
+                    error: None,
+                }))
+                .await
+                .unwrap();
+        });
+
+        result.expect_err("a malformed delivery must fail")
     }
 
     /// The minimal `Attach` a sender peer sends for this receiver link: it
@@ -2482,6 +2608,209 @@ mod tests {
             .await
             .expect("in-limit delivery must be accepted");
         assert_eq!(delivery.body(), body);
+    }
+
+    /// The first transfer of a multi-transfer delivery must carry the
+    /// delivery-id and delivery-tag (AMQP 1.0 §2.7.5); a violation closes the
+    /// link with `amqp:not-allowed` (AMQP 1.0 §2.6.5).
+    #[tokio::test]
+    async fn first_multi_frame_transfer_missing_mandatory_fields_closes_link() {
+        // Missing delivery-tag
+        let (mut inner, _session_rx, mut outgoing_rx, incoming_tx) =
+            make_receiver_inner_with_channels(4096);
+        incoming_tx
+            .send(make_link_frame(
+                make_incoming_transfer(1, None, true, false),
+                Payload::from(vec![0u8; 8]),
+            ))
+            .await
+            .unwrap();
+        let error = recv_expecting_fatal_close(&mut inner, &mut outgoing_rx, &incoming_tx).await;
+        assert!(matches!(error, RecvError::DeliveryTagIsNone));
+        assert!(matches!(inner.link.local_state, LinkState::Closed));
+
+        // Missing delivery-id
+        let (mut inner, _session_rx, mut outgoing_rx, incoming_tx) =
+            make_receiver_inner_with_channels(4096);
+        let mut missing_id = make_incoming_transfer(1, Some(vec![0x01]), true, false);
+        missing_id.delivery_id = None;
+        incoming_tx
+            .send(make_link_frame(missing_id, Payload::from(vec![0u8; 8])))
+            .await
+            .unwrap();
+        let error = recv_expecting_fatal_close(&mut inner, &mut outgoing_rx, &incoming_tx).await;
+        assert!(matches!(error, RecvError::DeliveryIdIsNone));
+        assert!(matches!(inner.link.local_state, LinkState::Closed));
+    }
+
+    /// A continuation that explicitly names a different delivery while one is
+    /// being assembled violates AMQP 1.0 §2.6.14 and closes the link.
+    #[tokio::test]
+    async fn continuation_with_different_delivery_tag_closes_link() {
+        let (mut inner, _session_rx, mut outgoing_rx, incoming_tx) =
+            make_receiver_inner_with_channels(4096);
+
+        incoming_tx
+            .send(make_link_frame(
+                make_incoming_transfer(1, Some(vec![0x01]), true, false),
+                Payload::from(vec![0u8; 8]),
+            ))
+            .await
+            .unwrap();
+        incoming_tx
+            .send(make_link_frame(
+                make_incoming_transfer(1, Some(vec![0x02]), false, false),
+                Payload::from(vec![0u8; 8]),
+            ))
+            .await
+            .unwrap();
+
+        let error = recv_expecting_fatal_close(&mut inner, &mut outgoing_rx, &incoming_tx).await;
+        assert!(matches!(
+            error,
+            RecvError::InconsistentFieldInMultiFrameDelivery
+        ));
+        assert!(matches!(inner.link.local_state, LinkState::Closed));
+    }
+
+    /// A continuation whose present message-format differs from the first
+    /// transfer is rejected (AMQP 1.0 §2.7.5) and closes the link.
+    #[tokio::test]
+    async fn continuation_with_different_message_format_closes_link() {
+        let (mut inner, _session_rx, mut outgoing_rx, incoming_tx) =
+            make_receiver_inner_with_channels(4096);
+
+        incoming_tx
+            .send(make_link_frame(
+                make_incoming_transfer(1, Some(vec![0x01]), true, false),
+                Payload::from(vec![0u8; 8]),
+            ))
+            .await
+            .unwrap();
+
+        let mut different_format = make_incoming_transfer(1, Some(vec![0x01]), false, false);
+        different_format.message_format = Some(1);
+        incoming_tx
+            .send(make_link_frame(
+                different_format,
+                Payload::from(vec![0u8; 8]),
+            ))
+            .await
+            .unwrap();
+
+        let error = recv_expecting_fatal_close(&mut inner, &mut outgoing_rx, &incoming_tx).await;
+        assert!(matches!(
+            error,
+            RecvError::InconsistentFieldInMultiFrameDelivery
+        ));
+        assert!(matches!(inner.link.local_state, LinkState::Closed));
+    }
+
+    /// AMQP 1.0 §2.6.13: a resumed delivery that is not in the local
+    /// unsettled map is ignored; the link stays usable.
+    #[tokio::test]
+    async fn resumed_delivery_unknown_to_unsettled_map_is_ignored() {
+        let (mut inner, _session_rx, _outgoing_rx, incoming_tx) =
+            make_receiver_inner_with_channels(4096);
+
+        let ignored_tag = DeliveryTag::from(vec![0x0A]);
+        let mut resumed = make_incoming_transfer(1, Some(vec![0x0A]), false, false);
+        resumed.resume = true;
+        incoming_tx
+            .send(make_link_frame(resumed, encoded_message_payload("ignored")))
+            .await
+            .unwrap();
+
+        // A following ordinary message is delivered; the ignored one is not.
+        let body = "ordinary";
+        incoming_tx
+            .send(make_link_frame(
+                make_incoming_transfer(2, Some(vec![0x0B]), false, false),
+                encoded_message_payload(body),
+            ))
+            .await
+            .unwrap();
+
+        let delivery = inner.recv::<String>().await.expect("ordinary delivery");
+        assert_eq!(delivery.body(), body);
+
+        let guard = inner.link.unsettled().read();
+        assert!(guard
+            .as_ref()
+            .is_none_or(|map| !map.contains_key(&ignored_tag)));
+    }
+
+    /// A resumed delivery present in the local unsettled map is delivered.
+    #[tokio::test]
+    async fn resumed_delivery_known_to_unsettled_map_is_delivered() {
+        let (mut inner, _session_rx, _outgoing_rx, incoming_tx) =
+            make_receiver_inner_with_channels(4096);
+
+        seed_unsettled(&inner.link.unsettled, &[vec![0x0A]]);
+
+        let body = "resumed";
+        let mut resumed = make_incoming_transfer(1, Some(vec![0x0A]), false, false);
+        resumed.resume = true;
+        incoming_tx
+            .send(make_link_frame(resumed, encoded_message_payload(body)))
+            .await
+            .unwrap();
+
+        let delivery = inner.recv::<String>().await.expect("resumed delivery");
+        assert_eq!(delivery.body(), body);
+    }
+
+    /// A tagless continuation carrying a `Received` state is attributed to the
+    /// buffered delivery instead of failing with `DeliveryTagIsNone`, and it
+    /// trims the buffer to the reported section and offset.
+    #[tokio::test]
+    async fn tagless_received_state_transfer_trims_the_buffer() {
+        let mut inner = make_receiver_inner(4096);
+        let tag = DeliveryTag::from(vec![0x01]);
+
+        let payload = encoded_sectioned_payload();
+        let full_len = payload.len() as u64;
+        inner
+            .on_incoming_transfer::<String>(
+                make_incoming_transfer(1, Some(vec![0x01]), true, false),
+                payload,
+            )
+            .await
+            .unwrap();
+
+        let mut state_transfer = make_incoming_transfer(1, None, true, false);
+        state_transfer.state = Some(DeliveryState::Received(Received {
+            section_number: 2,
+            section_offset: 0,
+        }));
+        inner
+            .on_incoming_transfer::<String>(state_transfer, Payload::new())
+            .await
+            .expect("a tagless state transfer must be attributed to the buffer");
+
+        // The buffer was trimmed to the reported section.
+        let incomplete = inner
+            .incomplete_transfer
+            .as_ref()
+            .expect("the delivery is still being assembled");
+        assert!(
+            incomplete.accumulated_payload_size() < full_len,
+            "the Received state must trim the buffer"
+        );
+
+        let guard = inner.link.unsettled().read();
+        let state = guard
+            .as_ref()
+            .and_then(|map| map.get(&tag))
+            .cloned()
+            .flatten();
+        assert!(matches!(
+            state,
+            Some(DeliveryState::Received(Received {
+                section_number: 2,
+                ..
+            }))
+        ));
     }
 
     /// A peer that suspends (non-closing detach) while this side is closing

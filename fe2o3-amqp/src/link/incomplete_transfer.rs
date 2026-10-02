@@ -1,4 +1,7 @@
-use fe2o3_amqp_types::performatives::Transfer;
+use fe2o3_amqp_types::{
+    definitions::{DeliveryNumber, DeliveryTag},
+    performatives::Transfer,
+};
 
 use crate::{util::AsByteIterator, Payload};
 
@@ -30,31 +33,66 @@ macro_rules! or_assign {
 
 #[derive(Debug)]
 pub(crate) struct IncompleteTransfer {
-    pub performative: Transfer,
-    pub buffer: Vec<Payload>,
-    pub section_number: Option<u32>,
-    pub section_offset: u64,
+    performative: Transfer,
+    buffer: Vec<Payload>,
+    section_number: Option<u32>,
+    section_offset: u64,
     /// Sum of the lengths of the chunks in `buffer`, kept in sync so that
     /// max-message-size enforcement does not have to re-sum the buffer for
     /// every incoming transfer frame.
-    pub accumulated_payload_size: u64,
+    accumulated_payload_size: u64,
 }
 
 impl IncompleteTransfer {
-    pub fn new(transfer: Transfer, partial_payload: Payload) -> Self {
+    /// Start buffering a multi-transfer delivery from its first transfer.
+    ///
+    /// The delivery-id and delivery-tag MUST be specified on the first transfer
+    /// of a multi-transfer delivery (AMQP 1.0 §2.7.5). Without them a later
+    /// continuation could silently supply them and a truncated delivery could
+    /// be assembled.
+    pub fn start(
+        transfer: Transfer,
+        partial_payload: Payload,
+    ) -> Result<Self, ReceiverTransferError> {
+        if transfer.delivery_id.is_none() {
+            return Err(ReceiverTransferError::DeliveryIdIsNone);
+        }
+        if transfer.delivery_tag.is_none() {
+            return Err(ReceiverTransferError::DeliveryTagIsNone);
+        }
+
         let (number, offset) = count_number_of_sections_and_offset(&partial_payload);
         let accumulated_payload_size = partial_payload.len() as u64;
-        Self {
+        Ok(Self {
             performative: transfer,
             buffer: vec![partial_payload], // TODO: handle payload split across re-attachment
             section_number: Some(number),
             section_offset: offset,
             accumulated_payload_size,
+        })
+    }
+
+    /// Append a continuation transfer to this delivery.
+    ///
+    /// Only a transfer of this delivery is accepted: a repeated or omitted
+    /// delivery tag continues the delivery, while an explicitly different tag
+    /// is rejected. A present delivery-id or message-format that differs from
+    /// the first transfer is rejected as well.
+    pub fn try_append(
+        &mut self,
+        transfer: Transfer,
+        payload: Payload,
+    ) -> Result<(), ReceiverTransferError> {
+        if !self.is_same_delivery_as(&transfer) {
+            return Err(ReceiverTransferError::InconsistentFieldInMultiFrameDelivery);
         }
+        self.or_assign(transfer)?;
+        self.append(payload);
+        Ok(())
     }
 
     /// Like `|=` operator but works on the field level
-    pub fn or_assign(&mut self, other: Transfer) -> Result<(), ReceiverTransferError> {
+    fn or_assign(&mut self, other: Transfer) -> Result<(), ReceiverTransferError> {
         or_assign! {
             self, other,
             delivery_id,
@@ -106,8 +144,39 @@ impl IncompleteTransfer {
         }
     }
 
+    pub fn delivery_id(&self) -> Option<DeliveryNumber> {
+        self.performative.delivery_id
+    }
+
+    pub fn delivery_tag(&self) -> Option<&DeliveryTag> {
+        self.performative.delivery_tag.as_ref()
+    }
+
+    pub fn section_number(&self) -> Option<u32> {
+        self.section_number
+    }
+
+    pub fn section_offset(&self) -> u64 {
+        self.section_offset
+    }
+
+    pub fn accumulated_payload_size(&self) -> u64 {
+        self.accumulated_payload_size
+    }
+
+    /// Consume the buffered transfer for assembly, yielding the merged
+    /// performative, the buffered payload and the section position.
+    pub fn into_assembled(self) -> (Transfer, Vec<Payload>, u32, u64) {
+        (
+            self.performative,
+            self.buffer,
+            self.section_number.unwrap_or(0),
+            self.section_offset,
+        )
+    }
+
     /// Append to the buffered payload
-    pub fn append(&mut self, other: Payload) {
+    fn append(&mut self, other: Payload) {
         // Count section numbers
         let (number, offset) = count_number_of_sections_and_offset(&other);
         match (&mut self.section_number, number) {
@@ -229,11 +298,80 @@ mod tests {
     }
 
     #[test]
-    fn new_and_append_track_accumulated_payload_size() {
+    fn start_rejects_missing_delivery_id_and_tag() {
+        let mut missing_id = test_transfer(true);
+        missing_id.delivery_id = None;
+        assert!(matches!(
+            IncompleteTransfer::start(missing_id, Payload::from(vec![0u8; 4])),
+            Err(ReceiverTransferError::DeliveryIdIsNone)
+        ));
+
+        let mut missing_tag = test_transfer(true);
+        missing_tag.delivery_tag = None;
+        assert!(matches!(
+            IncompleteTransfer::start(missing_tag, Payload::from(vec![0u8; 4])),
+            Err(ReceiverTransferError::DeliveryTagIsNone)
+        ));
+    }
+
+    #[test]
+    fn try_append_rejects_a_different_delivery() {
+        let mut incomplete =
+            IncompleteTransfer::start(test_transfer(true), encoded_message()).unwrap();
+
+        // A different tag is a different delivery.
+        let mut other_tag = test_transfer(true);
+        other_tag.delivery_tag = Some(DeliveryTag::from(vec![0x02]));
+        assert!(matches!(
+            incomplete.try_append(other_tag, Payload::from(vec![0u8; 4])),
+            Err(ReceiverTransferError::InconsistentFieldInMultiFrameDelivery)
+        ));
+
+        // A different delivery-id is rejected even if the tag repeats.
+        let mut other_id = test_transfer(true);
+        other_id.delivery_id = Some(1);
+        assert!(matches!(
+            incomplete.try_append(other_id, Payload::from(vec![0u8; 4])),
+            Err(ReceiverTransferError::InconsistentFieldInMultiFrameDelivery)
+        ));
+
+        // A different present message-format is rejected as well.
+        let mut other_format = test_transfer(true);
+        other_format.message_format = Some(1);
+        assert!(matches!(
+            incomplete.try_append(other_format, Payload::from(vec![0u8; 4])),
+            Err(ReceiverTransferError::InconsistentFieldInMultiFrameDelivery)
+        ));
+    }
+
+    #[test]
+    fn try_append_merges_omitted_fields() {
+        let mut incomplete =
+            IncompleteTransfer::start(test_transfer(true), encoded_message()).unwrap();
+        let len = incomplete.accumulated_payload_size;
+
+        let mut continuation = test_transfer(true);
+        continuation.delivery_id = None;
+        continuation.delivery_tag = None;
+        continuation.message_format = None;
+        incomplete
+            .try_append(continuation, Payload::from(vec![0u8; 17]))
+            .unwrap();
+
+        assert_eq!(incomplete.accumulated_payload_size, len + 17);
+        assert_eq!(incomplete.delivery_id(), Some(0));
+        assert_eq!(
+            incomplete.delivery_tag(),
+            Some(&DeliveryTag::from(vec![0x01]))
+        );
+    }
+
+    #[test]
+    fn append_tracks_accumulated_payload_size() {
         let payload = encoded_message();
         let len = payload.len() as u64;
 
-        let mut incomplete = IncompleteTransfer::new(test_transfer(true), payload);
+        let mut incomplete = IncompleteTransfer::start(test_transfer(true), payload).unwrap();
         assert_eq!(incomplete.accumulated_payload_size, len);
 
         let extra = Payload::from(vec![0u8; 17]);
@@ -248,7 +386,7 @@ mod tests {
         let first = payload.slice(..split);
         let second = payload.slice(split..);
 
-        let mut incomplete = IncompleteTransfer::new(test_transfer(true), first);
+        let mut incomplete = IncompleteTransfer::start(test_transfer(true), first).unwrap();
         incomplete.append(second);
 
         // The body section descriptor must be present for the truncation to
@@ -264,7 +402,7 @@ mod tests {
 
     #[test]
     fn is_same_delivery_as_accepts_same_or_omitted_tag_and_rejects_other() {
-        let incomplete = IncompleteTransfer::new(test_transfer(true), encoded_message());
+        let incomplete = IncompleteTransfer::start(test_transfer(true), encoded_message()).unwrap();
 
         let same_tag = test_transfer(true);
         assert!(incomplete.is_same_delivery_as(&same_tag));
