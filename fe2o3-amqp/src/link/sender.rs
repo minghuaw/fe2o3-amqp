@@ -883,7 +883,7 @@ impl SenderInner<SenderLink<Target>> {
         let transfer = Transfer {
             handle,
             delivery_id: None,
-            delivery_tag: Some(delivery_tag.clone()),
+            delivery_tag: Some(delivery_tag),
             message_format: Some(message_format),
             settled: None,
             more: false,
@@ -894,42 +894,14 @@ impl SenderInner<SenderLink<Target>> {
             batchable: false,
         };
         let payload = Bytes::new();
-        let settled = self.link.is_settled_on_send(&transfer);
 
-        match (settled, sender) {
-            (true, Some(sender)) => {
-                self.link
-                    .send_transfer_without_modifying_unsettled_map(
-                        &self.outgoing,
-                        transfer,
-                        payload,
-                    )
-                    .await?;
-                let _ = sender.send(Ok(None));
-            }
-            (false, Some(sender)) => {
-                let unsettled =
-                    UnsettledMessage::new(payload.clone(), None, message_format, sender);
-                self.link
-                    .send_unsettled_transfer(
-                        &self.outgoing,
-                        transfer,
-                        payload,
-                        delivery_tag,
-                        unsettled,
-                    )
-                    .await?;
-            }
-            // A delivery known only from the remote unsettled map has no local outcome to resolve
-            (_, None) => {
-                self.link
-                    .send_transfer_without_modifying_unsettled_map(
-                        &self.outgoing,
-                        transfer,
-                        payload,
-                    )
-                    .await?;
-            }
+        // An aborted delivery is implicitly settled (AMQP 1.0 §2.7.5), so it is
+        // not registered in the unsettled map; the local outcome is None.
+        self.link
+            .send_transfer_without_modifying_unsettled_map(&self.outgoing, transfer, payload)
+            .await?;
+        if let Some(sender) = sender {
+            let _ = sender.send(Ok(None));
         }
 
         Ok(())
@@ -1046,7 +1018,6 @@ impl SenderInner<SenderLink<Target>> {
         is_reattaching: bool,
     ) -> Result<(), SenderResumeErrorKind> {
         self.reallocate_output_handle().await?;
-
         let mut resend_buf = Vec::new();
 
         loop {
@@ -1304,7 +1275,7 @@ mod tests {
     use tokio::sync::Notify;
 
     use super::*;
-    use crate::endpoint::SenderLink as _;
+    use crate::endpoint::{InputHandle, SenderLink as _};
     use crate::{
         link::state::{LinkFlowState, LinkFlowStateInner, LinkState},
         util::Consumer,
@@ -1605,5 +1576,60 @@ mod tests {
 
         assert!(result.is_err());
         assert!(!is_registered(link, &tag));
+    }
+
+    /// Aborting a delivery sends a resuming, aborted transfer; the delivery is
+    /// implicitly settled, so the application future resolves and nothing is
+    /// registered in the unsettled map.
+    #[tokio::test]
+    async fn abort_sends_aborted_resuming_transfer_and_settles() {
+        let (mut inner, _session_rx, mut outgoing_rx, _incoming_tx) =
+            make_sender_inner_with_channels(4096);
+        inner.link.input_handle = Some(InputHandle(0));
+
+        let tag = DeliveryTag::from(vec![0x01]);
+        let (sender, mut settled) = oneshot::channel();
+        inner.abort(tag.clone(), 0, Some(sender)).await.unwrap();
+
+        match outgoing_rx.try_recv().expect("expected a transfer") {
+            LinkFrame::Transfer {
+                performative,
+                payload,
+                ..
+            } => {
+                assert!(performative.resume);
+                assert!(performative.aborted);
+                assert!(!performative.more);
+                assert_eq!(performative.delivery_tag, Some(tag.clone()));
+                assert!(payload.is_empty());
+            }
+            other => panic!("expected Transfer, got {other:?}"),
+        }
+
+        assert!(matches!(settled.try_recv(), Ok(Ok(None))));
+        assert!(!inner
+            .link
+            .unsettled
+            .read()
+            .as_ref()
+            .is_some_and(|map| map.contains_key(&tag)));
+    }
+
+    /// A delivery known only from the remote unsettled map has no local future
+    /// to resolve, and is not registered either.
+    #[tokio::test]
+    async fn abort_without_local_sender_does_not_register() {
+        let (mut inner, _session_rx, mut outgoing_rx, _incoming_tx) =
+            make_sender_inner_with_channels(4096);
+        inner.link.input_handle = Some(InputHandle(0));
+
+        let tag = DeliveryTag::from(vec![0x02]);
+        inner.abort(tag.clone(), 0, None).await.unwrap();
+
+        assert!(matches!(
+            outgoing_rx.try_recv(),
+            Ok(LinkFrame::Transfer { .. })
+        ));
+        assert!(inner.link.unsettled.read().is_none());
     }
 }
