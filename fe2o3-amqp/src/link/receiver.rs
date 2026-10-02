@@ -1194,7 +1194,9 @@ where
     /// multi-frame delivery, when the transfer is a continuation of it).
     fn accumulated_message_size(&self, transfer: &Transfer) -> u64 {
         match &self.incomplete_transfer {
-            Some(incomplete) if incomplete.matches(transfer) => incomplete.accumulated_payload_size,
+            Some(incomplete) if incomplete.is_same_delivery_as(transfer) => {
+                incomplete.accumulated_payload_size
+            }
             _ => 0,
         }
     }
@@ -1244,7 +1246,7 @@ where
         if self
             .incomplete_transfer
             .as_ref()
-            .is_some_and(|incomplete| incomplete.matches(&transfer))
+            .is_some_and(|incomplete| incomplete.is_same_delivery_as(&transfer))
         {
             self.incomplete_transfer.take();
         }
