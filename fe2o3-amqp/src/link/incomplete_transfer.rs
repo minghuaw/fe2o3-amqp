@@ -35,7 +35,7 @@ macro_rules! or_assign {
 pub(crate) struct IncompleteTransfer {
     performative: Transfer,
     buffer: Vec<Payload>,
-    section_number: Option<u32>,
+    section_number: u32,
     section_offset: u64,
     /// Sum of the lengths of the chunks in `buffer`, kept in sync so that
     /// max-message-size enforcement does not have to re-sum the buffer for
@@ -66,7 +66,7 @@ impl IncompleteTransfer {
         Ok(Self {
             performative: transfer,
             buffer: vec![partial_payload], // TODO: handle payload split across re-attachment
-            section_number: Some(number),
+            section_number: number,
             section_offset: offset,
             accumulated_payload_size,
         })
@@ -148,11 +148,18 @@ impl IncompleteTransfer {
         self.performative.delivery_id
     }
 
-    pub fn delivery_tag(&self) -> Option<&DeliveryTag> {
-        self.performative.delivery_tag.as_ref()
+    /// The delivery tag of the buffered delivery.
+    ///
+    /// `start` requires a delivery tag on the first transfer and continuation
+    /// merges never clear it, so it is always present.
+    pub fn delivery_tag(&self) -> &DeliveryTag {
+        self.performative
+            .delivery_tag
+            .as_ref()
+            .expect("the buffered delivery always has a delivery tag")
     }
 
-    pub fn section_number(&self) -> Option<u32> {
+    pub fn section_number(&self) -> u32 {
         self.section_number
     }
 
@@ -170,7 +177,7 @@ impl IncompleteTransfer {
         (
             self.performative,
             self.buffer,
-            self.section_number.unwrap_or(0),
+            self.section_number,
             self.section_offset,
         )
     }
@@ -179,21 +186,11 @@ impl IncompleteTransfer {
     fn append(&mut self, other: Payload) {
         // Count section numbers
         let (number, offset) = count_number_of_sections_and_offset(&other);
-        match (&mut self.section_number, number) {
-            (_, 0) => self.section_offset += offset,
-            (None, 1) => {
-                // The first section
-                self.section_number = Some(0);
-                self.section_offset = offset;
-            }
-            (None, _) => {
-                self.section_number = Some(number - 1);
-                self.section_offset = offset;
-            }
-            (Some(val), _) => {
-                *val += number;
-                self.section_offset = offset;
-            }
+        if number == 0 {
+            self.section_offset += offset;
+        } else {
+            self.section_number += number;
+            self.section_offset = offset;
         }
 
         self.accumulated_payload_size += other.len() as u64;
@@ -360,10 +357,7 @@ mod tests {
 
         assert_eq!(incomplete.accumulated_payload_size, len + 17);
         assert_eq!(incomplete.delivery_id(), Some(0));
-        assert_eq!(
-            incomplete.delivery_tag(),
-            Some(&DeliveryTag::from(vec![0x01]))
-        );
+        assert_eq!(incomplete.delivery_tag(), &DeliveryTag::from(vec![0x01]));
     }
 
     #[test]

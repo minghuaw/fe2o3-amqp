@@ -1110,15 +1110,13 @@ where
             None => self
                 .incomplete_transfer
                 .as_ref()
-                .and_then(|incomplete| incomplete.delivery_tag().cloned()),
+                .map(|incomplete| incomplete.delivery_tag().clone()),
         };
 
         if let Some(incomplete) = &mut self.incomplete_transfer {
-            let belongs = match (incomplete.delivery_tag(), delivery_tag.as_ref()) {
-                (Some(_), None) => true,
-                (Some(local), Some(remote)) => local == remote,
-                _ => false,
-            };
+            let belongs = delivery_tag
+                .as_ref()
+                .is_none_or(|remote| incomplete.delivery_tag() == remote);
             if belongs {
                 if let DeliveryState::Received(received) = &state {
                     incomplete.keep_buffer_till_section_number_and_offset(
@@ -1156,31 +1154,31 @@ where
         payload: Payload,
     ) -> Result<(), RecvError> {
         // Partial transfer of the delivery
-        if let Some(incomplete) = &mut self.incomplete_transfer {
-            if let Err(error) = incomplete.try_append(transfer, payload) {
-                return self.close_on_malformed_delivery(error).await;
-            }
-        } else {
-            match IncompleteTransfer::start(transfer, payload) {
-                Ok(incomplete) => self.incomplete_transfer = Some(Box::new(incomplete)),
-                Err(error) => return self.close_on_malformed_delivery(error).await,
-            }
-        }
+        let (delivery_tag, section_number, section_offset) =
+            if let Some(incomplete) = &mut self.incomplete_transfer {
+                if let Err(error) = incomplete.try_append(transfer, payload) {
+                    return self.close_on_malformed_delivery(error).await;
+                }
+                (
+                    incomplete.delivery_tag().clone(),
+                    incomplete.section_number(),
+                    incomplete.section_offset(),
+                )
+            } else {
+                match IncompleteTransfer::start(transfer, payload) {
+                    Ok(incomplete) => {
+                        let bookkeeping = (
+                            incomplete.delivery_tag().clone(),
+                            incomplete.section_number(),
+                            incomplete.section_offset(),
+                        );
+                        self.incomplete_transfer = Some(Box::new(incomplete));
+                        bookkeeping
+                    }
+                    Err(error) => return self.close_on_malformed_delivery(error).await,
+                }
+            };
 
-        let (delivery_tag, section_number, section_offset) = {
-            let incomplete = self
-                .incomplete_transfer
-                .as_ref()
-                .expect("the incomplete transfer was just stored");
-            (
-                incomplete
-                    .delivery_tag()
-                    .cloned()
-                    .expect("start validated the delivery tag"),
-                incomplete.section_number().unwrap_or(0),
-                incomplete.section_offset(),
-            )
-        };
         // Update the unsettled map in the link
         self.link
             .on_incomplete_transfer(delivery_tag, section_number, section_offset);
@@ -1291,7 +1289,7 @@ where
         let delivery_tag = transfer.delivery_tag.clone().or_else(|| {
             self.incomplete_transfer
                 .as_ref()
-                .and_then(|i| i.delivery_tag().cloned())
+                .map(|i| i.delivery_tag().clone())
         });
 
         // Discard the buffered chunks of the oversized delivery. A transfer
