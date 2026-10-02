@@ -12,9 +12,12 @@
    (AMQP 1.0 §2.7.3, §2.8.18, §2.6.5) and returns `RecvError::MessageSizeExceeded`, instead of
    rejecting only the delivery with a `Rejected` disposition and keeping the link usable. The
    link must be resumed to be used again.
-3. Malformed multi-frame deliveries (a first transfer missing the delivery-id or delivery-tag,
-   or a continuation whose present delivery-id, delivery-tag or message-format differs) now
-   detach the link with `amqp:not-allowed` (§2.7.5, §2.6.5).
+3. Malformed deliveries (a first transfer missing the delivery-id or delivery-tag, a
+   state-carrying transfer with no buffered delivery and no delivery-tag, or a continuation
+   whose present delivery-id, delivery-tag or message-format differs) now detach the link with
+   `amqp:not-allowed` (§2.7.5, §2.6.5). Requiring the fields on the first transfer of any
+   delivery, not just multi-transfer ones, is stricter than the transfer field text but matches
+   go-amqp and Qpid Proton.
 4. Resumed deliveries whose tag is not a non-terminal entry in the local unsettled map are
    ignored (§2.6.13), and a tagless transfer carrying a `Received` state is attributed to the
    buffered delivery instead of failing.

@@ -320,13 +320,15 @@ impl Receiver {
     /// this method returns [`RecvError::MessageSizeExceeded`]. The link can
     /// only be restored by resuming it.
     ///
-    /// # Malformed multi-frame deliveries
+    /// # Malformed deliveries
     ///
     /// The delivery-id and delivery-tag MUST be present on the first transfer
-    /// of a multi-transfer delivery, and a continuation that carries them MUST
-    /// repeat the same values (AMQP 1.0 §2.7.5). A violation detaches the link
-    /// with `amqp:not-allowed` (AMQP 1.0 §2.6.5), so this method returns an
-    /// error and the link is no longer usable.
+    /// of a delivery, and a continuation that carries them MUST repeat the same
+    /// values (AMQP 1.0 §2.7.5). The transfer field text scopes the MUST to
+    /// multi-transfer deliveries, but this crate requires them on the first
+    /// transfer of any delivery, matching go-amqp and Qpid Proton. A violation
+    /// detaches the link with `amqp:not-allowed` (AMQP 1.0 §2.6.5), so this
+    /// method returns an error and the link is no longer usable.
     ///
     /// # Resumed deliveries
     ///
@@ -999,6 +1001,20 @@ where
     }
 }
 
+/// Whether a transfer carries the delivery-id and delivery-tag required on the
+/// first transfer of a delivery. This is stricter than the transfer field text,
+/// which scopes the MUST to multi-transfer deliveries, but matches go-amqp and
+/// Qpid Proton, which require the fields on the first transfer of any delivery.
+fn ensure_delivery_identity(transfer: &Transfer) -> Result<(), ReceiverTransferError> {
+    if transfer.delivery_id.is_none() {
+        return Err(ReceiverTransferError::DeliveryIdIsNone);
+    }
+    if transfer.delivery_tag.is_none() {
+        return Err(ReceiverTransferError::DeliveryTagIsNone);
+    }
+    Ok(())
+}
+
 impl<L> ReceiverInner<L>
 where
     L: endpoint::ReceiverLink<
@@ -1095,7 +1111,7 @@ where
     /// A continuation transfer may omit the delivery tag; when it does, the
     /// buffered delivery's tag is used so that the state is attributed to the
     /// delivery being assembled.
-    fn on_transfer_state(
+    async fn on_transfer_state(
         &mut self,
         delivery_tag: &Option<DeliveryTag>,
         settled: Option<bool>,
@@ -1107,6 +1123,13 @@ where
                 .incomplete_transfer
                 .as_ref()
                 .map(|incomplete| incomplete.delivery_tag().clone()),
+        };
+        let Some(effective_tag) = effective_tag else {
+            // A state-carrying transfer with no buffered delivery and no
+            // delivery-tag cannot be attributed to a delivery.
+            return self
+                .close_on_malformed_delivery(ReceiverTransferError::DeliveryTagIsNone)
+                .await;
         };
 
         if let Some(incomplete) = &mut self.incomplete_transfer {
@@ -1124,7 +1147,7 @@ where
         }
 
         self.link
-            .on_transfer_state(&effective_tag, settled, state)
+            .on_transfer_state(&Some(effective_tag), settled, state)
             .map_err(Into::into)
     }
 
@@ -1200,6 +1223,10 @@ where
         for<'de> T: FromBody<'de> + Send,
     {
         // A different, previously unsettled delivery is being reassociated
+        if let Err(error) = ensure_delivery_identity(&transfer) {
+            return self.close_on_malformed_delivery(error).await.map(|()| None);
+        }
+
         let (section_number, section_offset) = count_number_of_sections_and_offset(&payload);
         let delivery =
             self.link
@@ -1298,6 +1325,11 @@ where
             self.link
                 .on_complete_transfer(performative, buffer, section_number, section_offset)?
         } else {
+            // A single-frame delivery is identified by its delivery-id/tag.
+            if let Err(error) = ensure_delivery_identity(&transfer) {
+                return self.close_on_malformed_delivery(error).await.map(|()| None);
+            }
+
             let (section_number, section_offset) = count_number_of_sections_and_offset(&payload);
             self.link
                 .on_complete_transfer(transfer, &payload, section_number, section_offset)?
@@ -1366,7 +1398,8 @@ where
             // on the transfer can be thought of as being equivalent to sending a disposition immediately before
             // the transfer performative, i.e., it is the state of the delivery (not the transfer) that existed at the
             // point the frame was sent.
-            self.on_transfer_state(&transfer.delivery_tag, transfer.settled, state)?;
+            self.on_transfer_state(&transfer.delivery_tag, transfer.settled, state)
+                .await?;
         }
 
         // Enforce the negotiated max-message-size of the link on every
@@ -2556,6 +2589,79 @@ mod tests {
         )
         .await;
         assert!(matches!(error, RecvError::DeliveryIdIsNone));
+        assert!(matches!(inner.link.local_state, LinkState::Closed));
+    }
+
+    /// The mandatory delivery-id and delivery-tag are required on the first
+    /// transfer of any delivery, including a single-frame one (stricter than
+    /// the transfer field text, matching go-amqp and Qpid Proton).
+    #[tokio::test]
+    async fn single_frame_transfer_missing_mandatory_fields_closes_link() {
+        // Missing delivery-tag
+        let (mut inner, _session_rx, mut outgoing_rx, incoming_tx) =
+            make_receiver_inner_with_channels(4096);
+        incoming_tx
+            .send(make_link_frame(
+                make_incoming_transfer(1, None, false, false),
+                Payload::from(vec![0u8; 8]),
+            ))
+            .await
+            .unwrap();
+        let error = recv_expecting_fatal_close(
+            &mut inner,
+            &mut outgoing_rx,
+            &incoming_tx,
+            definitions::ErrorCondition::from(definitions::AmqpError::NotAllowed),
+        )
+        .await;
+        assert!(matches!(error, RecvError::DeliveryTagIsNone));
+        assert!(matches!(inner.link.local_state, LinkState::Closed));
+
+        // Missing delivery-id
+        let (mut inner, _session_rx, mut outgoing_rx, incoming_tx) =
+            make_receiver_inner_with_channels(4096);
+        let mut missing_id = make_incoming_transfer(1, Some(vec![0x01]), false, false);
+        missing_id.delivery_id = None;
+        incoming_tx
+            .send(make_link_frame(missing_id, Payload::from(vec![0u8; 8])))
+            .await
+            .unwrap();
+        let error = recv_expecting_fatal_close(
+            &mut inner,
+            &mut outgoing_rx,
+            &incoming_tx,
+            definitions::ErrorCondition::from(definitions::AmqpError::NotAllowed),
+        )
+        .await;
+        assert!(matches!(error, RecvError::DeliveryIdIsNone));
+        assert!(matches!(inner.link.local_state, LinkState::Closed));
+    }
+
+    /// A state-carrying transfer with no buffered delivery and no delivery-tag
+    /// cannot be attributed to a delivery and closes the link.
+    #[tokio::test]
+    async fn tagless_state_transfer_without_buffer_closes_link() {
+        let (mut inner, _session_rx, mut outgoing_rx, incoming_tx) =
+            make_receiver_inner_with_channels(4096);
+
+        let mut state_transfer = make_incoming_transfer(1, None, false, false);
+        state_transfer.state = Some(DeliveryState::Received(Received {
+            section_number: 0,
+            section_offset: 0,
+        }));
+        incoming_tx
+            .send(make_link_frame(state_transfer, Payload::new()))
+            .await
+            .unwrap();
+
+        let error = recv_expecting_fatal_close(
+            &mut inner,
+            &mut outgoing_rx,
+            &incoming_tx,
+            definitions::ErrorCondition::from(definitions::AmqpError::NotAllowed),
+        )
+        .await;
+        assert!(matches!(error, RecvError::DeliveryTagIsNone));
         assert!(matches!(inner.link.local_state, LinkState::Closed));
     }
 
