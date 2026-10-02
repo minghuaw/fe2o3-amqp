@@ -1051,8 +1051,10 @@ impl SenderInner<SenderLink<Target>> {
                     }
 
                     // Upon completion of this reduction of state, the two parties MUST suspend and
-                    // re-attempt to resume the link.
+                    // re-attempt to resume the link. The detach consumes the output handle,
+                    // so reallocate it for the retry.
                     self.detach_with_error(None).await?;
+                    self.reallocate_output_handle().await?;
                 }
             }
         }
@@ -1270,12 +1272,16 @@ impl DetachedSender {
 mod tests {
     use std::marker::PhantomData;
 
-    use fe2o3_amqp_types::definitions::ReceiverSettleMode;
+    use fe2o3_amqp_types::{
+        definitions::ReceiverSettleMode,
+        messaging::{Accepted, Received},
+        primitives::OrderedMap,
+    };
     use parking_lot::RwLock;
     use tokio::sync::Notify;
 
     use super::*;
-    use crate::endpoint::{InputHandle, SenderLink as _};
+    use crate::endpoint::{InputHandle, OutputHandle, SenderLink as _};
     use crate::{
         link::state::{LinkFlowState, LinkFlowStateInner, LinkState},
         util::Consumer,
@@ -1631,5 +1637,121 @@ mod tests {
             Ok(LinkFrame::Transfer { .. })
         ));
         assert!(inner.link.unsettled.read().is_none());
+    }
+
+    /// Full resume→abort flow with a scripted peer: the local delivery is
+    /// terminal (`Accepted`) while the peer's attach reports it as partially
+    /// received, so the sender aborts it, settles the application future, and
+    /// completes the mandatory detach/re-attach cycle.
+    #[tokio::test]
+    async fn resuming_a_terminal_delivery_against_remote_received_aborts() {
+        let (mut inner, mut session_rx, mut outgoing_rx, _incoming_tx) =
+            make_sender_inner_with_channels(4096);
+
+        let tag = DeliveryTag::from(vec![0x01]);
+        let (sender, mut settled) = oneshot::channel();
+        let _ = inner
+            .link
+            .unsettled
+            .write()
+            .get_or_insert(OrderedMap::new())
+            .insert(
+                tag.clone(),
+                UnsettledMessage::new(
+                    Payload::new(),
+                    Some(DeliveryState::Accepted(Accepted {})),
+                    0,
+                    sender,
+                ),
+            );
+        inner.link.local_state = LinkState::Detached;
+
+        let mut remote_attach = peer_receiver_attach();
+        let mut remote_unsettled = OrderedMap::new();
+        remote_unsettled.insert(
+            tag.clone(),
+            Some(DeliveryState::Received(Received {
+                section_number: 0,
+                section_offset: 0,
+            })),
+        );
+        remote_attach.unsettled = Some(remote_unsettled);
+
+        let driver = async move {
+            let mut incoming_tx: Option<mpsc::Sender<LinkFrame>> = None;
+            let mut attaches = 0usize;
+            let mut detaches = 0usize;
+            let mut saw_abort = false;
+
+            loop {
+                tokio::select! {
+                    ctrl = session_rx.recv() => match ctrl {
+                        Some(SessionControl::AllocateLink {
+                            link_relay,
+                            responder,
+                            ..
+                        }) => {
+                            incoming_tx = Some(match link_relay {
+                                LinkRelay::Sender { tx, .. } => tx,
+                                LinkRelay::Receiver { tx, .. } => tx,
+                            });
+                            let _ = responder.send(Ok(OutputHandle(1)));
+                        }
+                        Some(_) => {}
+                        None => break,
+                    },
+                    frame = outgoing_rx.recv() => match frame {
+                        Some(LinkFrame::Attach(_)) => {
+                            attaches += 1;
+                            // The first attach is answered by
+                            // `initial_remote_attach`; the second is the
+                            // re-attach after the Resume exchange.
+                            if attaches == 2 {
+                                let tx =
+                                    incoming_tx.as_ref().expect("allocate was answered");
+                                let _ = tx
+                                    .send(LinkFrame::Attach(peer_receiver_attach()))
+                                    .await;
+                            }
+                        }
+                        Some(LinkFrame::Transfer { performative, .. }) => {
+                            assert!(performative.aborted);
+                            assert!(performative.resume);
+                            saw_abort = true;
+                        }
+                        Some(LinkFrame::Detach(detach)) => {
+                            assert!(!detach.closed);
+                            detaches += 1;
+                            let tx = incoming_tx.as_ref().expect("allocate was answered");
+                            let _ = tx
+                                .send(LinkFrame::Detach(Detach {
+                                    handle: fe2o3_amqp_types::definitions::Handle(0),
+                                    closed: false,
+                                    error: None,
+                                }))
+                                .await;
+                        }
+                        Some(_) => {}
+                        None => break,
+                    },
+                }
+
+                if saw_abort && detaches >= 1 && attaches >= 2 {
+                    break;
+                }
+            }
+        };
+
+        let (result, ()) = tokio::time::timeout(std::time::Duration::from_secs(10), async {
+            tokio::join!(
+                inner.resume_incoming_attach(Some(remote_attach), false),
+                driver
+            )
+        })
+        .await
+        .expect("the resume flow timed out");
+        result.unwrap();
+
+        assert!(matches!(settled.try_recv(), Ok(Ok(None))));
     }
 }
