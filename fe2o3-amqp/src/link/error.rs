@@ -748,28 +748,6 @@ impl From<LinkStateError> for SenderAttachError {
     }
 }
 
-impl From<LinkStateError> for DetachError {
-    fn from(value: LinkStateError) -> Self {
-        match value {
-            IllegalLinkStateError::IllegalState => SenderAttachError::IllegalState,
-            IllegalLinkStateError::SessionStopped(reason) => {
-                SenderAttachError::SessionStopped(reason)
-            }
-        }
-    }
-}
-
-impl From<IllegalLinkStateError> for SendError {
-    fn from(value: IllegalLinkStateError) -> Self {
-        match value {
-            IllegalLinkStateError::IllegalState => LinkStateError::IllegalState.into(),
-            IllegalLinkStateError::SessionStopped(reason) => {
-                LinkStateError::SessionStopped(reason).into()
-            }
-        }
-    }
-}
-
 impl<T> From<T> for RecvError
 where
     T: Into<LinkStateError>,
@@ -944,27 +922,7 @@ mod tests {
     #[test]
     fn link_state_error_recovery() {
         assert_eq!(
-            LinkStateError::RemoteDetached.recovery(),
-            ErrorRecovery::ReattachLink
-        );
-        assert_eq!(
-            LinkStateError::RemoteDetachedWithError(test_error()).recovery(),
-            ErrorRecovery::ReattachLink
-        );
-        assert_eq!(
-            LinkStateError::RemoteClosed.recovery(),
-            ErrorRecovery::NewLink
-        );
-        assert_eq!(
-            LinkStateError::RemoteClosedWithError(test_error()).recovery(),
-            ErrorRecovery::NewLink
-        );
-        assert_eq!(
             LinkStateError::IllegalState.recovery(),
-            ErrorRecovery::NewLink
-        );
-        assert_eq!(
-            LinkStateError::ExpectImmediateDetach.recovery(),
             ErrorRecovery::NewLink
         );
         assert_eq!(
@@ -981,7 +939,6 @@ mod tests {
     }
 
     #[test]
-    #[allow(deprecated)]
     fn detach_error_recovery() {
         assert_eq!(
             DetachError::SessionStopped(SessionStopReason::RemoteEnded).recovery(),
@@ -995,10 +952,6 @@ mod tests {
             ErrorRecovery::ReconnectConnection
         );
         assert_eq!(DetachError::IllegalState.recovery(), ErrorRecovery::NewLink);
-        assert_eq!(
-            DetachError::DetachedByRemote.recovery(),
-            ErrorRecovery::ReattachLink
-        );
     }
 
     #[test]
