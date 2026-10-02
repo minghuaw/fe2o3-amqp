@@ -1281,11 +1281,9 @@ where
             "Rejected delivery of {total_size} bytes: exceeds the link's max message size of {max_size}"
         );
 
-        let delivery_id = transfer.delivery_id.or_else(|| {
-            self.incomplete_transfer
-                .as_ref()
-                .and_then(|i| i.delivery_id())
-        });
+        let delivery_id = transfer
+            .delivery_id
+            .or_else(|| self.incomplete_transfer.as_ref().map(|i| i.delivery_id()));
         let delivery_tag = transfer.delivery_tag.clone().or_else(|| {
             self.incomplete_transfer
                 .as_ref()

@@ -34,6 +34,9 @@ macro_rules! or_assign {
 #[derive(Debug)]
 pub(crate) struct IncompleteTransfer {
     performative: Transfer,
+    /// Validated by `start`; continuation merges never change them.
+    delivery_id: DeliveryNumber,
+    delivery_tag: DeliveryTag,
     buffer: Vec<Payload>,
     section_number: u32,
     section_offset: u64,
@@ -54,17 +57,20 @@ impl IncompleteTransfer {
         transfer: Transfer,
         partial_payload: Payload,
     ) -> Result<Self, ReceiverTransferError> {
-        if transfer.delivery_id.is_none() {
-            return Err(ReceiverTransferError::DeliveryIdIsNone);
-        }
-        if transfer.delivery_tag.is_none() {
-            return Err(ReceiverTransferError::DeliveryTagIsNone);
-        }
+        let delivery_id = transfer
+            .delivery_id
+            .ok_or(ReceiverTransferError::DeliveryIdIsNone)?;
+        let delivery_tag = transfer
+            .delivery_tag
+            .clone()
+            .ok_or(ReceiverTransferError::DeliveryTagIsNone)?;
 
         let (number, offset) = count_number_of_sections_and_offset(&partial_payload);
         let accumulated_payload_size = partial_payload.len() as u64;
         Ok(Self {
             performative: transfer,
+            delivery_id,
+            delivery_tag,
             buffer: vec![partial_payload], // TODO: handle payload split across re-attachment
             section_number: number,
             section_offset: offset,
@@ -138,25 +144,20 @@ impl IncompleteTransfer {
     /// Whether `transfer` continues this delivery: it repeats the tag or omits it
     /// (AMQP 1.0 §2.7.5). Only an explicitly different delivery tag is rejected.
     pub fn is_same_delivery_as(&self, transfer: &Transfer) -> bool {
-        match (&self.performative.delivery_tag, &transfer.delivery_tag) {
-            (Some(local), Some(remote)) => local == remote,
-            _ => true,
+        match &transfer.delivery_tag {
+            Some(remote) => remote == &self.delivery_tag,
+            None => true,
         }
     }
 
-    pub fn delivery_id(&self) -> Option<DeliveryNumber> {
-        self.performative.delivery_id
+    /// The delivery id validated by `start`; continuation merges never change it.
+    pub fn delivery_id(&self) -> DeliveryNumber {
+        self.delivery_id
     }
 
-    /// The delivery tag of the buffered delivery.
-    ///
-    /// `start` requires a delivery tag on the first transfer and continuation
-    /// merges never clear it, so it is always present.
+    /// The delivery tag validated by `start`; continuation merges never change it.
     pub fn delivery_tag(&self) -> &DeliveryTag {
-        self.performative
-            .delivery_tag
-            .as_ref()
-            .expect("the buffered delivery always has a delivery tag")
+        &self.delivery_tag
     }
 
     pub fn section_number(&self) -> u32 {
@@ -356,7 +357,7 @@ mod tests {
             .unwrap();
 
         assert_eq!(incomplete.accumulated_payload_size, len + 17);
-        assert_eq!(incomplete.delivery_id(), Some(0));
+        assert_eq!(incomplete.delivery_id(), 0);
         assert_eq!(incomplete.delivery_tag(), &DeliveryTag::from(vec![0x01]));
     }
 
