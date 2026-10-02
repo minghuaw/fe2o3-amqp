@@ -1413,7 +1413,16 @@ where
                     .await
                     .map(|()| None);
             }
-            let _ = self.incomplete_transfer.take();
+
+            // An aborted message is implicitly settled: discard the buffered
+            // chunks and the entry the partial frames added to the unsettled
+            // map. A completed delivery (no buffer) is left untouched.
+            if let Some(incomplete) = self.incomplete_transfer.take() {
+                let mut guard = self.link.unsettled().write();
+                if let Some(map) = guard.as_mut() {
+                    let _ = map.swap_remove(incomplete.delivery_tag());
+                }
+            }
             return Ok(None);
         }
 
@@ -2692,6 +2701,153 @@ mod tests {
                 different_format,
                 Payload::from(vec![0u8; 8]),
             ))
+            .await
+            .unwrap();
+
+        let error = recv_expecting_fatal_close(&mut inner, &mut outgoing_rx, &incoming_tx).await;
+        assert!(matches!(
+            error,
+            RecvError::InconsistentFieldInMultiFrameDelivery
+        ));
+        assert!(matches!(inner.link.local_state, LinkState::Closed));
+    }
+
+    /// An aborted transfer matching the buffered delivery discards its chunks
+    /// and its entry in the unsettled map; the link stays usable.
+    #[tokio::test]
+    async fn aborted_transfer_discards_the_buffered_delivery() {
+        let (mut inner, _session_rx, _outgoing_rx, incoming_tx) =
+            make_receiver_inner_with_channels(4096);
+        let aborted_tag = DeliveryTag::from(vec![0x01]);
+
+        incoming_tx
+            .send(make_link_frame(
+                make_incoming_transfer(1, Some(vec![0x01]), true, false),
+                Payload::from(vec![0u8; 8]),
+            ))
+            .await
+            .unwrap();
+
+        // The sender aborts the delivery (`resume` mirrors `Sender::abort`).
+        let mut abort = make_incoming_transfer(1, Some(vec![0x01]), false, false);
+        abort.resume = true;
+        abort.aborted = true;
+        incoming_tx
+            .send(make_link_frame(abort, Payload::new()))
+            .await
+            .unwrap();
+
+        // The link remains usable: a following ordinary message is delivered.
+        let body = "after abort";
+        incoming_tx
+            .send(make_link_frame(
+                make_incoming_transfer(2, Some(vec![0x02]), false, false),
+                encoded_message_payload(body),
+            ))
+            .await
+            .unwrap();
+
+        let delivery = inner.recv::<String>().await.expect("ordinary delivery");
+        assert_eq!(delivery.body(), body);
+        assert!(inner.incomplete_transfer.is_none());
+
+        let guard = inner.link.unsettled().read();
+        assert!(guard
+            .as_ref()
+            .is_none_or(|map| !map.contains_key(&aborted_tag)));
+    }
+
+    /// The same as above when the aborting transfer omits the delivery tag:
+    /// the buffered delivery's tag identifies the entry to discard.
+    #[tokio::test]
+    async fn aborted_transfer_with_omitted_tag_discards_the_buffered_delivery() {
+        let (mut inner, _session_rx, _outgoing_rx, incoming_tx) =
+            make_receiver_inner_with_channels(4096);
+        let aborted_tag = DeliveryTag::from(vec![0x01]);
+
+        incoming_tx
+            .send(make_link_frame(
+                make_incoming_transfer(1, Some(vec![0x01]), true, false),
+                Payload::from(vec![0u8; 8]),
+            ))
+            .await
+            .unwrap();
+
+        let mut abort = make_incoming_transfer(1, None, false, false);
+        abort.resume = true;
+        abort.aborted = true;
+        incoming_tx
+            .send(make_link_frame(abort, Payload::new()))
+            .await
+            .unwrap();
+
+        let body = "after abort";
+        incoming_tx
+            .send(make_link_frame(
+                make_incoming_transfer(2, Some(vec![0x02]), false, false),
+                encoded_message_payload(body),
+            ))
+            .await
+            .unwrap();
+
+        let delivery = inner.recv::<String>().await.expect("ordinary delivery");
+        assert_eq!(delivery.body(), body);
+        assert!(inner.incomplete_transfer.is_none());
+
+        let guard = inner.link.unsettled().read();
+        assert!(guard
+            .as_ref()
+            .is_none_or(|map| !map.contains_key(&aborted_tag)));
+    }
+
+    /// An aborted transfer with no buffered delivery is ignored.
+    #[tokio::test]
+    async fn aborted_transfer_without_buffer_is_ignored() {
+        let (mut inner, _session_rx, _outgoing_rx, incoming_tx) =
+            make_receiver_inner_with_channels(4096);
+
+        let mut abort = make_incoming_transfer(1, Some(vec![0x09]), false, false);
+        abort.resume = true;
+        abort.aborted = true;
+        incoming_tx
+            .send(make_link_frame(abort, Payload::from(vec![0u8; 4])))
+            .await
+            .unwrap();
+
+        let body = "after ignored abort";
+        incoming_tx
+            .send(make_link_frame(
+                make_incoming_transfer(2, Some(vec![0x0A]), false, false),
+                encoded_message_payload(body),
+            ))
+            .await
+            .unwrap();
+
+        let delivery = inner.recv::<String>().await.expect("ordinary delivery");
+        assert_eq!(delivery.body(), body);
+        assert!(inner.incomplete_transfer.is_none());
+    }
+
+    /// An aborted transfer that explicitly names another delivery while one
+    /// is being assembled violates AMQP 1.0 §2.6.14 and closes the link.
+    #[tokio::test]
+    async fn aborted_transfer_with_different_delivery_tag_closes_link() {
+        let (mut inner, _session_rx, mut outgoing_rx, incoming_tx) =
+            make_receiver_inner_with_channels(4096);
+
+        incoming_tx
+            .send(make_link_frame(
+                make_incoming_transfer(1, Some(vec![0x01]), true, false),
+                Payload::from(vec![0u8; 8]),
+            ))
+            .await
+            .unwrap();
+
+        let mut abort = make_incoming_transfer(1, Some(vec![0x02]), false, false);
+        abort.resume = true;
+        abort.aborted = true;
+        incoming_tx
+            .send(make_link_frame(abort, Payload::new()))
             .await
             .unwrap();
 
