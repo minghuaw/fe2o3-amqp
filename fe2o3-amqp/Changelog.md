@@ -1,5 +1,27 @@
 # Change Log
 
+## Unreleased
+
+**Bugfixes and behavior corrections**:
+
+1. Receive-side `max-message-size` enforcement counted only the current frame for tagless
+   continuation frames, so a multi-frame delivery could exceed the link limit while every
+   individual frame stayed below it. The buffered payload is now counted, and the check runs
+   on every transfer frame.
+2. Receiving an oversized delivery now detaches the link with `amqp:link:message-size-exceeded`
+   (AMQP 1.0 §2.7.3, §2.8.18, §2.6.5) and returns `RecvError::MessageSizeExceeded`, instead of
+   rejecting only the delivery with a `Rejected` disposition and keeping the link usable. The
+   link must be resumed to be used again.
+3. Malformed multi-frame deliveries (a first transfer missing the delivery-id or delivery-tag,
+   or a continuation whose present delivery-id, delivery-tag or message-format differs) now
+   detach the link with `amqp:not-allowed` (§2.7.5, §2.6.5).
+4. Resumed deliveries whose tag is not a non-terminal entry in the local unsettled map are
+   ignored (§2.6.13), and a tagless transfer carrying a `Received` state is attributed to the
+   buffered delivery instead of failing.
+5. An aborted buffered delivery now also drops its entry from the unsettled map, and the sender
+   settles an aborted delivery locally instead of re-registering it. The sender also reallocates
+   its output handle after the detach that follows the resumption `Resume` exchange.
+
 ## 0.18.2
 
 **Bugfix**: an unsettled delivery is now registered before its transfer reaches the session, preventing `send` from hanging when the peer settles immediately.
