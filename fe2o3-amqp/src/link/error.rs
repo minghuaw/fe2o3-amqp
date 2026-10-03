@@ -794,6 +794,17 @@ pub enum SenderResumeErrorKind {
     #[error(transparent)]
     DetachError(#[from] DetachError),
 
+    /// The peer detached the link while it was being resumed
+    #[error("The peer detached the link while it was being resumed: {:?}", .0)]
+    LinkDetached(DetachStatus),
+
+    /// The link's unsettled map remained incomplete after repeated
+    /// suspend/re-attempt rounds (AMQP 1.0 §2.6.13)
+    #[error(
+        "The link's unsettled map remained incomplete after repeated suspend/re-attempt rounds"
+    )]
+    IncompleteUnsettled,
+
     /// Resume timed out
     #[error("Resume timed out")]
     Timeout,
