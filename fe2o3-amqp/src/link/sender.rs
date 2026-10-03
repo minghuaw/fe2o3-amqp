@@ -741,6 +741,15 @@ where
     }
 }
 
+/// Maximum number of incomplete-unsettled suspend/re-attempt rounds before
+/// resuming a sender link is aborted.
+///
+/// AMQP 1.0 §2.6.13 requires the two endpoints to reduce the unsettled state
+/// and then suspend and re-attempt the resume. Each round should make
+/// progress; this bounds the loop when it does not (e.g. the peer keeps
+/// advertising the same unsettled map and the application never settles).
+const MAX_INCOMPLETE_UNSETTLED_ROUNDS: usize = 32;
+
 impl<L> SenderInner<L>
 where
     L: endpoint::SenderLink<
@@ -1046,20 +1055,18 @@ impl SenderInner<SenderLink<Target>> {
     async fn resume_incoming_attach(
         &mut self,
         mut initial_remote_attach: Option<Attach>,
-        is_reattaching: bool,
     ) -> Result<(), SenderResumeErrorKind> {
         self.reallocate_output_handle().await?;
         let mut resend_buf = Vec::new();
+        let mut incomplete_rounds = 0usize;
 
         loop {
             let attach_exchange = match initial_remote_attach.take() {
                 Some(remote_attach) => {
-                    self.link
-                        .send_attach(&self.outgoing, is_reattaching)
-                        .await?;
+                    self.link.send_attach(&self.outgoing).await?;
                     self.link.on_incoming_attach(remote_attach)?
                 }
-                None => self.exchange_attach(is_reattaching).await?,
+                None => self.exchange_attach().await?,
             };
 
             match attach_exchange {
@@ -1070,11 +1077,51 @@ impl SenderInner<SenderLink<Target>> {
                             .await?;
                     }
 
-                    // The unsettled map was incomplete. AMQP 1.0 §2.6.6: after
+                    // The unsettled map was incomplete. AMQP 1.0 §2.6.13: after
                     // the reduction of state, the two parties suspend and
-                    // re-attempt to resume the link. The detach consumes the
-                    // output handle, so reallocate it for the retry.
-                    self.detach_with_error(None).await?;
+                    // re-attempt to resume the link.
+                    let status = self.detach_with_error(None).await?;
+                    if status.is_closed() {
+                        // The peer closed the link while we were suspending it,
+                        // so there is nothing left to resume.
+                        return Err(SenderResumeErrorKind::LinkDetached(status));
+                    }
+
+                    incomplete_rounds += 1;
+                    #[cfg(any(feature = "tracing", feature = "log"))]
+                    let unsettled_len = self.link.unsettled.read().as_ref().map(|m| m.len());
+                    #[cfg(feature = "tracing")]
+                    tracing::debug!(
+                        incomplete_rounds,
+                        ?unsettled_len,
+                        buffered = resend_buf.len(),
+                        "unsettled map incomplete; suspending and re-attempting"
+                    );
+                    #[cfg(feature = "log")]
+                    log::debug!(
+                        "unsettled map incomplete (round {}, local {:?}, buffered {}); suspending and re-attempting",
+                        incomplete_rounds,
+                        unsettled_len,
+                        resend_buf.len()
+                    );
+
+                    if incomplete_rounds > MAX_INCOMPLETE_UNSETTLED_ROUNDS {
+                        #[cfg(feature = "tracing")]
+                        tracing::warn!(
+                            incomplete_rounds,
+                            "the unsettled map did not become complete; aborting resumption"
+                        );
+                        #[cfg(feature = "log")]
+                        log::warn!(
+                            "the unsettled map did not become complete after {} rounds; aborting resumption",
+                            incomplete_rounds
+                        );
+                        return Err(SenderResumeErrorKind::IncompleteUnsettled);
+                    }
+
+                    // `detach_with_error` released the output handle and the
+                    // session released the link relay, so re-register the link
+                    // before re-attempting the attach exchange.
                     self.reallocate_output_handle().await?;
                 }
                 SenderAttachExchange::Resume(resuming_deliveries) => {
@@ -1825,5 +1872,219 @@ mod tests {
         result.unwrap();
 
         assert!(matches!(settled.try_recv(), Ok(Ok(None))));
+    }
+
+    fn seed_unsettled_entries(
+        link: &SenderLink<Target>,
+        n: u32,
+        state: Option<DeliveryState>,
+    ) -> Vec<oneshot::Receiver<Result<Option<DeliveryState>, DeliveryFailure>>> {
+        let mut map = OrderedMap::new();
+        let mut receivers = Vec::with_capacity(n as usize);
+        for i in 0..n {
+            let (tx, rx) = oneshot::channel();
+            receivers.push(rx);
+            map.insert(
+                DeliveryTag::from(i.to_be_bytes().to_vec()),
+                UnsettledMessage::new(Bytes::new(), state.clone(), 0, tx),
+            );
+        }
+        *link.unsettled.write() = Some(map);
+        receivers
+    }
+
+    fn peer_attach_with_unsettled(
+        remote: OrderedMap<DeliveryTag, Option<DeliveryState>>,
+    ) -> Attach {
+        let mut attach = peer_receiver_attach();
+        attach.unsettled = Some(remote);
+        attach.incomplete_unsettled = false;
+        attach
+    }
+
+    /// A scripted peer for the incomplete-unsettled resume loop: it answers
+    /// every `AllocateLink`, replies to each `Attach` with `peer_attach`, and
+    /// answers each `Detach` with a non-closing detach.
+    async fn drive_resume_peer(
+        mut session_rx: mpsc::Receiver<SessionControl>,
+        mut outgoing_rx: mpsc::Receiver<LinkFrame>,
+        initial_incoming_tx: mpsc::Sender<LinkFrame>,
+        peer_attach: Attach,
+    ) {
+        let mut incoming_tx = initial_incoming_tx;
+        loop {
+            tokio::select! {
+                ctrl = session_rx.recv() => match ctrl {
+                    Some(SessionControl::AllocateLink { link_relay, responder, .. }) => {
+                        incoming_tx = match link_relay {
+                            LinkRelay::Sender { tx, .. } => tx,
+                            LinkRelay::Receiver { tx, .. } => tx,
+                        };
+                        let _ = responder.send(Ok(endpoint::OutputHandle(1)));
+                    }
+                    Some(_) => {}
+                    None => break,
+                },
+                frame = outgoing_rx.recv() => match frame {
+                    Some(LinkFrame::Attach(_)) => {
+                        let _ = incoming_tx.send(LinkFrame::Attach(peer_attach.clone())).await;
+                    }
+                    Some(LinkFrame::Detach(_)) => {
+                        let _ = incoming_tx
+                            .send(LinkFrame::Detach(Detach {
+                                handle: fe2o3_amqp_types::definitions::Handle(0),
+                                closed: false,
+                                error: None,
+                            }))
+                            .await;
+                    }
+                    Some(_) => {}
+                    None => break,
+                },
+            }
+        }
+    }
+
+    /// `send_detach` is valid from the in-progress attach states used by the
+    /// AMQP 1.0 §2.6.13 reduce/suspend/re-attempt cycle, not only `Attached`.
+    #[tokio::test]
+    async fn send_detach_is_allowed_from_incomplete_attach_states() {
+        let cases = [
+            (
+                LinkState::IncompleteAttachExchanged,
+                false,
+                LinkState::DetachSent,
+            ),
+            (
+                LinkState::IncompleteAttachSent,
+                false,
+                LinkState::DetachSent,
+            ),
+            (
+                LinkState::IncompleteAttachReceived,
+                false,
+                LinkState::DetachSent,
+            ),
+            (
+                LinkState::IncompleteAttachExchanged,
+                true,
+                LinkState::CloseSent,
+            ),
+        ];
+
+        for (state, closed, expected) in cases {
+            let (mut inner, ..) = make_sender_inner_with_channels(4096);
+            let (tx, _rx) = mpsc::channel::<LinkFrame>(16);
+            inner.link.local_state = state;
+            inner
+                .link
+                .send_detach(&tx, closed, None)
+                .await
+                .expect("send_detach must succeed from an in-progress attach state");
+            assert_eq!(
+                std::mem::discriminant(&inner.link.local_state),
+                std::mem::discriminant(&expected),
+                "unexpected state after send_detach"
+            );
+        }
+    }
+
+    /// A map that cannot fit one attach frame is truncated and flagged
+    /// `incomplete_unsettled` (AMQP 1.0 §2.7.3).
+    #[test]
+    fn oversized_unsettled_map_is_truncated() {
+        let (inner, ..) = make_sender_inner_with_channels(512);
+        let _rx = seed_unsettled_entries(&inner.link, 200, None);
+
+        let attach = inner
+            .link
+            .as_maybe_incomplete_attach(512, endpoint::OutputHandle(0), true)
+            .expect("attach build failed");
+
+        assert!(attach.incomplete_unsettled);
+        let len = attach.unsettled.as_ref().map(|m| m.len()).unwrap_or(0);
+        assert!(len < 200, "expected a truncated map, got {len} entries");
+    }
+
+    /// A link whose unsettled map does not fit one attach frame resumes via the
+    /// AMQP 1.0 §2.6.13 reduction: the first attach is truncated and incomplete,
+    /// the reduction settles the deliveries the peer reports as terminal, the
+    /// link suspends and re-registers, and the second exchange completes.
+    #[tokio::test]
+    async fn incomplete_unsettled_resume_suspends_and_completes() {
+        let (mut inner, session_rx, outgoing_rx, incoming_tx) =
+            make_sender_inner_with_channels(512);
+        inner.link.local_state = LinkState::Detached;
+
+        let local_state = Some(DeliveryState::Received(Received {
+            section_number: 0,
+            section_offset: 0,
+        }));
+        let _rx = seed_unsettled_entries(&inner.link, 200, local_state);
+
+        // The peer reports every delivery as terminal (`Accepted`), so the
+        // reduction settles them and the map fits on the second attach.
+        let mut remote = OrderedMap::new();
+        for i in 0..200u32 {
+            remote.insert(
+                DeliveryTag::from(i.to_be_bytes().to_vec()),
+                Some(DeliveryState::Accepted(Accepted {})),
+            );
+        }
+        let peer_attach = peer_attach_with_unsettled(remote);
+
+        let peer = tokio::spawn(drive_resume_peer(
+            session_rx,
+            outgoing_rx,
+            incoming_tx,
+            peer_attach,
+        ));
+
+        let result = inner.resume_incoming_attach(None).await;
+        peer.abort();
+
+        result.expect("resume must complete");
+        assert!(matches!(inner.link.local_state, LinkState::Attached));
+        assert!(inner
+            .link
+            .unsettled
+            .read()
+            .as_ref()
+            .is_none_or(|m| m.is_empty()));
+    }
+
+    /// If the peer keeps advertising the same unsettled map and the reduction
+    /// never shrinks it, resumption aborts after a bounded number of rounds
+    /// instead of looping forever.
+    #[tokio::test]
+    async fn incomplete_unsettled_resume_aborts_without_progress() {
+        let (mut inner, session_rx, outgoing_rx, incoming_tx) =
+            make_sender_inner_with_channels(512);
+        inner.link.local_state = LinkState::Detached;
+
+        let _rx = seed_unsettled_entries(&inner.link, 200, None);
+
+        // Every tag is still unsettled at the peer with a null state, so the
+        // reduction re-sends and re-inserts them; the map never shrinks.
+        let mut remote = OrderedMap::new();
+        for i in 0..200u32 {
+            remote.insert(DeliveryTag::from(i.to_be_bytes().to_vec()), None);
+        }
+        let peer_attach = peer_attach_with_unsettled(remote);
+
+        let peer = tokio::spawn(drive_resume_peer(
+            session_rx,
+            outgoing_rx,
+            incoming_tx,
+            peer_attach,
+        ));
+
+        let result = inner.resume_incoming_attach(None).await;
+        peer.abort();
+
+        assert!(matches!(
+            result,
+            Err(SenderResumeErrorKind::IncompleteUnsettled)
+        ));
     }
 }

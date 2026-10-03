@@ -15,20 +15,41 @@
 5. **Breaking**: a peer-initiated link detach/close is now reported as an outcome instead of a
    link-state error. `LinkStateError` no longer carries `RemoteDetached`, `RemoteDetachedWithError`,
    `RemoteClosed` or `RemoteClosedWithError`; the new `DetachStatus` (`Detached`/`Closed` plus the
-   peer's optional error) is carried by `SendError::LinkEnded`, `RecvError::LinkEnded`,
-   `PostError::LinkEnded` and `ControllerSendError::LinkEnded`. `Sender::on_detach` returns
+   peer's optional error) is carried by `SendError::LinkDetached`, `RecvError::LinkDetached`,
+   `PostError::LinkDetached` and `ControllerSendError::LinkDetached`. `Sender::on_detach` returns
    `Result<DetachStatus, LinkStateError>`; the deprecated `DetachError::DetachedByRemote` is
    removed. The dead `SendError::Detached(DetachError)` and `From<DetachError> for SendError` are
    removed as well.
-2. **Breaking**: `IllegalLinkStateError` is merged into `LinkStateError`, which now carries only
+6. **Breaking**: `IllegalLinkStateError` is merged into `LinkStateError`, which now carries only
    `IllegalState` and `SessionStopped`; `DispositionError` and `FlowError` are aliases of it, and
    `IllegalLinkStateError` is kept as a deprecated alias. `ExpectImmediateDetach` moved from
    `LinkStateError` to `SendError`/`PostError`/`ControllerSendError`.
-3. **Bugfix**: link resumption now carries unsettled deliveries. The sender advertises its unsettled
+7. **Bugfix**: link resumption now carries unsettled deliveries. The sender advertises its unsettled
    map on (re)attach and re-sends the deliveries after the link is resumed on another session or
    connection, so a `send_batchable` future resolves with the peer's disposition instead of failing
    with `SessionStopped`. Same-session resume (`DetachedSender::resume()`) now completes instead of
    returning an `IllegalState` attach error when there are unsettled deliveries (#396).
+8. **Breaking**: `DetachError` is now a type alias of `LinkStateError` and the peer's detach/close
+   outcome is returned directly. `detach()`/`detach_with_error()` return
+   `(DetachedSender, DetachStatus)` (receiver: `(DetachedReceiver, DetachStatus)`);
+   `close()`/`close_with_error()` return `DetachStatus`, so the error the peer attached to its
+   closing detach is surfaced instead of being dropped. `DetachError::ClosedByRemote`,
+   `RemoteDetachedWithError` and `RemoteClosedWithError` are removed: the AMQP 1.0 §2.6.6 crossed
+   close is reported as `DetachStatus::Closed`. `SenderResumeErrorKind`/`ReceiverResumeErrorKind`
+   gain `LinkDetached(DetachStatus)`, and `detach_then_resume_on_session` reports a link the peer
+   detached closed through the existing `Resume` variant. `SenderAttachError`/`ReceiverAttachError`
+   no longer carry the unproduced `ExpectImmediateDetach`, and `PostError::Detached` is removed.
+9. **Bugfix**: resuming attaches now always carry a non-null `unsettled` map (empty when nothing is
+   unsettled) so they cannot be mistaken for a pipelined re-attach (AMQP 1.0 §2.6.5). Deliveries
+   only the peer considers unsettled are no longer answered with a resumed transfer (§2.6.13,
+   §2.7.5), and the receiver settles deliveries only it considers unsettled by comparing the attach
+   maps.
+10. **Bugfix**: resuming a link whose unsettled map does not fit one attach frame now performs the
+    AMQP 1.0 §2.6.13 reduce/suspend/re-attempt cycle. A detach is allowed from the in-progress
+    attach states, the link is re-registered before each re-attempt, and buffered source-only
+    deliveries are re-sent as new deliveries once the exchange completes (including when both maps
+    are empty). The loop is bounded and returns the new `SenderResumeErrorKind::IncompleteUnsettled`
+    if the unsettled map never becomes complete.
 
 ## 0.18.2
 
