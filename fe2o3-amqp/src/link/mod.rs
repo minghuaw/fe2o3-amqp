@@ -151,10 +151,19 @@ impl std::fmt::Debug for SenderAttachExchange {
 }
 
 impl SenderAttachExchange {
-    pub fn complete_or<E>(self, err: E) -> Result<(), E> {
+    /// Fail the deliveries of a non-complete exchange with `failure` instead
+    /// of dropping their settlement channels, then return `err`.
+    pub(crate) fn complete_or_fail_deliveries<E>(
+        self,
+        failure: DeliveryFailure,
+        err: E,
+    ) -> Result<(), E> {
         match self {
             Self::Complete => Ok(()),
-            _ => Err(err),
+            Self::IncompleteUnsettled(deliveries) | Self::Resume(deliveries) => {
+                resumption::fail_resuming_deliveries(deliveries, failure);
+                Err(err)
+            }
         }
     }
 }
