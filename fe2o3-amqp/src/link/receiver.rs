@@ -1093,9 +1093,18 @@ where
             | LinkFrame::FirstTransfer(_)
             | LinkFrame::TransferContinuation(_) => {
                 // Flow, Disposition and locally sent transfers are handled by
-                // LinkRelay which runs in the session loop; they are never
-                // sent to a link.
-                unreachable!()
+                // LinkRelay which runs in the session loop; report a defensive
+                // failure instead of panicking if one ever reaches the link
+                // stream.
+                #[cfg(feature = "tracing")]
+                tracing::error!(
+                    "Unexpected Flow, Disposition or local transfer frame in the receiver stream"
+                );
+                #[cfg(feature = "log")]
+                log::error!(
+                    "Unexpected Flow, Disposition or local transfer frame in the receiver stream"
+                );
+                Err(LinkStateError::IllegalState.into())
             }
             #[cfg(feature = "transaction")]
             LinkFrame::Acquisition(_) => {
