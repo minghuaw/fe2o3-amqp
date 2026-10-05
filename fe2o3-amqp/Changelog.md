@@ -66,7 +66,9 @@
     unsettled are failed with `LinkDetached(Closed)`, and previously the outcome was recorded
     while the link was left detached.
 12. `OwnedDischargeError` routes link-state errors from closing the control link to its `DetachError`
-    variant (the owned-transaction error naming/consolidation is still undecided).
+    variant. Control-link failures are exposed as `DeclareError`/`DischargeError` (aliases of
+    `ControllerSendError`); the owned errors keep their names, and the coordinator-internal errors
+    are named `CoordinatorAllocTxnIdError`/`CoordinatorDischargeError`.
 13. **Bugfix**: deliveries buffered for redelivery during resumption (the peer's unsettled map
     lacked their tags) are now kept on the link until they can be re-sent: a failed or aborted
     resume retries them, and a terminal close or a dropped sender fails them with
