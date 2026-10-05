@@ -133,7 +133,7 @@ pub enum ErrorRecovery {
     ReconnectConnection,
 
     /// The link was closed or destroyed, or the error left its state
-    /// indeterminate (the defensive `IllegalState`/`ExpectImmediateDetach`
+    /// indeterminate (the defensive `IllegalState`/`UnexpectedFrame`
     /// variants): create a new link.
     NewLink,
 }
@@ -249,9 +249,10 @@ pub(crate) enum TransferError {
     #[error("The peer detached the link")]
     LinkDetached(DetachStatus),
 
-    /// Expecting the peer to detach immediately but received another frame
-    #[error("Expecting the peer to immediately detach")]
-    ExpectImmediateDetach,
+    /// A frame other than the expected detach arrived while the transfer
+    /// waited for link credit
+    #[error("Unexpected frame while expecting the peer's detach")]
+    UnexpectedFrame,
 }
 
 impl From<TransferError> for SendError {
@@ -264,7 +265,7 @@ impl From<TransferError> for SendError {
             #[cfg(feature = "transaction")]
             TransferError::AcquisitionNotImplemented => SendError::AcquisitionNotImplemented,
             TransferError::LinkDetached(status) => SendError::LinkDetached(status),
-            TransferError::ExpectImmediateDetach => SendError::ExpectImmediateDetach,
+            TransferError::UnexpectedFrame => SendError::UnexpectedFrame,
         }
     }
 }
@@ -441,9 +442,10 @@ pub enum SendError {
     #[error(transparent)]
     MessageEncodeError(#[from] MessageEncodeError),
 
-    /// The peer was expected to detach immediately but another frame arrived
-    #[error("Expecting the peer to immediately detach")]
-    ExpectImmediateDetach,
+    /// A frame other than the expected detach arrived while the transfer
+    /// waited for link credit
+    #[error("Unexpected frame while expecting the peer's detach")]
+    UnexpectedFrame,
 }
 
 impl From<serde_amqp::Error> for SendError {
@@ -820,7 +822,7 @@ impl SendError {
             | Self::IllegalDeliveryState
             | Self::MessageSizeExceeded(_)
             | Self::MessageEncodeError(_) => ErrorRecovery::UseLink,
-            Self::NotAttached | Self::AcquisitionNotImplemented | Self::ExpectImmediateDetach => {
+            Self::NotAttached | Self::AcquisitionNotImplemented | Self::UnexpectedFrame => {
                 ErrorRecovery::NewLink
             }
             // `max-frame-size` is negotiated per connection (AMQP 1.0 §2.4.1),
@@ -1113,7 +1115,7 @@ mod tests {
             ErrorRecovery::NewLink
         );
         assert_eq!(
-            SendError::ExpectImmediateDetach.recovery(),
+            SendError::UnexpectedFrame.recovery(),
             ErrorRecovery::NewLink
         );
         assert_eq!(

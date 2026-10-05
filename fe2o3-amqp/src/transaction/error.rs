@@ -136,9 +136,10 @@ pub enum ControllerSendError {
     #[error(transparent)]
     MessageEncodeError(#[from] MessageEncodeError),
 
-    /// The peer was expected to detach immediately but another frame arrived
-    #[error("Expecting the peer to immediately detach")]
-    ExpectImmediateDetach,
+    /// A frame other than the expected detach arrived while the transfer
+    /// waited for link credit
+    #[error("Unexpected frame while expecting the peer's detach")]
+    UnexpectedFrame,
 }
 
 impl From<SendError> for ControllerSendError {
@@ -153,7 +154,7 @@ impl From<SendError> for ControllerSendError {
             SendError::IllegalDeliveryState => Self::IllegalDeliveryState,
             SendError::MessageSizeExceeded(error) => Self::MessageSizeExceeded(error),
             SendError::MessageEncodeError(error) => Self::MessageEncodeError(error),
-            SendError::ExpectImmediateDetach => Self::ExpectImmediateDetach,
+            SendError::UnexpectedFrame => Self::UnexpectedFrame,
         }
     }
 }
@@ -261,9 +262,10 @@ pub enum PostError {
     #[error(transparent)]
     MessageEncodeError(#[from] MessageEncodeError),
 
-    /// The peer was expected to detach immediately but another frame arrived
-    #[error("Expecting the peer to immediately detach")]
-    ExpectImmediateDetach,
+    /// A frame other than the expected detach arrived while the transfer
+    /// waited for link credit
+    #[error("Unexpected frame while expecting the peer's detach")]
+    UnexpectedFrame,
 }
 
 impl From<serde_amqp::Error> for PostError {
@@ -287,7 +289,7 @@ impl From<TransferError> for PostError {
             TransferError::FrameSizeTooSmall => Self::FrameSizeTooSmall,
             TransferError::AcquisitionNotImplemented => Self::AcquisitionNotImplemented,
             TransferError::LinkDetached(status) => Self::LinkDetached(status),
-            TransferError::ExpectImmediateDetach => Self::ExpectImmediateDetach,
+            TransferError::UnexpectedFrame => Self::UnexpectedFrame,
         }
     }
 }
