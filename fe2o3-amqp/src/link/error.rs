@@ -157,6 +157,19 @@ pub(crate) enum TransferError {
     #[error(transparent)]
     LinkState(#[from] LinkStateError),
 
+    /// The link endpoint has no local handle, i.e. the link is not attached
+    #[error("The link is not attached")]
+    NotAttached,
+
+    /// The performative could not be serialized
+    #[error(transparent)]
+    MessageEncodeError(#[from] MessageEncodeError),
+
+    /// The negotiated max frame size cannot fit even the serialized transfer
+    /// performative, so the delivery cannot be split into frames
+    #[error("The negotiated max frame size is too small for the transfer performative")]
+    FrameSizeTooSmall,
+
     /// The peer detached the link before the transfer completed
     #[error("The peer detached the link")]
     LinkDetached(DetachStatus),
@@ -170,6 +183,9 @@ impl From<TransferError> for SendError {
     fn from(value: TransferError) -> Self {
         match value {
             TransferError::LinkState(error) => SendError::LinkStateError(error),
+            TransferError::NotAttached => SendError::NotAttached,
+            TransferError::MessageEncodeError(error) => SendError::MessageEncodeError(error),
+            TransferError::FrameSizeTooSmall => SendError::FrameSizeTooSmall,
             TransferError::LinkDetached(status) => SendError::LinkDetached(status),
             TransferError::ExpectImmediateDetach => SendError::ExpectImmediateDetach,
         }
@@ -314,6 +330,17 @@ pub enum SendError {
     #[error("The peer detached the link: {:?}", .0)]
     LinkDetached(DetachStatus),
 
+    /// The link endpoint has no local handle, i.e. the link is not attached
+    #[error("The link is not attached")]
+    NotAttached,
+
+    /// The negotiated max frame size cannot fit even the serialized transfer
+    /// performative, so the message cannot be sent. `max-frame-size` is
+    /// negotiated per connection (AMQP 1.0 §2.4.1), so only a new connection
+    /// can change it.
+    #[error("The negotiated max frame size is too small for the transfer performative")]
+    FrameSizeTooSmall,
+
     /// A non-terminal delivery state is received while expecting
     /// an outcome
     #[error("A non-terminal delivery state is received when an outcome is expected")]
@@ -329,8 +356,8 @@ pub enum SendError {
     MessageSizeExceeded(MessageSizeExceeded),
 
     /// Error serializing message
-    #[error("Error encoding message")]
-    MessageEncodeError,
+    #[error(transparent)]
+    MessageEncodeError(#[from] MessageEncodeError),
 
     /// The peer was expected to detach immediately but another frame arrived
     #[error("Expecting the peer to immediately detach")]
@@ -338,8 +365,8 @@ pub enum SendError {
 }
 
 impl From<serde_amqp::Error> for SendError {
-    fn from(_: serde_amqp::Error) -> Self {
-        Self::MessageEncodeError
+    fn from(source: serde_amqp::Error) -> Self {
+        Self::MessageEncodeError(MessageEncodeError { source })
     }
 }
 
@@ -548,9 +575,9 @@ pub enum LinkStateError {
 /// Errors associated with receiving a transfer
 #[derive(Debug, thiserror::Error)]
 pub(crate) enum ReceiverTransferError {
-    /// ILlegal link state
-    #[error("Illegal local state")]
-    IllegalState,
+    /// The link endpoint has no local handle, i.e. the link is not attached
+    #[error("The link is not attached")]
+    NotAttached,
 
     /// The peer sent more message transfers than currently allowed on the link.
     #[error("The peer sent more message transfers than currently allowed on the link")]
@@ -596,6 +623,21 @@ impl std::fmt::Display for MessageDecodeError {
 
 impl std::error::Error for MessageDecodeError {}
 
+/// Error encoding message
+#[derive(Debug)]
+pub struct MessageEncodeError {
+    /// Source error
+    pub source: serde_amqp::Error,
+}
+
+impl std::fmt::Display for MessageEncodeError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Error encoding message: {}", self.source)
+    }
+}
+
+impl std::error::Error for MessageEncodeError {}
+
 /// Errors associated with receiving
 #[derive(Debug, thiserror::Error)]
 pub enum RecvError {
@@ -606,6 +648,10 @@ pub enum RecvError {
     /// The peer detached the link before a delivery could be received
     #[error("The peer detached the link: {:?}", .0)]
     LinkDetached(DetachStatus),
+
+    /// The link endpoint has no local handle, i.e. the link is not attached
+    #[error("The link is not attached")]
+    NotAttached,
 
     /// The peer sent more message transfers than currently allowed on the link.
     #[error("The peer sent more message transfers than currently allowed on the link")]
@@ -639,9 +685,9 @@ pub enum RecvError {
     #[error(transparent)]
     MessageSizeExceeded(MessageSizeExceeded),
 
-    /// Transactional acquision is not supported yet
+    /// Transactional acquisition is not supported yet
     #[error("Transactional acquisition is not implemented")]
-    TransactionalAcquisitionIsNotImeplemented,
+    TransactionalAcquisitionNotImplemented,
 }
 
 impl From<ReceiverTransferError> for RecvError {
@@ -657,9 +703,7 @@ impl From<ReceiverTransferError> for RecvError {
             ReceiverTransferError::InconsistentFieldInMultiFrameDelivery => {
                 RecvError::InconsistentFieldInMultiFrameDelivery
             }
-            ReceiverTransferError::IllegalState => {
-                RecvError::LinkStateError(LinkStateError::IllegalState)
-            }
+            ReceiverTransferError::NotAttached => RecvError::NotAttached,
         }
     }
 }
@@ -693,8 +737,12 @@ impl SendError {
             Self::NonTerminalDeliveryState
             | Self::IllegalDeliveryState
             | Self::MessageSizeExceeded(_)
-            | Self::MessageEncodeError => ErrorRecovery::UseLink,
-            Self::ExpectImmediateDetach => ErrorRecovery::NewLink,
+            | Self::MessageEncodeError(_) => ErrorRecovery::UseLink,
+            Self::NotAttached | Self::ExpectImmediateDetach => ErrorRecovery::NewLink,
+            // `max-frame-size` is negotiated per connection (AMQP 1.0 §2.4.1),
+            // so a new link on the same connection inherits the same limit;
+            // only a new connection can change it.
+            Self::FrameSizeTooSmall => ErrorRecovery::ReconnectConnection,
         }
     }
 }
@@ -710,9 +758,10 @@ impl RecvError {
             | Self::IllegalRcvSettleModeInTransfer => ErrorRecovery::UseLink,
             Self::DeliveryIdIsNone
             | Self::DeliveryTagIsNone
+            | Self::NotAttached
             | Self::MessageSizeExceeded(_)
             | Self::InconsistentFieldInMultiFrameDelivery
-            | Self::TransactionalAcquisitionIsNotImeplemented => ErrorRecovery::NewLink,
+            | Self::TransactionalAcquisitionNotImplemented => ErrorRecovery::NewLink,
         }
     }
 }
@@ -919,6 +968,11 @@ mod tests {
         MessageDecodeError { info, source }
     }
 
+    fn message_encode_error() -> MessageEncodeError {
+        let source = serde_amqp::from_slice::<String>(&[]).unwrap_err();
+        MessageEncodeError { source }
+    }
+
     #[test]
     fn link_state_error_recovery() {
         assert_eq!(
@@ -995,8 +1049,13 @@ mod tests {
             ErrorRecovery::UseLink
         );
         assert_eq!(
-            SendError::MessageEncodeError.recovery(),
+            SendError::MessageEncodeError(message_encode_error()).recovery(),
             ErrorRecovery::UseLink
+        );
+        assert_eq!(SendError::NotAttached.recovery(), ErrorRecovery::NewLink);
+        assert_eq!(
+            SendError::FrameSizeTooSmall.recovery(),
+            ErrorRecovery::ReconnectConnection
         );
     }
 
@@ -1063,9 +1122,30 @@ mod tests {
             RecvError::InconsistentFieldInMultiFrameDelivery.recovery(),
             ErrorRecovery::NewLink
         );
+        assert_eq!(RecvError::NotAttached.recovery(), ErrorRecovery::NewLink);
         assert_eq!(
-            RecvError::TransactionalAcquisitionIsNotImeplemented.recovery(),
+            RecvError::TransactionalAcquisitionNotImplemented.recovery(),
             ErrorRecovery::NewLink
+        );
+    }
+
+    #[test]
+    fn receiver_transfer_error_mapping() {
+        assert!(matches!(
+            RecvError::from(ReceiverTransferError::NotAttached),
+            RecvError::NotAttached
+        ));
+    }
+
+    #[test]
+    fn encode_error_preserves_source() {
+        let source = serde_amqp::from_slice::<String>(&[]).unwrap_err();
+        let expected = source.to_string();
+        let error = SendError::from(source);
+        assert!(matches!(error, SendError::MessageEncodeError(_)));
+        assert_eq!(
+            error.to_string(),
+            format!("Error encoding message: {expected}")
         );
     }
 

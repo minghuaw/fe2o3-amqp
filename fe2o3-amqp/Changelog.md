@@ -71,6 +71,15 @@
     lacked their tags) are now kept on the link until they can be re-sent: a failed or aborted
     resume retries them, and a terminal close or a dropped sender fails them with
     `LinkDetached` instead of losing their settlement channels.
+14. **Breaking**: transfer failures now carry their cause instead of the catch-all `IllegalState`.
+    `SendError`, `PostError` and `ControllerSendError` gain `NotAttached` (the link endpoint has
+    no local handle) and `FrameSizeTooSmall` (the negotiated max-frame-size cannot fit the
+    serialized transfer performative, which previously underflowed the payload bound and could
+    panic or emit an oversized frame); `RecvError` gains `NotAttached` on the receiving side.
+    `MessageEncodeError` is now a struct carrying the underlying `serde_amqp::Error`, exposed by
+    the `MessageEncodeError` variants of `SendError`, `PostError` and `ControllerSendError`; and
+    the typo'd `RecvError::TransactionalAcquisitionIsNotImeplemented` is renamed to
+    `TransactionalAcquisitionNotImplemented`.
 
 ## 0.18.2
 

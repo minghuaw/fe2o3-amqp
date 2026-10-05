@@ -3,7 +3,8 @@ use fe2o3_amqp_types::messaging::{Accepted, DeliveryState, Outcome, Rejected};
 use crate::link::{
     delivery::{FromDeliveryFailure, FromDeliveryState, FromPreSettled},
     DetachError, DetachStatus, DeliveryFailure, LinkStateError,
-    MessageSizeExceeded, SendError, SenderAttachError, SessionStopReason, TransferError,
+    MessageEncodeError, MessageSizeExceeded, SendError, SenderAttachError, SessionStopReason,
+    TransferError,
 };
 
 /// Errors with allocation of new transacation ID
@@ -99,6 +100,15 @@ pub enum ControllerSendError {
     #[error("The peer detached the link: {:?}", .0)]
     LinkDetached(DetachStatus),
 
+    /// The link endpoint has no local handle, i.e. the link is not attached
+    #[error("The link is not attached")]
+    NotAttached,
+
+    /// The negotiated max frame size cannot fit even the serialized transfer
+    /// performative, so the message cannot be sent
+    #[error("The negotiated max frame size is too small for the transfer performative")]
+    FrameSizeTooSmall,
+
     /// The message was rejected
     #[error("Outcome Rejected: {:?}", .0)]
     Rejected(Rejected),
@@ -118,8 +128,8 @@ pub enum ControllerSendError {
     MessageSizeExceeded(MessageSizeExceeded),
 
     /// Error serializing message
-    #[error("Error encoding message")]
-    MessageEncodeError,
+    #[error(transparent)]
+    MessageEncodeError(#[from] MessageEncodeError),
 
     /// The peer was expected to detach immediately but another frame arrived
     #[error("Expecting the peer to immediately detach")]
@@ -131,10 +141,12 @@ impl From<SendError> for ControllerSendError {
         match value {
             SendError::LinkStateError(state) => Self::LinkStateError(state),
             SendError::LinkDetached(status) => Self::LinkDetached(status),
+            SendError::NotAttached => Self::NotAttached,
+            SendError::FrameSizeTooSmall => Self::FrameSizeTooSmall,
             SendError::NonTerminalDeliveryState => Self::NonTerminalDeliveryState,
             SendError::IllegalDeliveryState => Self::IllegalDeliveryState,
             SendError::MessageSizeExceeded(error) => Self::MessageSizeExceeded(error),
-            SendError::MessageEncodeError => Self::MessageEncodeError,
+            SendError::MessageEncodeError(error) => Self::MessageEncodeError(error),
             SendError::ExpectImmediateDetach => Self::ExpectImmediateDetach,
         }
     }
@@ -211,6 +223,15 @@ pub enum PostError {
     #[error("The peer detached the link: {:?}", .0)]
     LinkDetached(DetachStatus),
 
+    /// The link endpoint has no local handle, i.e. the link is not attached
+    #[error("The link is not attached")]
+    NotAttached,
+
+    /// The negotiated max frame size cannot fit even the serialized transfer
+    /// performative, so the message cannot be sent
+    #[error("The negotiated max frame size is too small for the transfer performative")]
+    FrameSizeTooSmall,
+
     /// A non-terminal delivery state is received while expecting
     /// an outcome
     #[error("A non-terminal delivery state is received when an outcome is expected")]
@@ -226,8 +247,8 @@ pub enum PostError {
     MessageSizeExceeded(MessageSizeExceeded),
 
     /// Error serializing message
-    #[error("Error encoding message")]
-    MessageEncodeError,
+    #[error(transparent)]
+    MessageEncodeError(#[from] MessageEncodeError),
 
     /// The peer was expected to detach immediately but another frame arrived
     #[error("Expecting the peer to immediately detach")]
@@ -235,8 +256,8 @@ pub enum PostError {
 }
 
 impl From<serde_amqp::Error> for PostError {
-    fn from(_: serde_amqp::Error) -> Self {
-        Self::MessageEncodeError
+    fn from(source: serde_amqp::Error) -> Self {
+        Self::MessageEncodeError(MessageEncodeError { source })
     }
 }
 
@@ -250,6 +271,9 @@ impl From<TransferError> for PostError {
     fn from(value: TransferError) -> Self {
         match value {
             TransferError::LinkState(error) => Self::LinkStateError(error),
+            TransferError::NotAttached => Self::NotAttached,
+            TransferError::MessageEncodeError(error) => Self::MessageEncodeError(error),
+            TransferError::FrameSizeTooSmall => Self::FrameSizeTooSmall,
             TransferError::LinkDetached(status) => Self::LinkDetached(status),
             TransferError::ExpectImmediateDetach => Self::ExpectImmediateDetach,
         }

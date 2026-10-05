@@ -142,7 +142,7 @@ where
     {
         match self.local_state {
             LinkState::Attached | LinkState::IncompleteAttachExchanged => {}
-            _ => return Err(ReceiverTransferError::IllegalState),
+            _ => return Err(ReceiverTransferError::NotAttached),
         }
 
         // ReceiverFlowState will not wait until link credit is available.
@@ -224,7 +224,7 @@ where
         let link_output_handle = self
             .output_handle
             .clone()
-            .ok_or(ReceiverTransferError::IllegalState)?
+            .ok_or(ReceiverTransferError::NotAttached)?
             .into();
 
         let delivery = Delivery {
