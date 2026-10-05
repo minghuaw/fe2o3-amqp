@@ -1091,8 +1091,13 @@ where
             LinkFrame::Attach(_) => Err(LinkStateError::IllegalState.into()),
             LinkFrame::Flow(_) | LinkFrame::Disposition(_) => {
                 // Flow and Disposition are handled by LinkRelay which runs
-                // in the session loop
-                unreachable!()
+                // in the session loop; report a defensive failure instead of
+                // panicking if one ever reaches the link stream.
+                #[cfg(feature = "tracing")]
+                tracing::error!("Unexpected Flow or Disposition frame in the receiver stream");
+                #[cfg(feature = "log")]
+                log::error!("Unexpected Flow or Disposition frame in the receiver stream");
+                Err(LinkStateError::IllegalState.into())
             }
             #[cfg(feature = "transaction")]
             LinkFrame::Acquisition(_) => {
