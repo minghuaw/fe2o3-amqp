@@ -61,10 +61,16 @@
     are empty). The loop is bounded and returns the new `SenderResumeErrorKind::IncompleteUnsettled`
     if the unsettled map never becomes complete.
 11. **Bugfix**: `close()` on a link whose detach was answered by a suspension now completes the
-    AMQP 1.0 §2.6.6 reattach-then-close handshake and returns `DetachStatus::Closed`;
-    previously the outcome was recorded and the link was left detached.
+    AMQP 1.0 §2.6.6 reattach-then-close handshake and returns `DetachStatus::Closed`; the
+    reattach carries a null `unsettled` map (§2.7.3), any deliveries the peer still considers
+    unsettled are failed with `LinkDetached(Closed)`, and previously the outcome was recorded
+    while the link was left detached.
 12. `OwnedDischargeError` routes link-state errors from closing the control link to its `DetachError`
     variant (the owned-transaction error naming/consolidation is still undecided).
+13. **Bugfix**: deliveries buffered for redelivery during resumption (the peer's unsettled map
+    lacked their tags) are now kept on the link until they can be re-sent: a failed or aborted
+    resume retries them, and a terminal close or a dropped sender fails them with
+    `LinkDetached` instead of losing their settlement channels.
 
 ## 0.18.2
 

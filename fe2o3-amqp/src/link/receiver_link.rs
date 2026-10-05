@@ -778,8 +778,9 @@ where
     async fn send_attach(
         &mut self,
         writer: &mpsc::Sender<LinkFrame>,
+        mode: AttachMode,
     ) -> Result<(), Self::AttachError> {
-        self.send_attach_inner(writer).await?;
+        self.send_attach_inner(writer, mode).await?;
         Ok(())
     }
 }
@@ -866,9 +867,10 @@ where
         &mut self,
         writer: &mpsc::Sender<LinkFrame>,
         reader: &mut mpsc::Receiver<LinkFrame>,
+        mode: AttachMode,
     ) -> Result<Self::AttachExchange, ReceiverAttachError> {
         // Send out local attach
-        self.send_attach(writer).await?;
+        self.send_attach(writer, mode).await?;
 
         // Wait for remote attach
         let remote_attach = match reader

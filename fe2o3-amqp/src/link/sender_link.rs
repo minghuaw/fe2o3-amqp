@@ -48,20 +48,43 @@ where
         transfer: Transfer,
         payload: Payload,
         delivery_tag: DeliveryTag,
-        unsettled: UnsettledMessage,
+        unsettled: &mut Option<UnsettledMessage>,
     ) -> Result<(), LinkStateError> {
         self.unsettled
             .write()
             .get_or_insert(OrderedMap::new())
-            .insert(delivery_tag.clone(), unsettled);
+            .insert(
+                delivery_tag.clone(),
+                unsettled
+                    .take()
+                    .expect("the caller supplies the unsettled message"),
+            );
         let registration = UnsettledRegistration {
             unsettled: &self.unsettled,
             delivery_tag: Some(&delivery_tag),
         };
-        self.send_transfer_without_modifying_unsettled_map(writer, transfer, payload)
-            .await?;
-        registration.keep();
-        Ok(())
+        match self
+            .send_transfer_without_modifying_unsettled_map(writer, transfer, payload)
+            .await
+        {
+            Ok(_) => {
+                registration.keep();
+                Ok(())
+            }
+            Err(error) => {
+                // Recover the message so the caller can retry it instead of
+                // losing its settlement channel. The relay may have removed
+                // and failed the entry in the meantime, in which case there is
+                // nothing left to recover.
+                *unsettled = self
+                    .unsettled
+                    .write()
+                    .as_mut()
+                    .and_then(|map| map.swap_remove(&delivery_tag));
+                registration.keep();
+                Err(error)
+            }
+        }
     }
 
     /// # Cancel safety
@@ -355,9 +378,20 @@ where
         }
 
         let (tx, rx) = oneshot::channel();
-        let unsettled = UnsettledMessage::new(payload_copy, None, message_format, tx);
-        self.send_unsettled_transfer(writer, transfer, payload, delivery_tag.clone(), unsettled)
-            .await?;
+        let mut unsettled = Some(UnsettledMessage::new(
+            payload_copy,
+            None,
+            message_format,
+            tx,
+        ));
+        self.send_unsettled_transfer(
+            writer,
+            transfer,
+            payload,
+            delivery_tag.clone(),
+            &mut unsettled,
+        )
+        .await?;
 
         Ok(Settlement::Unsettled {
             delivery_tag,
@@ -729,8 +763,9 @@ where
     async fn send_attach(
         &mut self,
         writer: &mpsc::Sender<LinkFrame>,
+        mode: AttachMode,
     ) -> Result<(), Self::AttachError> {
-        self.send_attach_inner(writer).await?;
+        self.send_attach_inner(writer, mode).await?;
         Ok(())
     }
 }
@@ -813,9 +848,10 @@ where
         &mut self,
         writer: &mpsc::Sender<LinkFrame>,
         reader: &mut mpsc::Receiver<LinkFrame>,
+        mode: AttachMode,
     ) -> Result<Self::AttachExchange, SenderAttachError> {
         // Send out local attach
-        self.send_attach(writer).await?;
+        self.send_attach(writer, mode).await?;
 
         // Wait for remote attach
         let remote_attach =
