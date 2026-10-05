@@ -264,11 +264,11 @@ impl<R> ConnectionHandle<R> {
 pub(crate) async fn deallocate_session(
     control: &mut Sender<ConnectionControl>,
     channel: OutgoingChannel,
-) -> Result<(), DeallcoSessionError> {
+) -> Result<(), DeallocateSessionError> {
     control
         .send(ConnectionControl::DeallocateSession(channel))
         .await
-        .map_err(|_| DeallcoSessionError::IllegalState)
+        .map_err(|_| DeallocateSessionError::IllegalState)
 }
 
 /// An AMQP 1.0 Connection.

@@ -42,8 +42,8 @@ pub struct ControlLinkAcceptor {
     >,
 }
 
-fn unreachable_dynamic_coordinator(_: Coordinator) -> Option<Coordinator> {
-    unreachable!()
+fn reject_dynamic_coordinator(_: Coordinator) -> Option<Coordinator> {
+    None
 }
 
 impl Default for ControlLinkAcceptor {
@@ -55,7 +55,7 @@ impl Default for ControlLinkAcceptor {
                 credit_mode: Default::default(),
                 target_capabilities: None,
                 auto_accept: false,
-                on_dynamic_target: unreachable_dynamic_coordinator,
+                on_dynamic_target: reject_dynamic_coordinator,
                 target_marker: std::marker::PhantomData,
 
                 // Should always be true for control links

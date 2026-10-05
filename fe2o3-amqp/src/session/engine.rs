@@ -442,8 +442,9 @@ where
 
             #[cfg(feature = "transaction")]
             LinkFrame::Acquisition(_) => {
-                // This is purely used to notify sender about TxnAcquisition, which is not implemented
-                unreachable!("LinkFrame::Acquisition should not appear in outgoing link frames")
+                // This is purely used to notify the sender about a txn
+                // acquisition and never belongs to the outgoing direction.
+                return Err(SessionInnerError::IllegalState);
             }
         };
 

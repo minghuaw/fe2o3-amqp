@@ -1,6 +1,6 @@
 //! Implements errors associated with the connection
 
-use std::{convert::Infallible, io};
+use std::io;
 
 use bytes::Bytes;
 use fe2o3_amqp_types::{definitions, primitives::Binary, sasl::SaslCode};
@@ -106,12 +106,6 @@ impl From<NegotiationError> for OpenError {
             #[cfg(feature = "scram")]
             NegotiationError::ScramError(e) => Self::ScramError(e),
         }
-    }
-}
-
-impl From<Infallible> for OpenError {
-    fn from(_: Infallible) -> Self {
-        unreachable!()
     }
 }
 
@@ -271,7 +265,7 @@ pub(crate) enum AllocSessionError {
     ChannelMaxReached,
 }
 
-pub(crate) enum DeallcoSessionError {
+pub(crate) enum DeallocateSessionError {
     IllegalState,
 }
 
