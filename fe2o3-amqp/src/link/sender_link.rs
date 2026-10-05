@@ -266,19 +266,14 @@ where
                         #[cfg(feature = "log")]
                         log::error!("Unexpected frame: {:?}", _frame);
 
-                        Err(TransferError::ExpectImmediateDetach)
+                        Err(TransferError::UnexpectedFrame)
                     }
                     None => {
                         // The channel closed without a frame: the session (or its
                         // connection) stopped and the engine dropped the relay.
-                        match self.session_stop_reason.get() {
-                            Some(reason) => {
-                                Err(TransferError::LinkState(
-                                    LinkStateError::SessionStopped(reason.clone()),
-                                ))
-                            }
-                            None => Err(TransferError::ExpectImmediateDetach), // defensive: no stop reason recorded; failure is link-local
-                        }
+                        Err(TransferError::LinkState(
+                            link_state_error_from_stop_reason(&self.session_stop_reason),
+                        ))
                     }
                 }
             },

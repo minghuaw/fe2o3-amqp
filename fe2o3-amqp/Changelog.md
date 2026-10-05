@@ -27,7 +27,7 @@
    removed as well.
 6. **Breaking**: `IllegalLinkStateError` is merged into `LinkStateError`, which now carries only
    `IllegalState` and `SessionStopped`; `DispositionError` and `FlowError` are aliases of it, and
-   `IllegalLinkStateError` is kept as a deprecated alias. `ExpectImmediateDetach` moved from
+   `IllegalLinkStateError` is kept as a deprecated alias. `UnexpectedFrame` moved from
    `LinkStateError` to `SendError`/`PostError`/`ControllerSendError`.
 7. **Bugfix**: link resumption now carries unsettled deliveries. The sender advertises its unsettled
    map on (re)attach and re-sends the deliveries after the link is resumed on another session or
@@ -44,7 +44,7 @@
    `SenderResumeErrorKind`/`ReceiverResumeErrorKind` gain `LinkDetached(DetachStatus)`, and
    `detach_then_resume_on_session` reports a link the peer detached closed through the existing
    `Resume` variant without attempting to resume it. `SenderAttachError`/`ReceiverAttachError`
-   no longer carry the unproduced `ExpectImmediateDetach` and once again report
+   no longer carry the unproduced `UnexpectedFrame` and once again report
    `RemoteClosedWithError` from the peer's detach reply (the `TryFrom<DetachError>` conversions
    become the infallible `From<LinkStateError>`). `PostError::Detached` and
    `ControllerSendError::Detached` are removed, and `ReceiverResumeErrorKind::DetachError` is
@@ -86,6 +86,12 @@
     (AMQP 1.0 §4.4.3) and the send fails with the new `SendError::AcquisitionNotImplemented`
     (mirrored in `PostError` and `ControllerSendError`) instead of `ExpectImmediateDetach`.
     Full support is tracked separately (#385).
+
+16. **Breaking**: the detach-race error is renamed from `ExpectImmediateDetach` to
+    `UnexpectedFrame` on `SendError`/`PostError`/`ControllerSendError`; it is produced only
+    when a frame other than the expected detach arrives while a transfer waits for link credit
+    (a protocol violation). A closed incoming channel without a recorded session stop reason now
+    reports the defensive `SessionStopped`/`IllegalState`, consistent with every other operation.
 
 ## 0.18.2
 
