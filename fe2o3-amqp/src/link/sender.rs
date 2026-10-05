@@ -41,6 +41,9 @@ use super::{
     SessionStopReason, TransferError,
 };
 
+#[cfg(feature = "transaction")]
+use super::shared_inner::TxnAcquisitionCloseExt;
+
 #[cfg(docsrs)]
 use fe2o3_amqp_types::messaging::{
     AmqpSequence, AmqpValue, Batch, Body, Data, IntoBody, Message, MESSAGE_FORMAT,
@@ -811,6 +814,7 @@ where
             AttachError = SenderAttachError,
             DetachError = DetachError,
         > + LinkExt<FlowState = SenderFlowState, Unsettled = ArcSenderUnsettledMap>
+        + LinkAttach<AttachExchange = SenderAttachExchange>
         + Send
         + Sync,
 {
@@ -898,7 +902,7 @@ where
 
         // send a transfer, checking state will be implemented in SenderLink
         let detached_fut = self.incoming.recv(); // cancel safe
-        let settlement = self
+        let settlement = match self
             .link
             .send_payload(
                 &self.outgoing,
@@ -909,7 +913,16 @@ where
                 state,
                 batchable,
             )
-            .await?;
+            .await
+        {
+            Ok(settlement) => settlement,
+            #[cfg(feature = "transaction")]
+            Err(TransferError::AcquisitionNotImplemented) => {
+                self.close_on_acquisition_not_implemented().await;
+                return Err(E::from(TransferError::AcquisitionNotImplemented));
+            }
+            Err(error) => return Err(error.into()),
+        };
         Ok(settlement)
     }
 }
@@ -1079,8 +1092,14 @@ impl SenderInner<SenderLink<Target>> {
     /// so a later resume can retry it instead of losing its settlement channel.
     async fn resend(&mut self, unsettled_message: UnsettledMessage) -> Result<(), SendError> {
         let detached_fut = self.incoming.recv();
-        let tag = match self.link.get_delivery_tag_or_detached(detached_fut).await {
+        let tag = match self.link.next_delivery_tag(detached_fut).await {
             Ok(tag) => tag,
+            #[cfg(feature = "transaction")]
+            Err(TransferError::AcquisitionNotImplemented) => {
+                self.pending_redeliveries.push(unsettled_message);
+                self.close_on_acquisition_not_implemented().await;
+                return Err(SendError::AcquisitionNotImplemented);
+            }
             Err(error) => {
                 self.pending_redeliveries.push(unsettled_message);
                 return Err(error.into());
@@ -1816,6 +1835,77 @@ mod tests {
         assert!(matches!(result, Err(TransferError::FrameSizeTooSmall)));
         // Nothing may be written to the session's outgoing channel
         assert!(outgoing_rx.try_recv().is_err());
+    }
+
+    /// The link-level wait reports an unsupported remote acquisition as such;
+    /// terminating the link is the caller's job.
+    #[cfg(feature = "transaction")]
+    #[tokio::test]
+    async fn next_delivery_tag_reports_acquisition_not_implemented() {
+        let (mut inner, _session_rx, mut outgoing_rx, incoming_tx) =
+            make_sender_inner_with_channels(4096);
+        inner.link.input_handle = Some(endpoint::InputHandle(0));
+
+        incoming_tx
+            .send(LinkFrame::Acquisition(DeliveryTag::from(vec![0x01])))
+            .await
+            .expect("the incoming end is open");
+
+        let result = inner.link.next_delivery_tag(inner.incoming.recv()).await;
+
+        assert!(matches!(
+            result,
+            Err(TransferError::AcquisitionNotImplemented)
+        ));
+        assert!(outgoing_rx.try_recv().is_err());
+    }
+
+    /// A remote-initiated transactional acquisition is not supported yet: the
+    /// sender terminates the link with a closing not-implemented detach
+    /// (AMQP 1.0 §4.4.3) and reports `SendError::AcquisitionNotImplemented`.
+    #[cfg(feature = "transaction")]
+    #[tokio::test]
+    async fn acquisition_terminates_link_with_not_implemented() {
+        let (mut inner, _session_rx, mut outgoing_rx, incoming_tx) =
+            make_sender_inner_with_channels(4096);
+        inner.link.input_handle = Some(endpoint::InputHandle(0));
+
+        incoming_tx
+            .send(LinkFrame::Acquisition(DeliveryTag::from(vec![0x01])))
+            .await
+            .expect("the incoming end is open");
+
+        let (result, ()) = tokio::join!(
+            inner.send_payload::<SendError>(Payload::from_static(b"m"), 0, None, None, false,),
+            async {
+                match outgoing_rx.recv().await.expect("expected a closing detach") {
+                    LinkFrame::Detach(detach) => {
+                        assert!(detach.closed, "the link must be terminated");
+                        let error = detach
+                            .error
+                            .as_ref()
+                            .expect("the detach must carry the error");
+                        assert_eq!(
+                            error.condition,
+                            fe2o3_amqp_types::definitions::AmqpError::NotImplemented.into()
+                        );
+                    }
+                    other => panic!("expected Detach, got {other:?}"),
+                }
+
+                // Answer the closing detach to complete the close handshake.
+                incoming_tx
+                    .send(LinkFrame::Detach(Detach {
+                        handle: fe2o3_amqp_types::definitions::Handle(0),
+                        closed: true,
+                        error: None,
+                    }))
+                    .await
+                    .expect("the incoming end is open");
+            }
+        );
+
+        assert!(matches!(result, Err(SendError::AcquisitionNotImplemented)));
     }
 
     /// A channel to the session with no room left, so a hand-over stays pending until the

@@ -117,11 +117,36 @@ where
 
     /// Close the link.
     ///
-    /// This will send a Detach performative with the `closed` field set to true.
+    /// This will send a `Detach` performative with the `closed` field set to true.
     async fn close_with_error(
         &mut self,
         error: Option<definitions::Error>,
     ) -> Result<DetachStatus, <Self::Link as LinkDetach>::DetachError>;
+}
+
+/// Link endpoints that must terminate the link when a remote-initiated
+/// transactional acquisition arrives, since it is not supported.
+#[cfg(feature = "transaction")]
+pub(crate) trait TxnAcquisitionCloseExt: LinkEndpointInnerDetach {
+    /// Best-effort terminate the link with `amqp:not-implemented` because a
+    /// remote-initiated transactional acquisition is not supported
+    /// (AMQP 1.0 §4.4.3). The caller reports the acquisition error.
+    async fn close_on_acquisition_not_implemented(&mut self);
+}
+
+#[cfg(feature = "transaction")]
+impl<T> TxnAcquisitionCloseExt for T
+where
+    T: LinkEndpointInnerDetach,
+{
+    async fn close_on_acquisition_not_implemented(&mut self) {
+        let error = definitions::Error::new(
+            definitions::AmqpError::NotImplemented,
+            "Transactional acquisition is not implemented".to_string(),
+            None,
+        );
+        let _ = self.close_with_error(Some(error)).await;
+    }
 }
 
 impl<T> LinkEndpointInnerDetach for T

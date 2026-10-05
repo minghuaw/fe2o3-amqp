@@ -41,9 +41,8 @@ use super::{
     SessionStopReason, DEFAULT_CREDIT,
 };
 
-cfg_transaction! {
-    use fe2o3_amqp_types::definitions::AmqpError;
-}
+#[cfg(feature = "transaction")]
+use super::shared_inner::TxnAcquisitionCloseExt;
 
 #[cfg(docsrs)]
 use fe2o3_amqp_types::{
@@ -1105,15 +1104,11 @@ where
             }
             #[cfg(feature = "transaction")]
             LinkFrame::Acquisition(_) => {
-                let error = definitions::Error::new(
-                    AmqpError::NotImplemented,
-                    "Transactional acquisition is not implemented".to_string(),
-                    None,
-                );
-                // Best-effort close; the acquisition error below is what the
-                // caller sees.
-                let _ = self.close_with_error(Some(error)).await;
-                Err(RecvError::TransactionalAcquisitionNotImplemented)
+                // A receiver is never expected to receive an acquisition, but
+                // if one arrives the link is terminated with
+                // `amqp:not-implemented` (AMQP 1.0 §4.4.3).
+                self.close_on_acquisition_not_implemented().await;
+                Err(RecvError::AcquisitionNotImplemented)
             }
         }
     }
@@ -2344,6 +2339,32 @@ mod tests {
         });
 
         result.expect_err("a malformed delivery must fail")
+    }
+
+    /// A remote-initiated transactional acquisition is never expected on a
+    /// receiver, but if one arrives the link is terminated with
+    /// `amqp:not-implemented` (AMQP 1.0 §4.4.3) and
+    /// `RecvError::AcquisitionNotImplemented` is reported.
+    #[cfg(feature = "transaction")]
+    #[tokio::test]
+    async fn acquisition_terminates_link_with_not_implemented() {
+        let (mut inner, _session_rx, mut outgoing_rx, incoming_tx) =
+            make_receiver_inner_with_channels(4096);
+
+        incoming_tx
+            .send(LinkFrame::Acquisition(DeliveryTag::from(vec![0x01])))
+            .await
+            .expect("the incoming end is open");
+
+        let error = recv_expecting_fatal_close(
+            &mut inner,
+            &mut outgoing_rx,
+            &incoming_tx,
+            definitions::AmqpError::NotImplemented.into(),
+        )
+        .await;
+
+        assert!(matches!(error, RecvError::AcquisitionNotImplemented));
     }
 
     /// The minimal `Attach` a sender peer sends for this receiver link: it

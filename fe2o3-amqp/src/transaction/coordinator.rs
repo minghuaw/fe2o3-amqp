@@ -235,7 +235,7 @@ impl TxnCoordinator {
             | RecvError::IllegalRcvSettleModeInTransfer
             | RecvError::InconsistentFieldInMultiFrameDelivery
             | RecvError::MessageSizeExceeded(_)
-            | RecvError::TransactionalAcquisitionNotImplemented => {
+            | RecvError::AcquisitionNotImplemented => {
                 #[cfg(feature = "tracing")]
                 tracing::error!(?error);
                 #[cfg(feature = "log")]

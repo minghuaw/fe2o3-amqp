@@ -109,6 +109,11 @@ pub enum ControllerSendError {
     #[error("The negotiated max frame size is too small for the transfer performative")]
     FrameSizeTooSmall,
 
+    /// The peer requested a transactional acquisition, which is not
+    /// implemented
+    #[error("Transactional acquisition is not implemented")]
+    AcquisitionNotImplemented,
+
     /// The message was rejected
     #[error("Outcome Rejected: {:?}", .0)]
     Rejected(Rejected),
@@ -143,6 +148,7 @@ impl From<SendError> for ControllerSendError {
             SendError::LinkDetached(status) => Self::LinkDetached(status),
             SendError::NotAttached => Self::NotAttached,
             SendError::FrameSizeTooSmall => Self::FrameSizeTooSmall,
+            SendError::AcquisitionNotImplemented => Self::AcquisitionNotImplemented,
             SendError::NonTerminalDeliveryState => Self::NonTerminalDeliveryState,
             SendError::IllegalDeliveryState => Self::IllegalDeliveryState,
             SendError::MessageSizeExceeded(error) => Self::MessageSizeExceeded(error),
@@ -232,6 +238,11 @@ pub enum PostError {
     #[error("The negotiated max frame size is too small for the transfer performative")]
     FrameSizeTooSmall,
 
+    /// The peer requested a transactional acquisition, which is not
+    /// implemented
+    #[error("Transactional acquisition is not implemented")]
+    AcquisitionNotImplemented,
+
     /// A non-terminal delivery state is received while expecting
     /// an outcome
     #[error("A non-terminal delivery state is received when an outcome is expected")]
@@ -274,6 +285,7 @@ impl From<TransferError> for PostError {
             TransferError::NotAttached => Self::NotAttached,
             TransferError::MessageEncodeError(error) => Self::MessageEncodeError(error),
             TransferError::FrameSizeTooSmall => Self::FrameSizeTooSmall,
+            TransferError::AcquisitionNotImplemented => Self::AcquisitionNotImplemented,
             TransferError::LinkDetached(status) => Self::LinkDetached(status),
             TransferError::ExpectImmediateDetach => Self::ExpectImmediateDetach,
         }
