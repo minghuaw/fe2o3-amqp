@@ -362,6 +362,11 @@ pub enum SenderAttachError {
     /// Remote peer closed the link with an error
     #[error("Remote peer closed with error {:?}", .0)]
     RemoteClosedWithError(definitions::Error),
+
+    /// The peer's attach reply carried an unsettled map during a
+    /// client-initiated attach
+    #[error("The peer's attach response carried an unsettled map")]
+    UnexpectedUnsettledMap,
 }
 
 /// The encoded message is larger than the maximum message size negotiated on
@@ -565,6 +570,11 @@ pub enum ReceiverAttachError {
     /// The desired filter(s) on the receiver is not supported by the remote peer
     #[error("{:?}", .0)]
     DesiredFilterNotSupported(#[from] DesiredFilterNotSupported),
+
+    /// The peer's attach reply carried an unsettled map during a
+    /// client-initiated attach
+    #[error("The peer's attach response carried an unsettled map")]
+    UnexpectedUnsettledMap,
 }
 
 impl From<AllocLinkError> for ReceiverAttachError {
@@ -597,6 +607,7 @@ impl<'a> TryFrom<&'a ReceiverAttachError> for definitions::Error {
             ReceiverAttachError::DynamicNodePropertiesIsSomeWhenDynamicIsFalse => {
                 AmqpError::InvalidField.into()
             }
+            ReceiverAttachError::UnexpectedUnsettledMap => AmqpError::IllegalState.into(),
             _ => return Err(value),
         };
 
@@ -633,6 +644,7 @@ impl<'a> TryFrom<&'a SenderAttachError> for definitions::Error {
             SenderAttachError::SourceAddressIsSomeWhenDynamicIsTrue => {
                 AmqpError::InvalidField.into()
             }
+            SenderAttachError::UnexpectedUnsettledMap => AmqpError::IllegalState.into(),
 
             #[cfg(feature = "transaction")]
             SenderAttachError::DesireTxnCapabilitiesNotSupported => return Err(value),

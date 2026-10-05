@@ -1,5 +1,5 @@
 use fe2o3_amqp_types::{
-    definitions::MessageFormat,
+    definitions::{DeliveryTag, MessageFormat},
     messaging::{DeliveryState, Received},
 };
 use tokio::sync::oneshot;
@@ -41,6 +41,31 @@ pub(crate) enum ResumingDelivery {
         message_format: MessageFormat,
         sender: oneshot::Sender<Result<Option<DeliveryState>, DeliveryFailure>>,
     },
+}
+
+/// Fail the deliveries carried by a map-carrying attach exchange without
+/// resuming them: when the exchange cannot be completed (a close handshake or
+/// a protocol-violating reply), the outstanding deliveries are failed with
+/// `failure` instead of being resumed.
+pub(crate) fn fail_resuming_deliveries(
+    resuming_deliveries: Vec<(DeliveryTag, ResumingDelivery)>,
+    failure: DeliveryFailure,
+) {
+    for (_, resuming) in resuming_deliveries {
+        match resuming {
+            ResumingDelivery::Abort { sender, .. } => {
+                if let Some(sender) = sender {
+                    let _ = sender.send(Err(failure.clone()));
+                }
+            }
+            ResumingDelivery::Resend(message) | ResumingDelivery::Resume(message) => {
+                let _ = message.fail(failure.clone());
+            }
+            ResumingDelivery::RestateOutcome { sender, .. } => {
+                let _ = sender.send(Err(failure.clone()));
+            }
+        }
+    }
 }
 
 pub(crate) fn resume_delivery(

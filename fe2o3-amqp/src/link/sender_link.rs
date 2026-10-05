@@ -896,6 +896,7 @@ where
             | SenderAttachError::SessionNotMapped
             | SenderAttachError::IllegalState
             | SenderAttachError::NonAttachFrameReceived
+            | SenderAttachError::UnexpectedUnsettledMap
             | SenderAttachError::RemoteClosedWithError(_) => attach_error,
 
             SenderAttachError::DuplicatedLinkName => {

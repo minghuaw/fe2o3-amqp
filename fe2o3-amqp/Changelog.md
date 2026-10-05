@@ -93,6 +93,11 @@
     (a protocol violation). A closed incoming channel without a recorded session stop reason now
     reports the defensive `SessionStopped`/`IllegalState`, consistent with every other operation.
 
+17. **Breaking**: `SenderAttachError` and `ReceiverAttachError` gain `UnexpectedUnsettledMap`:
+    a client-initiated attach whose peer reply carries an unsettled map now reports it instead
+    of `IllegalState`, and the sender fails the deliveries pending resumption with
+    `DeliveryFailure::LinkState(IllegalState)` instead of dropping their settlement channels.
+
 ## 0.18.2
 
 **Bugfix**: an unsettled delivery is now registered before its transfer reaches the session, preventing `send` from hanging when the peer settles immediately.

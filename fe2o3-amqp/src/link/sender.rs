@@ -30,7 +30,7 @@ use super::{
     builder::{self, WithSource, WithoutName, WithoutTarget},
     delivery::{DeliveryFut, Sendable, UnsettledMessage},
     error::DetachError,
-    resumption::ResumingDelivery,
+    resumption::{fail_resuming_deliveries, ResumingDelivery},
     role,
     shared_inner::{
         recv_remote_detach, LinkEndpointInner, LinkEndpointInnerDetach, LinkEndpointInnerReattach,
@@ -740,31 +740,6 @@ where
         error: Option<definitions::Error>,
     ) -> Result<(), <Self::Link as LinkDetach>::DetachError> {
         self.link.send_detach(&self.outgoing, closed, error).await
-    }
-}
-
-/// Fail the deliveries carried by a map-carrying attach exchange without
-/// resuming them: the reattach is completing a close (AMQP 1.0 §2.6.6), not
-/// resuming the link, so the outstanding deliveries are failed with the close
-/// outcome instead of being resumed.
-fn fail_resuming_deliveries(
-    resuming_deliveries: Vec<(DeliveryTag, ResumingDelivery)>,
-    failure: DeliveryFailure,
-) {
-    for (_, resuming) in resuming_deliveries {
-        match resuming {
-            ResumingDelivery::Abort { sender, .. } => {
-                if let Some(sender) = sender {
-                    let _ = sender.send(Err(failure.clone()));
-                }
-            }
-            ResumingDelivery::Resend(message) | ResumingDelivery::Resume(message) => {
-                let _ = message.fail(failure.clone());
-            }
-            ResumingDelivery::RestateOutcome { sender, .. } => {
-                let _ = sender.send(Err(failure.clone()));
-            }
-        }
     }
 }
 
@@ -1850,6 +1825,50 @@ mod tests {
             result,
             Err(TransferError::LinkState(LinkStateError::IllegalState))
         ));
+    }
+
+    /// A non-complete attach exchange fails its pending deliveries instead of
+    /// dropping their settlement channels.
+    #[tokio::test]
+    async fn incomplete_attach_exchange_fails_resuming_deliveries() {
+        let (tx, mut rx) = oneshot::channel();
+        let exchange = SenderAttachExchange::IncompleteUnsettled(vec![(
+            DeliveryTag::from(vec![0x01]),
+            ResumingDelivery::Abort {
+                message_format: 0,
+                sender: Some(tx),
+            },
+        )]);
+
+        let result = exchange.complete_or_fail_deliveries(
+            DeliveryFailure::LinkState(LinkStateError::IllegalState),
+            SenderAttachError::UnexpectedUnsettledMap,
+        );
+
+        assert!(matches!(
+            result,
+            Err(SenderAttachError::UnexpectedUnsettledMap)
+        ));
+        assert!(matches!(
+            rx.try_recv(),
+            Ok(Err(DeliveryFailure::LinkState(
+                LinkStateError::IllegalState
+            )))
+        ));
+    }
+
+    /// A complete attach exchange reports success and leaves the deliveries
+    /// untouched.
+    #[tokio::test]
+    async fn complete_attach_exchange_succeeds() {
+        let exchange = SenderAttachExchange::Complete;
+
+        let result = exchange.complete_or_fail_deliveries(
+            DeliveryFailure::LinkState(LinkStateError::IllegalState),
+            SenderAttachError::UnexpectedUnsettledMap,
+        );
+
+        assert!(result.is_ok());
     }
 
     /// The link-level wait reports an unsupported remote acquisition as such;
