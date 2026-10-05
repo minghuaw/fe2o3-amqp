@@ -214,7 +214,17 @@ where
         Ok(settled)
     }
 
-    pub(crate) async fn get_delivery_tag_or_detached<Fut>(
+    /// Wait for the next delivery tag, consuming one unit of link credit, or
+    /// fail if the link is detaching or stopping at the same time.
+    ///
+    /// The incoming frame is polled before the credit so a remote detach that
+    /// has already arrived is observed before credit is consumed; otherwise a
+    /// send could race the remote closing the link, consuming credit and
+    /// writing a transfer the relay can no longer forward. The failure is the
+    /// peer's detach/close outcome, an unsupported remote-initiated
+    /// acquisition, the session stop reason, or a defensive unexpected-frame
+    /// error.
+    pub(crate) async fn next_delivery_tag<Fut>(
         &mut self,
         detached: Fut,
     ) -> Result<[u8; 4], TransferError>
@@ -242,6 +252,13 @@ where
                             Err(err) => Err(TransferError::LinkState(err.into())),
                         }
                     },
+                    // A remote-initiated transactional acquisition is not
+                    // supported yet; the caller terminates the link with
+                    // `amqp:not-implemented` (AMQP 1.0 §4.4.3).
+                    #[cfg(feature = "transaction")]
+                    Some(LinkFrame::Acquisition(_)) => {
+                        Err(TransferError::AcquisitionNotImplemented)
+                    }
                     Some(_frame) => {
                         // Other frames should not forwarded to the sender by the session
                         #[cfg(feature = "tracing")]
@@ -349,7 +366,7 @@ where
     where
         Fut: Future<Output = Option<LinkFrame>> + Send,
     {
-        let tag = self.get_delivery_tag_or_detached(detached).await?;
+        let tag = self.next_delivery_tag(detached).await?;
         // Delivery count is incremented when consuming credit
         let delivery_tag = DeliveryTag::from(tag);
 

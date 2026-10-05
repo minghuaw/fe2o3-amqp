@@ -79,7 +79,13 @@
     `MessageEncodeError` is now a struct carrying the underlying `serde_amqp::Error`, exposed by
     the `MessageEncodeError` variants of `SendError`, `PostError` and `ControllerSendError`; and
     the typo'd `RecvError::TransactionalAcquisitionIsNotImeplemented` is renamed to
-    `TransactionalAcquisitionNotImplemented`.
+    `AcquisitionNotImplemented`.
+
+15. **Breaking**: a remote-initiated transactional acquisition on a sender link is not
+    supported yet; the link is terminated with an `amqp:not-implemented` detach
+    (AMQP 1.0 §4.4.3) and the send fails with the new `SendError::AcquisitionNotImplemented`
+    (mirrored in `PostError` and `ControllerSendError`) instead of `ExpectImmediateDetach`.
+    Full support is tracked separately (#385).
 
 ## 0.18.2
 
