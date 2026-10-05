@@ -121,6 +121,25 @@ pub(crate) enum SenderAttachExchange {
     Resume(Vec<(DeliveryTag, ResumingDelivery)>),
 }
 
+/// Whether an outgoing `Attach` continues an existing link (resume) or
+/// re-creates it (reattach).
+///
+/// The two are distinguished on the wire by the `unsettled` field:
+///
+/// - [`AttachMode::Resume`] advertises the unsettled map (a non-null, possibly
+///   empty map), so the peer can reconcile outstanding deliveries (AMQP 1.0
+///   §2.6.3/§2.6.13).
+/// - [`AttachMode::Reattach`] forces `unsettled` to be null; per §2.7.3 a
+///   genuine reattach, such as the one completing the §2.6.6 crossed close,
+///   MUST NOT carry an unsettled map.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum AttachMode {
+    /// Continue an existing (suspended) link; advertise the unsettled map.
+    Resume,
+    /// Re-create the link; send a null unsettled map.
+    Reattach,
+}
+
 impl std::fmt::Debug for SenderAttachExchange {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
@@ -336,6 +355,7 @@ where
     pub(crate) async fn send_attach_inner(
         &mut self,
         writer: &mpsc::Sender<LinkFrame>,
+        mode: AttachMode,
     ) -> Result<(), SendAttachErrorKind> {
         // Create Attach frame
         let handle = match &self.output_handle {
@@ -343,12 +363,15 @@ where
             None => return Err(SendAttachErrorKind::IllegalState),
         };
 
-        // A link that was previously attached is being resumed; its attach
-        // must carry a non-null unsettled map even when nothing is unsettled.
-        let is_resuming = matches!(
-            self.local_state,
-            LinkState::Detached | LinkState::DetachSent
-        );
+        // A resuming attach carries a non-null unsettled map, including an
+        // empty-but-present map when nothing is unsettled. A reattach, such as
+        // the one completing the AMQP 1.0 §2.6.6 crossed close, MUST carry a
+        // null `unsettled` field (§2.7.3).
+        let is_resuming = matches!(mode, AttachMode::Resume)
+            && matches!(
+                self.local_state,
+                LinkState::Detached | LinkState::DetachSent
+            );
 
         // Advertise the unsettled map on (re)attach so the peer can reconcile
         // outstanding deliveries; resumption re-sends them.
@@ -357,7 +380,7 @@ where
             guard.as_ref().map(|m| m.len())
         };
 
-        let attach = match unsettled_map_len {
+        let mut attach = match unsettled_map_len {
             Some(0) | None => self.as_complete_attach(handle, is_resuming),
             Some(_) => {
                 // The connection engine publishes the negotiated encoder max
@@ -367,6 +390,10 @@ where
                 self.as_maybe_incomplete_attach(self.max_frame_size, handle, is_resuming)?
             }
         };
+        if matches!(mode, AttachMode::Reattach) {
+            attach.unsettled = None;
+            attach.incomplete_unsettled = false;
+        }
         let incomplete_unsettled = attach.incomplete_unsettled;
         let frame = LinkFrame::Attach(attach);
 
