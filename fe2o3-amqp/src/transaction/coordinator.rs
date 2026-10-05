@@ -209,6 +209,16 @@ impl TxnCoordinator {
                 }
                 Running::Stop
             }
+            RecvError::NotAttached => {
+                #[cfg(feature = "tracing")]
+                tracing::error!(?error);
+                #[cfg(feature = "log")]
+                log::error!("error = {:?}", error);
+                let error = definitions::Error::new(AmqpError::IllegalState, None, None);
+                // TODO: detach instead of closing
+                let _ = self.inner.close_with_error(Some(error)).await;
+                Running::Stop
+            }
             RecvError::TransferLimitExceeded => {
                 #[cfg(feature = "tracing")]
                 tracing::error!(?error);
@@ -225,7 +235,7 @@ impl TxnCoordinator {
             | RecvError::IllegalRcvSettleModeInTransfer
             | RecvError::InconsistentFieldInMultiFrameDelivery
             | RecvError::MessageSizeExceeded(_)
-            | RecvError::TransactionalAcquisitionIsNotImeplemented => {
+            | RecvError::TransactionalAcquisitionNotImplemented => {
                 #[cfg(feature = "tracing")]
                 tracing::error!(?error);
                 #[cfg(feature = "log")]
