@@ -41,6 +41,8 @@ use super::{
     SessionStopReason, TransferError,
 };
 
+use super::link_state_error_from_stop_reason;
+
 #[cfg(feature = "transaction")]
 use super::shared_inner::TxnAcquisitionCloseExt;
 
@@ -635,12 +637,9 @@ where
                 if detach_sent {
                     None
                 } else {
-                    match self.link.session_stop_reason().get() {
-                        Some(reason) => Some(DeliveryFailure::LinkState(
-                            LinkStateError::SessionStopped(reason.clone()),
-                        )),
-                        None => Some(DeliveryFailure::LinkState(LinkStateError::IllegalState)), // defensive: no stop reason recorded; failure is link-local
-                    }
+                    Some(DeliveryFailure::LinkState(
+                        link_state_error_from_stop_reason(self.link.session_stop_reason()),
+                    ))
                 }
             });
         if let Some(failure) = failure {

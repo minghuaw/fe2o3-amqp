@@ -41,6 +41,8 @@ use super::{
     SessionStopReason, DEFAULT_CREDIT,
 };
 
+use super::link_state_error_from_stop_reason;
+
 #[cfg(feature = "transaction")]
 use super::shared_inner::TxnAcquisitionCloseExt;
 
@@ -728,10 +730,7 @@ impl ReceiverDisposer {
             self.outgoing
                 .send(LinkFrame::Disposition(disposition))
                 .await
-                .map_err(|_| match self.session_stop_reason.get() {
-                    Some(reason) => DispositionError::SessionStopped(reason.clone()),
-                    None => DispositionError::IllegalState, // defensive: no stop reason recorded; failure is link-local
-                })?;
+                .map_err(|_| link_state_error_from_stop_reason(&self.session_stop_reason))?;
         }
 
         let prev = self.processed.fetch_add(1, Ordering::Release);
@@ -765,10 +764,7 @@ impl ReceiverDisposer {
                 self.outgoing
                     .send(LinkFrame::Flow(flow))
                     .await
-                    .map_err(|_| match self.session_stop_reason.get() {
-                        Some(reason) => DispositionError::SessionStopped(reason.clone()),
-                        None => DispositionError::IllegalState, // defensive: no stop reason recorded; failure is link-local
-                    })?;
+                    .map_err(|_| link_state_error_from_stop_reason(&self.session_stop_reason))?;
             }
         }
         Ok(())
@@ -1072,13 +1068,9 @@ where
             // cancel safe
             Some(frame) => frame,
             None => {
-                return Err(match self.link().session_stop_reason().get() {
-                    Some(reason) => {
-                        RecvError::LinkStateError(LinkStateError::SessionStopped(reason.clone()))
-                    }
-                    // defensive: no stop reason recorded; failure is link-local
-                    None => RecvError::LinkStateError(LinkStateError::IllegalState),
-                });
+                return Err(RecvError::from(link_state_error_from_stop_reason(
+                    self.link().session_stop_reason(),
+                )));
             }
         };
 
