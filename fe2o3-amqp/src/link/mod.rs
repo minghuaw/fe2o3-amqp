@@ -402,10 +402,7 @@ where
             | LinkState::Detached // May attempt to resume
             | LinkState::DetachSent => {
                 writer.send(frame).await // cancel safe
-                    .map_err(|_| match self.session_stop_reason.get() {
-                        Some(reason) => SendAttachErrorKind::SessionStopped(reason.clone()),
-                        None => SendAttachErrorKind::IllegalState, // defensive: no stop reason recorded; failure is link-local
-                    })?;
+                    .map_err(|_| link_state_error_from_stop_reason(&self.session_stop_reason))?;
                 if incomplete_unsettled {
                     self.local_state = LinkState::IncompleteAttachSent
                 } else {
@@ -414,10 +411,7 @@ where
             }
             LinkState::AttachReceived => {
                 writer.send(frame).await // cancel safe
-                    .map_err(|_| match self.session_stop_reason.get() {
-                        Some(reason) => SendAttachErrorKind::SessionStopped(reason.clone()),
-                        None => SendAttachErrorKind::IllegalState, // defensive: no stop reason recorded; failure is link-local
-                    })?;
+                    .map_err(|_| link_state_error_from_stop_reason(&self.session_stop_reason))?;
                 if incomplete_unsettled {
                     self.local_state = LinkState::IncompleteAttachExchanged
                 } else {
@@ -521,10 +515,7 @@ where
                 let result = writer
                     .send(LinkFrame::Detach(detach))
                     .await // cancel safe
-                    .map_err(|_| match self.session_stop_reason.get() {
-                        Some(reason) => DetachError::SessionStopped(reason.clone()),
-                        None => DetachError::IllegalState, // defensive: no stop reason recorded; failure is link-local
-                    });
+                    .map_err(|_| detach_error_from_stop_reason(&self.session_stop_reason));
 
                 self.output_handle.take();
                 result

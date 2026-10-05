@@ -1,3 +1,5 @@
+use std::sync::OnceLock;
+
 use fe2o3_amqp_types::definitions::{self, AmqpError, ErrorCondition, SessionError};
 use serde_amqp::primitives::Symbol;
 
@@ -36,6 +38,73 @@ fn session_stop_recovery(reason: &SessionStopReason) -> ErrorRecovery {
     match reason {
         SessionStopReason::ConnectionStopped(_) => ErrorRecovery::ReconnectConnection,
         _ => ErrorRecovery::ReconnectSession,
+    }
+}
+
+/// Warn that an operation failed after the session's relay was dropped without
+/// a recorded stop reason; the failure is link-local in that case.
+fn warn_unrecorded_stop_reason() {
+    #[cfg(feature = "tracing")]
+    tracing::warn!("session stop reason not recorded; reporting a link-local failure");
+    #[cfg(feature = "log")]
+    log::warn!("session stop reason not recorded; reporting a link-local failure");
+}
+
+/// The [`LinkStateError`] for an operation that failed because the session (or
+/// its connection) stopped; [`LinkStateError::IllegalState`] when no stop
+/// reason was recorded (defensive).
+pub(crate) fn link_state_error_from_stop_reason(
+    cell: &OnceLock<SessionStopReason>,
+) -> LinkStateError {
+    match cell.get() {
+        Some(reason) => LinkStateError::SessionStopped(reason.clone()),
+        None => {
+            warn_unrecorded_stop_reason();
+            LinkStateError::IllegalState
+        }
+    }
+}
+
+/// The [`DetachError`] for an operation that failed because the session (or
+/// its connection) stopped; [`DetachError::IllegalState`] when no stop reason
+/// was recorded (defensive).
+pub(crate) fn detach_error_from_stop_reason(cell: &OnceLock<SessionStopReason>) -> DetachError {
+    match cell.get() {
+        Some(reason) => DetachError::SessionStopped(reason.clone()),
+        None => {
+            warn_unrecorded_stop_reason();
+            DetachError::IllegalState
+        }
+    }
+}
+
+/// The [`SenderAttachError`] for an attach that failed because the session (or
+/// its connection) stopped; [`SenderAttachError::IllegalState`] when no stop
+/// reason was recorded (defensive).
+pub(crate) fn sender_attach_error_from_stop_reason(
+    cell: &OnceLock<SessionStopReason>,
+) -> SenderAttachError {
+    match cell.get() {
+        Some(reason) => SenderAttachError::SessionStopped(reason.clone()),
+        None => {
+            warn_unrecorded_stop_reason();
+            SenderAttachError::IllegalState
+        }
+    }
+}
+
+/// The [`ReceiverAttachError`] for an attach that failed because the session
+/// (or its connection) stopped; [`ReceiverAttachError::IllegalState`] when no
+/// stop reason was recorded (defensive).
+pub(crate) fn receiver_attach_error_from_stop_reason(
+    cell: &OnceLock<SessionStopReason>,
+) -> ReceiverAttachError {
+    match cell.get() {
+        Some(reason) => ReceiverAttachError::SessionStopped(reason.clone()),
+        None => {
+            warn_unrecorded_stop_reason();
+            ReceiverAttachError::IllegalState
+        }
     }
 }
 

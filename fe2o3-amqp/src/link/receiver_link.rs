@@ -60,10 +60,7 @@ where
         writer
             .send(LinkFrame::Flow(flow))
             .await // cancel safe
-            .map_err(|_| match self.session_stop_reason.get() {
-                Some(reason) => Self::FlowError::SessionStopped(reason.clone()),
-                None => Self::FlowError::IllegalState, // defensive: no stop reason recorded; failure is link-local
-            })
+            .map_err(|_| link_state_error_from_stop_reason(&self.session_stop_reason))
     }
 
     fn on_transfer_state(
@@ -297,10 +294,7 @@ where
             writer
                 .send(frame)
                 .await // cancel safe
-                .map_err(|_| match self.session_stop_reason.get() {
-                    Some(reason) => Self::DispositionError::SessionStopped(reason.clone()),
-                    None => Self::DispositionError::IllegalState, // defensive: no stop reason recorded; failure is link-local
-                })?;
+                .map_err(|_| link_state_error_from_stop_reason(&self.session_stop_reason))?;
         }
 
         Ok(())
@@ -428,10 +422,7 @@ impl ReceiverLink<Target> {
             let flow = self.get_link_flow(handle, link_credit, drain, echo, include_properties);
             writer
                 .blocking_send(LinkFrame::Flow(flow))
-                .map_err(|_| match self.session_stop_reason.get() {
-                    Some(reason) => FlowError::SessionStopped(reason.clone()),
-                    None => FlowError::IllegalState, // defensive: no stop reason recorded; failure is link-local
-                })
+                .map_err(|_| link_state_error_from_stop_reason(&self.session_stop_reason))
         }
     }
 }
@@ -535,10 +526,7 @@ impl<T> ReceiverLink<T> {
         writer
             .send(frame)
             .await // cancel safe
-            .map_err(|_| match self.session_stop_reason.get() {
-                Some(reason) => DispositionError::SessionStopped(reason.clone()),
-                None => DispositionError::IllegalState, // defensive: no stop reason recorded; failure is link-local
-            })
+            .map_err(|_| link_state_error_from_stop_reason(&self.session_stop_reason))
     }
 
     fn get_link_flow(
@@ -876,10 +864,8 @@ where
         let remote_attach = match reader
             .recv()
             .await // cancel safe
-            .ok_or_else(|| match self.session_stop_reason.get() {
-                Some(reason) => ReceiverAttachError::SessionStopped(reason.clone()),
-                None => ReceiverAttachError::IllegalState, // defensive: no stop reason recorded; failure is link-local
-            })? {
+            .ok_or_else(|| receiver_attach_error_from_stop_reason(&self.session_stop_reason))?
+        {
             LinkFrame::Attach(attach) => attach,
             _ => return Err(ReceiverAttachError::NonAttachFrameReceived),
         };
@@ -911,10 +897,9 @@ where
                     .send(SessionControl::End(Some(error)))
                     .await
                     .map(|_| attach_error)
-                    .unwrap_or(match self.session_stop_reason.get() {
-                        Some(reason) => ReceiverAttachError::SessionStopped(reason.clone()),
-                        None => ReceiverAttachError::IllegalState, // defensive: no stop reason recorded; failure is link-local
-                    })
+                    .unwrap_or(receiver_attach_error_from_stop_reason(
+                        &self.session_stop_reason,
+                    ))
             }
 
             // ReceiverAttachError::SndSettleModeNotSupported
@@ -924,10 +909,9 @@ where
                     .send_detach(writer, true, None)
                     .await
                     .map(|_| attach_error)
-                    .unwrap_or(match self.session_stop_reason.get() {
-                        Some(reason) => ReceiverAttachError::SessionStopped(reason.clone()),
-                        None => ReceiverAttachError::IllegalState, // defensive: no stop reason recorded; failure is link-local
-                    });
+                    .unwrap_or(receiver_attach_error_from_stop_reason(
+                        &self.session_stop_reason,
+                    ));
                 recv_detach(self, reader, err).await
             }
 
@@ -939,10 +923,7 @@ where
                 match (&attach_error).try_into() {
                     Ok(error) => match self.send_detach(writer, true, Some(error)).await {
                         Ok(_) => recv_detach(self, reader, attach_error).await,
-                        Err(_) => match self.session_stop_reason.get() {
-                            Some(reason) => ReceiverAttachError::SessionStopped(reason.clone()),
-                            None => ReceiverAttachError::IllegalState, // defensive: no stop reason recorded; failure is link-local
-                        },
+                        Err(_) => receiver_attach_error_from_stop_reason(&self.session_stop_reason),
                     },
                     Err(_) => attach_error,
                 }
@@ -974,10 +955,7 @@ where
             Err(detach_error) => ReceiverAttachError::from(detach_error),
         },
         Some(_) => ReceiverAttachError::NonAttachFrameReceived,
-        None => match link.session_stop_reason.get() {
-            Some(reason) => ReceiverAttachError::SessionStopped(reason.clone()),
-            None => ReceiverAttachError::IllegalState, // defensive: no stop reason recorded; failure is link-local
-        },
+        None => receiver_attach_error_from_stop_reason(&link.session_stop_reason),
     }
 }
 
