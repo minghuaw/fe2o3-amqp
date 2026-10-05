@@ -170,6 +170,12 @@ pub(crate) enum TransferError {
     #[error("The negotiated max frame size is too small for the transfer performative")]
     FrameSizeTooSmall,
 
+    /// The peer requested a transactional acquisition, which is not
+    /// implemented
+    #[cfg(feature = "transaction")]
+    #[error("Transactional acquisition is not implemented")]
+    AcquisitionNotImplemented,
+
     /// The peer detached the link before the transfer completed
     #[error("The peer detached the link")]
     LinkDetached(DetachStatus),
@@ -186,6 +192,8 @@ impl From<TransferError> for SendError {
             TransferError::NotAttached => SendError::NotAttached,
             TransferError::MessageEncodeError(error) => SendError::MessageEncodeError(error),
             TransferError::FrameSizeTooSmall => SendError::FrameSizeTooSmall,
+            #[cfg(feature = "transaction")]
+            TransferError::AcquisitionNotImplemented => SendError::AcquisitionNotImplemented,
             TransferError::LinkDetached(status) => SendError::LinkDetached(status),
             TransferError::ExpectImmediateDetach => SendError::ExpectImmediateDetach,
         }
@@ -340,6 +348,11 @@ pub enum SendError {
     /// can change it.
     #[error("The negotiated max frame size is too small for the transfer performative")]
     FrameSizeTooSmall,
+
+    /// The peer requested a transactional acquisition, which is not
+    /// implemented
+    #[error("Transactional acquisition is not implemented")]
+    AcquisitionNotImplemented,
 
     /// A non-terminal delivery state is received while expecting
     /// an outcome
@@ -687,7 +700,7 @@ pub enum RecvError {
 
     /// Transactional acquisition is not supported yet
     #[error("Transactional acquisition is not implemented")]
-    TransactionalAcquisitionNotImplemented,
+    AcquisitionNotImplemented,
 }
 
 impl From<ReceiverTransferError> for RecvError {
@@ -738,7 +751,9 @@ impl SendError {
             | Self::IllegalDeliveryState
             | Self::MessageSizeExceeded(_)
             | Self::MessageEncodeError(_) => ErrorRecovery::UseLink,
-            Self::NotAttached | Self::ExpectImmediateDetach => ErrorRecovery::NewLink,
+            Self::NotAttached | Self::AcquisitionNotImplemented | Self::ExpectImmediateDetach => {
+                ErrorRecovery::NewLink
+            }
             // `max-frame-size` is negotiated per connection (AMQP 1.0 §2.4.1),
             // so a new link on the same connection inherits the same limit;
             // only a new connection can change it.
@@ -761,7 +776,7 @@ impl RecvError {
             | Self::NotAttached
             | Self::MessageSizeExceeded(_)
             | Self::InconsistentFieldInMultiFrameDelivery
-            | Self::TransactionalAcquisitionNotImplemented => ErrorRecovery::NewLink,
+            | Self::AcquisitionNotImplemented => ErrorRecovery::NewLink,
         }
     }
 }
@@ -1057,6 +1072,10 @@ mod tests {
             SendError::FrameSizeTooSmall.recovery(),
             ErrorRecovery::ReconnectConnection
         );
+        assert_eq!(
+            SendError::AcquisitionNotImplemented.recovery(),
+            ErrorRecovery::NewLink
+        );
     }
 
     #[test]
@@ -1124,7 +1143,7 @@ mod tests {
         );
         assert_eq!(RecvError::NotAttached.recovery(), ErrorRecovery::NewLink);
         assert_eq!(
-            RecvError::TransactionalAcquisitionNotImplemented.recovery(),
+            RecvError::AcquisitionNotImplemented.recovery(),
             ErrorRecovery::NewLink
         );
     }
