@@ -973,7 +973,7 @@ impl SenderInner<SenderLink<Target>> {
             .link
             .output_handle
             .clone()
-            .ok_or(LinkStateError::IllegalState)?
+            .ok_or(SendError::NotAttached)?
             .into();
         let transfer = Transfer {
             handle,
@@ -1011,7 +1011,7 @@ impl SenderInner<SenderLink<Target>> {
             .link
             .output_handle
             .clone()
-            .ok_or(LinkStateError::IllegalState)?
+            .ok_or(SendError::NotAttached)?
             .into();
         let settled = match self.link.snd_settle_mode {
             SenderSettleMode::Settled => true,
@@ -1048,7 +1048,7 @@ impl SenderInner<SenderLink<Target>> {
             .link
             .output_handle
             .clone()
-            .ok_or(LinkStateError::IllegalState)?
+            .ok_or(SendError::NotAttached)?
             .into();
         let transfer = Transfer {
             handle,
@@ -1738,6 +1738,84 @@ mod tests {
             .read()
             .as_ref()
             .is_some_and(|map| map.contains_key(tag))
+    }
+
+    fn plain_transfer() -> Transfer {
+        Transfer {
+            handle: definitions::Handle(0),
+            delivery_id: None,
+            delivery_tag: None,
+            message_format: None,
+            settled: None,
+            more: false,
+            rcv_settle_mode: None,
+            state: None,
+            resume: false,
+            aborted: false,
+            batchable: false,
+        }
+    }
+
+    /// A link without a local handle is not attached, so a transfer reports
+    /// `NotAttached` instead of the catch-all `IllegalState`.
+    #[tokio::test]
+    async fn send_without_input_handle_returns_not_attached() {
+        let inner = make_sender_inner(4096); // input_handle is None
+        let (outgoing_tx, mut outgoing_rx) = mpsc::channel::<LinkFrame>(16);
+
+        let result = inner
+            .link
+            .send_transfer_without_modifying_unsettled_map(
+                &outgoing_tx,
+                plain_transfer(),
+                Bytes::from_static(b"payload"),
+            )
+            .await;
+
+        assert!(matches!(result, Err(TransferError::NotAttached)));
+        assert!(outgoing_rx.try_recv().is_err());
+    }
+
+    /// Generating a transfer without a local handle is not attached.
+    #[test]
+    fn generate_transfer_without_output_handle_returns_not_attached() {
+        let mut inner = make_sender_inner(4096);
+        inner.link.output_handle = None;
+
+        let result = inner.link.generate_non_resuming_transfer_performative(
+            DeliveryTag::from(b"tag0".to_vec()),
+            0,
+            None,
+            None,
+            false,
+        );
+
+        assert!(matches!(result, Err(TransferError::NotAttached)));
+    }
+
+    /// A max-frame-size that cannot even fit the serialized transfer
+    /// performative leaves no room for any payload, so the split must report
+    /// `FrameSizeTooSmall` instead of underflowing the payload bound (which
+    /// would panic in debug builds or, in release builds, wrap into a huge
+    /// bound that emits a single oversized frame).
+    #[tokio::test]
+    async fn split_returns_frame_size_too_small_when_performative_exceeds_max_frame_size() {
+        let mut inner = make_sender_inner(8);
+        inner.link.input_handle = Some(endpoint::InputHandle(0));
+        let (outgoing_tx, mut outgoing_rx) = mpsc::channel::<LinkFrame>(16);
+
+        let result = inner
+            .link
+            .send_transfer_without_modifying_unsettled_map(
+                &outgoing_tx,
+                plain_transfer(),
+                Bytes::from_static(b"payload"),
+            )
+            .await;
+
+        assert!(matches!(result, Err(TransferError::FrameSizeTooSmall)));
+        // Nothing may be written to the session's outgoing channel
+        assert!(outgoing_rx.try_recv().is_err());
     }
 
     /// A channel to the session with no room left, so a hand-over stays pending until the

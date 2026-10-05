@@ -1113,7 +1113,7 @@ where
                 // Best-effort close; the acquisition error below is what the
                 // caller sees.
                 let _ = self.close_with_error(Some(error)).await;
-                Err(RecvError::TransactionalAcquisitionIsNotImeplemented)
+                Err(RecvError::TransactionalAcquisitionNotImplemented)
             }
         }
     }

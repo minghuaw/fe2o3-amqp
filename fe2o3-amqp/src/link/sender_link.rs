@@ -49,7 +49,7 @@ where
         payload: Payload,
         delivery_tag: DeliveryTag,
         unsettled: &mut Option<UnsettledMessage>,
-    ) -> Result<(), LinkStateError> {
+    ) -> Result<(), TransferError> {
         self.unsettled
             .write()
             .get_or_insert(OrderedMap::new())
@@ -95,12 +95,12 @@ where
         writer: &mpsc::Sender<LinkFrame>,
         mut transfer: Transfer,
         mut payload: Payload,
-    ) -> Result<bool, LinkStateError> {
+    ) -> Result<bool, TransferError> {
         let settled = self.is_settled_on_send(&transfer);
         let input_handle = self
             .input_handle
             .clone()
-            .ok_or(LinkStateError::IllegalState)?;
+            .ok_or(TransferError::NotAttached)?;
 
         // The connection engine publishes the negotiated encoder max frame
         // length before the connection handle is created; links are only
@@ -128,9 +128,20 @@ where
         let orig_delivery_id = transfer.delivery_id; // None on all send paths
         transfer.delivery_id = Some(u32::MAX);
         let performative_size =
-            serialized_size(&transfer).map_err(|_| LinkStateError::IllegalState)?; // This should not happen
+            serialized_size(&transfer).map_err(|source| MessageEncodeError { source })?;
         transfer.delivery_id = orig_delivery_id;
-        let max_payload = self.max_frame_size - 4 - performative_size;
+        // Saturate so a pathologically small max-frame-size (one that cannot
+        // even fit the serialized performative) reports an error instead of
+        // underflowing into a huge payload bound.
+        let max_payload = self
+            .max_frame_size
+            .saturating_sub(4)
+            .saturating_sub(performative_size);
+        if max_payload == 0 {
+            // The serialized performative alone does not fit into a single
+            // frame, so the delivery cannot be split at all.
+            return Err(TransferError::FrameSizeTooSmall);
+        }
 
         // Split the payload so that every transfer frame fits within the
         // negotiated max frame size, keeping the session's transfer-id and
@@ -273,11 +284,11 @@ where
         settled: Option<bool>,
         state: Option<DeliveryState>,
         batchable: bool,
-    ) -> Result<Transfer, LinkStateError> {
+    ) -> Result<Transfer, TransferError> {
         let handle = self
             .output_handle
             .clone()
-            .ok_or(LinkStateError::IllegalState)?
+            .ok_or(TransferError::NotAttached)?
             .into();
 
         let settled = match self.snd_settle_mode {
