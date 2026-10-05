@@ -1836,6 +1836,22 @@ mod tests {
         assert!(outgoing_rx.try_recv().is_err());
     }
 
+    /// A closed incoming channel with no recorded session stop reason is a
+    /// link-local defensive failure, not an unexpected detach.
+    #[tokio::test]
+    async fn closed_incoming_channel_without_stop_reason_is_illegal_state() {
+        let (mut inner, _session_rx, _outgoing_rx, incoming_tx) =
+            make_sender_inner_with_channels(4096);
+        drop(incoming_tx);
+
+        let result = inner.link.next_delivery_tag(inner.incoming.recv()).await;
+
+        assert!(matches!(
+            result,
+            Err(TransferError::LinkState(LinkStateError::IllegalState))
+        ));
+    }
+
     /// The link-level wait reports an unsupported remote acquisition as such;
     /// terminating the link is the caller's job.
     #[cfg(feature = "transaction")]
