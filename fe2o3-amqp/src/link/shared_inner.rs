@@ -10,8 +10,8 @@ use crate::{
 };
 
 use super::{
-    state::LinkState, AttachMode, DetachError, DetachStatus, LinkFrame, LinkRelay, LinkStateError,
-    SessionStopReason,
+    detach_error_from_stop_reason, link_state_error_from_stop_reason, state::LinkState, AttachMode,
+    DetachError, DetachStatus, LinkFrame, LinkRelay, LinkStateError, SessionStopReason,
 };
 
 pub(crate) trait LinkEndpointInner
@@ -257,7 +257,7 @@ where
                 // The sender will be dropped after close
                 self.send_detach(true, error)
                     .await // cancel safe
-                    .map_err(|_| detach_error_from_stop_reason(self))?;
+                    .map_err(|_| detach_error_from_stop_reason(self.session_stop_reason()))?;
 
                 // Wait for remote detach
                 let remote_detach = recv_remote_detach(self).await?; // cancel safe
@@ -347,37 +347,14 @@ where
         // TODO(error-refactor): preserve the concrete attach error (or give the
         // "no stop reason recorded" fallback its own variant) so these cases
         // become distinguishable.
-        return Err(detach_error_from_stop_reason(link_inner));
+        return Err(detach_error_from_stop_reason(
+            link_inner.session_stop_reason(),
+        ));
     }
     link_inner.send_detach(true, None).await?; // cancel safe
     let remote_detach = recv_remote_detach(link_inner).await?; // cancel safe
     link_inner.link_mut().on_detach_reply(remote_detach)?;
     Ok(())
-}
-
-/// The `DetachError` for a link operation that failed because the session (or its
-/// connection) stopped; `IllegalState` when no stop reason was recorded (defensive).
-fn detach_error_from_stop_reason<T>(inner: &T) -> DetachError
-where
-    T: LinkEndpointInner + ?Sized,
-{
-    match inner.session_stop_reason().get() {
-        Some(reason) => DetachError::SessionStopped(reason.clone()),
-        None => DetachError::IllegalState, // defensive: no stop reason recorded; failure is link-local
-    }
-}
-
-/// The `LinkStateError` for a link operation that failed because the
-/// session (or its connection) stopped; `IllegalState` when no stop reason was
-/// recorded (defensive).
-fn illegal_link_state_from_stop_reason<T>(inner: &T) -> LinkStateError
-where
-    T: LinkEndpointInner + ?Sized,
-{
-    match inner.session_stop_reason().get() {
-        Some(reason) => LinkStateError::SessionStopped(reason.clone()),
-        None => LinkStateError::IllegalState, // defensive: no stop reason recorded; failure is link-local
-    }
 }
 
 /// # Cancel safety
@@ -394,7 +371,7 @@ where
             .reader_mut()
             .recv()
             .await // cancel safe
-            .ok_or_else(|| illegal_link_state_from_stop_reason(link_inner))?
+            .ok_or_else(|| link_state_error_from_stop_reason(link_inner.session_stop_reason()))?
         {
             LinkFrame::Detach(detach) => return Ok(detach),
             _frame => {

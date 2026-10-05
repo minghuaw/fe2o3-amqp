@@ -13,7 +13,7 @@ use crate::{
         role,
         sender::SenderInner,
         shared_inner::LinkEndpointInnerDetach,
-        DeliveryFailure, LinkStateError, SendError, SenderAttachError, SenderLink,
+        DeliveryFailure, SendError, SenderAttachError, SenderLink,
     },
     session::SessionHandle,
     Sendable,
@@ -82,10 +82,7 @@ pub(crate) async fn declare_on_link(
     let outcome = send_on_control_link(inner, sendable)
         .await?
         .await
-        .map_err(|_| match inner.link.session_stop_reason.get() {
-            Some(reason) => LinkStateError::SessionStopped(reason.clone()),
-            None => LinkStateError::IllegalState, // defensive: no stop reason recorded; failure is link-local
-        })?;
+        .map_err(|_| link::link_state_error_from_stop_reason(&inner.link.session_stop_reason))?;
     let outcome = outcome?;
     outcome
         .ok_or(ControllerSendError::NonTerminalDeliveryState)?
@@ -115,10 +112,7 @@ pub(crate) async fn discharge_on_link(
     let outcome = send_on_control_link(inner, sendable)
         .await?
         .await
-        .map_err(|_| match inner.link.session_stop_reason.get() {
-            Some(reason) => LinkStateError::SessionStopped(reason.clone()),
-            None => LinkStateError::IllegalState, // defensive: no stop reason recorded; failure is link-local
-        })?;
+        .map_err(|_| link::link_state_error_from_stop_reason(&inner.link.session_stop_reason))?;
     let outcome = outcome?;
     outcome
         .ok_or(ControllerSendError::NonTerminalDeliveryState)?
