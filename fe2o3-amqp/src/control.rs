@@ -18,7 +18,7 @@ cfg_transaction! {
         messaging::Accepted, transaction::TransactionError, transaction::TransactionId,
     };
 
-    use crate::transaction::AllocTxnIdError;
+    use crate::transaction::CoordinatorAllocTxnIdError;
 }
 
 #[derive(Debug)]
@@ -66,7 +66,7 @@ pub(crate) enum SessionControl {
     // Transaction related controls
     #[cfg(feature = "transaction")]
     AllocateTransactionId {
-        resp: oneshot::Sender<Result<TransactionId, AllocTxnIdError>>,
+        resp: oneshot::Sender<Result<TransactionId, CoordinatorAllocTxnIdError>>,
     },
     #[cfg(feature = "transaction")]
     CommitTransaction {
