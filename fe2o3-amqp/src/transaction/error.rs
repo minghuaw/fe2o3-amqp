@@ -9,7 +9,7 @@ use crate::link::{
 
 /// Errors with allocation of new transacation ID
 #[derive(Debug)]
-pub(crate) enum AllocTxnIdError {
+pub(crate) enum CoordinatorAllocTxnIdError {
     /// Allocation of transaction ID is not implemented
     ///
     /// This happens when transaction session is not enabled
@@ -26,7 +26,7 @@ cfg_acceptor! {
 
     /// Errors with discharging a transaction at the transaction manager
     #[derive(Debug)]
-    pub(crate) enum DischargeError {
+    pub(crate) enum CoordinatorDischargeError {
         /// Session must have dropped
         #[cfg(not(target_arch = "wasm32"))]
         #[cfg(feature = "acceptor")]
@@ -38,7 +38,7 @@ cfg_acceptor! {
         TransactionError(TransactionError),
     }
 
-    impl From<TransactionError> for DischargeError {
+    impl From<TransactionError> for CoordinatorDischargeError {
         fn from(value: TransactionError) -> Self {
             Self::TransactionError(value)
         }
@@ -66,24 +66,24 @@ cfg_acceptor! {
         TransactionError(TransactionError),
     }
     
-    impl From<AllocTxnIdError> for CoordinatorError {
-        fn from(value: AllocTxnIdError) -> Self {
+    impl From<CoordinatorAllocTxnIdError> for CoordinatorError {
+        fn from(value: CoordinatorAllocTxnIdError) -> Self {
             match value {
-                AllocTxnIdError::NotImplemented => Self::AllocTxnIdNotImplemented,
+                CoordinatorAllocTxnIdError::NotImplemented => Self::AllocTxnIdNotImplemented,
                 #[cfg(not(target_arch = "wasm32"))]
                 #[cfg(feature = "acceptor")]
-                AllocTxnIdError::InvalidSessionState => Self::InvalidSessionState,
+                CoordinatorAllocTxnIdError::InvalidSessionState => Self::InvalidSessionState,
             }
         }
     }
     
-    impl From<DischargeError> for CoordinatorError {
-        fn from(value: DischargeError) -> Self {
+    impl From<CoordinatorDischargeError> for CoordinatorError {
+        fn from(value: CoordinatorDischargeError) -> Self {
             match value {
                 #[cfg(not(target_arch = "wasm32"))]
                 #[cfg(feature = "acceptor")]
-                DischargeError::InvalidSessionState => Self::InvalidSessionState,
-                DischargeError::TransactionError(error) => Self::TransactionError(error),
+                CoordinatorDischargeError::InvalidSessionState => Self::InvalidSessionState,
+                CoordinatorDischargeError::TransactionError(error) => Self::TransactionError(error),
             }
         }
     }
@@ -167,6 +167,12 @@ impl From<DeliveryFailure> for ControllerSendError {
         }
     }
 }
+
+/// Error declaring a transaction on the control link
+pub type DeclareError = ControllerSendError;
+
+/// Error discharging a transaction on the control link
+pub type DischargeError = ControllerSendError;
 
 /// Errors with declaring an OwnedTransaction
 #[derive(Debug, thiserror::Error)]

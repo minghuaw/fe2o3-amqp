@@ -5,12 +5,12 @@ use fe2o3_amqp_types::{
     transaction::{TransactionError, TransactionId},
 };
 
-use crate::transaction::AllocTxnIdError;
+use crate::transaction::CoordinatorAllocTxnIdError;
 
 use super::Session;
 
 pub(crate) trait HandleDeclare: Session {
-    fn allocate_transaction_id(&mut self) -> Result<TransactionId, AllocTxnIdError>;
+    fn allocate_transaction_id(&mut self) -> Result<TransactionId, CoordinatorAllocTxnIdError>;
 }
 
 

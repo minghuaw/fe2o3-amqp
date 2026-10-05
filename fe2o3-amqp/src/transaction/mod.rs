@@ -526,7 +526,7 @@ pub struct Transaction<'t> {
 
 
 impl<'t> TransactionDischarge for Transaction<'t> {
-    type Error = ControllerSendError;
+    type Error = DischargeError;
 
     fn is_discharged(&self) -> bool {
         self.is_discharged
@@ -560,7 +560,7 @@ impl<'t> Transaction<'t> {
     pub async fn declare(
         controller: &'t Controller,
         global_id: impl Into<Option<TransactionId>>,
-    ) -> Result<Transaction<'t>, ControllerSendError> {
+    ) -> Result<Transaction<'t>, DeclareError> {
         let mut inner = controller.inner.lock().await;
         let declared = declare_on_link(&mut inner, global_id.into()).await?;
         Ok(Self {

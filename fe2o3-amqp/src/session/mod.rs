@@ -36,7 +36,7 @@ cfg_transaction! {
 
     use crate::{
         endpoint::{HandleDeclare, HandleDischarge},
-        transaction::AllocTxnIdError,
+        transaction::CoordinatorAllocTxnIdError,
     };
 }
 
@@ -1189,9 +1189,9 @@ cfg_transaction! {
         // This should be unreachable, but an error is probably a better way
         fn allocate_transaction_id(
             &mut self,
-        ) -> Result<fe2o3_amqp_types::transaction::TransactionId, AllocTxnIdError> {
+        ) -> Result<fe2o3_amqp_types::transaction::TransactionId, CoordinatorAllocTxnIdError> {
             // Err(Error::amqp_error(AmqpError::NotImplemented, "Resource side transaction is not enabled".to_string()))
-            Err(AllocTxnIdError::NotImplemented)
+            Err(CoordinatorAllocTxnIdError::NotImplemented)
         }
     }
 
