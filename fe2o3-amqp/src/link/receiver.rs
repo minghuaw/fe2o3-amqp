@@ -34,10 +34,11 @@ use super::{
     receiver_link::count_number_of_sections_and_offset,
     role,
     shared_inner::{LinkEndpointInner, LinkEndpointInnerDetach, LinkEndpointInnerReattach},
-    ArcReceiverUnsettledMap, DetachStatus, DetachThenResumeReceiverError, DispositionError,
-    FlowError, LinkFrame, LinkRelay, LinkStateError, MessageSizeExceeded, ReceiverAttachError,
-    ReceiverAttachExchange, ReceiverFlowState, ReceiverLink, ReceiverResumeError,
-    ReceiverResumeErrorKind, ReceiverTransferError, RecvError, SessionStopReason, DEFAULT_CREDIT,
+    ArcReceiverUnsettledMap, AttachMode, DetachStatus, DetachThenResumeReceiverError,
+    DispositionError, FlowError, LinkFrame, LinkRelay, LinkStateError, MessageSizeExceeded,
+    ReceiverAttachError, ReceiverAttachExchange, ReceiverFlowState, ReceiverLink,
+    ReceiverResumeError, ReceiverResumeErrorKind, ReceiverTransferError, RecvError,
+    SessionStopReason, DEFAULT_CREDIT,
 };
 
 cfg_transaction! {
@@ -962,9 +963,10 @@ where
 
     async fn exchange_attach(
         &mut self,
+        mode: AttachMode,
     ) -> Result<ReceiverAttachExchange, <Self::Link as LinkAttach>::AttachError> {
         self.link
-            .exchange_attach(&self.outgoing, &mut self.incoming)
+            .exchange_attach(&self.outgoing, &mut self.incoming, mode)
             .await
     }
 
@@ -1005,12 +1007,14 @@ where
         outcome: ReceiverAttachExchange,
     ) -> Result<&mut Self, L::AttachError> {
         match outcome {
-            ReceiverAttachExchange::Complete => Ok(self),
-            //  Re-attach should have None valued unsettled, so this should be invalid
-            ReceiverAttachExchange::IncompleteUnsettled | ReceiverAttachExchange::Resume => {
-                Err(ReceiverAttachError::IllegalState)
-            }
+            ReceiverAttachExchange::Complete => {}
+            // The reachable map-carrying exchanges are the peer's reply during
+            // the crossed close. The receiver's outstanding deliveries are
+            // tracked by the application, so there is nothing to resume here:
+            // the link is closed next by `reattach_then_close`.
+            ReceiverAttachExchange::IncompleteUnsettled | ReceiverAttachExchange::Resume => {}
         }
+        Ok(self)
     }
 }
 
@@ -1556,10 +1560,12 @@ impl ReceiverInner<ReceiverLink<Target>> {
 
         let exchange = match initial_remote_attach.take() {
             Some(remote_attach) => {
-                self.link.send_attach(&self.outgoing).await?;
+                self.link
+                    .send_attach(&self.outgoing, AttachMode::Resume)
+                    .await?;
                 self.link.on_incoming_attach(remote_attach)?
             }
-            None => self.exchange_attach().await?,
+            None => self.exchange_attach(AttachMode::Resume).await?,
         };
         #[cfg(feature = "tracing")]
         tracing::debug!(?exchange);
