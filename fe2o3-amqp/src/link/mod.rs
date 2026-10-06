@@ -236,7 +236,7 @@ pub(crate) struct Link<R, T, F, M> {
     pub(crate) unsettled: ArcUnsettledMap<M>,
 
     /// Why the session (or its connection) stopped, shared from the session
-    pub(crate) session_stop_reason: Arc<OnceLock<SessionOutcome>>,
+    pub(crate) session_stop_reason: Arc<OnceLock<SessionStopped>>,
 
     /// The negotiated max frame size (encoder max frame length), shared from
     /// the session and the connection; used to split transfers and attach

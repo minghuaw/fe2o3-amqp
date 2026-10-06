@@ -3,7 +3,7 @@ use fe2o3_amqp_types::messaging::{Accepted, DeliveryState, Outcome, Rejected};
 use crate::link::{
     delivery::{FromDeliveryFailure, FromDeliveryState, FromPreSettled},
     DetachError, LinkOutcome, DeliveryFailure, LinkStateError,
-    MessageEncodeError, MessageSizeExceeded, SendError, SenderAttachError, SessionOutcome,
+    MessageEncodeError, MessageSizeExceeded, SendError, SenderAttachError, SessionStopped,
     TransferError,
 };
 
@@ -357,7 +357,7 @@ impl FromDeliveryFailure for PostResult {
         Err(PostError::LinkStateError(LinkStateError::InvariantViolation))
     }
 
-    fn from_session_stop_reason(reason: SessionOutcome) -> Self {
+    fn from_session_stop_reason(reason: SessionStopped) -> Self {
         Err(PostError::LinkStateError(LinkStateError::SessionStopped(reason)))
     }
 

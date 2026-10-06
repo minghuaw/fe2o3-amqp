@@ -557,7 +557,7 @@ async fn send_transfer(
     input_handle: InputHandle,
     transfer: Transfer,
     payload: Payload,
-    session_stop_reason: &OnceLock<SessionOutcome>,
+    session_stop_reason: &OnceLock<SessionStopped>,
 ) -> Result<(), LinkStateError> {
     let frame = LinkFrame::Transfer {
         input_handle,
@@ -578,7 +578,7 @@ async fn send_disposition(
     settled: bool,
     state: Option<DeliveryState>,
     batchable: bool,
-    session_stop_reason: &OnceLock<SessionOutcome>,
+    session_stop_reason: &OnceLock<SessionStopped>,
 ) -> Result<(), LinkStateError> {
     let disposition = Disposition {
         role: Role::Sender,
@@ -824,7 +824,7 @@ where
         &mut self.output_handle
     }
 
-    fn session_stop_reason(&self) -> &Arc<OnceLock<SessionOutcome>> {
+    fn session_stop_reason(&self) -> &Arc<OnceLock<SessionStopped>> {
         &self.session_stop_reason
     }
 

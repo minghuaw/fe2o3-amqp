@@ -275,3 +275,26 @@ async fn repeated_connection_close_reports_the_same_clean_outcome() {
         Ok(ConnectionOutcome::Closed)
     ));
 }
+
+/// A session whose connection stopped reports the connection stop as an error
+/// on `on_end`, consistent with link operations failing when their session
+/// stopped.
+#[tokio::test]
+async fn session_end_reports_connection_stop_as_error() {
+    let (mut server_connection, mut client_connection) = establish_connection_pair().await;
+    let (mut client_session, _server_session) =
+        establish_session_pair(&mut server_connection, &mut client_connection).await;
+
+    let (server_result, client_result) = tokio::time::timeout(Duration::from_secs(10), async {
+        tokio::join!(server_connection.close(), client_session.on_end())
+    })
+    .await
+    .expect("session end timed out");
+
+    server_result.expect("server close failed");
+    let error = client_result.expect_err("the connection stopped first");
+    assert!(
+        matches!(error, fe2o3_amqp::session::Error::ConnectionStopped(_)),
+        "expected ConnectionStopped, got {error:?}"
+    );
+}
