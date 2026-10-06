@@ -26,7 +26,7 @@ use crate::{
     connection::ConnectionOutcome,
     control::SessionControl,
     endpoint::{self, IncomingChannel, InputHandle, LinkFlow, OutgoingChannel, OutputHandle},
-    link::{LinkFrame, LinkRelay, SessionOutcome},
+    link::{LinkFrame, LinkRelay},
     util::{is_consecutive, Constant},
     Payload,
 };
@@ -44,6 +44,9 @@ pub(crate) mod engine;
 pub(crate) mod frame;
 
 pub mod error;
+/// The outcome of a session's end, re-exported from [`crate::link`] where it
+/// is defined next to the link outcome.
+pub use crate::link::SessionOutcome;
 use error::{
     connection_stop_reason_or_closed, AllocLinkError, SessionInnerError, SessionStateError,
 };
@@ -70,10 +73,14 @@ pub struct SessionHandle<R> {
     pub(crate) is_ended: bool,
     /// The terminal outcome, cached once observed so later `on_end`/`try_end`
     /// calls report the same result
-    pub(crate) terminal_outcome: Option<TerminalOutcome>,
+    pub(crate) terminal_outcome: Option<SessionOutcome>,
+    /// Whether the terminal outcome was a local error instead of an outcome;
+    /// the concrete error cannot be cloned, so later calls report
+    /// `Error::IllegalState`
+    pub(crate) terminated_with_error: bool,
     pub(crate) control: mpsc::Sender<SessionControl>,
     pub(crate) engine_handle: JoinHandle<()>,
-    pub(crate) outcome: oneshot::Receiver<Result<(), Error>>,
+    pub(crate) outcome: oneshot::Receiver<Result<SessionOutcome, Error>>,
 
     // outgoing for Link
     pub(crate) outgoing: mpsc::Sender<LinkFrame>,
@@ -83,35 +90,6 @@ pub struct SessionHandle<R> {
     /// the connection and with the links
     pub(crate) max_frame_size: usize,
     pub(crate) link_listener: R,
-}
-
-/// The terminal outcome of the session event loop.
-///
-/// Cached on the handle once observed so repeated `on_end`/`try_end` calls
-/// report the same result: a clean end stays `Ok`, a remote end error is
-/// replayed, and any other terminal error degrades to `IllegalState` because
-/// the concrete error cannot be cloned.
-pub(crate) enum TerminalOutcome {
-    Ok,
-    RemoteError(definitions::Error),
-    Error,
-}
-impl TerminalOutcome {
-    fn from_result(result: &Result<(), Error>) -> Self {
-        match result {
-            Ok(()) => Self::Ok,
-            Err(Error::RemoteEndedWithError(error)) => Self::RemoteError(error.clone()),
-            Err(_) => Self::Error,
-        }
-    }
-
-    fn to_result(&self) -> Result<(), Error> {
-        match self {
-            Self::Ok => Ok(()),
-            Self::RemoteError(error) => Err(Error::RemoteEndedWithError(error.clone())),
-            Self::Error => Err(Error::IllegalState),
-        }
-    }
 }
 
 impl<R> std::fmt::Debug for SessionHandle<R> {
@@ -168,28 +146,34 @@ impl<R> SessionHandle<R> {
     ///
     /// # Returns
     ///
-    /// - `Ok(())` if the session ended cleanly
-    /// - `Err(TryEndError::Ended(error))` if the session ended with an error
+    /// - `Ok(outcome)` if the session reached a terminal outcome
+    /// - `Err(TryEndError::Stopped(error))` if the session stopped with a local error
     /// - `Err(TryEndError::RemoteEndNotReceived)` if the remote end has not been received yet
-    pub fn try_end(&mut self) -> Result<(), TryEndError> {
+    pub fn try_end(&mut self) -> Result<SessionOutcome, TryEndError> {
         if let Some(outcome) = &self.terminal_outcome {
-            return outcome
-                .to_result()
-                .map_err(|error| TryEndError::Ended(Box::new(error)));
+            return Ok(outcome.clone());
+        }
+        if self.terminated_with_error {
+            return Err(TryEndError::Stopped(Box::new(Error::IllegalState)));
         }
 
         let _ = self.control.try_send(SessionControl::End(None));
         match self.outcome.try_recv() {
-            Ok(res) => {
+            Ok(Ok(outcome)) => {
                 self.is_ended = true;
-                self.terminal_outcome = Some(TerminalOutcome::from_result(&res));
-                res.map_err(|error| TryEndError::Ended(Box::new(error)))
+                self.terminal_outcome = Some(outcome.clone());
+                Ok(outcome)
+            }
+            Ok(Err(error)) => {
+                self.is_ended = true;
+                self.terminated_with_error = true;
+                Err(TryEndError::Stopped(Box::new(error)))
             }
             Err(TryRecvError::Empty) => Err(TryEndError::RemoteEndNotReceived),
             Err(TryRecvError::Closed) => {
                 self.is_ended = true;
-                self.terminal_outcome = Some(TerminalOutcome::Error);
-                Err(TryEndError::Ended(Box::new(Error::IllegalState)))
+                self.terminated_with_error = true;
+                Err(TryEndError::Stopped(Box::new(Error::IllegalState)))
             }
         }
     }
@@ -201,13 +185,15 @@ impl<R> SessionHandle<R> {
         /// this method returns `Ok`; connection-level errors are reported through the
         /// [`ConnectionHandle`](crate::connection::ConnectionHandle).
         ///
-        /// A session that already ended reports the outcome it reached, including
-        /// a remote end error, if any.
+        /// On success the returned [`SessionOutcome`] reports how the session ended
+        /// (locally, by the remote, or with the connection) and carries the error the
+        /// peer or this side attached to the end, if any. A session that already
+        /// ended reports the outcome it reached.
         ///
         /// # wasm32 support
         ///
         /// This method is not supported on wasm32 targets, please use `drop()` instead.
-        pub async fn end(&mut self) -> Result<(), Error> {
+        pub async fn end(&mut self) -> Result<SessionOutcome, Error> {
             // If sending is unsuccessful, the `SessionEngine` event loop is
             // already dropped, this should be reflected by `JoinError` then.
             let _ = self.control.send(SessionControl::End(None)).await;
@@ -219,14 +205,15 @@ impl<R> SessionHandle<R> {
         /// # wasm32 support
         ///
         /// This method is not supported on wasm32 targets, please use `drop()` instead.
-        pub async fn close(&mut self) -> Result<(), Error> {
+        pub async fn close(&mut self) -> Result<SessionOutcome, Error> {
             self.end().await
         }
 
         /// End the session with an error
         ///
-        /// A session that already ended reports the outcome it reached, including
-        /// a remote end error, if any.
+        /// On success the returned [`SessionOutcome`] is
+        /// [`EndedWithError`](SessionOutcome::EndedWithError). A session that already
+        /// ended reports the outcome it reached.
         ///
         /// # wasm32 support
         ///
@@ -234,7 +221,7 @@ impl<R> SessionHandle<R> {
         pub async fn end_with_error(
             &mut self,
             error: impl Into<definitions::Error>,
-        ) -> Result<(), Error> {
+        ) -> Result<SessionOutcome, Error> {
             // If sending is unsuccessful, the `SessionEngine` event loop is
             // already dropped, this should be reflected by `JoinError` then.
             let _ = self
@@ -249,20 +236,28 @@ impl<R> SessionHandle<R> {
     ///
     /// A session that already ended reports the outcome it reached, including
     /// a remote end error, if any.
-    pub async fn on_end(&mut self) -> Result<(), Error> {
+    pub async fn on_end(&mut self) -> Result<SessionOutcome, Error> {
         if let Some(outcome) = &self.terminal_outcome {
-            return outcome.to_result();
+            return Ok(outcome.clone());
+        }
+        if self.terminated_with_error {
+            return Err(Error::IllegalState);
         }
 
         match (&mut self.outcome).await {
-            Ok(res) => {
+            Ok(Ok(outcome)) => {
                 self.is_ended = true;
-                self.terminal_outcome = Some(TerminalOutcome::from_result(&res));
-                res
+                self.terminal_outcome = Some(outcome.clone());
+                Ok(outcome)
+            }
+            Ok(Err(error)) => {
+                self.is_ended = true;
+                self.terminated_with_error = true;
+                Err(error)
             }
             Err(_) => {
                 self.is_ended = true;
-                self.terminal_outcome = Some(TerminalOutcome::Error);
+                self.terminated_with_error = true;
                 Err(Error::IllegalState)
             }
         }
@@ -1351,5 +1346,41 @@ mod tests {
         session.need_flow_count = u32::MAX;
 
         assert!(session.maybe_outgoing_session_flow().is_none());
+    }
+
+    /// A session that stopped with a local (non-outcome) error reports that
+    /// error once; later calls report `IllegalState` because the concrete
+    /// error cannot be cloned.
+    #[tokio::test]
+    async fn terminal_local_error_is_replayed_as_illegal_state() {
+        use tokio::sync::{mpsc, oneshot};
+
+        let (control, _control_rx) = mpsc::channel(8);
+        let (outgoing, _outgoing_rx) = mpsc::channel(8);
+        let (outcome_tx, outcome) =
+            oneshot::channel::<Result<super::SessionOutcome, super::Error>>();
+        outcome_tx
+            .send(Err(super::Error::IllegalState))
+            .expect("the receiver is held");
+        let mut handle = super::SessionHandle {
+            is_ended: false,
+            terminal_outcome: None,
+            terminated_with_error: false,
+            control,
+            engine_handle: tokio::spawn(async {}),
+            outcome,
+            outgoing,
+            session_stop_reason: Arc::new(OnceLock::new()),
+            max_frame_size: 0,
+            link_listener: (),
+        };
+
+        let error = handle.on_end().await.expect_err("a local error");
+        assert!(matches!(error, super::Error::IllegalState));
+
+        let error = handle.on_end().await.expect_err("the replayed error");
+        assert!(matches!(error, super::Error::IllegalState));
+
+        assert!(handle.try_end().is_err());
     }
 }

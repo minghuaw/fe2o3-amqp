@@ -176,7 +176,7 @@ impl SessionAcceptor {
             session_control_rx: mpsc::Receiver<SessionControl>,
             incoming: mpsc::Receiver<SessionFrame>,
             outgoing_link_frames: mpsc::Receiver<LinkFrame>,
-        ) -> Result<(JoinHandle<()>, oneshot::Receiver<Result<(), Error>>), BeginError> {
+        ) -> Result<(JoinHandle<()>, oneshot::Receiver<Result<SessionOutcome, Error>>), BeginError> {
             let engine = SessionEngine::begin_listener_session(
                 connection.control.clone(),
                 listener_session,
@@ -201,7 +201,7 @@ impl SessionAcceptor {
             session_control_rx: mpsc::Receiver<SessionControl>,
             incoming: mpsc::Receiver<SessionFrame>,
             outgoing_link_frames: mpsc::Receiver<LinkFrame>,
-        ) -> Result<(JoinHandle<()>, oneshot::Receiver<Result<(), Error>>), BeginError> {
+        ) -> Result<(JoinHandle<()>, oneshot::Receiver<Result<SessionOutcome, Error>>), BeginError> {
             match self.0.control_link_acceptor.clone() {
                 Some(control_link_acceptor) => {
                     let txn_manager =
@@ -326,6 +326,7 @@ impl SessionAcceptor {
         let handle = SessionHandle {
             is_ended: false,
             terminal_outcome: None,
+            terminated_with_error: false,
             control: session_control_tx,
             engine_handle,
             outcome,
