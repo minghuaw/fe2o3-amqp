@@ -690,6 +690,12 @@ where
         tracing::debug!("Stopped");
         #[cfg(feature = "log")]
         log::debug!("Stopped");
+        // A clean remote close is an outcome, not an error, for the handle;
+        // the stop reason above still records that the remote closed.
+        let result = match result {
+            Err(Error::RemoteClosed) => Ok(()),
+            other => other,
+        };
         let _ = tx.send(result);
     }
 }

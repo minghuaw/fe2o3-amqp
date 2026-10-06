@@ -88,6 +88,9 @@ pub enum ConnectionStopReason {
 pub struct ConnectionHandle<R> {
     /// Only change this value in `on_close` method
     pub(crate) is_closed: bool,
+    /// The terminal outcome, cached once observed so later `on_close`/`try_close`
+    /// calls report the same result
+    pub(crate) terminal_outcome: Option<TerminalOutcome>,
     pub(crate) control: Sender<ConnectionControl>,
     pub(crate) handle: JoinHandle<()>,
     pub(crate) outcome: oneshot::Receiver<Result<(), Error>>,
@@ -105,6 +108,36 @@ pub struct ConnectionHandle<R> {
 impl<R> std::fmt::Debug for ConnectionHandle<R> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("ConnectionHandle").finish()
+    }
+}
+
+/// The terminal outcome of the connection event loop.
+///
+/// Cached on the handle once observed so repeated `on_close`/`try_close` calls
+/// report the same result: a clean close stays `Ok`, a remote close error is
+/// replayed, and any other terminal error degrades to `IllegalState` because
+/// the concrete error cannot be cloned.
+pub(crate) enum TerminalOutcome {
+    Ok,
+    RemoteError(definitions::Error),
+    Error,
+}
+
+impl TerminalOutcome {
+    fn from_result(result: &Result<(), Error>) -> Self {
+        match result {
+            Ok(()) => Self::Ok,
+            Err(Error::RemoteClosedWithError(error)) => Self::RemoteError(error.clone()),
+            Err(_) => Self::Error,
+        }
+    }
+
+    fn to_result(&self) -> Result<(), Error> {
+        match self {
+            Self::Ok => Ok(()),
+            Self::RemoteError(error) => Err(Error::RemoteClosedWithError(error.clone())),
+            Self::Error => Err(Error::IllegalState),
+        }
     }
 }
 
@@ -145,28 +178,34 @@ impl<R> ConnectionHandle<R> {
 
     /// Tries to close the connection
     ///
+    /// A connection that already closed reports the outcome it reached,
+    /// including a remote close error, if any.
+    ///
     /// # Returns
     ///
-    /// - `Ok(Ok(()))` if the connection is closed successfully
-    /// - `Ok(Err(error))` if an error occurred on either side during exchange of close frames
-    /// - `Err(TryCloseError::AlreadyClosed)` if the connection is already closed
+    /// - `Ok(())` if the connection closed cleanly
+    /// - `Err(TryCloseError::Closed(error))` if the connection closed with an error
     /// - `Err(TryCloseError::RemoteCloseNotReceived)` if the remote close is not received
-    pub fn try_close(&mut self) -> Result<Result<(), Error>, TryCloseError> {
-        if self.is_closed {
-            return Err(TryCloseError::AlreadyClosed);
+    pub fn try_close(&mut self) -> Result<(), TryCloseError> {
+        if let Some(outcome) = &self.terminal_outcome {
+            return outcome
+                .to_result()
+                .map_err(|error| TryCloseError::Closed(Box::new(error)));
         }
 
         let _ = self.control.try_send(ConnectionControl::Close(None));
         match self.outcome.try_recv() {
             Ok(res) => {
                 self.is_closed = true;
-                Ok(res)
+                self.terminal_outcome = Some(TerminalOutcome::from_result(&res));
+                res.map_err(|error| TryCloseError::Closed(Box::new(error)))
             }
             Err(TryRecvError::Empty) => Err(TryCloseError::RemoteCloseNotReceived),
             Err(TryRecvError::Closed) => {
                 self.is_closed = true;
+                self.terminal_outcome = Some(TerminalOutcome::Error);
                 // The engine somehow has already stopped running
-                Ok(Err(Error::IllegalState))
+                Err(TryCloseError::Closed(Box::new(Error::IllegalState)))
             }
         }
     }
@@ -178,10 +217,8 @@ impl<R> ConnectionHandle<R> {
         /// no need to end the sessions first. If the peer closed the connection with an
         /// error, the error is reported through this method.
         ///
-        /// An `Error::IllegalState` will be returned if this is called after executing any of
-        /// [`close`](#method.close), [`close_with_error`](#method.close_with_error) or
-        /// [`on_close`](#method.on_close). This will cause the JoinHandle to be polled after
-        /// completion, which causes a panic.
+        /// A connection that already closed reports the outcome it reached, including
+        /// a remote close error, if any.
         ///
         /// # wasm32 support
         ///
@@ -195,10 +232,8 @@ impl<R> ConnectionHandle<R> {
 
         /// Close the connection with an error
         ///
-        /// An `Error::IllegalState` will be returned if this is called after executing any of
-        /// [`close`](#method.close), [`close_with_error`](#method.close_with_error) or
-        /// [`on_close`](#method.on_close). This will cause the JoinHandle to be polled after
-        /// completion, which causes a panic.
+        /// A connection that already closed reports the outcome it reached, including
+        /// a remote close error, if any.
         ///
         /// # wasm32 support
         ///
@@ -219,21 +254,21 @@ impl<R> ConnectionHandle<R> {
 
     /// Returns when the underlying event loop has stopped
     ///
-    /// An `Error::IllegalState` will be returned if this is called after executing any of
-    /// [`close`](#method.close), [`close_with_error`](#method.close_with_error) or
-    /// [`on_close`](#method.on_close). This will cause the JoinHandle to be polled after
-    /// completion, which causes a panic.
+    /// A connection that already closed reports the outcome it reached,
+    /// including a remote close error, if any.
     pub async fn on_close(&mut self) -> Result<(), Error> {
-        if self.is_closed {
-            return Err(Error::IllegalState);
+        if let Some(outcome) = &self.terminal_outcome {
+            return outcome.to_result();
         }
         match (&mut self.outcome).await {
             Ok(res) => {
                 self.is_closed = true;
+                self.terminal_outcome = Some(TerminalOutcome::from_result(&res));
                 res
             }
             Err(_) => {
                 self.is_closed = true;
+                self.terminal_outcome = Some(TerminalOutcome::Error);
                 Err(Error::IllegalState)
             }
         }

@@ -325,6 +325,7 @@ impl SessionAcceptor {
 
         let handle = SessionHandle {
             is_ended: false,
+            terminal_outcome: None,
             control: session_control_tx,
             engine_handle,
             outcome,

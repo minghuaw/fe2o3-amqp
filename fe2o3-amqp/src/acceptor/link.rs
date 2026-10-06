@@ -264,6 +264,7 @@ mod tests {
         }
         SessionHandle {
             is_ended: false,
+            terminal_outcome: None,
             control,
             engine_handle: tokio::spawn(async {}),
             outcome,

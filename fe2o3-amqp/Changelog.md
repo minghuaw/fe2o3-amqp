@@ -118,6 +118,16 @@
     stop always wins. The immediate-detach rejection paths also no longer wait for a detach
     reply after sending the detach failed.
 
+20. **Breaking**: session and connection handles now report the terminal outcome on repeated
+    `on_end`/`on_close`/`try_end`/`try_close` calls instead of `IllegalState`/
+    `AlreadyEnded`/`AlreadyClosed`: a clean end or close returns `Ok(())`, a remote error is
+    replayed, and other terminal errors are reported as `IllegalState`. A clean remote-ended
+    session or remote-closed connection now returns `Ok(())` from the handle instead of
+    `Error::RemoteEnded`/`Error::RemoteClosed` (the stop reasons still record the remote
+    end/close for links). `try_end`/`try_close` now return a flat `Result<(), TryEndError>`
+    and `Result<(), TryCloseError>` whose `Ended`/`Closed` variant carries the terminal
+    error; `TryEndError::AlreadyEnded` and `TryCloseError::AlreadyClosed` are removed.
+
 ## 0.18.2
 
 **Bugfix**: an unsettled delivery is now registered before its transfer reaches the session, preventing `send` from hanging when the peer settles immediately.
