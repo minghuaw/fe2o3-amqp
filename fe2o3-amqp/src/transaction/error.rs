@@ -94,7 +94,7 @@ cfg_acceptor! {
 pub enum ControllerSendError {
     /// Errors found in link state
     #[error("Local error: {:?}", .0)]
-    LinkStateError(#[from] LinkStateError),
+    LinkStateError(LinkStateError),
 
     /// The peer detached the link before the delivery was settled
     #[error("The peer detached the link: {:?}", .0)]
@@ -168,6 +168,15 @@ impl From<DeliveryFailure> for ControllerSendError {
     }
 }
 
+impl From<LinkStateError> for ControllerSendError {
+    fn from(value: LinkStateError) -> Self {
+        match value {
+            LinkStateError::LinkDetached(status) => Self::LinkDetached(status),
+            other => Self::LinkStateError(other),
+        }
+    }
+}
+
 /// Error declaring a transaction on the control link
 pub type DeclareError = ControllerSendError;
 
@@ -230,7 +239,7 @@ impl From<LinkStateError> for OwnedDischargeError {
 pub enum PostError {
     /// Errors found in link state
     #[error("Local error: {:?}", .0)]
-    LinkStateError(#[from] LinkStateError),
+    LinkStateError(LinkStateError),
 
     /// The peer detached the link before the delivery was settled
     #[error("The peer detached the link: {:?}", .0)]
@@ -277,6 +286,15 @@ pub enum PostError {
 impl From<serde_amqp::Error> for PostError {
     fn from(source: serde_amqp::Error) -> Self {
         Self::MessageEncodeError(MessageEncodeError { source })
+    }
+}
+
+impl From<LinkStateError> for PostError {
+    fn from(value: LinkStateError) -> Self {
+        match value {
+            LinkStateError::LinkDetached(status) => Self::LinkDetached(status),
+            other => Self::LinkStateError(other),
+        }
     }
 }
 

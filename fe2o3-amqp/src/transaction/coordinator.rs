@@ -197,6 +197,27 @@ impl TxnCoordinator {
                     // Session must have already stopped
                     Running::Stop
                 }
+                crate::link::LinkStateError::InvariantViolation => {
+                    #[cfg(feature = "tracing")]
+                    tracing::error!(?error);
+                    #[cfg(feature = "log")]
+                    log::error!("error = {:?}", error);
+                    let error = definitions::Error::new(AmqpError::InternalError, None, None);
+                    // TODO: detach instead of closing
+                    let _ = self.inner.close_with_error(Some(error)).await;
+                    Running::Stop
+                }
+                crate::link::LinkStateError::LinkDetached(_) => {
+                    // The link already reached a terminal outcome; finish the
+                    // local close.
+                    if let Err(_err) = self.inner.close_with_error(None).await {
+                        #[cfg(feature = "tracing")]
+                        tracing::error!(detach_error = ?_err);
+                        #[cfg(feature = "log")]
+                        log::error!("detach_error = {:?}", _err);
+                    }
+                    Running::Stop
+                }
             },
             RecvError::LinkDetached(_) => {
                 // The peer detached the link; the relay already answered its
@@ -299,6 +320,20 @@ impl TxnCoordinator {
                 }
                 LinkStateError::SessionStopped(_) => {
                     // Session must have already dropped
+                    Running::Stop
+                }
+                LinkStateError::InvariantViolation => {
+                    #[cfg(feature = "tracing")]
+                    tracing::error!(?disposition_error);
+                    #[cfg(feature = "log")]
+                    log::error!("error = {:?}", disposition_error);
+                    let error = definitions::Error::new(AmqpError::InternalError, None, None);
+                    // TODO: detach instead of closing
+                    let _ = self.inner.close_with_error(Some(error)).await;
+                    Running::Stop
+                }
+                LinkStateError::LinkDetached(_) => {
+                    // The link already reached a terminal outcome.
                     Running::Stop
                 }
             },
