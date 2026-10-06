@@ -1353,6 +1353,7 @@ cfg_not_wasm32! {
         let connection_handle = ConnectionHandle {
             is_closed: false,
             terminal_outcome: None,
+            terminated_with_error: false,
             control: control_tx,
             handle,
             outcome,
@@ -1383,6 +1384,7 @@ cfg_wasm32! {
         let connection_handle = ConnectionHandle {
             is_closed: false,
             terminal_outcome: None,
+            terminated_with_error: false,
             control: control_tx,
             handle,
             outcome,
@@ -1410,6 +1412,7 @@ cfg_wasm32! {
         let connection_handle = ConnectionHandle {
             is_closed: false,
             terminal_outcome: None,
+            terminated_with_error: false,
             control: control_tx,
             handle,
             outcome,

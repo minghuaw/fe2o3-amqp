@@ -268,7 +268,7 @@ pub enum TryEndError {
     #[error("The session has not received a remote end frame")]
     RemoteEndNotReceived,
 
-    /// The session ended with an error
-    #[error("The session ended with an error: {0}")]
-    Ended(Box<Error>),
+    /// The session stopped with a local error
+    #[error("The session stopped with an error: {0}")]
+    Stopped(Box<Error>),
 }

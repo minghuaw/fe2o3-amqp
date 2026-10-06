@@ -283,7 +283,7 @@ pub enum TryCloseError {
     #[error("The connection has not received a close frame from the remote peer")]
     RemoteCloseNotReceived,
 
-    /// The connection closed with an error
+    /// The connection stopped with a local error
     #[error("The connection closed with an error: {0}")]
-    Closed(Box<Error>),
+    Stopped(Box<Error>),
 }

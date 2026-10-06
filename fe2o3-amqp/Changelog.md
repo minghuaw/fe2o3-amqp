@@ -118,20 +118,27 @@
     stop always wins. The immediate-detach rejection paths also no longer wait for a detach
     reply after sending the detach failed.
 
-20. **Breaking**: session and connection handles now report the terminal outcome on repeated
-    `on_end`/`on_close`/`try_end`/`try_close` calls instead of `IllegalState`/
-    `AlreadyEnded`/`AlreadyClosed`: a clean end or close returns `Ok(())`, a remote error is
-    replayed, and other terminal errors are reported as `IllegalState`. A clean remote-ended
-    session or remote-closed connection now returns `Ok(())` from the handle instead of
-    `Error::RemoteEnded`/`Error::RemoteClosed` (the stop reasons still record the remote
-    end/close for links). `try_end`/`try_close` now return a flat `Result<(), TryEndError>`
-    and `Result<(), TryCloseError>` whose `Ended`/`Closed` variant carries the terminal
-    error; `TryEndError::AlreadyEnded` and `TryCloseError::AlreadyClosed` are removed.
+20. **Breaking**: `on_end`/`on_close`/`try_end`/`try_close` replay the terminal outcome on
+    repeated calls instead of reporting `IllegalState`/`AlreadyEnded`/`AlreadyClosed` (see
+    item 22 for the outcome types); `TryEndError::AlreadyEnded` and
+    `TryCloseError::AlreadyClosed` are removed.
 
 21. **Breaking**: the close/detach outcome types are renamed to a consistent family:
     `DetachStatus` -> `LinkOutcome`, `SessionStopReason` -> `SessionOutcome`, and
     `ConnectionStopReason` -> `ConnectionOutcome`. The variants are unchanged;
     `SessionOutcome::ConnectionStopped` now embeds a `ConnectionOutcome`.
+
+22. **Breaking**: the session and connection close APIs now report the terminal outcome as
+    data: `Session::end`/`end_with_error`/`close`/`on_end` and `SessionHandle::try_end`
+    return `Result<SessionOutcome, Error>`, and `Connection::close`/`close_with_error`/
+    `on_close` and `ConnectionHandle::try_close` return `Result<ConnectionOutcome, Error>`.
+    A completed exchange is `Ok` even when the peer attached an error, which is carried by
+    `RemoteEndedWithError`/`RemoteClosedWithError`; `Err` is reserved for local failures
+    (the session or connection stopped, invariant violations, transport errors). A session
+    that ends with its connection reports `SessionOutcome::ConnectionStopped`, and
+    `end_with_error`/`close_with_error` report `EndedWithError`/`ClosedWithError`;
+    `TryEndError::Ended`/`TryCloseError::Closed` are renamed to `Stopped` and only carry
+    local errors.
 
 ## 0.18.2
 

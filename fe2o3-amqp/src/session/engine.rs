@@ -128,7 +128,7 @@ cfg_not_wasm32! {
         AllocLinkError: From<S::AllocError>,
         SessionInnerError: From<S::Error> + From<S::BeginError> + From<S::EndError>,
     {
-        pub fn spawn(self) -> (JoinHandle<()>, oneshot::Receiver<Result<(), Error>>) {
+        pub fn spawn(self) -> (JoinHandle<()>, oneshot::Receiver<Result<SessionOutcome, Error>>) {
             let (tx, rx) = oneshot::channel();
             let handle = tokio::spawn(self.event_loop(tx));
             (handle, rx)
@@ -143,13 +143,13 @@ cfg_wasm32! {
         AllocLinkError: From<S::AllocError>,
         SessionInnerError: From<S::Error> + From<S::BeginError> + From<S::EndError>,
     {
-        pub fn spawn_local(self) -> (JoinHandle<()>, oneshot::Receiver<Result<(), Error>>) {
+        pub fn spawn_local(self) -> (JoinHandle<()>, oneshot::Receiver<Result<SessionOutcome, Error>>) {
             let (tx, rx) = oneshot::channel();
             let handle = tokio::task::spawn_local(self.event_loop(tx));
             (handle, rx)
         }
 
-        pub fn spawn_on_local_set(self, local_set: &tokio::task::LocalSet) -> (JoinHandle<()>, oneshot::Receiver<Result<(), Error>>) {
+        pub fn spawn_on_local_set(self, local_set: &tokio::task::LocalSet) -> (JoinHandle<()>, oneshot::Receiver<Result<SessionOutcome, Error>>) {
             let (tx, rx) = oneshot::channel();
             let handle = local_set.spawn_local(self.event_loop(tx));
             (handle, rx)
@@ -602,7 +602,7 @@ where
     }
 
     #[cfg_attr(feature = "tracing", tracing::instrument(name = "Session::event_loop", skip(self), fields(outgoing_channel = %self.session.outgoing_channel().0)))]
-    async fn event_loop(mut self, tx: oneshot::Sender<Result<(), Error>>) {
+    async fn event_loop(mut self, tx: oneshot::Sender<Result<SessionOutcome, Error>>) {
         let mut outcome = Ok(());
         loop {
             let result = tokio::select! {
@@ -733,15 +733,21 @@ where
         let _ =
             connection::deallocate_session(&mut self.conn_control, self.session.outgoing_channel())
                 .await;
-        // The session ends with the connection; sanitize the connection stop
-        // so the handle observes a clean end. Connection-level errors are
-        // reported through the `ConnectionHandle`. A clean remote end is an
-        // outcome, not an error, for the handle as well.
+        // A session that reached a terminal state reports the status it stopped
+        // with: a connection stop or a remote end (with or without error), as
+        // recorded first. Local protocol errors have no status and stay errors.
+        let status = self
+            .session
+            .session_stop_reason()
+            .get()
+            .cloned()
+            .unwrap_or(SessionOutcome::Ended);
         let result = match outcome {
-            Err(SessionInnerError::ConnectionStopped(_)) | Err(SessionInnerError::RemoteEnded) => {
-                Ok(())
-            }
-            other => other.map_err(Into::into),
+            Ok(())
+            | Err(SessionInnerError::ConnectionStopped(_))
+            | Err(SessionInnerError::RemoteEnded)
+            | Err(SessionInnerError::RemoteEndedWithError(_)) => Ok(status),
+            Err(other) => Err(other.into()),
         };
         let _ = tx.send(result);
     }

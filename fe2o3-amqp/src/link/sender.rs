@@ -1607,11 +1607,13 @@ mod tests {
     fn make_session_handle(max_frame_size: usize) -> SessionHandle<()> {
         let (control, _control_rx) = mpsc::channel::<SessionControl>(16);
         let (outgoing_tx, _outgoing_rx) = mpsc::channel::<LinkFrame>(16);
-        let (outcome_tx, outcome) = oneshot::channel::<Result<(), crate::session::error::Error>>();
+        let (outcome_tx, outcome) =
+            oneshot::channel::<Result<crate::link::SessionOutcome, crate::session::error::Error>>();
         drop(outcome_tx);
         SessionHandle {
             is_ended: false,
             terminal_outcome: None,
+            terminated_with_error: false,
             control,
             engine_handle: tokio::spawn(async {}),
             outcome,
