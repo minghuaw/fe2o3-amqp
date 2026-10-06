@@ -905,16 +905,10 @@ where
             // ReceiverAttachError::SndSettleModeNotSupported
             ReceiverAttachError::IncomingSourceIsNone => {
                 // Just send detach immediately
-                let err = match self.send_detach(writer, true, None).await {
-                    Ok(()) => attach_error,
-                    Err(DetachError::SessionStopped(reason)) => {
-                        ReceiverAttachError::SessionStopped(reason)
-                    }
-                    // The rejecting detach failed for a link-local reason; the
-                    // attach failure stays the primary error.
-                    Err(_) => attach_error,
-                };
-                recv_detach(self, reader, err).await
+                match self.send_detach(writer, true, None).await {
+                    Ok(()) => recv_detach(self, reader, attach_error).await,
+                    Err(detach_error) => receiver_detach_failure(detach_error, attach_error),
+                }
             }
 
             ReceiverAttachError::CoordinatorIsNotImplemented
@@ -922,21 +916,52 @@ where
             | ReceiverAttachError::SourceAddressIsNoneWhenDynamicIsTrue
             | ReceiverAttachError::TargetAddressIsSomeWhenDynamicIsTrue
             | ReceiverAttachError::DynamicNodePropertiesIsSomeWhenDynamicIsFalse => {
-                match (&attach_error).try_into() {
-                    Ok(error) => match self.send_detach(writer, true, Some(error)).await {
-                        Ok(_) => recv_detach(self, reader, attach_error).await,
-                        Err(DetachError::SessionStopped(reason)) => {
-                            ReceiverAttachError::SessionStopped(reason)
-                        }
-                        // The rejecting detach failed for a link-local reason;
-                        // the attach failure stays the primary error.
-                        Err(_) => attach_error,
-                    },
-                    Err(_) => attach_error,
-                }
+                try_detach_with_error(self, attach_error, writer, reader).await
             }
             _ => attach_error,
         }
+    }
+}
+
+/// Classify a rejected attach whose closing detach could not be sent.
+///
+/// An already terminal link is not a failure by itself: when the stored
+/// outcome carries a remote error the remote error is reported, otherwise the
+/// attach failure stays the primary error. A session stop always wins.
+fn receiver_detach_failure(
+    detach_error: DetachError,
+    attach_error: ReceiverAttachError,
+) -> ReceiverAttachError {
+    match detach_error {
+        DetachError::SessionStopped(reason) => ReceiverAttachError::SessionStopped(reason),
+        DetachError::LinkDetached(status) => match status.remote_error() {
+            Some(error) => ReceiverAttachError::RemoteClosedWithError(error.clone()),
+            None => attach_error,
+        },
+        DetachError::IllegalState | DetachError::InvariantViolation => attach_error,
+    }
+}
+
+async fn try_detach_with_error<T>(
+    link: &mut ReceiverLink<T>,
+    attach_error: ReceiverAttachError,
+    writer: &mpsc::Sender<LinkFrame>,
+    reader: &mut mpsc::Receiver<LinkFrame>,
+) -> ReceiverAttachError
+where
+    T: Into<TargetArchetype>
+        + TryFrom<TargetArchetype>
+        + VerifyTargetArchetype
+        + Clone
+        + Send
+        + Sync,
+{
+    match (&attach_error).try_into() {
+        Ok(error) => match link.send_detach(writer, true, Some(error)).await {
+            Ok(()) => recv_detach(link, reader, attach_error).await,
+            Err(detach_error) => receiver_detach_failure(detach_error, attach_error),
+        },
+        Err(_) => attach_error,
     }
 }
 

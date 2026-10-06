@@ -2389,6 +2389,71 @@ mod tests {
         ));
     }
 
+    /// A rejected attach whose closing detach cannot be sent because the link
+    /// is already terminal keeps the attach error when the stored outcome has
+    /// no remote error.
+    #[tokio::test]
+    async fn rejection_detach_on_terminal_link_keeps_primary_error() {
+        let (mut inner, _session_rx, _outgoing_rx, _incoming_tx) =
+            make_receiver_inner_with_channels(4096);
+        inner.link.local_state = LinkState::Detached(None);
+
+        let result = inner
+            .handle_attach_error(ReceiverAttachError::CoordinatorIsNotImplemented)
+            .await;
+
+        assert!(matches!(
+            result,
+            ReceiverAttachError::CoordinatorIsNotImplemented
+        ));
+    }
+
+    /// A rejected attach whose closing detach cannot be sent reports the
+    /// remote error stored in the terminal outcome.
+    #[tokio::test]
+    async fn rejection_detach_on_terminal_link_reports_remote_error() {
+        let (mut inner, _session_rx, _outgoing_rx, _incoming_tx) =
+            make_receiver_inner_with_channels(4096);
+        let peer_error = definitions::Error::new(
+            definitions::AmqpError::ResourceLimitExceeded,
+            Some("no capacity".to_string()),
+            None,
+        );
+        inner.link.local_state = LinkState::Detached(Some(peer_error.clone()));
+
+        let result = inner
+            .handle_attach_error(ReceiverAttachError::CoordinatorIsNotImplemented)
+            .await;
+
+        assert!(matches!(
+            result,
+            ReceiverAttachError::RemoteClosedWithError(ref error) if error == &peer_error
+        ));
+    }
+
+    /// The immediate-detach rejection path classifies an already terminal
+    /// link the same way.
+    #[tokio::test]
+    async fn immediate_rejection_detach_on_terminal_link_reports_remote_error() {
+        let (mut inner, _session_rx, _outgoing_rx, _incoming_tx) =
+            make_receiver_inner_with_channels(4096);
+        let peer_error = definitions::Error::new(
+            definitions::AmqpError::ResourceLimitExceeded,
+            Some("no capacity".to_string()),
+            None,
+        );
+        inner.link.local_state = LinkState::Detached(Some(peer_error.clone()));
+
+        let result = inner
+            .handle_attach_error(ReceiverAttachError::IncomingSourceIsNone)
+            .await;
+
+        assert!(matches!(
+            result,
+            ReceiverAttachError::RemoteClosedWithError(ref error) if error == &peer_error
+        ));
+    }
+
     /// The minimal `Attach` a sender peer sends for this receiver link: it
     /// must carry a source and an initial delivery count so
     /// `on_incoming_attach` accepts it.
