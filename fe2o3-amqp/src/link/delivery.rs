@@ -21,7 +21,7 @@ use crate::{
 };
 use crate::{util::AsDeliveryState, Payload};
 
-use super::{DeliveryFailure, LinkOutcome, LinkStateError, SendError, SessionOutcome};
+use super::{DeliveryFailure, LinkOutcome, LinkStateError, SendError, SessionStopped};
 
 /// Delivery information that is needed for disposing a message
 #[derive(Clone)]
@@ -364,7 +364,7 @@ pin_project! {
         outcome_marker: PhantomData<O>,
         // Why the session (or its connection) stopped, consulted when the
         // settlement oneshot dies
-        session_stop_reason: Arc<OnceLock<SessionOutcome>>,
+        session_stop_reason: Arc<OnceLock<SessionStopped>>,
     }
 }
 
@@ -372,7 +372,7 @@ impl<O> DeliveryFut<O> {
     /// Create a new delivery future with the shared stop-reason cell
     pub(crate) fn new(
         settlement: Settlement,
-        session_stop_reason: Arc<OnceLock<SessionOutcome>>,
+        session_stop_reason: Arc<OnceLock<SessionStopped>>,
     ) -> Self {
         Self {
             settlement,
@@ -422,7 +422,7 @@ pub trait FromDeliveryFailure {
     fn from_oneshot_recv_error(err: RecvError) -> Self;
 
     /// how to interprete a "the session (or its connection) stopped" failure
-    fn from_session_stop_reason(reason: SessionOutcome) -> Self;
+    fn from_session_stop_reason(reason: SessionStopped) -> Self;
 
     /// how to interprete a link-state error delivered through the settlement
     /// channel (e.g. the remote closed the link while the delivery was pending)
@@ -442,7 +442,7 @@ impl FromDeliveryFailure for SendResult {
         Err(LinkStateError::InvariantViolation.into())
     }
 
-    fn from_session_stop_reason(reason: SessionOutcome) -> Self {
+    fn from_session_stop_reason(reason: SessionStopped) -> Self {
         Err(LinkStateError::SessionStopped(reason).into())
     }
 
@@ -554,7 +554,7 @@ mod tests {
 
     use crate::Sendable;
 
-    use super::{DeliveryFut, FromDeliveryFailure, SendResult, SessionOutcome};
+    use super::{DeliveryFut, FromDeliveryFailure, SendResult, SessionStopped};
     use crate::link::{DeliveryFailure, LinkOutcome, LinkStateError, SendError};
 
     struct Foo {}
@@ -600,7 +600,7 @@ mod tests {
     #[test]
     fn test_send_result_from_session_stop_reason() {
         let reason =
-            SessionOutcome::ConnectionStopped(
+            SessionStopped::ConnectionStopped(
                 crate::connection::ConnectionOutcome::RemoteClosedWithError(
                     definitions::Error::new(ConnectionError::ConnectionForced, None, None),
                 ),
@@ -626,7 +626,7 @@ mod tests {
         };
         let session_stop_reason = Arc::new(OnceLock::new());
         session_stop_reason
-            .set(SessionOutcome::ConnectionStopped(
+            .set(SessionStopped::ConnectionStopped(
                 crate::connection::ConnectionOutcome::Closed,
             ))
             .unwrap();
@@ -635,7 +635,7 @@ mod tests {
 
         match fut.await {
             Err(SendError::LinkStateError(LinkStateError::SessionStopped(
-                SessionOutcome::ConnectionStopped(crate::connection::ConnectionOutcome::Closed),
+                SessionStopped::ConnectionStopped(crate::connection::ConnectionOutcome::Closed),
             ))) => {}
             other => panic!("unexpected result: {:?}", other),
         }

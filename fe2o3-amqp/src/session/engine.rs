@@ -13,7 +13,7 @@ use crate::{
     connection::{self, ConnectionOutcome},
     control::{ConnectionControl, SessionControl},
     endpoint::{self, IncomingChannel, Session},
-    link::{LinkFrame, SessionOutcome},
+    link::{LinkFrame, SessionOutcome, SessionStopped},
     util::Running,
     SendBound,
 };
@@ -265,10 +265,12 @@ where
                     // `EndReceived` state only results from a remote-initiated
                     // end, so the error (if any) is the remote's.
                     self.session.set_session_stop_reason(match end_error {
-                        Some(error) => SessionOutcome::RemoteEndedWithError(error),
+                        Some(error) => {
+                            SessionStopped::Outcome(SessionOutcome::RemoteEndedWithError(error))
+                        }
                         None => match self.session.connection_stop_reason().get() {
-                            Some(reason) => SessionOutcome::from(reason.clone()),
-                            None => SessionOutcome::RemoteEnded,
+                            Some(reason) => SessionStopped::from(reason.clone()),
+                            None => SessionStopped::Outcome(SessionOutcome::RemoteEnded),
                         },
                     });
                     // if control is closing, finish sending all buffered messages before closing
@@ -291,10 +293,10 @@ where
 
     /// The session stop reason derived from the connection's recorded stop;
     /// `Ended` when the connection has not stopped.
-    fn session_stop_reason_from_connection(&self) -> SessionOutcome {
+    fn session_stop_reason_from_connection(&self) -> SessionStopped {
         match self.session.connection_stop_reason().get() {
-            Some(reason) => SessionOutcome::from(reason.clone()),
-            None => SessionOutcome::Ended,
+            Some(reason) => SessionStopped::from(reason.clone()),
+            None => SessionStopped::Outcome(SessionOutcome::Ended),
         }
     }
 
@@ -310,7 +312,9 @@ where
                 // Record the stop reason before the link channel is closed, so
                 // links that fail on the closure observe the reason.
                 self.session.set_session_stop_reason(match &error {
-                    Some(error) => SessionOutcome::EndedWithError(error.clone()),
+                    Some(error) => {
+                        SessionStopped::Outcome(SessionOutcome::EndedWithError(error.clone()))
+                    }
                     None => self.session_stop_reason_from_connection(),
                 });
                 // if control is closing, finish sending all buffered messages before closing
@@ -721,32 +725,41 @@ where
         // so every link that wakes on the channel closures sees it.
         let session_stop_reason = match &outcome {
             Err(SessionInnerError::ConnectionStopped(reason)) => {
-                SessionOutcome::from(reason.clone())
+                SessionStopped::from(reason.clone())
             }
             Err(SessionInnerError::RemoteEndedWithError(error)) => {
-                SessionOutcome::RemoteEndedWithError(error.clone())
+                SessionStopped::Outcome(SessionOutcome::RemoteEndedWithError(error.clone()))
             }
-            Err(SessionInnerError::RemoteEnded) => SessionOutcome::RemoteEnded,
-            _ => SessionOutcome::Ended,
+            Err(SessionInnerError::RemoteEnded) => {
+                SessionStopped::Outcome(SessionOutcome::RemoteEnded)
+            }
+            _ => SessionStopped::Outcome(SessionOutcome::Ended),
         };
         self.session.set_session_stop_reason(session_stop_reason);
         let _ =
             connection::deallocate_session(&mut self.conn_control, self.session.outgoing_channel())
                 .await;
-        // A session that reached a terminal state reports the status it stopped
-        // with: a connection stop or a remote end (with or without error), as
-        // recorded first. Local protocol errors have no status and stay errors.
-        let status = self
+        // A session that reached a terminal state reports the outcome it stopped
+        // with; the connection stopping first is a failure of the session's end
+        // operation (`Err(ConnectionStopped)`), consistent with link operations
+        // failing when their session stopped. Local protocol errors stay errors.
+        let stop = self
             .session
             .session_stop_reason()
             .get()
             .cloned()
-            .unwrap_or(SessionOutcome::Ended);
+            .unwrap_or(SessionStopped::Outcome(SessionOutcome::Ended));
+        let stop_result = |stop: SessionStopped| match stop {
+            SessionStopped::Outcome(outcome) => Ok(outcome),
+            SessionStopped::ConnectionStopped(reason) => Err(Error::ConnectionStopped(reason)),
+        };
         let result = match outcome {
-            Ok(())
-            | Err(SessionInnerError::ConnectionStopped(_))
-            | Err(SessionInnerError::RemoteEnded)
-            | Err(SessionInnerError::RemoteEndedWithError(_)) => Ok(status),
+            Ok(()) => stop_result(stop),
+            Err(SessionInnerError::ConnectionStopped(reason)) => {
+                Err(Error::ConnectionStopped(reason))
+            }
+            Err(SessionInnerError::RemoteEnded)
+            | Err(SessionInnerError::RemoteEndedWithError(_)) => stop_result(stop),
             Err(other) => Err(other.into()),
         };
         let _ = tx.send(result);

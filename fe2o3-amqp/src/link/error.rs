@@ -12,14 +12,13 @@ use fe2o3_amqp_types::transaction::Coordinator;
 
 use super::{delivery::DeliveryInfo, receiver::DetachedReceiver, sender::DetachedSender};
 
-/// Why the link's session (or its connection) stopped before the link was
-/// detached or closed. From a link's perspective, a parent stopping earlier
-/// is always an error for the link's operations; the variants here describe
-/// the parent's state so the caller can decide how to recover.
+/// Why the session itself ended, independent of its connection. A connection
+/// stop is a failure of the session's end operation (`Err` from
+/// `Session::end`/`on_end`) and is not represented here; see [`SessionStopped`]
+/// for the link-facing propagation type that carries both.
 ///
 /// The unprefixed variants describe the local side's action; the `Remote*`
-/// variants describe a remote-initiated end. `ConnectionStopped(..)` embeds
-/// the connection's own stop reason (see [`ConnectionOutcome`]).
+/// variants describe a remote-initiated end.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum SessionOutcome {
     /// The session ended cleanly (locally)
@@ -30,16 +29,56 @@ pub enum SessionOutcome {
     RemoteEnded,
     /// The remote peer ended the session with this error
     RemoteEndedWithError(definitions::Error),
-    /// The connection stopped; the embedded reason tells whether the close
-    /// was local or remote and whether it carried an error
+}
+
+/// Why a session-dependent operation failed because the session stopped: the
+/// session reached its own outcome, or the session ended with its connection
+/// (carrying the connection's outcome).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum SessionStopped {
+    /// The session reached one of its own [`SessionOutcome`]s
+    Outcome(SessionOutcome),
+    /// The session ended with its connection; the embedded outcome tells
+    /// whether the close was local or remote and whether it carried an error
     ConnectionStopped(ConnectionOutcome),
 }
 
+impl SessionStopped {
+    /// The session's own outcome, if the session ended by itself (i.e. not
+    /// with its connection).
+    pub fn outcome(&self) -> Option<&SessionOutcome> {
+        match self {
+            Self::Outcome(outcome) => Some(outcome),
+            Self::ConnectionStopped(_) => None,
+        }
+    }
+
+    /// The connection's outcome when the session ended with its connection.
+    pub fn connection_outcome(&self) -> Option<&ConnectionOutcome> {
+        match self {
+            Self::Outcome(_) => None,
+            Self::ConnectionStopped(outcome) => Some(outcome),
+        }
+    }
+}
+
+impl From<SessionOutcome> for SessionStopped {
+    fn from(outcome: SessionOutcome) -> Self {
+        Self::Outcome(outcome)
+    }
+}
+
+impl From<ConnectionOutcome> for SessionStopped {
+    fn from(outcome: ConnectionOutcome) -> Self {
+        Self::ConnectionStopped(outcome)
+    }
+}
+
 /// The recovery action for a session that stopped.
-fn session_stop_recovery(reason: &SessionOutcome) -> ErrorRecovery {
-    match reason {
-        SessionOutcome::ConnectionStopped(_) => ErrorRecovery::ReconnectConnection,
-        _ => ErrorRecovery::ReconnectSession,
+fn session_stop_recovery(stopped: &SessionStopped) -> ErrorRecovery {
+    match stopped {
+        SessionStopped::ConnectionStopped(_) => ErrorRecovery::ReconnectConnection,
+        SessionStopped::Outcome(_) => ErrorRecovery::ReconnectSession,
     }
 }
 
@@ -55,7 +94,7 @@ fn warn_unrecorded_stop_reason() {
 /// The [`LinkStateError`] for an operation that failed because the session (or
 /// its connection) stopped; [`LinkStateError::IllegalState`] when no stop
 /// reason was recorded (defensive).
-pub(crate) fn link_state_error_from_stop_reason(cell: &OnceLock<SessionOutcome>) -> LinkStateError {
+pub(crate) fn link_state_error_from_stop_reason(cell: &OnceLock<SessionStopped>) -> LinkStateError {
     match cell.get() {
         Some(reason) => LinkStateError::SessionStopped(reason.clone()),
         None => {
@@ -68,7 +107,7 @@ pub(crate) fn link_state_error_from_stop_reason(cell: &OnceLock<SessionOutcome>)
 /// The [`DetachError`] for an operation that failed because the session (or
 /// its connection) stopped; [`DetachError::IllegalState`] when no stop reason
 /// was recorded (defensive).
-pub(crate) fn detach_error_from_stop_reason(cell: &OnceLock<SessionOutcome>) -> DetachError {
+pub(crate) fn detach_error_from_stop_reason(cell: &OnceLock<SessionStopped>) -> DetachError {
     match cell.get() {
         Some(reason) => DetachError::SessionStopped(reason.clone()),
         None => {
@@ -82,7 +121,7 @@ pub(crate) fn detach_error_from_stop_reason(cell: &OnceLock<SessionOutcome>) -> 
 /// its connection) stopped; [`SenderAttachError::IllegalState`] when no stop
 /// reason was recorded (defensive).
 pub(crate) fn sender_attach_error_from_stop_reason(
-    cell: &OnceLock<SessionOutcome>,
+    cell: &OnceLock<SessionStopped>,
 ) -> SenderAttachError {
     match cell.get() {
         Some(reason) => SenderAttachError::SessionStopped(reason.clone()),
@@ -97,7 +136,7 @@ pub(crate) fn sender_attach_error_from_stop_reason(
 /// (or its connection) stopped; [`ReceiverAttachError::IllegalState`] when no
 /// stop reason was recorded (defensive).
 pub(crate) fn receiver_attach_error_from_stop_reason(
-    cell: &OnceLock<SessionOutcome>,
+    cell: &OnceLock<SessionStopped>,
 ) -> ReceiverAttachError {
     match cell.get() {
         Some(reason) => ReceiverAttachError::SessionStopped(reason.clone()),
@@ -119,7 +158,7 @@ pub(crate) fn receiver_attach_error_from_stop_reason(
 /// means the relay disappeared without a recorded detach, which is an internal
 /// invariant violation (defensive).
 pub(crate) fn link_error_from_closed_channel(
-    cell: &OnceLock<SessionOutcome>,
+    cell: &OnceLock<SessionStopped>,
     local_state: &LinkState,
 ) -> LinkStateError {
     if let Some(reason) = cell.get() {
@@ -344,7 +383,7 @@ impl From<DeliveryFailure> for SendError {
 pub enum SenderAttachError {
     /// The session (or its connection) stopped before the attach completed
     #[error("The session stopped before the link was attached: {:?}", .0)]
-    SessionStopped(SessionOutcome),
+    SessionStopped(SessionStopped),
 
     /// The session is not in the `Mapped` state (e.g. not begun, or ending)
     #[error("The session is not in a state that permits link attachment")]
@@ -566,7 +605,7 @@ impl std::error::Error for DesiredFilterNotSupported {}
 pub enum ReceiverAttachError {
     /// The session (or its connection) stopped before the attach completed
     #[error("The session stopped before the link was attached: {:?}", .0)]
-    SessionStopped(SessionOutcome),
+    SessionStopped(SessionStopped),
 
     /// The session is not in the `Mapped` state (e.g. not begun, or ending)
     #[error("The session is not in a state that permits link attachment")]
@@ -733,7 +772,7 @@ pub enum LinkStateError {
 
     /// The session (or its connection) stopped before the link was detached or closed
     #[error("The session stopped before the link was detached or closed: {:?}", .0)]
-    SessionStopped(SessionOutcome),
+    SessionStopped(SessionStopped),
 }
 
 /// Errors associated with receiving a transfer
@@ -1183,11 +1222,12 @@ mod tests {
             ErrorRecovery::NewLink
         );
         assert_eq!(
-            LinkStateError::SessionStopped(SessionOutcome::Ended).recovery(),
+            LinkStateError::SessionStopped(SessionStopped::Outcome(SessionOutcome::Ended))
+                .recovery(),
             ErrorRecovery::ReconnectSession
         );
         assert_eq!(
-            LinkStateError::SessionStopped(SessionOutcome::ConnectionStopped(
+            LinkStateError::SessionStopped(SessionStopped::ConnectionStopped(
                 ConnectionOutcome::Closed
             ))
             .recovery(),
@@ -1198,11 +1238,12 @@ mod tests {
     #[test]
     fn detach_error_recovery() {
         assert_eq!(
-            DetachError::SessionStopped(SessionOutcome::RemoteEnded).recovery(),
+            DetachError::SessionStopped(SessionStopped::Outcome(SessionOutcome::RemoteEnded))
+                .recovery(),
             ErrorRecovery::ReconnectSession
         );
         assert_eq!(
-            DetachError::SessionStopped(SessionOutcome::ConnectionStopped(
+            DetachError::SessionStopped(SessionStopped::ConnectionStopped(
                 ConnectionOutcome::RemoteClosed
             ))
             .recovery(),
@@ -1214,8 +1255,10 @@ mod tests {
     #[test]
     fn send_error_recovery() {
         assert_eq!(
-            SendError::LinkStateError(LinkStateError::SessionStopped(SessionOutcome::RemoteEnded))
-                .recovery(),
+            SendError::LinkStateError(LinkStateError::SessionStopped(SessionStopped::Outcome(
+                SessionOutcome::RemoteEnded
+            )))
+            .recovery(),
             ErrorRecovery::ReconnectSession
         );
         assert_eq!(
@@ -1268,7 +1311,7 @@ mod tests {
     fn recv_error_recovery() {
         assert_eq!(
             RecvError::LinkStateError(LinkStateError::SessionStopped(
-                SessionOutcome::ConnectionStopped(ConnectionOutcome::Closed)
+                SessionStopped::ConnectionStopped(ConnectionOutcome::Closed)
             ))
             .recovery(),
             ErrorRecovery::ReconnectConnection

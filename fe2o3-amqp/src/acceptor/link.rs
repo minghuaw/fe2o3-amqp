@@ -243,7 +243,7 @@ mod tests {
     use super::{AcceptorAttachError, LinkAcceptor, ListenerSessionHandle, SessionHandle};
     use crate::{
         control::SessionControl,
-        link::{LinkFrame, SessionOutcome},
+        link::{LinkFrame, SessionOutcome, SessionStopped},
         session::error::Error,
     };
 
@@ -251,7 +251,7 @@ mod tests {
     /// listener sender is dropped (as if the session engine exited) and the
     /// stop reason cell is either pre-set or left unset.
     fn ended_listener_session_handle(
-        session_stop_reason: Option<SessionOutcome>,
+        session_stop_reason: Option<SessionStopped>,
     ) -> ListenerSessionHandle {
         let (_, link_listener) = mpsc::channel::<Attach>(16);
         let (control, _) = mpsc::channel::<SessionControl>(16);
@@ -281,14 +281,14 @@ mod tests {
     #[tokio::test]
     async fn accept_reports_recorded_stop_reason() {
         let mut handle = ended_listener_session_handle(Some(
-            SessionOutcome::ConnectionStopped(crate::connection::ConnectionOutcome::Closed),
+            SessionStopped::ConnectionStopped(crate::connection::ConnectionOutcome::Closed),
         ));
 
         let result = LinkAcceptor::new().accept(&mut handle).await;
 
         match result {
             Err(AcceptorAttachError::SessionStopped(
-                SessionOutcome::ConnectionStopped(
+                SessionStopped::ConnectionStopped(
                     crate::connection::ConnectionOutcome::Closed,
                 ),
             )) => {}
@@ -305,7 +305,9 @@ mod tests {
         let result = LinkAcceptor::new().accept(&mut handle).await;
 
         match result {
-            Err(AcceptorAttachError::SessionStopped(SessionOutcome::Ended)) => {}
+            Err(AcceptorAttachError::SessionStopped(SessionStopped::Outcome(
+                SessionOutcome::Ended,
+            ))) => {}
             other => panic!("expected SessionStopped(Ended), got {:?}", other),
         }
     }

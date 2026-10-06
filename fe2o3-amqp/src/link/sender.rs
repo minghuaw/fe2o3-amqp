@@ -39,7 +39,7 @@ use super::{
     ArcSenderUnsettledMap, AttachMode, DeliveryFailure, DetachThenResumeSenderError, LinkFrame,
     LinkOutcome, LinkRelay, LinkStateError, MessageSizeExceeded, SendError, SenderAttachError,
     SenderAttachExchange, SenderFlowState, SenderLink, SenderResumeError, SenderResumeErrorKind,
-    SessionOutcome, TransferError,
+    SessionStopped, TransferError,
 };
 
 use super::link_error_from_closed_channel;
@@ -738,7 +738,7 @@ where
         &self.session
     }
 
-    fn session_stop_reason(&self) -> &Arc<OnceLock<SessionOutcome>> {
+    fn session_stop_reason(&self) -> &Arc<OnceLock<SessionStopped>> {
         self.link().session_stop_reason()
     }
 

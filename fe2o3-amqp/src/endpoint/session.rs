@@ -13,7 +13,7 @@ use tokio::sync::mpsc;
 
 use crate::{
     connection::ConnectionOutcome,
-    link::{LinkRelay, SessionOutcome},
+    link::{LinkRelay, SessionStopped},
     session::frame::{SessionFrame, SessionOutgoingItem},
     Payload, SendBound,
 };
@@ -33,10 +33,10 @@ pub(crate) trait Session {
     ///
     /// Only succeeds if the stop reason has not been recorded yet; a later
     /// call is a no-op (the first recorded reason wins).
-    fn set_session_stop_reason(&mut self, reason: SessionOutcome);
+    fn set_session_stop_reason(&mut self, reason: SessionStopped);
 
     /// The shared cell holding why the session (or its connection) stopped
-    fn session_stop_reason(&self) -> &Arc<OnceLock<SessionOutcome>>;
+    fn session_stop_reason(&self) -> &Arc<OnceLock<SessionStopped>>;
 
     /// The shared cell holding why the connection stopped
     fn connection_stop_reason(&self) -> &Arc<OnceLock<ConnectionOutcome>>;

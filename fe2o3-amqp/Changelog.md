@@ -125,20 +125,30 @@
 
 21. **Breaking**: the close/detach outcome types are renamed to a consistent family:
     `DetachStatus` -> `LinkOutcome`, `SessionStopReason` -> `SessionOutcome`, and
-    `ConnectionStopReason` -> `ConnectionOutcome`. The variants are unchanged;
-    `SessionOutcome::ConnectionStopped` now embeds a `ConnectionOutcome`.
+    `ConnectionStopReason` -> `ConnectionOutcome`. `SessionOutcome` is self-contained: the
+    connection's own outcome is not embedded in it (see item 23).
 
 22. **Breaking**: the session and connection close APIs now report the terminal outcome as
     data: `Session::end`/`end_with_error`/`close`/`on_end` and `SessionHandle::try_end`
     return `Result<SessionOutcome, Error>`, and `Connection::close`/`close_with_error`/
     `on_close` and `ConnectionHandle::try_close` return `Result<ConnectionOutcome, Error>`.
     A completed exchange is `Ok` even when the peer attached an error, which is carried by
-    `RemoteEndedWithError`/`RemoteClosedWithError`; `Err` is reserved for local failures
-    (the session or connection stopped, invariant violations, transport errors). A session
-    that ends with its connection reports `SessionOutcome::ConnectionStopped`, and
-    `end_with_error`/`close_with_error` report `EndedWithError`/`ClosedWithError`;
-    `TryEndError::Ended`/`TryCloseError::Closed` are renamed to `Stopped` and only carry
-    local errors.
+    `RemoteEndedWithError`/`RemoteClosedWithError`; `Err` is reserved for local failures:
+    the connection stopping first (`Error::ConnectionStopped(reason)`), invariant
+    violations, and transport errors. `end_with_error`/`close_with_error` report
+    `EndedWithError`/`ClosedWithError`; `TryEndError::Ended`/`TryCloseError::Closed` are
+    renamed to `Stopped` and only carry local errors.
+
+23. **Breaking**: a session-dependent operation that failed because the session stopped now
+    reports the separate `SessionStopped` type: `SessionStopped::Outcome(SessionOutcome)`
+    when the session reached its own outcome, or
+    `SessionStopped::ConnectionStopped(ConnectionOutcome)` when the session ended with its
+    connection. It is used by `LinkStateError::SessionStopped`, the attach errors'
+    `SessionStopped`, `AllocLinkError::SessionStopped`, `AcceptorAttachError::SessionStopped`,
+    and `FromDeliveryFailure::from_session_stop_reason`. `SessionOutcome` is a
+    connection-free leaf; a connection stopping is a failure of the session's own end
+    operation (`Err(Error::ConnectionStopped)`), consistent with links failing when their
+    session stopped.
 
 ## 0.18.2
 

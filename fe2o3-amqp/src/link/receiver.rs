@@ -38,7 +38,7 @@ use super::{
     ArcReceiverUnsettledMap, AttachMode, DetachThenResumeReceiverError, DispositionError,
     FlowError, LinkFrame, LinkOutcome, LinkRelay, LinkStateError, MessageSizeExceeded,
     ReceiverAttachError, ReceiverAttachExchange, ReceiverFlowState, ReceiverLink,
-    ReceiverResumeError, ReceiverResumeErrorKind, ReceiverTransferError, RecvError, SessionOutcome,
+    ReceiverResumeError, ReceiverResumeErrorKind, ReceiverTransferError, RecvError, SessionStopped,
     DEFAULT_CREDIT,
 };
 
@@ -671,7 +671,7 @@ pub struct ReceiverDisposer {
     output_handle: Option<OutputHandle>,
     processed: Arc<AtomicU32>,
     credit_mode: CreditMode,
-    session_stop_reason: Arc<OnceLock<SessionOutcome>>,
+    session_stop_reason: Arc<OnceLock<SessionStopped>>,
 }
 
 impl ReceiverDisposer {
@@ -957,7 +957,7 @@ where
         &self.session
     }
 
-    fn session_stop_reason(&self) -> &Arc<OnceLock<SessionOutcome>> {
+    fn session_stop_reason(&self) -> &Arc<OnceLock<SessionStopped>> {
         self.link().session_stop_reason()
     }
 

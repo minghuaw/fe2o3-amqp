@@ -18,7 +18,7 @@ use crate::{
     endpoint::{
         self, IncomingChannel, InputHandle, LinkFlow, OutgoingChannel, OutputHandle, Session,
     },
-    link::{LinkFrame, LinkRelay, SessionOutcome},
+    link::{LinkFrame, LinkRelay, SessionOutcome, SessionStopped},
     session::{
         self,
         engine::SessionEngine,
@@ -70,7 +70,7 @@ pub(crate) async fn allocate_incoming_link(
     link_name: String,
     link_relay: LinkRelay<()>,
     input_handle: InputHandle,
-    session_stop_reason: &Arc<OnceLock<SessionOutcome>>,
+    session_stop_reason: &Arc<OnceLock<SessionStopped>>,
 ) -> Result<OutputHandle, AllocLinkError> {
     let (responder, resp_rx) = oneshot::channel();
 
@@ -87,7 +87,7 @@ pub(crate) async fn allocate_incoming_link(
             log::warn!(
                 "allocate_incoming_link: session stop reason not recorded; reporting SessionStopped(Ended)"
             );
-            SessionOutcome::Ended
+            SessionStopped::Outcome(SessionOutcome::Ended)
         }
     };
 
@@ -412,11 +412,11 @@ impl endpoint::Session for ListenerSession {
         self.session.local_state()
     }
 
-    fn set_session_stop_reason(&mut self, reason: SessionOutcome) {
+    fn set_session_stop_reason(&mut self, reason: SessionStopped) {
         self.session.set_session_stop_reason(reason)
     }
 
-    fn session_stop_reason(&self) -> &Arc<OnceLock<SessionOutcome>> {
+    fn session_stop_reason(&self) -> &Arc<OnceLock<SessionStopped>> {
         self.session.session_stop_reason()
     }
 
