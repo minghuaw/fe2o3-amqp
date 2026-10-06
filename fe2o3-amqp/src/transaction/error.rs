@@ -162,7 +162,7 @@ impl From<SendError> for ControllerSendError {
 impl From<DeliveryFailure> for ControllerSendError {
     fn from(value: DeliveryFailure) -> Self {
         match value {
-            DeliveryFailure::LinkState(error) => Self::LinkStateError(error),
+            DeliveryFailure::LinkState(error) => error.into(),
             DeliveryFailure::LinkDetached(status) => Self::LinkDetached(status),
         }
     }
@@ -307,7 +307,7 @@ impl From<MessageSizeExceeded> for PostError {
 impl From<TransferError> for PostError {
     fn from(value: TransferError) -> Self {
         match value {
-            TransferError::LinkState(error) => Self::LinkStateError(error),
+            TransferError::LinkState(error) => error.into(),
             TransferError::NotAttached => Self::NotAttached,
             TransferError::MessageEncodeError(error) => Self::MessageEncodeError(error),
             TransferError::FrameSizeTooSmall => Self::FrameSizeTooSmall,
@@ -352,7 +352,9 @@ impl FromPreSettled for PostResult {
 
 impl FromDeliveryFailure for PostResult {
     fn from_oneshot_recv_error(_: tokio::sync::oneshot::error::RecvError) -> Self {
-        Err(PostError::LinkStateError(LinkStateError::IllegalState))
+        // The session relay and the link endpoint fail the pending deliveries
+        // before they drop their maps, so this is defensive only.
+        Err(PostError::LinkStateError(LinkStateError::InvariantViolation))
     }
 
     fn from_session_stop_reason(reason: SessionStopReason) -> Self {
@@ -360,7 +362,7 @@ impl FromDeliveryFailure for PostResult {
     }
 
     fn from_link_state_error(error: LinkStateError) -> Self {
-        Err(PostError::LinkStateError(error))
+        Err(error.into())
     }
 
     fn from_detach_status(status: DetachStatus) -> Self {

@@ -1,6 +1,6 @@
 //! Implements errors associated with the connection
 
-use std::io;
+use std::{convert::Infallible, io};
 
 use bytes::Bytes;
 use fe2o3_amqp_types::{definitions, primitives::Binary, sasl::SaslCode};
@@ -106,6 +106,12 @@ impl From<NegotiationError> for OpenError {
             #[cfg(feature = "scram")]
             NegotiationError::ScramError(e) => Self::ScramError(e),
         }
+    }
+}
+
+impl From<Infallible> for OpenError {
+    fn from(_: Infallible) -> Self {
+        unreachable!("Infallible cannot be constructed")
     }
 }
 
