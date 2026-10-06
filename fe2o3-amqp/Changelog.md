@@ -105,11 +105,11 @@
     detach no longer leaves a later `on_detach`, `recv` or send reporting `IllegalState` (or
     waiting for a frame that will not come): the link reports the `LinkDetached(Detached)` or
     `LinkDetached(Closed)` outcome it already reached. `Sender::on_detach` on an already
-    terminal link returns `LinkDetached(status)` immediately, `send_detach` on a terminal link
-    reports the same, and the session relay now fails the deliveries still pending on a sender
-    link with the peer's actual `Detached`/`Closed` outcome (including its error) when the link
-    endpoint is gone or the peer closed the link, instead of letting their settlement channels
-    drop.
+    terminal link returns the stored `DetachStatus` immediately, `send_detach` on a terminal
+    link reports the outcome as `LinkDetached(status)`, and the session relay now fails the
+    deliveries still pending on a sender link with the peer's actual `Detached`/`Closed`
+    outcome (including its error) when the link endpoint is gone or the peer closed the link,
+    instead of letting their settlement channels drop.
 
 19. **Bugfix**: when this side rejects an incoming attach, a rejection detach that could not
     be sent is now classified against the attach failure. If the link already reached a
