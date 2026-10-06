@@ -21,7 +21,7 @@ use crate::{
 };
 use crate::{util::AsDeliveryState, Payload};
 
-use super::{DeliveryFailure, DetachStatus, LinkStateError, SendError, SessionStopReason};
+use super::{DeliveryFailure, LinkOutcome, LinkStateError, SendError, SessionOutcome};
 
 /// Delivery information that is needed for disposing a message
 #[derive(Clone)]
@@ -364,7 +364,7 @@ pin_project! {
         outcome_marker: PhantomData<O>,
         // Why the session (or its connection) stopped, consulted when the
         // settlement oneshot dies
-        session_stop_reason: Arc<OnceLock<SessionStopReason>>,
+        session_stop_reason: Arc<OnceLock<SessionOutcome>>,
     }
 }
 
@@ -372,7 +372,7 @@ impl<O> DeliveryFut<O> {
     /// Create a new delivery future with the shared stop-reason cell
     pub(crate) fn new(
         settlement: Settlement,
-        session_stop_reason: Arc<OnceLock<SessionStopReason>>,
+        session_stop_reason: Arc<OnceLock<SessionOutcome>>,
     ) -> Self {
         Self {
             settlement,
@@ -422,7 +422,7 @@ pub trait FromDeliveryFailure {
     fn from_oneshot_recv_error(err: RecvError) -> Self;
 
     /// how to interprete a "the session (or its connection) stopped" failure
-    fn from_session_stop_reason(reason: SessionStopReason) -> Self;
+    fn from_session_stop_reason(reason: SessionOutcome) -> Self;
 
     /// how to interprete a link-state error delivered through the settlement
     /// channel (e.g. the remote closed the link while the delivery was pending)
@@ -430,7 +430,7 @@ pub trait FromDeliveryFailure {
 
     /// how to interprete a peer detach/close delivered through the settlement
     /// channel while the delivery was pending
-    fn from_detach_status(status: DetachStatus) -> Self;
+    fn from_detach_status(status: LinkOutcome) -> Self;
 }
 
 impl FromDeliveryFailure for SendResult {
@@ -442,7 +442,7 @@ impl FromDeliveryFailure for SendResult {
         Err(LinkStateError::InvariantViolation.into())
     }
 
-    fn from_session_stop_reason(reason: SessionStopReason) -> Self {
+    fn from_session_stop_reason(reason: SessionOutcome) -> Self {
         Err(LinkStateError::SessionStopped(reason).into())
     }
 
@@ -450,7 +450,7 @@ impl FromDeliveryFailure for SendResult {
         Err(error.into())
     }
 
-    fn from_detach_status(status: DetachStatus) -> Self {
+    fn from_detach_status(status: LinkOutcome) -> Self {
         Err(SendError::LinkDetached(status))
     }
 }
@@ -554,8 +554,8 @@ mod tests {
 
     use crate::Sendable;
 
-    use super::{DeliveryFut, FromDeliveryFailure, SendResult, SessionStopReason};
-    use crate::link::{DeliveryFailure, DetachStatus, LinkStateError, SendError};
+    use super::{DeliveryFut, FromDeliveryFailure, SendResult, SessionOutcome};
+    use crate::link::{DeliveryFailure, LinkOutcome, LinkStateError, SendError};
 
     struct Foo {}
 
@@ -599,11 +599,12 @@ mod tests {
 
     #[test]
     fn test_send_result_from_session_stop_reason() {
-        let reason = SessionStopReason::ConnectionStopped(
-            crate::connection::ConnectionStopReason::RemoteClosedWithError(
-                definitions::Error::new(ConnectionError::ConnectionForced, None, None),
-            ),
-        );
+        let reason =
+            SessionOutcome::ConnectionStopped(
+                crate::connection::ConnectionOutcome::RemoteClosedWithError(
+                    definitions::Error::new(ConnectionError::ConnectionForced, None, None),
+                ),
+            );
         let result = <SendResult as FromDeliveryFailure>::from_session_stop_reason(reason.clone());
         match result {
             Err(SendError::LinkStateError(LinkStateError::SessionStopped(actual))) => {
@@ -625,8 +626,8 @@ mod tests {
         };
         let session_stop_reason = Arc::new(OnceLock::new());
         session_stop_reason
-            .set(SessionStopReason::ConnectionStopped(
-                crate::connection::ConnectionStopReason::Closed,
+            .set(SessionOutcome::ConnectionStopped(
+                crate::connection::ConnectionOutcome::Closed,
             ))
             .unwrap();
         let fut = DeliveryFut::new(settlement, session_stop_reason);
@@ -634,9 +635,7 @@ mod tests {
 
         match fut.await {
             Err(SendError::LinkStateError(LinkStateError::SessionStopped(
-                SessionStopReason::ConnectionStopped(
-                    crate::connection::ConnectionStopReason::Closed,
-                ),
+                SessionOutcome::ConnectionStopped(crate::connection::ConnectionOutcome::Closed),
             ))) => {}
             other => panic!("unexpected result: {:?}", other),
         }
@@ -674,12 +673,11 @@ mod tests {
 
     #[test]
     fn test_send_result_from_detach_status() {
-        let result =
-            <SendResult as FromDeliveryFailure>::from_detach_status(DetachStatus::Closed {
-                remote_error: None,
-            });
+        let result = <SendResult as FromDeliveryFailure>::from_detach_status(LinkOutcome::Closed {
+            remote_error: None,
+        });
         match result {
-            Err(SendError::LinkDetached(DetachStatus::Closed { remote_error: None })) => {}
+            Err(SendError::LinkDetached(LinkOutcome::Closed { remote_error: None })) => {}
             other => panic!("unexpected result: {:?}", other),
         }
 
@@ -688,12 +686,11 @@ mod tests {
             Some("remote closed".to_string()),
             None,
         );
-        let result =
-            <SendResult as FromDeliveryFailure>::from_detach_status(DetachStatus::Closed {
-                remote_error: Some(error.clone()),
-            });
+        let result = <SendResult as FromDeliveryFailure>::from_detach_status(LinkOutcome::Closed {
+            remote_error: Some(error.clone()),
+        });
         match result {
-            Err(SendError::LinkDetached(DetachStatus::Closed {
+            Err(SendError::LinkDetached(LinkOutcome::Closed {
                 remote_error: Some(actual),
             })) => {
                 assert_eq!(actual, error);
@@ -719,12 +716,12 @@ mod tests {
             Some("remote closed".to_string()),
             None,
         );
-        let _ = tx.send(Err(DeliveryFailure::LinkDetached(DetachStatus::Closed {
+        let _ = tx.send(Err(DeliveryFailure::LinkDetached(LinkOutcome::Closed {
             remote_error: Some(error.clone()),
         })));
 
         match fut.await {
-            Err(SendError::LinkDetached(DetachStatus::Closed {
+            Err(SendError::LinkDetached(LinkOutcome::Closed {
                 remote_error: Some(actual),
             })) => {
                 assert_eq!(actual, error);

@@ -21,7 +21,7 @@ use crate::transport::Transport;
 use crate::util::Running;
 use crate::{endpoint, transport, SendBound};
 
-use super::ConnectionStopReason;
+use super::ConnectionOutcome;
 use super::{heartbeat::HeartBeat, ConnectionState};
 use super::{AllocSessionError, ConnectionInnerError, ConnectionStateError, Error, OpenError};
 
@@ -41,7 +41,7 @@ where
 {
     /// The shared cell holding why the connection stopped, on the connection
     /// object and shared with the sessions and the handle
-    pub(crate) fn connection_stop_reason(&self) -> &Arc<OnceLock<ConnectionStopReason>> {
+    pub(crate) fn connection_stop_reason(&self) -> &Arc<OnceLock<ConnectionOutcome>> {
         self.connection.connection_stop_reason()
     }
 
@@ -417,9 +417,10 @@ where
                 // channels close, so sessions and links observe the local
                 // error regardless of how the peer responds.
                 if let Some(error) = &error {
-                    self.connection.set_connection_stop_reason(
-                        ConnectionStopReason::ClosedWithError(error.clone()),
-                    );
+                    self.connection
+                        .set_connection_stop_reason(ConnectionOutcome::ClosedWithError(
+                            error.clone(),
+                        ));
                 }
                 self.outgoing_session_frames.close();
                 while let Some(frame) = self.outgoing_session_frames.recv().await {
@@ -675,10 +676,10 @@ where
         // session that wakes on the channel closure sees it.
         let connection_stop_reason = match &result {
             Err(Error::RemoteClosedWithError(error)) => {
-                ConnectionStopReason::RemoteClosedWithError(error.clone())
+                ConnectionOutcome::RemoteClosedWithError(error.clone())
             }
-            Err(Error::RemoteClosed) => ConnectionStopReason::RemoteClosed,
-            _ => ConnectionStopReason::Closed,
+            Err(Error::RemoteClosed) => ConnectionOutcome::RemoteClosed,
+            _ => ConnectionOutcome::Closed,
         };
         self.connection
             .set_connection_stop_reason(connection_stop_reason);

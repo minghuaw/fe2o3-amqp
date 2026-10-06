@@ -18,11 +18,11 @@
    outcomes are classified as reattach (`Detached`) or new link (`Closed`).
 5. **Breaking**: a peer-initiated link detach/close is now reported as an outcome instead of a
    link-state error. `LinkStateError` no longer carries `RemoteDetached`, `RemoteDetachedWithError`,
-   `RemoteClosed` or `RemoteClosedWithError`; the new `DetachStatus` (`Detached`/`Closed` plus the
+   `RemoteClosed` or `RemoteClosedWithError`; the new `LinkOutcome` (`Detached`/`Closed` plus the
    peer's optional error) is carried by `SendError::LinkDetached`, `RecvError::LinkDetached`,
    `PostError::LinkDetached` and `ControllerSendError::LinkDetached`, and exposes `is_closed()` and
    `remote_error()` to inspect the outcome. `Sender::on_detach` returns
-   `Result<DetachStatus, LinkStateError>`; the deprecated `DetachError::DetachedByRemote` is
+   `Result<LinkOutcome, LinkStateError>`; the deprecated `DetachError::DetachedByRemote` is
    removed. The dead `SendError::Detached(DetachError)` and `From<DetachError> for SendError` are
    removed as well.
 6. **Breaking**: `IllegalLinkStateError` is merged into `LinkStateError`, which now carries only
@@ -36,12 +36,12 @@
    returning an `IllegalState` attach error when there are unsettled deliveries (#396).
 8. **Breaking**: `DetachError` is now a type alias of `LinkStateError` and the peer's detach/close
    outcome is returned directly. `detach()`/`detach_with_error()` return
-   `(DetachedSender, DetachStatus)` (receiver: `(DetachedReceiver, DetachStatus)`);
-   `close()`/`close_with_error()` on `Sender`, `Receiver` and `Controller` return `DetachStatus`,
+   `(DetachedSender, LinkOutcome)` (receiver: `(DetachedReceiver, LinkOutcome)`);
+   `close()`/`close_with_error()` on `Sender`, `Receiver` and `Controller` return `LinkOutcome`,
    so the error the peer attached to its closing detach is surfaced instead of being dropped.
    `DetachError::ClosedByRemote`, `RemoteDetachedWithError` and `RemoteClosedWithError` are
-   removed: the AMQP 1.0 §2.6.6 crossed close is reported as `DetachStatus::Closed`.
-   `SenderResumeErrorKind`/`ReceiverResumeErrorKind` gain `LinkDetached(DetachStatus)`, and
+   removed: the AMQP 1.0 §2.6.6 crossed close is reported as `LinkOutcome::Closed`.
+   `SenderResumeErrorKind`/`ReceiverResumeErrorKind` gain `LinkDetached(LinkOutcome)`, and
    `detach_then_resume_on_session` reports a link the peer detached closed through the existing
    `Resume` variant without attempting to resume it. `SenderAttachError`/`ReceiverAttachError`
    no longer carry the unproduced `UnexpectedFrame` and once again report
@@ -61,7 +61,7 @@
     are empty). The loop is bounded and returns the new `SenderResumeErrorKind::IncompleteUnsettled`
     if the unsettled map never becomes complete.
 11. **Bugfix**: `close()` on a link whose detach was answered by a suspension now completes the
-    AMQP 1.0 §2.6.6 reattach-then-close handshake and returns `DetachStatus::Closed`; the
+    AMQP 1.0 §2.6.6 reattach-then-close handshake and returns `LinkOutcome::Closed`; the
     reattach carries a null `unsettled` map (§2.7.3), any deliveries the peer still considers
     unsettled are failed with `LinkDetached(Closed)`, and previously the outcome was recorded
     while the link was left detached.
@@ -105,7 +105,7 @@
     detach no longer leaves a later `on_detach`, `recv` or send reporting `IllegalState` (or
     waiting for a frame that will not come): the link reports the `LinkDetached(Detached)` or
     `LinkDetached(Closed)` outcome it already reached. `Sender::on_detach` on an already
-    terminal link returns the stored `DetachStatus` immediately, `send_detach` on a terminal
+    terminal link returns the stored `LinkOutcome` immediately, `send_detach` on a terminal
     link reports the outcome as `LinkDetached(status)`, and the session relay now fails the
     deliveries still pending on a sender link with the peer's actual `Detached`/`Closed`
     outcome (including its error) when the link endpoint is gone or the peer closed the link,
@@ -127,6 +127,11 @@
     end/close for links). `try_end`/`try_close` now return a flat `Result<(), TryEndError>`
     and `Result<(), TryCloseError>` whose `Ended`/`Closed` variant carries the terminal
     error; `TryEndError::AlreadyEnded` and `TryCloseError::AlreadyClosed` are removed.
+
+21. **Breaking**: the close/detach outcome types are renamed to a consistent family:
+    `DetachStatus` -> `LinkOutcome`, `SessionStopReason` -> `SessionOutcome`, and
+    `ConnectionStopReason` -> `ConnectionOutcome`. The variants are unchanged;
+    `SessionOutcome::ConnectionStopped` now embeds a `ConnectionOutcome`.
 
 ## 0.18.2
 

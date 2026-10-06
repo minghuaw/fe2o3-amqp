@@ -12,7 +12,7 @@ use futures_util::Sink;
 use tokio::sync::mpsc;
 
 use crate::{
-    connection::ConnectionStopReason, frames::amqp::Frame, session::frame::SessionIncomingItem,
+    connection::ConnectionOutcome, frames::amqp::Frame, session::frame::SessionIncomingItem,
     SendBound,
 };
 
@@ -31,13 +31,13 @@ pub(crate) trait Connection {
     fn local_open(&self) -> &Open;
 
     /// The shared cell holding why this connection stopped
-    fn connection_stop_reason(&self) -> &Arc<OnceLock<ConnectionStopReason>>;
+    fn connection_stop_reason(&self) -> &Arc<OnceLock<ConnectionOutcome>>;
 
     /// Record why this connection stopped
     ///
     /// Only succeeds if the stop reason has not been recorded yet; a later
     /// call is a no-op (the first recorded reason wins).
-    fn set_connection_stop_reason(&mut self, reason: ConnectionStopReason);
+    fn set_connection_stop_reason(&mut self, reason: ConnectionOutcome);
 
     // Allocate outgoing channel id and session id to a new session
     fn allocate_session(

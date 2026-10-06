@@ -35,11 +35,11 @@ use super::{
     role,
     shared_inner::{LinkEndpointInner, LinkEndpointInnerDetach, LinkEndpointInnerReattach},
     state::LinkState,
-    ArcReceiverUnsettledMap, AttachMode, DetachStatus, DetachThenResumeReceiverError,
-    DispositionError, FlowError, LinkFrame, LinkRelay, LinkStateError, MessageSizeExceeded,
+    ArcReceiverUnsettledMap, AttachMode, DetachThenResumeReceiverError, DispositionError,
+    FlowError, LinkFrame, LinkOutcome, LinkRelay, LinkStateError, MessageSizeExceeded,
     ReceiverAttachError, ReceiverAttachExchange, ReceiverFlowState, ReceiverLink,
-    ReceiverResumeError, ReceiverResumeErrorKind, ReceiverTransferError, RecvError,
-    SessionStopReason, DEFAULT_CREDIT,
+    ReceiverResumeError, ReceiverResumeErrorKind, ReceiverTransferError, RecvError, SessionOutcome,
+    DEFAULT_CREDIT,
 };
 
 use super::{link_error_from_closed_channel, link_state_error_from_stop_reason};
@@ -373,7 +373,7 @@ impl Receiver {
     /// re-attach and then close by exchanging closing Detach performatives.
     pub async fn detach(
         mut self,
-    ) -> Result<(DetachedReceiver, DetachStatus), (DetachedReceiver, DetachError)> {
+    ) -> Result<(DetachedReceiver, LinkOutcome), (DetachedReceiver, DetachError)> {
         match self.inner.detach_with_error(None).await {
             Ok(status) => Ok((
                 DetachedReceiver {
@@ -398,7 +398,7 @@ impl Receiver {
     pub async fn detach_with_error(
         mut self,
         error: impl Into<definitions::Error>,
-    ) -> Result<(DetachedReceiver, DetachStatus), (DetachedReceiver, DetachError)> {
+    ) -> Result<(DetachedReceiver, LinkOutcome), (DetachedReceiver, DetachError)> {
         match self.inner.detach_with_error(Some(error.into())).await {
             Ok(status) => Ok((
                 DetachedReceiver {
@@ -423,7 +423,7 @@ impl Receiver {
             self,
             duration: Duration,
         ) -> Result<
-            Result<(DetachedReceiver, DetachStatus), (DetachedReceiver, DetachError)>,
+            Result<(DetachedReceiver, LinkOutcome), (DetachedReceiver, DetachError)>,
             Elapsed,
         > {
             timeout(duration, self.detach()).await
@@ -467,9 +467,9 @@ impl Receiver {
     /// Close the link.
     ///
     /// This will send a Detach performative with the `closed` field set to true.
-    /// The returned [`DetachStatus`] carries the error the peer attached to
+    /// The returned [`LinkOutcome`] carries the error the peer attached to
     /// its closing detach, if any.
-    pub async fn close(mut self) -> Result<DetachStatus, DetachError> {
+    pub async fn close(mut self) -> Result<LinkOutcome, DetachError> {
         self.inner.close_with_error(None).await
     }
 
@@ -479,7 +479,7 @@ impl Receiver {
     pub async fn close_with_error(
         mut self,
         error: impl Into<definitions::Error>,
-    ) -> Result<DetachStatus, DetachError> {
+    ) -> Result<LinkOutcome, DetachError> {
         // Stop link transfer before closing
         self.set_credit(0).await?;
         self.inner.close_with_error(Some(error.into())).await
@@ -671,7 +671,7 @@ pub struct ReceiverDisposer {
     output_handle: Option<OutputHandle>,
     processed: Arc<AtomicU32>,
     credit_mode: CreditMode,
-    session_stop_reason: Arc<OnceLock<SessionStopReason>>,
+    session_stop_reason: Arc<OnceLock<SessionOutcome>>,
 }
 
 impl ReceiverDisposer {
@@ -957,7 +957,7 @@ where
         &self.session
     }
 
-    fn session_stop_reason(&self) -> &Arc<OnceLock<SessionStopReason>> {
+    fn session_stop_reason(&self) -> &Arc<OnceLock<SessionOutcome>> {
         self.link().session_stop_reason()
     }
 
@@ -2383,7 +2383,7 @@ mod tests {
 
         assert!(matches!(
             result,
-            Err(RecvError::LinkDetached(DetachStatus::Detached {
+            Err(RecvError::LinkDetached(LinkOutcome::Detached {
                 remote_error: None
             }))
         ));
@@ -3205,7 +3205,7 @@ mod tests {
     /// triggers the AMQP 1.0 §2.6.6 simultaneous-detach handshake. The spec
     /// assigns the reattach to this side (the non-closing/suspending side),
     /// which reattaches and then sends a closing detach; the link ends
-    /// `Closed`, reported as a `DetachStatus::Closed` outcome.
+    /// `Closed`, reported as a `LinkOutcome::Closed` outcome.
     ///
     /// The peer's frames are scripted, so this is deterministic.
     #[tokio::test]
@@ -3230,7 +3230,7 @@ mod tests {
         );
         assert!(matches!(
             result,
-            Ok(DetachStatus::Closed { remote_error: None })
+            Ok(LinkOutcome::Closed { remote_error: None })
         ));
         assert!(matches!(&inner.link.local_state, LinkState::Closed(_)));
     }
