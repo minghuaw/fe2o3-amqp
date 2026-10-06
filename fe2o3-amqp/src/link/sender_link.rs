@@ -920,16 +920,10 @@ where
             SenderAttachError::SndSettleModeNotSupported
             | SenderAttachError::IncomingTargetIsNone => {
                 // Just send detach immediately
-                let err = match self.send_detach(writer, true, None).await {
-                    Ok(()) => attach_error,
-                    Err(DetachError::SessionStopped(reason)) => {
-                        SenderAttachError::SessionStopped(reason)
-                    }
-                    // The rejecting detach failed for a link-local reason; the
-                    // attach failure stays the primary error.
-                    Err(_) => attach_error,
-                };
-                recv_detach(self, reader, err).await
+                match self.send_detach(writer, true, None).await {
+                    Ok(()) => recv_detach(self, reader, attach_error).await,
+                    Err(detach_error) => sender_detach_failure(detach_error, attach_error),
+                }
             }
 
             SenderAttachError::CoordinatorIsNotImplemented
@@ -943,6 +937,25 @@ where
                 try_detach_with_error(self, attach_error, writer, reader).await
             }
         }
+    }
+}
+
+/// Classify a rejected attach whose closing detach could not be sent.
+///
+/// An already terminal link is not a failure by itself: when the stored
+/// outcome carries a remote error the remote error is reported, otherwise the
+/// attach failure stays the primary error. A session stop always wins.
+fn sender_detach_failure(
+    detach_error: DetachError,
+    attach_error: SenderAttachError,
+) -> SenderAttachError {
+    match detach_error {
+        DetachError::SessionStopped(reason) => SenderAttachError::SessionStopped(reason),
+        DetachError::LinkDetached(status) => match status.remote_error() {
+            Some(error) => SenderAttachError::RemoteClosedWithError(error.clone()),
+            None => attach_error,
+        },
+        DetachError::IllegalState | DetachError::InvariantViolation => attach_error,
     }
 }
 
@@ -962,20 +975,8 @@ where
 {
     match (&attach_error).try_into() {
         Ok(err) => match link.send_detach(writer, true, Some(err)).await {
-            Ok(_) => match reader.recv().await {
-                Some(LinkFrame::Detach(remote_detach)) => {
-                    match link.on_detach_reply(remote_detach) {
-                        Ok(status) => match status.remote_error() {
-                            Some(error) => SenderAttachError::RemoteClosedWithError(error.clone()),
-                            None => attach_error,
-                        },
-                        Err(detach_error) => SenderAttachError::from(detach_error),
-                    }
-                }
-                Some(_) => SenderAttachError::NonAttachFrameReceived,
-                None => sender_attach_error_from_stop_reason(link.session_stop_reason()),
-            },
-            Err(_) => sender_attach_error_from_stop_reason(link.session_stop_reason()),
+            Ok(()) => recv_detach(link, reader, attach_error).await,
+            Err(detach_error) => sender_detach_failure(detach_error, attach_error),
         },
         Err(_) => attach_error,
     }

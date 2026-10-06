@@ -111,6 +111,13 @@
     endpoint is gone or the peer closed the link, instead of letting their settlement channels
     drop.
 
+19. **Bugfix**: when this side rejects an incoming attach, a rejection detach that could not
+    be sent is now classified against the attach failure. If the link already reached a
+    terminal outcome, the remote error stored in that outcome is reported as
+    `RemoteClosedWithError`; otherwise the attach error stays the primary error, and a session
+    stop always wins. The immediate-detach rejection paths also no longer wait for a detach
+    reply after sending the detach failed.
+
 ## 0.18.2
 
 **Bugfix**: an unsettled delivery is now registered before its transfer reaches the session, preventing `send` from hanging when the peer settles immediately.
