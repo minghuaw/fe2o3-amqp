@@ -256,7 +256,7 @@ mod tests {
         let (_, link_listener) = mpsc::channel::<Attach>(16);
         let (control, _) = mpsc::channel::<SessionControl>(16);
         let (outgoing, _) = mpsc::channel::<LinkFrame>(16);
-        let (outcome_tx, outcome) = oneshot::channel::<Result<(), Error>>();
+        let (outcome_tx, outcome) = oneshot::channel::<Result<SessionOutcome, Error>>();
         drop(outcome_tx);
         let stop_reason_cell = Arc::new(OnceLock::new());
         if let Some(reason) = session_stop_reason {
@@ -265,6 +265,7 @@ mod tests {
         SessionHandle {
             is_ended: false,
             terminal_outcome: None,
+            terminated_with_error: false,
             control,
             engine_handle: tokio::spawn(async {}),
             outcome,

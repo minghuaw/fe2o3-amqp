@@ -378,6 +378,7 @@ impl Builder {
             let handle = SessionHandle {
                 is_ended: false,
                 terminal_outcome: None,
+                terminated_with_error: false,
                 control: session_control_tx,
                 engine_handle,
                 outcome,
@@ -449,6 +450,7 @@ impl Builder {
             let handle = SessionHandle {
                 is_ended: false,
                 terminal_outcome: None,
+                terminated_with_error: false,
                 control: session_control_tx,
                 engine_handle,
                 outcome,
@@ -519,6 +521,7 @@ impl Builder {
             let handle = SessionHandle {
                 is_ended: false,
                 terminal_outcome: None,
+                terminated_with_error: false,
                 control: session_control_tx,
                 engine_handle,
                 outcome,
