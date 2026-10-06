@@ -22,7 +22,7 @@ use fe2o3_amqp::{
         ConnectionAcceptor, LinkAcceptor, LinkEndpoint, ListenerSessionHandle, SessionAcceptor,
     },
     connection::{Connection, ConnectionHandle},
-    link::{DetachStatus, SendError},
+    link::{LinkOutcome, SendError},
     session::{Session, SessionHandle},
     types::messaging::Message,
     Sendable, Sender,
@@ -113,7 +113,7 @@ async fn pending_delivery_failed_by_close_echo_after_sender_dropped_without_clos
         .expect("delivery did not resolve after the close echo")
         .expect_err("stranded delivery must fail on the close echo");
     match result {
-        SendError::LinkDetached(DetachStatus::Closed { remote_error: None }) => {}
+        SendError::LinkDetached(LinkOutcome::Closed { remote_error: None }) => {}
         other => panic!("expected Closed, got {:?}", other),
     }
 
@@ -149,7 +149,7 @@ async fn remote_link_close_fails_pending_delivery_and_session_survives() {
         .expect("delivery did not resolve")
         .expect_err("pending delivery must fail on remote close");
     match result {
-        SendError::LinkDetached(DetachStatus::Closed { remote_error: None }) => {}
+        SendError::LinkDetached(LinkOutcome::Closed { remote_error: None }) => {}
         other => panic!("expected Closed, got {:?}", other),
     }
 
@@ -201,7 +201,7 @@ async fn on_detach_returns_after_remote_close_and_close_is_clean() {
         .await
         .expect("on_detach timed out");
     match detached {
-        Ok(DetachStatus::Closed { remote_error: None }) => {}
+        Ok(LinkOutcome::Closed { remote_error: None }) => {}
         other => panic!("expected Closed, got {:?}", other),
     }
     close_task.await.unwrap();
@@ -237,7 +237,7 @@ async fn on_detach_returns_after_remote_close_and_close_is_clean() {
 /// A remote **non-closing** detach (suspend) leaves the link `Detached`; a
 /// subsequent `close()` must complete without reattaching the link or writing
 /// another detach. The relay answers the peer's detach at arrival, so
-/// `on_detach` reports `DetachStatus::Detached` and `close()` is a no-op on
+/// `on_detach` reports `LinkOutcome::Detached` and `close()` is a no-op on
 /// the already-terminal link.
 #[tokio::test]
 async fn on_detach_returns_after_remote_suspend_and_close_does_not_reattach() {
@@ -257,7 +257,7 @@ async fn on_detach_returns_after_remote_suspend_and_close_does_not_reattach() {
         .await
         .expect("on_detach timed out");
     match detached {
-        Ok(DetachStatus::Detached { remote_error: None }) => {}
+        Ok(LinkOutcome::Detached { remote_error: None }) => {}
         other => panic!("expected Detached, got {:?}", other),
     }
     let _detached_receiver = detach_task.await.unwrap();

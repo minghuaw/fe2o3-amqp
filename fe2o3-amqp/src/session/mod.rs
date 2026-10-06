@@ -23,10 +23,10 @@ use tokio::{
 };
 
 use crate::{
-    connection::ConnectionStopReason,
+    connection::ConnectionOutcome,
     control::SessionControl,
     endpoint::{self, IncomingChannel, InputHandle, LinkFlow, OutgoingChannel, OutputHandle},
-    link::{LinkFrame, LinkRelay, SessionStopReason},
+    link::{LinkFrame, LinkRelay, SessionOutcome},
     util::{is_consecutive, Constant},
     Payload,
 };
@@ -78,7 +78,7 @@ pub struct SessionHandle<R> {
     // outgoing for Link
     pub(crate) outgoing: mpsc::Sender<LinkFrame>,
     /// Why the session (or its connection) stopped, shared with the links
-    pub(crate) session_stop_reason: Arc<OnceLock<SessionStopReason>>,
+    pub(crate) session_stop_reason: Arc<OnceLock<SessionOutcome>>,
     /// The negotiated max frame size (encoder max frame length), shared from
     /// the connection and with the links
     pub(crate) max_frame_size: usize,
@@ -142,7 +142,7 @@ impl<R> Drop for SessionHandle<R> {
 
 impl<R> SessionHandle<R> {
     /// The shared stop reason cell, used by links to observe why the session stopped
-    pub(crate) fn session_stop_reason(&self) -> &Arc<OnceLock<SessionStopReason>> {
+    pub(crate) fn session_stop_reason(&self) -> &Arc<OnceLock<SessionOutcome>> {
         &self.session_stop_reason
     }
 
@@ -277,7 +277,7 @@ pub(crate) async fn allocate_link(
     control: &mpsc::Sender<SessionControl>,
     link_name: String,
     link_relay: LinkRelay<()>,
-    session_stop_reason: &Arc<OnceLock<SessionStopReason>>,
+    session_stop_reason: &Arc<OnceLock<SessionOutcome>>,
 ) -> Result<OutputHandle, AllocLinkError> {
     let (responder, resp_rx) = oneshot::channel();
 
@@ -294,7 +294,7 @@ pub(crate) async fn allocate_link(
             log::warn!(
                 "allocate_link: session stop reason not recorded; reporting SessionStopped(Ended)"
             );
-            SessionStopReason::Ended
+            SessionOutcome::Ended
         }
     };
 
@@ -358,11 +358,11 @@ pub struct Session {
 
     /// Why this session (or its connection) stopped, shared with the links
     /// and the session handle
-    pub(crate) session_stop_reason: Arc<OnceLock<SessionStopReason>>,
+    pub(crate) session_stop_reason: Arc<OnceLock<SessionOutcome>>,
 
     /// Why the connection stopped, shared with the connection engine and the
     /// connection handle
-    pub(crate) connection_stop_reason: Arc<OnceLock<ConnectionStopReason>>,
+    pub(crate) connection_stop_reason: Arc<OnceLock<ConnectionOutcome>>,
 
     // local amqp states
     pub(crate) local_state: SessionState,
@@ -633,15 +633,15 @@ impl endpoint::Session for Session {
         &self.local_state
     }
 
-    fn set_session_stop_reason(&mut self, reason: SessionStopReason) {
+    fn set_session_stop_reason(&mut self, reason: SessionOutcome) {
         let _ = self.session_stop_reason.set(reason);
     }
 
-    fn session_stop_reason(&self) -> &Arc<OnceLock<SessionStopReason>> {
+    fn session_stop_reason(&self) -> &Arc<OnceLock<SessionOutcome>> {
         &self.session_stop_reason
     }
 
-    fn connection_stop_reason(&self) -> &Arc<OnceLock<ConnectionStopReason>> {
+    fn connection_stop_reason(&self) -> &Arc<OnceLock<ConnectionOutcome>> {
         &self.connection_stop_reason
     }
 
@@ -676,7 +676,7 @@ impl endpoint::Session for Session {
                             log::warn!(
                                 "allocate_link: session stop reason not recorded; reporting SessionStopped(Ended)"
                             );
-                            AllocLinkError::SessionStopped(SessionStopReason::Ended)
+                            AllocLinkError::SessionStopped(SessionOutcome::Ended)
                         }
                         // Not begun yet (or fully ended without a recorded stop):
                         // the session exists but is not mapped

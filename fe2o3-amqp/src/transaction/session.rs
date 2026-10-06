@@ -13,10 +13,10 @@ use tokio::sync::{mpsc, oneshot};
 use uuid::Uuid;
 
 use crate::{
-    connection::ConnectionStopReason,
+    connection::ConnectionOutcome,
     control::SessionControl,
     endpoint::{self, IncomingChannel, InputHandle, LinkFlow, OutgoingChannel, OutputHandle},
-    link::{target_archetype::VariantOfTargetArchetype, LinkRelay, SessionStopReason},
+    link::{target_archetype::VariantOfTargetArchetype, LinkRelay, SessionOutcome},
     session::{
         self,
         frame::{SessionFrame, SessionOutgoingItem},
@@ -238,15 +238,15 @@ where
         self.session.local_state()
     }
 
-    fn set_session_stop_reason(&mut self, reason: SessionStopReason) {
+    fn set_session_stop_reason(&mut self, reason: SessionOutcome) {
         self.session.set_session_stop_reason(reason)
     }
 
-    fn session_stop_reason(&self) -> &Arc<OnceLock<SessionStopReason>> {
+    fn session_stop_reason(&self) -> &Arc<OnceLock<SessionOutcome>> {
         self.session.session_stop_reason()
     }
 
-    fn connection_stop_reason(&self) -> &Arc<OnceLock<ConnectionStopReason>> {
+    fn connection_stop_reason(&self) -> &Arc<OnceLock<ConnectionOutcome>> {
         self.session.connection_stop_reason()
     }
 

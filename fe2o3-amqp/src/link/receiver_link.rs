@@ -808,7 +808,7 @@ where
         &mut self.output_handle
     }
 
-    fn session_stop_reason(&self) -> &Arc<OnceLock<SessionStopReason>> {
+    fn session_stop_reason(&self) -> &Arc<OnceLock<SessionOutcome>> {
         &self.session_stop_reason
     }
 
