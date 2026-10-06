@@ -269,11 +269,13 @@ where
                         Err(TransferError::UnexpectedFrame)
                     }
                     None => {
-                        // The channel closed without a frame: the session (or its
-                        // connection) stopped and the engine dropped the relay.
-                        Err(TransferError::LinkState(
-                            link_state_error_from_stop_reason(&self.session_stop_reason),
-                        ))
+                        // The channel closed without a frame: the session
+                        // stopped, or the peer detached the link and the relay
+                        // was removed while the session stayed alive.
+                        Err(TransferError::LinkState(link_error_from_closed_channel(
+                            &self.session_stop_reason,
+                            &self.local_state,
+                        )))
                     }
                 }
             },
@@ -681,13 +683,13 @@ where
             (LinkState::IncompleteAttachSent, false) => {
                 self.local_state = LinkState::IncompleteAttachExchanged;
             }
-            (LinkState::Unattached, false) | (LinkState::Detached, false) => {
+            (LinkState::Unattached, false) | (LinkState::Detached(_), false) => {
                 self.local_state = LinkState::AttachReceived; // re-attaching
             }
             (LinkState::AttachSent, true) | (LinkState::IncompleteAttachSent, true) => {
                 self.local_state = LinkState::IncompleteAttachExchanged;
             }
-            (LinkState::Unattached, true) | (LinkState::Detached, true) => {
+            (LinkState::Unattached, true) | (LinkState::Detached(_), true) => {
                 self.local_state = LinkState::IncompleteAttachReceived; // re-attaching
             }
             _ => return Err(SenderAttachError::IllegalState),
@@ -918,13 +920,15 @@ where
             SenderAttachError::SndSettleModeNotSupported
             | SenderAttachError::IncomingTargetIsNone => {
                 // Just send detach immediately
-                let err = self
-                    .send_detach(writer, true, None)
-                    .await
-                    .map(|_| attach_error)
-                    .unwrap_or(sender_attach_error_from_stop_reason(
-                        &self.session_stop_reason,
-                    ));
+                let err = match self.send_detach(writer, true, None).await {
+                    Ok(()) => attach_error,
+                    Err(DetachError::SessionStopped(reason)) => {
+                        SenderAttachError::SessionStopped(reason)
+                    }
+                    // The rejecting detach failed for a link-local reason; the
+                    // attach failure stays the primary error.
+                    Err(_) => attach_error,
+                };
                 recv_detach(self, reader, err).await
             }
 

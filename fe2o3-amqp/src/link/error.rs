@@ -5,6 +5,8 @@ use serde_amqp::primitives::Symbol;
 
 use crate::{connection::ConnectionStopReason, session::error::AllocLinkError};
 
+use super::state::LinkState;
+
 #[cfg(docsrs)]
 use fe2o3_amqp_types::transaction::Coordinator;
 
@@ -108,6 +110,38 @@ pub(crate) fn receiver_attach_error_from_stop_reason(
     }
 }
 
+/// The [`LinkStateError`] for an operation whose incoming channel closed with
+/// no buffered frame.
+///
+/// The session records its stop reason before dropping the relays; without
+/// one, the peer detached the link and the relay was removed while the
+/// session stayed alive. The link's local state then carries the outcome:
+/// `Detached`/`Closed` report a [`LinkStateError::LinkDetached`] with the
+/// peer's error from the detach that terminalized the link. Any other state
+/// means the relay disappeared without a recorded detach, which is an internal
+/// invariant violation (defensive).
+pub(crate) fn link_error_from_closed_channel(
+    cell: &OnceLock<SessionStopReason>,
+    local_state: &LinkState,
+) -> LinkStateError {
+    if let Some(reason) = cell.get() {
+        return LinkStateError::SessionStopped(reason.clone());
+    }
+
+    match local_state {
+        LinkState::Detached(remote_error) => LinkStateError::LinkDetached(DetachStatus::Detached {
+            remote_error: remote_error.clone(),
+        }),
+        LinkState::Closed(remote_error) => LinkStateError::LinkDetached(DetachStatus::Closed {
+            remote_error: remote_error.clone(),
+        }),
+        _ => {
+            warn_unrecorded_stop_reason();
+            LinkStateError::InvariantViolation
+        }
+    }
+}
+
 /// What a caller can do with a link after an operation failed.
 ///
 /// Returned by the `recovery()` method on [`LinkStateError`], [`SendError`]
@@ -207,15 +241,34 @@ impl DetachStatus {
 /// [`LinkDetach::apply_remote_detach_outcome`].
 ///
 /// The outcome itself is reported as [`DetachStatus`]; this error means the
-/// outcome was *not* recorded: the link is `Unattached`, already `Detached`,
-/// or already `Closed`, and nothing changed.
+/// outcome was *not* recorded because the link was not in a state that can
+/// record it, and nothing changed.
 #[derive(Debug, thiserror::Error)]
-#[error("Illegal link state")]
-pub(crate) struct ApplyRemoteDetachError;
+pub(crate) enum ApplyRemoteDetachError {
+    /// The link was never attached
+    #[error("The link is not attached")]
+    NotAttached,
+
+    /// The link was already suspended by a previous detach
+    #[error("The link is already detached")]
+    AlreadyDetached(Option<definitions::Error>),
+
+    /// The link was already closed by a previous detach
+    #[error("The link is already closed")]
+    AlreadyClosed(Option<definitions::Error>),
+}
 
 impl From<ApplyRemoteDetachError> for LinkStateError {
-    fn from(_: ApplyRemoteDetachError) -> Self {
-        LinkStateError::IllegalState
+    fn from(value: ApplyRemoteDetachError) -> Self {
+        match value {
+            ApplyRemoteDetachError::NotAttached => LinkStateError::InvariantViolation,
+            ApplyRemoteDetachError::AlreadyDetached(remote_error) => {
+                LinkStateError::LinkDetached(DetachStatus::Detached { remote_error })
+            }
+            ApplyRemoteDetachError::AlreadyClosed(remote_error) => {
+                LinkStateError::LinkDetached(DetachStatus::Closed { remote_error })
+            }
+        }
     }
 }
 
@@ -258,7 +311,7 @@ pub(crate) enum TransferError {
 impl From<TransferError> for SendError {
     fn from(value: TransferError) -> Self {
         match value {
-            TransferError::LinkState(error) => SendError::LinkStateError(error),
+            TransferError::LinkState(error) => error.into(),
             TransferError::NotAttached => SendError::NotAttached,
             TransferError::MessageEncodeError(error) => SendError::MessageEncodeError(error),
             TransferError::FrameSizeTooSmall => SendError::FrameSizeTooSmall,
@@ -282,7 +335,7 @@ pub(crate) enum DeliveryFailure {
 impl From<DeliveryFailure> for SendError {
     fn from(value: DeliveryFailure) -> Self {
         match value {
-            DeliveryFailure::LinkState(error) => SendError::LinkStateError(error),
+            DeliveryFailure::LinkState(error) => error.into(),
             DeliveryFailure::LinkDetached(status) => SendError::LinkDetached(status),
         }
     }

@@ -100,6 +100,17 @@
     of `IllegalState`, and the sender fails the deliveries pending resumption with
     `DeliveryFailure::LinkState(IllegalState)` instead of dropping their settlement channels.
 
+18. **Bugfix**: link failures are now derived from the link's local state when its incoming
+    channel closes without a recorded session stop. A concurrent send that consumed the peer's
+    detach no longer leaves a later `on_detach`, `recv` or send reporting `IllegalState` (or
+    waiting for a frame that will not come): the link reports the `LinkDetached(Detached)` or
+    `LinkDetached(Closed)` outcome it already reached. `Sender::on_detach` on an already
+    terminal link returns `LinkDetached(status)` immediately, `send_detach` on a terminal link
+    reports the same, and the session relay now fails the deliveries still pending on a sender
+    link with the peer's actual `Detached`/`Closed` outcome (including its error) when the link
+    endpoint is gone or the peer closed the link, instead of letting their settlement channels
+    drop.
+
 ## 0.18.2
 
 **Bugfix**: an unsettled delivery is now registered before its transfer reaches the session, preventing `send` from hanging when the peer settles immediately.

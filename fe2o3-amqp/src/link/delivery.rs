@@ -435,9 +435,11 @@ pub trait FromDeliveryFailure {
 
 impl FromDeliveryFailure for SendResult {
     fn from_oneshot_recv_error(_: RecvError) -> Self {
-        // The settlement channel died without the session recording a stop,
-        // e.g. the link was torn down with the delivery still pending.
-        Err(LinkStateError::IllegalState.into())
+        // The settlement channel died without the session recording a stop.
+        // The session relay and the link endpoint fail the pending deliveries
+        // before they drop their maps, so this is defensive only; the link
+        // state cannot be classified from here.
+        Err(LinkStateError::InvariantViolation.into())
     }
 
     fn from_session_stop_reason(reason: SessionStopReason) -> Self {
@@ -654,7 +656,7 @@ mod tests {
         drop(tx);
 
         match fut.await {
-            Err(SendError::LinkStateError(LinkStateError::IllegalState)) => {}
+            Err(SendError::LinkStateError(LinkStateError::InvariantViolation)) => {}
             other => panic!("unexpected result: {:?}", other),
         }
     }
