@@ -10,8 +10,8 @@ use crate::{
 };
 
 use super::{
-    detach_error_from_stop_reason, link_state_error_from_stop_reason, state::LinkState, AttachMode,
-    DetachError, DetachStatus, LinkFrame, LinkRelay, LinkStateError, SessionStopReason,
+    link_error_from_closed_channel, state::LinkState, AttachMode, DetachError, DetachStatus,
+    LinkFrame, LinkRelay, LinkStateError, SessionStopReason,
 };
 
 pub(crate) trait LinkEndpointInner
@@ -26,6 +26,9 @@ where
     fn link_mut(&mut self) -> &mut Self::Link;
 
     fn reader_mut(&mut self) -> &mut mpsc::Receiver<LinkFrame>;
+
+    /// The link endpoint's local state, used to derive state-aware failures
+    fn local_state(&self) -> &LinkState;
 
     fn buffer_size(&self) -> usize;
 
@@ -197,7 +200,9 @@ where
                     self.link_mut().on_detach_reply(remote_detach)
                 }
             }
-            LinkState::Detached => Ok(DetachStatus::Detached { remote_error: None }),
+            LinkState::Detached(remote_error) => Ok(DetachStatus::Detached {
+                remote_error: remote_error.clone(),
+            }),
             LinkState::CloseSent => {
                 // A live handle is not normally left in `CloseSent` (the
                 // public close paths consume it, and dropping the close
@@ -234,7 +239,9 @@ where
                     Ok(status)
                 }
             }
-            LinkState::Closed => Ok(DetachStatus::Closed { remote_error: None }),
+            LinkState::Closed(remote_error) => Ok(DetachStatus::Closed {
+                remote_error: remote_error.clone(),
+            }),
         }
     }
 
@@ -255,9 +262,7 @@ where
             | LinkState::Attached => {
                 // Send detach with closed=true and wait for remote closing detach
                 // The sender will be dropped after close
-                self.send_detach(true, error)
-                    .await // cancel safe
-                    .map_err(|_| detach_error_from_stop_reason(self.session_stop_reason()))?;
+                self.send_detach(true, error).await?; // cancel safe
 
                 // Wait for remote detach
                 let remote_detach = recv_remote_detach(self).await?; // cancel safe
@@ -296,7 +301,9 @@ where
                     Ok(status)
                 }
             }
-            LinkState::Detached => Ok(DetachStatus::Detached { remote_error: None }),
+            LinkState::Detached(remote_error) => Ok(DetachStatus::Detached {
+                remote_error: remote_error.clone(),
+            }),
             LinkState::CloseSent => {
                 // Wait for remote detach
                 let remote_detach = recv_remote_detach(self).await?; // cancel safe
@@ -314,7 +321,9 @@ where
                     Ok(status)
                 }
             }
-            LinkState::Closed => Ok(DetachStatus::Closed { remote_error: None }),
+            LinkState::Closed(remote_error) => Ok(DetachStatus::Closed {
+                remote_error: remote_error.clone(),
+            }),
         }
     }
 }
@@ -340,15 +349,14 @@ where
     if let Err(_attach_error) = link_inner.reattach_inner().await {
         // The reattach that completes the AMQP 1.0 §2.6.6 handshake failed.
         // This helper is generic over the link type, so the concrete
-        // `AttachError` cannot be inspected here. The cause is derived from the
-        // shared session stop reason; with none recorded the error is
-        // `IllegalState`.
+        // `AttachError` cannot be inspected here. The failure is derived from
+        // the session stop reason and the link's local state instead.
         //
-        // TODO(error-refactor): preserve the concrete attach error (or give the
-        // "no stop reason recorded" fallback its own variant) so these cases
-        // become distinguishable.
-        return Err(detach_error_from_stop_reason(
+        // TODO(error-refactor): preserve the concrete attach error so these
+        // cases become fully distinguishable from a terminal link.
+        return Err(link_error_from_closed_channel(
             link_inner.session_stop_reason(),
+            link_inner.local_state(),
         ));
     }
     link_inner.send_detach(true, None).await?; // cancel safe
@@ -371,8 +379,12 @@ where
             .reader_mut()
             .recv()
             .await // cancel safe
-            .ok_or_else(|| link_state_error_from_stop_reason(link_inner.session_stop_reason()))?
-        {
+            .ok_or_else(|| {
+                link_error_from_closed_channel(
+                    link_inner.session_stop_reason(),
+                    link_inner.local_state(),
+                )
+            })? {
             LinkFrame::Detach(detach) => return Ok(detach),
             _frame => {
                 // The only other frames should be Attach or Detach, (or Transfer if receiver).

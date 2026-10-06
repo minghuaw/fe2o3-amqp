@@ -34,6 +34,7 @@ use super::{
     receiver_link::count_number_of_sections_and_offset,
     role,
     shared_inner::{LinkEndpointInner, LinkEndpointInnerDetach, LinkEndpointInnerReattach},
+    state::LinkState,
     ArcReceiverUnsettledMap, AttachMode, DetachStatus, DetachThenResumeReceiverError,
     DispositionError, FlowError, LinkFrame, LinkRelay, LinkStateError, MessageSizeExceeded,
     ReceiverAttachError, ReceiverAttachExchange, ReceiverFlowState, ReceiverLink,
@@ -41,7 +42,7 @@ use super::{
     SessionStopReason, DEFAULT_CREDIT,
 };
 
-use super::link_state_error_from_stop_reason;
+use super::{link_error_from_closed_channel, link_state_error_from_stop_reason};
 
 #[cfg(feature = "transaction")]
 use super::shared_inner::TxnAcquisitionCloseExt;
@@ -931,6 +932,10 @@ where
         &mut self.incoming
     }
 
+    fn local_state(&self) -> &LinkState {
+        <L as endpoint::LinkExt>::local_state(&self.link)
+    }
+
     fn buffer_size(&self) -> usize {
         self.buffer_size
     }
@@ -1068,8 +1073,9 @@ where
             // cancel safe
             Some(frame) => frame,
             None => {
-                return Err(RecvError::from(link_state_error_from_stop_reason(
+                return Err(RecvError::from(link_error_from_closed_channel(
                     self.link().session_stop_reason(),
+                    self.link().local_state(),
                 )));
             }
         };
@@ -1081,7 +1087,7 @@ where
             // closing (`None` above).
             LinkFrame::Detach(detach) => match self.link.apply_remote_detach_outcome(detach) {
                 Ok(status) => Err(RecvError::LinkDetached(status)),
-                Err(err) => Err(RecvError::LinkStateError(err.into())),
+                Err(err) => Err(RecvError::from(err)),
             },
             LinkFrame::Transfer {
                 input_handle: _,
@@ -2364,6 +2370,25 @@ mod tests {
         assert!(matches!(error, RecvError::AcquisitionNotImplemented));
     }
 
+    /// A receiver whose channel closed while its link is terminal reports the
+    /// outcome the link already reached.
+    #[tokio::test]
+    async fn recv_on_terminal_link_with_closed_channel_reports_detached() {
+        let (mut inner, _session_rx, _outgoing_rx, incoming_tx) =
+            make_receiver_inner_with_channels(4096);
+        inner.link.local_state = LinkState::Detached(None);
+        drop(incoming_tx);
+
+        let result = inner.recv::<String>().await;
+
+        assert!(matches!(
+            result,
+            Err(RecvError::LinkDetached(DetachStatus::Detached {
+                remote_error: None
+            }))
+        ));
+    }
+
     /// The minimal `Attach` a sender peer sends for this receiver link: it
     /// must carry a source and an initial delivery count so
     /// `on_incoming_attach` accepts it.
@@ -2476,7 +2501,7 @@ mod tests {
         .await;
         assert_message_size_exceeded(error, 120, 100);
         assert!(inner.incomplete_transfer.is_none());
-        assert!(matches!(inner.link.local_state, LinkState::Closed));
+        assert!(matches!(inner.link.local_state, LinkState::Closed(_)));
     }
 
     /// A delivery spanning three or more frames must detach the link as soon
@@ -2521,7 +2546,7 @@ mod tests {
         .await;
         assert_message_size_exceeded(error, 101, 100);
         assert!(inner.incomplete_transfer.is_none());
-        assert!(matches!(inner.link.local_state, LinkState::Closed));
+        assert!(matches!(inner.link.local_state, LinkState::Closed(_)));
     }
 
     /// A tagless-continuation delivery whose total size is exactly the limit
@@ -2585,7 +2610,7 @@ mod tests {
         )
         .await;
         assert!(matches!(error, RecvError::DeliveryTagIsNone));
-        assert!(matches!(inner.link.local_state, LinkState::Closed));
+        assert!(matches!(inner.link.local_state, LinkState::Closed(_)));
 
         // Missing delivery-id
         let (mut inner, _session_rx, mut outgoing_rx, incoming_tx) =
@@ -2604,7 +2629,7 @@ mod tests {
         )
         .await;
         assert!(matches!(error, RecvError::DeliveryIdIsNone));
-        assert!(matches!(inner.link.local_state, LinkState::Closed));
+        assert!(matches!(inner.link.local_state, LinkState::Closed(_)));
     }
 
     /// The mandatory delivery-id and delivery-tag are required on the first
@@ -2630,7 +2655,7 @@ mod tests {
         )
         .await;
         assert!(matches!(error, RecvError::DeliveryTagIsNone));
-        assert!(matches!(inner.link.local_state, LinkState::Closed));
+        assert!(matches!(inner.link.local_state, LinkState::Closed(_)));
 
         // Missing delivery-id
         let (mut inner, _session_rx, mut outgoing_rx, incoming_tx) =
@@ -2649,7 +2674,7 @@ mod tests {
         )
         .await;
         assert!(matches!(error, RecvError::DeliveryIdIsNone));
-        assert!(matches!(inner.link.local_state, LinkState::Closed));
+        assert!(matches!(inner.link.local_state, LinkState::Closed(_)));
     }
 
     /// A state-carrying transfer with no buffered delivery and no delivery-tag
@@ -2677,7 +2702,7 @@ mod tests {
         )
         .await;
         assert!(matches!(error, RecvError::DeliveryTagIsNone));
-        assert!(matches!(inner.link.local_state, LinkState::Closed));
+        assert!(matches!(inner.link.local_state, LinkState::Closed(_)));
     }
 
     /// A continuation that explicitly names a different delivery while one is
@@ -2713,7 +2738,7 @@ mod tests {
             error,
             RecvError::InconsistentFieldInMultiFrameDelivery
         ));
-        assert!(matches!(inner.link.local_state, LinkState::Closed));
+        assert!(matches!(inner.link.local_state, LinkState::Closed(_)));
     }
 
     /// A continuation whose present message-format differs from the first
@@ -2752,7 +2777,7 @@ mod tests {
             error,
             RecvError::InconsistentFieldInMultiFrameDelivery
         ));
-        assert!(matches!(inner.link.local_state, LinkState::Closed));
+        assert!(matches!(inner.link.local_state, LinkState::Closed(_)));
     }
 
     /// An aborted transfer matching the buffered delivery discards its chunks
@@ -2905,7 +2930,7 @@ mod tests {
             error,
             RecvError::InconsistentFieldInMultiFrameDelivery
         ));
-        assert!(matches!(inner.link.local_state, LinkState::Closed));
+        assert!(matches!(inner.link.local_state, LinkState::Closed(_)));
     }
 
     /// AMQP 1.0 §2.6.13: a resumed delivery that is not in the local
@@ -3107,7 +3132,7 @@ mod tests {
             "expected a detach before and after the reattach"
         );
         assert!(result.is_ok(), "close must complete: {result:?}");
-        assert!(matches!(&inner.link.local_state, LinkState::Closed));
+        assert!(matches!(&inner.link.local_state, LinkState::Closed(_)));
     }
 
     /// A peer that closes (closing detach) while this side is suspending
@@ -3141,6 +3166,6 @@ mod tests {
             result,
             Ok(DetachStatus::Closed { remote_error: None })
         ));
-        assert!(matches!(&inner.link.local_state, LinkState::Closed));
+        assert!(matches!(&inner.link.local_state, LinkState::Closed(_)));
     }
 }

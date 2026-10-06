@@ -379,7 +379,7 @@ where
         let is_resuming = matches!(mode, AttachMode::Resume)
             && matches!(
                 self.local_state,
-                LinkState::Detached | LinkState::DetachSent
+                LinkState::Detached(_) | LinkState::DetachSent
             );
 
         // Advertise the unsettled map on (re)attach so the peer can reconcile
@@ -408,7 +408,7 @@ where
 
         match self.local_state {
             LinkState::Unattached
-            | LinkState::Detached // May attempt to resume
+            | LinkState::Detached(_) // May attempt to resume
             | LinkState::DetachSent => {
                 writer.send(frame).await // cancel safe
                     .map_err(|_| link_state_error_from_stop_reason(&self.session_stop_reason))?;
@@ -462,10 +462,10 @@ where
         match self.local_state {
             LinkState::DetachSent if !detach.closed => {}
             LinkState::CloseSent if detach.closed => {}
-            _ => return Err(DetachError::IllegalState),
+            _ => return Err(DetachError::InvariantViolation),
         }
         self.apply_remote_detach_outcome(detach)
-            .map_err(DetachError::from)
+            .map_err(|_| DetachError::InvariantViolation)
     }
 
     /// # Cancel safety
@@ -504,7 +504,17 @@ where
                 | LinkState::IncompleteAttachExchanged,
                 true,
             ) => self.local_state = LinkState::CloseSent,
-            _ => return Err(DetachError::IllegalState),
+            (LinkState::Detached(remote_error), _) => {
+                return Err(DetachError::LinkDetached(DetachStatus::Detached {
+                    remote_error: remote_error.clone(),
+                }));
+            }
+            (LinkState::Closed(remote_error), _) => {
+                return Err(DetachError::LinkDetached(DetachStatus::Closed {
+                    remote_error: remote_error.clone(),
+                }));
+            }
+            _ => return Err(DetachError::InvariantViolation),
         };
 
         match self.output_handle.clone() {
@@ -529,7 +539,7 @@ where
                 self.output_handle.take();
                 result
             }
-            None => Err(DetachError::IllegalState),
+            None => Err(DetachError::InvariantViolation),
         }
     }
 
@@ -539,7 +549,7 @@ where
         &mut self,
         detach: Detach,
     ) -> Result<DetachStatus, ApplyRemoteDetachError> {
-        match self.local_state {
+        match self.local_state.clone() {
             LinkState::Attached
             | LinkState::AttachSent
             | LinkState::AttachReceived
@@ -548,24 +558,30 @@ where
             | LinkState::IncompleteAttachReceived
             | LinkState::DetachSent
             | LinkState::CloseSent => {
-                self.local_state = if detach.closed {
-                    LinkState::Closed
-                } else {
-                    LinkState::Detached
-                };
-                let _ = self.output_handle.take();
                 let status = if detach.closed {
                     DetachStatus::Closed {
-                        remote_error: detach.error,
+                        remote_error: detach.error.clone(),
                     }
                 } else {
                     DetachStatus::Detached {
-                        remote_error: detach.error,
+                        remote_error: detach.error.clone(),
                     }
                 };
+                self.local_state = if detach.closed {
+                    LinkState::Closed(detach.error)
+                } else {
+                    LinkState::Detached(detach.error)
+                };
+                let _ = self.output_handle.take();
                 Ok(status)
             }
-            _ => Err(ApplyRemoteDetachError),
+            LinkState::Unattached => Err(ApplyRemoteDetachError::NotAttached),
+            LinkState::Detached(remote_error) => Err(ApplyRemoteDetachError::AlreadyDetached(
+                remote_error.clone(),
+            )),
+            LinkState::Closed(remote_error) => {
+                Err(ApplyRemoteDetachError::AlreadyClosed(remote_error.clone()))
+            }
         }
     }
 }
@@ -860,9 +876,9 @@ impl LinkRelay<OutputHandle> {
     ///
     /// If the peer detached the link on its own, also returns the reply
     /// detach for the session to send back, and fails the still-pending
-    /// deliveries when the detach closes the link. If the detach instead
-    /// answers one the link sent itself, returns `None`: the engine's own
-    /// close/detach procedure is waiting for it.
+    /// deliveries when the detach closes the link or the endpoint is already
+    /// gone. If the detach instead answers one the link sent itself, returns
+    /// `None`: the engine's own close/detach procedure is waiting for it.
     ///
     /// Cancel safe: only `.await`s on sending over `tokio::mpsc::Sender`.
     pub(crate) async fn on_incoming_detach(
@@ -887,14 +903,18 @@ impl LinkRelay<OutputHandle> {
                     // link endpoint's local handshake consumes the forwarded
                     // frame — unless the endpoint was dropped, in which case
                     // the forward fails and nothing else would fail the
-                    // deliveries that are still pending on the closed link.
-                    if forward_result.is_err() && detach.closed {
+                    // deliveries that are still pending on the link.
+                    if forward_result.is_err() {
                         fail_pending_unsettled(unsettled, &detach);
                     }
                     return None;
                 }
 
-                if detach.closed {
+                // A remote-initiated closing detach destroys the link, so the
+                // pending deliveries can no longer be settled. A non-closing
+                // detach suspends it instead: a live endpoint keeps the
+                // deliveries resumable, but a dropped endpoint cannot.
+                if detach.closed || forward_result.is_err() {
                     fail_pending_unsettled(unsettled, &detach);
                 }
 
@@ -928,8 +948,14 @@ impl LinkRelay<OutputHandle> {
 /// drop path and the relay cannot fail the same delivery twice.
 fn fail_pending_unsettled(unsettled: &ArcSenderUnsettledMap, detach: &Detach) {
     if let Some(entries) = unsettled.write().take() {
-        let status = DetachStatus::Closed {
-            remote_error: detach.error.clone(),
+        let status = if detach.closed {
+            DetachStatus::Closed {
+                remote_error: detach.error.clone(),
+            }
+        } else {
+            DetachStatus::Detached {
+                remote_error: detach.error.clone(),
+            }
         };
         for (_, entry) in entries {
             let _ = entry.fail(DeliveryFailure::LinkDetached(status.clone()));

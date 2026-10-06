@@ -6,7 +6,7 @@ use fe2o3_amqp_types::{
 use tokio::sync::{oneshot, Mutex};
 
 use crate::{
-    endpoint::Settlement,
+    endpoint::{LinkExt as _, Settlement},
     link::{
         self,
         builder::{WithSource, WithoutName, WithoutTarget},
@@ -82,7 +82,12 @@ pub(crate) async fn declare_on_link(
     let outcome = send_on_control_link(inner, sendable)
         .await?
         .await
-        .map_err(|_| link::link_state_error_from_stop_reason(&inner.link.session_stop_reason))?;
+        .map_err(|_| {
+            link::link_error_from_closed_channel(
+                &inner.link.session_stop_reason,
+                inner.link.local_state(),
+            )
+        })?;
     let outcome = outcome?;
     outcome
         .ok_or(ControllerSendError::NonTerminalDeliveryState)?
@@ -112,7 +117,12 @@ pub(crate) async fn discharge_on_link(
     let outcome = send_on_control_link(inner, sendable)
         .await?
         .await
-        .map_err(|_| link::link_state_error_from_stop_reason(&inner.link.session_stop_reason))?;
+        .map_err(|_| {
+            link::link_error_from_closed_channel(
+                &inner.link.session_stop_reason,
+                inner.link.local_state(),
+            )
+        })?;
     let outcome = outcome?;
     outcome
         .ok_or(ControllerSendError::NonTerminalDeliveryState)?
