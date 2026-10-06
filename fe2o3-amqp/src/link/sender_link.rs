@@ -902,6 +902,7 @@ where
             SenderAttachError::SessionStopped(_)
             | SenderAttachError::SessionNotMapped
             | SenderAttachError::IllegalState
+            | SenderAttachError::InvariantViolation
             | SenderAttachError::NonAttachFrameReceived
             | SenderAttachError::UnexpectedUnsettledMap
             | SenderAttachError::RemoteClosedWithError(_) => attach_error,
