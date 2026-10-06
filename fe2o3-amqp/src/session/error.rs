@@ -6,7 +6,7 @@ use fe2o3_amqp_types::definitions::{self};
 
 use crate::{
     connection::{AllocSessionError, ConnectionOutcome},
-    link::{LinkRelayError, SessionOutcome},
+    link::{LinkRelayError, SessionStopped},
 };
 
 /// Error with ending a session
@@ -241,13 +241,6 @@ pub(crate) fn connection_stop_reason_or_closed(
     }
 }
 
-/// The session stop reason corresponding to a connection stop
-impl From<ConnectionOutcome> for SessionOutcome {
-    fn from(reason: ConnectionOutcome) -> Self {
-        Self::ConnectionStopped(reason)
-    }
-}
-
 #[derive(Debug, thiserror::Error)]
 pub(crate) enum AllocLinkError {
     /// The session is not in the `Mapped` state (e.g. not begun, or ending)
@@ -255,7 +248,7 @@ pub(crate) enum AllocLinkError {
     SessionNotMapped,
 
     #[error("The session stopped before the link was attached: {:?}", .0)]
-    SessionStopped(crate::link::SessionOutcome),
+    SessionStopped(SessionStopped),
 
     #[error("Link name must be unique")]
     DuplicatedLinkName,

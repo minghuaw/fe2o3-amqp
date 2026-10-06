@@ -16,7 +16,7 @@ use crate::{
     connection::ConnectionOutcome,
     control::SessionControl,
     endpoint::{self, IncomingChannel, InputHandle, LinkFlow, OutgoingChannel, OutputHandle},
-    link::{target_archetype::VariantOfTargetArchetype, LinkRelay, SessionOutcome},
+    link::{target_archetype::VariantOfTargetArchetype, LinkRelay, SessionStopped},
     session::{
         self,
         frame::{SessionFrame, SessionOutgoingItem},
@@ -238,11 +238,11 @@ where
         self.session.local_state()
     }
 
-    fn set_session_stop_reason(&mut self, reason: SessionOutcome) {
+    fn set_session_stop_reason(&mut self, reason: SessionStopped) {
         self.session.set_session_stop_reason(reason)
     }
 
-    fn session_stop_reason(&self) -> &Arc<OnceLock<SessionOutcome>> {
+    fn session_stop_reason(&self) -> &Arc<OnceLock<SessionStopped>> {
         self.session.session_stop_reason()
     }
 

@@ -11,7 +11,7 @@ use crate::{
 
 use super::{
     link_error_from_closed_channel, state::LinkState, AttachMode, DetachError, LinkFrame,
-    LinkOutcome, LinkRelay, LinkStateError, SessionOutcome,
+    LinkOutcome, LinkRelay, LinkStateError, SessionStopped,
 };
 
 pub(crate) trait LinkEndpointInner
@@ -37,7 +37,7 @@ where
     fn session_control(&self) -> &mpsc::Sender<SessionControl>;
 
     /// The shared cell holding why the session (or its connection) stopped
-    fn session_stop_reason(&self) -> &Arc<OnceLock<SessionOutcome>>;
+    fn session_stop_reason(&self) -> &Arc<OnceLock<SessionStopped>>;
 
     async fn exchange_attach(
         &mut self,

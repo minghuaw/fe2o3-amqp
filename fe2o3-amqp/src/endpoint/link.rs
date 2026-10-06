@@ -15,7 +15,7 @@ use crate::{
     link::{
         delivery::{Delivery, DeliveryInfo},
         state::LinkState,
-        ApplyRemoteDetachError, AttachMode, LinkFrame, LinkOutcome, SessionOutcome,
+        ApplyRemoteDetachError, AttachMode, LinkFrame, LinkOutcome, SessionStopped,
     },
     util::{AsByteIterator, IntoReader},
     Payload,
@@ -103,7 +103,7 @@ pub(crate) trait LinkExt: Link {
     fn output_handle_mut(&mut self) -> &mut Option<OutputHandle>;
 
     /// The shared cell holding why the session (or its connection) stopped
-    fn session_stop_reason(&self) -> &Arc<OnceLock<SessionOutcome>>;
+    fn session_stop_reason(&self) -> &Arc<OnceLock<SessionStopped>>;
 
     fn flow_state(&self) -> &Self::FlowState;
 
