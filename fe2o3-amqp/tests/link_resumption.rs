@@ -15,7 +15,7 @@ use fe2o3_amqp::{
         ListenerSessionHandle, SessionAcceptor,
     },
     connection::{Connection, ConnectionHandle},
-    link::DetachStatus,
+    link::LinkOutcome,
     session::{Session, SessionHandle},
     Sendable, Sender,
 };
@@ -153,7 +153,7 @@ async fn pending_delivery_resolves_after_resume_on_same_session() {
         let _ = receiver_a.recv::<String>().await;
     });
     let (detached, status) = common::expect_ok!(sender.detach()).await;
-    assert!(matches!(status, DetachStatus::Detached { .. }));
+    assert!(matches!(status, LinkOutcome::Detached { .. }));
     recv_a.await.unwrap();
 
     let accept = tokio::spawn(accept_and_accept_delivery(listener_a));

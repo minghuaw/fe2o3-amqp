@@ -7,7 +7,7 @@ use fe2o3_amqp_types::{definitions, primitives::Binary, sasl::SaslCode};
 use tokio::{sync::mpsc, task::JoinError};
 
 use crate::{
-    connection::ConnectionStopReason,
+    connection::ConnectionOutcome,
     transport::{self, error::NegotiationError},
 };
 
@@ -265,7 +265,7 @@ pub(crate) enum AllocSessionError {
 
     /// The connection stopped before the session was allocated
     #[error("The connection stopped: {:?}", .0)]
-    ConnectionStopped(ConnectionStopReason),
+    ConnectionStopped(ConnectionOutcome),
 
     #[error("Reached connection channel max")]
     ChannelMaxReached,
