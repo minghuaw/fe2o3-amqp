@@ -346,7 +346,7 @@ where
         let mut attach = self.as_attach_inner(handle.clone(), denominator, is_resuming);
         // `SizeSerializer` computes the serialized size without allocating a
         // buffer; only the size is needed here.
-        while serialized_size(&attach).map_err(|_| SendAttachErrorKind::IllegalState)? // This should not happen
+        while serialized_size(&attach).map_err(|_| SendAttachErrorKind::InvariantViolation)? // This should not happen
             > max_frame_size
         {
             denominator *= 2;
@@ -369,7 +369,7 @@ where
         // Create Attach frame
         let handle = match &self.output_handle {
             Some(h) => h.clone(),
-            None => return Err(SendAttachErrorKind::IllegalState),
+            None => return Err(SendAttachErrorKind::InvariantViolation),
         };
 
         // A resuming attach carries a non-null unsettled map, including an
@@ -427,7 +427,7 @@ where
                     self.local_state = LinkState::Attached
                 }
             }
-            _ => return Err(SendAttachErrorKind::IllegalState),
+            _ => return Err(SendAttachErrorKind::InvariantViolation),
         }
 
         Ok(())

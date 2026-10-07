@@ -129,10 +129,46 @@ where
     ) -> Result<LinkOutcome, <Self::Link as LinkDetach>::DetachError>;
 }
 
+/// Link endpoints that must terminate the link when the peer sends a frame
+/// that is not permitted in the current state.
+pub(crate) trait PeerViolationCloseExt: LinkEndpointInnerDetach {
+    /// Best-effort close the link with the given error because the peer
+    /// violated the link state machine. The caller reports the frame error.
+    async fn close_on_peer_violation(&mut self, error: definitions::Error);
+}
+
+impl<T> PeerViolationCloseExt for T
+where
+    T: LinkEndpointInnerDetach,
+{
+    async fn close_on_peer_violation(&mut self, error: definitions::Error) {
+        let _ = self.close_with_error(Some(error)).await;
+    }
+}
+
+/// The `amqp:illegal-state` error for a frame the peer sent that is not
+/// permitted in the current state.
+pub(crate) fn illegal_state_error() -> definitions::Error {
+    definitions::Error::new(
+        definitions::AmqpError::IllegalState,
+        "The peer sent a frame that is not permitted in the current state".to_string(),
+        None,
+    )
+}
+
+/// The `amqp:internal-error` error for an internal invariant violation.
+pub(crate) fn internal_error(description: &str) -> definitions::Error {
+    definitions::Error::new(
+        definitions::AmqpError::InternalError,
+        description.to_string(),
+        None,
+    )
+}
+
 /// Link endpoints that must terminate the link when a remote-initiated
 /// transactional acquisition arrives, since it is not supported.
 #[cfg(feature = "transaction")]
-pub(crate) trait TxnAcquisitionCloseExt: LinkEndpointInnerDetach {
+pub(crate) trait TxnAcquisitionCloseExt: PeerViolationCloseExt {
     /// Best-effort terminate the link with `amqp:not-implemented` because a
     /// remote-initiated transactional acquisition is not supported
     /// (AMQP 1.0 §4.4.3). The caller reports the acquisition error.
@@ -142,7 +178,7 @@ pub(crate) trait TxnAcquisitionCloseExt: LinkEndpointInnerDetach {
 #[cfg(feature = "transaction")]
 impl<T> TxnAcquisitionCloseExt for T
 where
-    T: LinkEndpointInnerDetach,
+    T: PeerViolationCloseExt,
 {
     async fn close_on_acquisition_not_implemented(&mut self) {
         let error = definitions::Error::new(
@@ -150,7 +186,7 @@ where
             "Transactional acquisition is not implemented".to_string(),
             None,
         );
-        let _ = self.close_with_error(Some(error)).await;
+        self.close_on_peer_violation(error).await;
     }
 }
 

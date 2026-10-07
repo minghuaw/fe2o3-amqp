@@ -155,6 +155,18 @@
     operation (`Err(Error::ConnectionStopped)`), consistent with links failing when their
     session stopped.
 
+24. **Breaking**: peer violations in the link layer are now answered consistently. A frame
+    the session forwards that is not permitted in the current state (an `Attach` on an
+    attached link, or any other unexpected frame) terminates the link with an
+    `amqp:illegal-state` detach; the attach rejections previously reported `IllegalState`
+    without closing the link, `SendError::UnexpectedFrame` was reported without a detach,
+    and a `Flow`/`Disposition` frame reaching the receiver stream reported `IllegalState`
+    instead of an internal-invariant failure. `Flow`/`Disposition` leaks now close the link
+    with `amqp:internal-error` and report `LinkStateError::InvariantViolation`. Local
+    producers were reclassified: attach serialization, a missing output handle and a missing
+    delivery tag report `InvariantViolation`; flow and disposition operations on a link
+    without a local handle report the new `LinkStateError::NotAttached`.
+
 ## 0.18.2
 
 **Bugfix**: an unsettled delivery is now registered before its transfer reaches the session, preventing `send` from hanging when the peer settles immediately.

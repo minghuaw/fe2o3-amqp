@@ -759,12 +759,16 @@ impl<'a> TryFrom<&'a SenderAttachError> for definitions::Error {
 pub enum LinkStateError {
     /// The peer sent a frame that is not permitted in the current state
     /// (`amqp:illegal-state`)
-    #[error("Illegal local state")]
+    #[error("The peer sent a frame that is not permitted in the current state")]
     IllegalState,
 
     /// An internal invariant was violated; this indicates a bug in the library
     #[error("An internal invariant was violated")]
     InvariantViolation,
+
+    /// The link endpoint has no local handle, i.e. the link is not attached
+    #[error("The link is not attached")]
+    NotAttached,
 
     /// The link already reached a terminal outcome (`Detached`/`Closed`)
     #[error("The link is already detached or closed: {:?}", .0)]
@@ -925,9 +929,10 @@ impl LinkStateError {
     /// Classifies what the caller can do with the link after this error.
     pub fn recovery(&self) -> ErrorRecovery {
         match self {
-            Self::IllegalState | Self::InvariantViolation | Self::LinkDetached(_) => {
-                ErrorRecovery::NewLink
-            }
+            Self::IllegalState
+            | Self::InvariantViolation
+            | Self::NotAttached
+            | Self::LinkDetached(_) => ErrorRecovery::NewLink,
             Self::SessionStopped(reason) => session_stop_recovery(reason),
         }
     }
@@ -937,6 +942,7 @@ impl From<LinkStateError> for SendError {
     fn from(value: LinkStateError) -> Self {
         match value {
             LinkStateError::LinkDetached(status) => SendError::LinkDetached(status),
+            LinkStateError::NotAttached => SendError::NotAttached,
             other => SendError::LinkStateError(other),
         }
     }
@@ -1000,9 +1006,12 @@ impl From<LinkStateError> for ReceiverAttachError {
         match value {
             LinkStateError::IllegalState => ReceiverAttachError::IllegalState,
             LinkStateError::InvariantViolation => ReceiverAttachError::InvariantViolation,
-            // Attach paths never propagate a terminal link outcome; the
-            // primary attach error is preserved by the caller instead.
-            LinkStateError::LinkDetached(_) => ReceiverAttachError::IllegalState,
+            // Attach paths never propagate a missing handle or a terminal
+            // link outcome; the primary attach error is preserved by the
+            // caller instead.
+            LinkStateError::NotAttached | LinkStateError::LinkDetached(_) => {
+                ReceiverAttachError::IllegalState
+            }
             LinkStateError::SessionStopped(reason) => ReceiverAttachError::SessionStopped(reason),
         }
     }
@@ -1013,9 +1022,12 @@ impl From<LinkStateError> for SenderAttachError {
         match value {
             LinkStateError::IllegalState => SenderAttachError::IllegalState,
             LinkStateError::InvariantViolation => SenderAttachError::InvariantViolation,
-            // Attach paths never propagate a terminal link outcome; the
-            // primary attach error is preserved by the caller instead.
-            LinkStateError::LinkDetached(_) => SenderAttachError::IllegalState,
+            // Attach paths never propagate a missing handle or a terminal
+            // link outcome; the primary attach error is preserved by the
+            // caller instead.
+            LinkStateError::NotAttached | LinkStateError::LinkDetached(_) => {
+                SenderAttachError::IllegalState
+            }
             LinkStateError::SessionStopped(reason) => SenderAttachError::SessionStopped(reason),
         }
     }
@@ -1025,6 +1037,7 @@ impl From<LinkStateError> for RecvError {
     fn from(value: LinkStateError) -> Self {
         match value {
             LinkStateError::LinkDetached(status) => RecvError::LinkDetached(status),
+            LinkStateError::NotAttached => RecvError::NotAttached,
             other => RecvError::LinkStateError(other),
         }
     }

@@ -53,7 +53,7 @@ where
         let handle = self
             .output_handle
             .clone()
-            .ok_or(Self::FlowError::IllegalState)?
+            .ok_or(Self::FlowError::NotAttached)?
             .into();
 
         let flow = self.get_link_flow(handle, link_credit, drain, echo, include_properties);
@@ -416,7 +416,7 @@ impl ReceiverLink<Target> {
             let handle = self
                 .output_handle
                 .clone()
-                .ok_or(FlowError::IllegalState)?
+                .ok_or(FlowError::NotAttached)?
                 .into();
 
             let flow = self.get_link_flow(handle, link_credit, drain, echo, include_properties);
@@ -883,7 +883,6 @@ where
         match attach_error {
             // Errors that indicate failed attachment
             ReceiverAttachError::SessionStopped(_)
-            | ReceiverAttachError::IllegalState
             | ReceiverAttachError::NonAttachFrameReceived
             | ReceiverAttachError::RemoteClosedWithError(_) => attach_error,
 
@@ -912,6 +911,7 @@ where
             }
 
             ReceiverAttachError::CoordinatorIsNotImplemented
+            | ReceiverAttachError::IllegalState
             | ReceiverAttachError::InitialDeliveryCountIsNone
             | ReceiverAttachError::SourceAddressIsNoneWhenDynamicIsTrue
             | ReceiverAttachError::TargetAddressIsSomeWhenDynamicIsTrue
@@ -938,7 +938,9 @@ fn receiver_detach_failure(
             Some(error) => ReceiverAttachError::RemoteClosedWithError(error.clone()),
             None => attach_error,
         },
-        DetachError::IllegalState | DetachError::InvariantViolation => attach_error,
+        DetachError::IllegalState | DetachError::InvariantViolation | DetachError::NotAttached => {
+            attach_error
+        }
     }
 }
 
