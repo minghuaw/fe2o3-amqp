@@ -1005,6 +1005,7 @@ where
     fn handle_reattach_outcome(
         &mut self,
         outcome: ReceiverAttachExchange,
+        _detach_outcome: LinkOutcome,
     ) -> Result<&mut Self, L::AttachError> {
         match outcome {
             ReceiverAttachExchange::Complete => {}
@@ -3192,6 +3193,7 @@ mod tests {
                 outgoing_rx,
                 incoming_tx,
                 peer_sender_attach(),
+                None,
             ),
         );
 
@@ -3223,6 +3225,7 @@ mod tests {
                 outgoing_rx,
                 incoming_tx,
                 peer_sender_attach(),
+                None,
             ),
         );
 

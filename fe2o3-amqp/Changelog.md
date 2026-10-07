@@ -109,7 +109,9 @@
     link reports the outcome as `LinkDetached(status)`, and the session relay now fails the
     deliveries still pending on a sender link with the peer's actual `Detached`/`Closed`
     outcome (including its error) when the link endpoint is gone or the peer closed the link,
-    instead of letting their settlement channels drop.
+    instead of letting their settlement channels drop. The deliveries failed by the
+    AMQP 1.0 §2.6.6 crossed-close handshake likewise report the peer's crossing detach
+    outcome (including its error) instead of a synthesized close.
 
 19. **Bugfix**: when this side rejects an incoming attach, a rejection detach that could not
     be sent is now classified against the attach failure. If the link already reached a

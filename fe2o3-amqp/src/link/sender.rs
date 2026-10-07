@@ -788,17 +788,19 @@ where
     fn handle_reattach_outcome(
         &mut self,
         outcome: SenderAttachExchange,
+        detach_outcome: LinkOutcome,
     ) -> Result<&mut Self, L::AttachError> {
         match outcome {
             SenderAttachExchange::Complete => {}
             // The reachable map-carrying exchanges are the peer's reply during
             // the crossed close: fail the deliveries it still considers
-            // unsettled and let `reattach_then_close` send the closing detach.
+            // unsettled with the detach outcome that ended the link, and let
+            // `reattach_then_close` send the closing detach.
             SenderAttachExchange::IncompleteUnsettled(resuming_deliveries)
             | SenderAttachExchange::Resume(resuming_deliveries) => {
                 fail_resuming_deliveries(
                     resuming_deliveries,
-                    DeliveryFailure::LinkDetached(LinkOutcome::Closed { remote_error: None }),
+                    DeliveryFailure::LinkDetached(detach_outcome),
                 );
             }
         }
@@ -1708,6 +1710,7 @@ mod tests {
                 outgoing_rx,
                 incoming_tx,
                 peer_receiver_attach(),
+                None,
             ),
         );
 
@@ -1739,6 +1742,7 @@ mod tests {
                 outgoing_rx,
                 incoming_tx,
                 peer_receiver_attach(),
+                None,
             ),
         );
 
@@ -2682,6 +2686,7 @@ mod tests {
                 outgoing_rx,
                 incoming_tx,
                 peer_receiver_attach(),
+                None,
             ),
         );
 
@@ -2701,6 +2706,106 @@ mod tests {
             })))
         ));
         assert!(matches!(&inner.link.local_state, LinkState::Closed(_)));
+    }
+
+    /// A crossed close reports the peer's crossing detach error to the
+    /// deliveries that cannot be resumed.
+    #[tokio::test]
+    async fn crossed_close_reports_the_peer_error_to_resuming_deliveries() {
+        let (mut inner, session_rx, outgoing_rx, incoming_tx) =
+            make_sender_inner_with_channels(4096);
+
+        let tag = DeliveryTag::from(vec![0x01]);
+        let (tx, mut outcome) = oneshot::channel();
+        inner
+            .link
+            .unsettled
+            .write()
+            .get_or_insert(OrderedMap::new())
+            .insert(tag, UnsettledMessage::new(Bytes::new(), None, 0, tx));
+
+        let peer_error = definitions::Error::new(
+            definitions::AmqpError::ResourceLimitExceeded,
+            Some("no capacity".to_string()),
+            None,
+        );
+
+        let (result, (saw_attach, detaches)) = tokio::join!(
+            inner.detach_with_error(None),
+            crate::link::test_util::drive_simultaneous_detach_race(
+                session_rx,
+                outgoing_rx,
+                incoming_tx,
+                peer_receiver_attach(),
+                Some(peer_error.clone()),
+            ),
+        );
+
+        assert!(saw_attach, "the suspending side must reattach");
+        assert_eq!(
+            detaches, 2,
+            "expected a detach before and after the reattach"
+        );
+        assert!(matches!(
+            result,
+            Ok(LinkOutcome::Closed { remote_error: Some(ref error) }) if error == &peer_error
+        ));
+        assert!(matches!(
+            outcome.try_recv(),
+            Ok(Err(DeliveryFailure::LinkDetached(LinkOutcome::Closed {
+                remote_error: Some(ref error)
+            }))) if error == &peer_error
+        ));
+    }
+
+    /// The closing side of a crossed close also reports the peer's crossing
+    /// detach error to the deliveries that cannot be resumed.
+    #[tokio::test]
+    async fn closing_side_reports_the_peer_error_to_resuming_deliveries() {
+        let (mut inner, session_rx, outgoing_rx, incoming_tx) =
+            make_sender_inner_with_channels(4096);
+
+        let tag = DeliveryTag::from(vec![0x01]);
+        let (tx, mut outcome) = oneshot::channel();
+        inner
+            .link
+            .unsettled
+            .write()
+            .get_or_insert(OrderedMap::new())
+            .insert(tag, UnsettledMessage::new(Bytes::new(), None, 0, tx));
+
+        let peer_error = definitions::Error::new(
+            definitions::AmqpError::ResourceLimitExceeded,
+            Some("no capacity".to_string()),
+            None,
+        );
+
+        let (result, (saw_attach, detaches)) = tokio::join!(
+            inner.close_with_error(None),
+            crate::link::test_util::drive_simultaneous_detach_race(
+                session_rx,
+                outgoing_rx,
+                incoming_tx,
+                peer_receiver_attach(),
+                Some(peer_error.clone()),
+            ),
+        );
+
+        assert!(saw_attach, "the closing side must reattach");
+        assert_eq!(
+            detaches, 2,
+            "expected a detach before and after the reattach"
+        );
+        assert!(matches!(
+            result,
+            Ok(LinkOutcome::Closed { remote_error: Some(ref error) }) if error == &peer_error
+        ));
+        assert!(matches!(
+            outcome.try_recv(),
+            Ok(Err(DeliveryFailure::LinkDetached(LinkOutcome::Closed {
+                remote_error: Some(ref error)
+            }))) if error == &peer_error
+        ));
     }
 
     /// When the incomplete-unsettled loop hits its round cap, the deliveries
