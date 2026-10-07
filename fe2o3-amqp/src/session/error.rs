@@ -16,6 +16,10 @@ pub(crate) enum SessionStateError {
     #[error("Illegal session state")]
     IllegalState,
 
+    /// An internal invariant was violated; this indicates a bug in the library
+    #[error("An internal invariant was violated")]
+    InvariantViolation,
+
     /// The connection stopped before the operation completed
     #[error("The connection stopped: {:?}", .0)]
     ConnectionStopped(ConnectionOutcome),
@@ -35,6 +39,10 @@ pub enum BeginError {
     /// Illegal session state
     #[error("Illegal session state")]
     IllegalState,
+
+    /// An internal invariant was violated; this indicates a bug in the library
+    #[error("An internal invariant was violated")]
+    InvariantViolation,
 
     /// The connection stopped before the operation completed
     #[error("The connection stopped: {:?}", .0)]
@@ -71,6 +79,7 @@ impl From<SessionStateError> for BeginError {
     fn from(error: SessionStateError) -> Self {
         match error {
             SessionStateError::IllegalState => Self::IllegalState,
+            SessionStateError::InvariantViolation => Self::InvariantViolation,
             SessionStateError::ConnectionStopped(reason) => Self::ConnectionStopped(reason),
             SessionStateError::RemoteEnded => Self::RemoteEnded,
             SessionStateError::RemoteEndedWithError(err) => Self::RemoteEndedWithError(err),
@@ -95,6 +104,10 @@ pub(crate) enum SessionInnerError {
     /// Illegal sesesion state
     #[error("Illegal session state")]
     IllegalState,
+
+    /// An internal invariant was violated; this indicates a bug in the library
+    #[error("An internal invariant was violated")]
+    InvariantViolation,
 
     /// The connection stopped before the operation completed
     #[error("The connection stopped: {:?}", .0)]
@@ -123,6 +136,7 @@ impl From<SessionStateError> for SessionInnerError {
     fn from(error: SessionStateError) -> Self {
         match error {
             SessionStateError::IllegalState => Self::IllegalState,
+            SessionStateError::InvariantViolation => Self::InvariantViolation,
             SessionStateError::ConnectionStopped(reason) => Self::ConnectionStopped(reason),
             SessionStateError::RemoteEnded => Self::RemoteEnded,
             SessionStateError::RemoteEndedWithError(err) => Self::RemoteEndedWithError(err),
@@ -159,6 +173,10 @@ pub enum Error {
     #[error("Illegal session state")]
     IllegalState,
 
+    /// An internal invariant was violated; this indicates a bug in the library
+    #[error("An internal invariant was violated")]
+    InvariantViolation,
+
     /// The connection stopped before the operation completed
     #[error("The connection stopped: {:?}", .0)]
     ConnectionStopped(ConnectionOutcome),
@@ -194,6 +212,7 @@ impl From<SessionInnerError> for Error {
             }
             SessionInnerError::HandleInUse => Self::HandleInUse,
             SessionInnerError::IllegalState => Self::IllegalState,
+            SessionInnerError::InvariantViolation => Self::InvariantViolation,
             SessionInnerError::ConnectionStopped(reason) => Self::ConnectionStopped(reason),
             SessionInnerError::TransferFrameToSender => Self::TransferFrameToSender,
             SessionInnerError::RemoteEnded => Self::RemoteEnded,
@@ -219,6 +238,7 @@ impl From<SessionStateError> for Error {
     fn from(error: SessionStateError) -> Self {
         match error {
             SessionStateError::IllegalState => Self::IllegalState,
+            SessionStateError::InvariantViolation => Self::InvariantViolation,
             SessionStateError::ConnectionStopped(reason) => Self::ConnectionStopped(reason),
             SessionStateError::RemoteEnded => Self::RemoteEnded,
             SessionStateError::RemoteEndedWithError(err) => Self::RemoteEndedWithError(err),

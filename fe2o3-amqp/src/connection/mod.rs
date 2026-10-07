@@ -179,7 +179,7 @@ impl<R> ConnectionHandle<R> {
             Err(TryRecvError::Closed) => {
                 self.is_closed = true;
                 // The engine somehow has already stopped running
-                Err(TryCloseError::Stopped(Box::new(Error::IllegalState)))
+                Err(TryCloseError::Stopped(Box::new(Error::InvariantViolation)))
             }
         }
     }
@@ -256,7 +256,7 @@ impl<R> ConnectionHandle<R> {
             }
             Err(_) => {
                 self.is_closed = true;
-                Err(Error::IllegalState)
+                Err(Error::InvariantViolation)
             }
         }
     }
@@ -786,7 +786,7 @@ impl endpoint::Connection for Connection {
             ConnectionState::HeaderExchange => self.local_state = ConnectionState::OpenSent,
             ConnectionState::OpenReceived => self.local_state = ConnectionState::Opened,
             ConnectionState::HeaderSent => self.local_state = ConnectionState::OpenPipe,
-            _ => return Err(Self::OpenError::IllegalState),
+            _ => return Err(Self::OpenError::InvariantViolation),
         }
 
         Ok(())
@@ -981,6 +981,62 @@ mod tests {
         assert!(matches!(
             handle.try_close(),
             Err(super::TryCloseError::AlreadyClosed)
+        ));
+    }
+
+    /// An outcome channel dropped without a result (the engine stopped without
+    /// reporting) is an internal invariant violation.
+    #[tokio::test]
+    async fn dropped_outcome_reports_invariant_violation() {
+        use std::sync::{Arc, OnceLock};
+        use tokio::sync::oneshot;
+
+        let (control, _control_rx) = mpsc::channel(8);
+        let (outgoing, _outgoing_rx) = mpsc::channel(8);
+        let (outcome_tx, outcome) = oneshot::channel::<Result<ConnectionOutcome, super::Error>>();
+        drop(outcome_tx);
+        let mut handle = super::ConnectionHandle {
+            is_closed: false,
+            control,
+            handle: tokio::spawn(async {}),
+            outcome,
+            outgoing,
+            connection_stop_reason: Arc::new(OnceLock::new()),
+            max_frame_size: 0,
+            session_listener: (),
+        };
+
+        let error = handle.on_close().await.expect_err("an internal error");
+        assert!(matches!(error, super::Error::InvariantViolation));
+    }
+
+    /// `try_close` on an engine that stopped without reporting an outcome
+    /// reports an internal invariant violation.
+    #[tokio::test]
+    async fn try_close_with_dropped_outcome_reports_invariant_violation() {
+        use std::sync::{Arc, OnceLock};
+        use tokio::sync::oneshot;
+
+        let (control, _control_rx) = mpsc::channel(8);
+        let (outgoing, _outgoing_rx) = mpsc::channel(8);
+        let (outcome_tx, outcome) = oneshot::channel::<Result<ConnectionOutcome, super::Error>>();
+        drop(outcome_tx);
+        let mut handle = super::ConnectionHandle {
+            is_closed: false,
+            control,
+            handle: tokio::spawn(async {}),
+            outcome,
+            outgoing,
+            connection_stop_reason: Arc::new(OnceLock::new()),
+            max_frame_size: 0,
+            session_listener: (),
+        };
+
+        let error = handle.try_close().expect_err("an internal error");
+        assert!(matches!(
+            error,
+            super::TryCloseError::Stopped(error)
+                if matches!(*error, super::Error::InvariantViolation)
         ));
     }
 }
