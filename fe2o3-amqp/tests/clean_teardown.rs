@@ -13,7 +13,7 @@ use fe2o3_amqp::{
     connection::{
         Connection, ConnectionHandle, ConnectionOutcome, Error as ConnectionError, TryCloseError,
     },
-    session::{Session, SessionHandle, SessionOutcome},
+    session::{Error as SessionError, Session, SessionHandle, SessionOutcome, TryEndError},
     types::definitions::{self, AmqpError},
 };
 
@@ -159,10 +159,10 @@ async fn remote_session_end_returns_ok() {
     );
 }
 
-/// A remote session end with an error is reported on the session handle, and
-/// a later call reports the same error.
+/// A remote session end with an error is reported on the session handle; the
+/// outcome is delivered once and later calls report `AlreadyEnded`.
 #[tokio::test]
-async fn remote_session_end_with_error_is_reported_and_cached() {
+async fn remote_session_end_with_error_is_reported() {
     let (mut server_connection, mut client_connection) = establish_connection_pair().await;
     let (mut client_session, mut server_session) =
         establish_session_pair(&mut server_connection, &mut client_connection).await;
@@ -183,31 +183,33 @@ async fn remote_session_end_with_error_is_reported_and_cached() {
         "remote end with error must be reported as an outcome, got {client_result:?}"
     );
 
-    let again = client_session
+    let error = client_session
         .on_end()
         .await
-        .expect("the outcome is cached");
+        .expect_err("the outcome was already observed");
     assert!(
-        matches!(&again, SessionOutcome::RemoteEndedWithError(error) if error == &expected),
-        "the cached outcome must keep the remote error, got {again:?}"
+        matches!(error, SessionError::AlreadyEnded),
+        "a later call must report AlreadyEnded, got {error:?}"
     );
 }
 
-/// Repeated local session ends report the same clean outcome.
+/// Repeated local session ends report `AlreadyEnded` after the outcome was
+/// observed once.
 #[tokio::test]
-async fn repeated_session_end_reports_the_same_clean_outcome() {
+async fn repeated_session_end_reports_already_ended() {
     let (mut server_connection, mut client_connection) = establish_connection_pair().await;
     let (mut client_session, _server_session) =
         establish_session_pair(&mut server_connection, &mut client_connection).await;
 
     client_session.end().await.expect("local end failed");
-    assert!(matches!(
-        client_session.on_end().await,
-        Ok(SessionOutcome::Ended)
-    ));
+    let error = client_session
+        .on_end()
+        .await
+        .expect_err("the outcome was already observed");
+    assert!(matches!(error, SessionError::AlreadyEnded));
     assert!(matches!(
         client_session.try_end(),
-        Ok(SessionOutcome::Ended)
+        Err(TryEndError::AlreadyEnded)
     ));
 }
 
