@@ -166,6 +166,18 @@
     producers were reclassified: attach serialization, a missing output handle and a missing
     delivery tag report `InvariantViolation`; flow and disposition operations on a link
     without a local handle report the new `LinkStateError::NotAttached`.
+25. **Breaking**: local session/connection state-machine violations are now answered with
+    `amqp:internal-error` instead of `amqp:illegal-state` (which is reserved for frames
+    the peer is not permitted to send): `session::Error` and `session::BeginError` gain
+    `InvariantViolation`, as do `connection::Error` and `OpenError`, and a session or
+    connection whose engine stopped without reporting its outcome reports
+    `InvariantViolation` instead of `IllegalState`. Frames that race an ending session or
+    a closing connection are discarded: an outgoing link/session frame that can no longer
+    be forwarded is dropped instead of failing the session/connection, and a duplicate or
+    late `End` is ignored. A transport that ends without the AMQP close exchange now
+    reports the new `ConnectionLost` error (`OpenError::ConnectionLost` when the
+    connection was still opening) instead of an artificial unexpected-EOF IO error; a
+    close before the open exchange completes simply stops.
 
 ## 0.18.2
 

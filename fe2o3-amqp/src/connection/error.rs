@@ -65,6 +65,14 @@ pub enum OpenError {
     #[error("Illegal local state")]
     IllegalState,
 
+    /// The transport closed before the connection was opened
+    #[error("The connection was lost")]
+    ConnectionLost,
+
+    /// An internal invariant was violated; this indicates a bug in the library
+    #[error("An internal invariant was violated")]
+    InvariantViolation,
+
     /// Not implemented
     #[error("Not implemented")]
     NotImplemented(Option<String>),
@@ -122,6 +130,10 @@ pub(crate) enum ConnectionStateError {
     #[error("Illegal local state")]
     IllegalState,
 
+    /// An internal invariant was violated; this indicates a bug in the library
+    #[error("An internal invariant was violated")]
+    InvariantViolation,
+
     /// Remote peer closed connection
     #[error("Remote peer closed")]
     RemoteClosed,
@@ -141,6 +153,7 @@ impl From<ConnectionStateError> for OpenError {
     fn from(error: ConnectionStateError) -> Self {
         match error {
             ConnectionStateError::IllegalState => Self::IllegalState,
+            ConnectionStateError::InvariantViolation => Self::InvariantViolation,
             ConnectionStateError::RemoteClosed => Self::RemoteClosed,
             ConnectionStateError::RemoteClosedWithError(val) => Self::RemoteClosedWithError(val),
             ConnectionStateError::TransportError(val) => Self::TransportError(val),
@@ -158,6 +171,14 @@ pub(crate) enum ConnectionInnerError {
     /// Illegal local connection state
     #[error("Illegal local state")]
     IllegalState,
+
+    /// The transport closed without the AMQP close exchange
+    #[error("The connection was lost")]
+    ConnectionLost,
+
+    /// An internal invariant was violated; this indicates a bug in the library
+    #[error("An internal invariant was violated")]
+    InvariantViolation,
 
     /// Not implemented
     #[error("Not implemented {:?}", .0)]
@@ -189,6 +210,7 @@ impl From<ConnectionStateError> for ConnectionInnerError {
     fn from(error: ConnectionStateError) -> Self {
         match error {
             ConnectionStateError::IllegalState => Self::IllegalState,
+            ConnectionStateError::InvariantViolation => Self::InvariantViolation,
             ConnectionStateError::RemoteClosed => Self::RemoteClosed,
             ConnectionStateError::RemoteClosedWithError(val) => Self::RemoteClosedWithError(val),
             ConnectionStateError::TransportError(val) => Self::TransportError(val),
@@ -206,6 +228,14 @@ pub enum Error {
     /// Illegal local connection state
     #[error("Illegal local state")]
     IllegalState,
+
+    /// The transport closed without the AMQP close exchange
+    #[error("The connection was lost")]
+    ConnectionLost,
+
+    /// An internal invariant was violated; this indicates a bug in the library
+    #[error("An internal invariant was violated")]
+    InvariantViolation,
 
     /// Not implemented
     #[error("Not implemented {:?}", .0)]
@@ -241,6 +271,8 @@ impl From<ConnectionInnerError> for Error {
         match error {
             ConnectionInnerError::TransportError(val) => Self::TransportError(val),
             ConnectionInnerError::IllegalState => Self::IllegalState,
+            ConnectionInnerError::ConnectionLost => Self::ConnectionLost,
+            ConnectionInnerError::InvariantViolation => Self::InvariantViolation,
             ConnectionInnerError::NotImplemented(val) => Self::NotImplemented(val),
             ConnectionInnerError::NotFound(val) => Self::NotFound(val),
             ConnectionInnerError::RemoteClosed => Self::RemoteClosed,
@@ -253,6 +285,7 @@ impl From<ConnectionStateError> for Error {
     fn from(error: ConnectionStateError) -> Self {
         match error {
             ConnectionStateError::IllegalState => Self::IllegalState,
+            ConnectionStateError::InvariantViolation => Self::InvariantViolation,
             ConnectionStateError::RemoteClosed => Self::RemoteClosed,
             ConnectionStateError::RemoteClosedWithError(val) => Self::RemoteClosedWithError(val),
             ConnectionStateError::TransportError(val) => Self::TransportError(val),
