@@ -820,7 +820,7 @@ impl endpoint::Connection for Connection {
                 true => self.local_state = ConnectionState::Discarding,
                 false => self.local_state = ConnectionState::OpenClosePipe,
             },
-            _ => return Err(CloseError::IllegalState),
+            _ => return Err(CloseError::InvariantViolation),
         }
         Ok(())
     }
@@ -1037,6 +1037,59 @@ mod tests {
             error,
             super::TryCloseError::Stopped(error)
                 if matches!(*error, super::Error::InvariantViolation)
+        ));
+    }
+
+    /// A sink that accepts every frame, for testing frame-writing methods.
+    struct NullSink;
+
+    impl futures_util::Sink<crate::frames::amqp::Frame> for NullSink {
+        type Error = crate::transport::Error;
+
+        fn poll_ready(
+            self: std::pin::Pin<&mut Self>,
+            _: &mut std::task::Context<'_>,
+        ) -> std::task::Poll<Result<(), Self::Error>> {
+            std::task::Poll::Ready(Ok(()))
+        }
+
+        fn start_send(
+            self: std::pin::Pin<&mut Self>,
+            _: crate::frames::amqp::Frame,
+        ) -> Result<(), Self::Error> {
+            Ok(())
+        }
+
+        fn poll_flush(
+            self: std::pin::Pin<&mut Self>,
+            _: &mut std::task::Context<'_>,
+        ) -> std::task::Poll<Result<(), Self::Error>> {
+            std::task::Poll::Ready(Ok(()))
+        }
+
+        fn poll_close(
+            self: std::pin::Pin<&mut Self>,
+            _: &mut std::task::Context<'_>,
+        ) -> std::task::Poll<Result<(), Self::Error>> {
+            std::task::Poll::Ready(Ok(()))
+        }
+    }
+
+    /// A `send_close` from a state that cannot send a Close is an internal
+    /// invariant violation.
+    #[tokio::test]
+    async fn send_close_in_wrong_state_is_invariant_violation() {
+        let mut connection = Connection::new(ConnectionState::End, test_open());
+        let mut sink = NullSink;
+
+        let error = connection
+            .send_close(&mut sink, None)
+            .await
+            .expect_err("the close must be rejected");
+
+        assert!(matches!(
+            error,
+            super::ConnectionStateError::InvariantViolation
         ));
     }
 }
