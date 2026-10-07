@@ -130,7 +130,7 @@ pub(crate) enum SenderAttachExchange {
 ///   empty map), so the peer can reconcile outstanding deliveries (AMQP 1.0
 ///   §2.6.3/§2.6.13).
 /// - [`AttachMode::Reattach`] forces `unsettled` to be null; per §2.7.3 a
-///   genuine reattach, such as the one completing the §2.6.6 crossed close,
+///   genuine reattach, such as the one completing the §2.6.6 simultaneous-detach race,
 ///   MUST NOT carry an unsettled map.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum AttachMode {
@@ -374,7 +374,7 @@ where
 
         // A resuming attach carries a non-null unsettled map, including an
         // empty-but-present map when nothing is unsettled. A reattach, such as
-        // the one completing the AMQP 1.0 §2.6.6 crossed close, MUST carry a
+        // the one completing the AMQP 1.0 §2.6.6 simultaneous-detach race, MUST carry a
         // null `unsettled` field (§2.7.3).
         let is_resuming = matches!(mode, AttachMode::Resume)
             && matches!(
@@ -455,7 +455,7 @@ where
         // session relay at arrival and recorded via
         // `apply_remote_detach_outcome`.
         //
-        // A crossing detach (closed while DetachSent, or open while
+        // A simultaneous detach (closed while DetachSent, or open while
         // CloseSent) must not be applied here: the caller reattaches first
         // (§2.6.6). Without this check `apply_remote_detach_outcome` would
         // terminalize the link and break that handshake.
@@ -1010,7 +1010,7 @@ pub(crate) mod test_util {
     /// 3. on the link's `Attach`, reply with the peer's `Attach`;
     /// 4. on the link's second detach, reply with a closing detach.
     ///
-    /// The first (crossing) detach reply carries `peer_detach_error`.
+    /// The peer's simultaneous detach reply carries `peer_detach_error`.
     ///
     /// Returns `(saw_attach, detaches)`.
     pub(crate) async fn drive_simultaneous_detach_race(

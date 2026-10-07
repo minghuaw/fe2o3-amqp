@@ -335,8 +335,8 @@ where
 /// closed the link by reattaching and then sending a closing detach.
 ///
 /// Used on both sides of the race. The closing side reattaches too so the
-/// link is re-registered for the peer's crossed attach (it is released when
-/// the closing detach is sent); the crossed attach exchanges then converge
+/// link is re-registered for the peer's simultaneous attach (it is released when
+/// the closing detach is sent); the simultaneous attach exchanges then converge
 /// symmetrically.
 ///
 /// # Cancel safety

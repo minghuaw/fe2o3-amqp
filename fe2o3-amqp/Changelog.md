@@ -40,7 +40,7 @@
    `close()`/`close_with_error()` on `Sender`, `Receiver` and `Controller` return `LinkOutcome`,
    so the error the peer attached to its closing detach is surfaced instead of being dropped.
    `DetachError::ClosedByRemote`, `RemoteDetachedWithError` and `RemoteClosedWithError` are
-   removed: the AMQP 1.0 §2.6.6 crossed close is reported as `LinkOutcome::Closed`.
+   removed: the AMQP 1.0 §2.6.6 simultaneous detach is reported as `LinkOutcome::Closed`.
    `SenderResumeErrorKind`/`ReceiverResumeErrorKind` gain `LinkDetached(LinkOutcome)`, and
    `detach_then_resume_on_session` reports a link the peer detached closed through the existing
    `Resume` variant without attempting to resume it. `SenderAttachError`/`ReceiverAttachError`
@@ -110,7 +110,7 @@
     deliveries still pending on a sender link with the peer's actual `Detached`/`Closed`
     outcome (including its error) when the link endpoint is gone or the peer closed the link,
     instead of letting their settlement channels drop. The deliveries failed by the
-    AMQP 1.0 §2.6.6 crossed-close handshake likewise report the peer's crossing detach
+    AMQP 1.0 §2.6.6 simultaneous-detach handshake likewise report the peer's detach
     outcome (including its error) instead of a synthesized close.
 
 19. **Bugfix**: when this side rejects an incoming attach, a rejection detach that could not
