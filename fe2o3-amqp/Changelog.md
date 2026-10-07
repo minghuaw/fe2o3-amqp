@@ -118,10 +118,10 @@
     stop always wins. The immediate-detach rejection paths also no longer wait for a detach
     reply after sending the detach failed.
 
-20. **Breaking**: `on_end`/`on_close`/`try_end`/`try_close` replay the terminal outcome on
-    repeated calls instead of reporting `IllegalState`/`AlreadyEnded`/`AlreadyClosed` (see
-    item 22 for the outcome types); `TryEndError::AlreadyEnded` and
-    `TryCloseError::AlreadyClosed` are removed.
+20. **Breaking**: session handles replay the terminal outcome on repeated
+    `on_end`/`try_end` calls instead of reporting `IllegalState`/`AlreadyEnded` (see
+    item 22 for the outcome types); `TryEndError::AlreadyEnded` is removed. Connection
+    handles deliver the outcome once (see item 24).
 
 21. **Breaking**: the close/detach outcome types are renamed to a consistent family:
     `DetachStatus` -> `LinkOutcome`, `SessionStopReason` -> `SessionOutcome`, and
@@ -149,6 +149,12 @@
     connection-free leaf; a connection stopping is a failure of the session's own end
     operation (`Err(Error::ConnectionStopped)`), consistent with links failing when their
     session stopped.
+
+24. **Breaking**: the connection handle delivers the close outcome once, like joining
+    the engine task: `close`/`close_with_error`/`on_close` return the outcome a single
+    time and later calls report `Error::AlreadyClosed`; `try_close` reports
+    `TryCloseError::AlreadyClosed` (reintroduced) after the outcome was observed. Use
+    `is_closed` to query the state instead. Neither the outcome nor an error is replayed.
 
 ## 0.18.2
 

@@ -10,7 +10,9 @@ use std::time::Duration;
 
 use fe2o3_amqp::{
     acceptor::{ConnectionAcceptor, ListenerSessionHandle, SessionAcceptor},
-    connection::{Connection, ConnectionHandle, ConnectionOutcome},
+    connection::{
+        Connection, ConnectionHandle, ConnectionOutcome, Error as ConnectionError, TryCloseError,
+    },
     session::{Session, SessionHandle, SessionOutcome},
     types::definitions::{self, AmqpError},
 };
@@ -229,9 +231,9 @@ async fn remote_connection_close_returns_ok() {
 }
 
 /// A remote connection close with an error is reported on the connection
-/// handle, and a later call reports the same error.
+/// handle; the outcome is delivered once and later calls report `AlreadyClosed`.
 #[tokio::test]
-async fn remote_connection_close_with_error_is_reported_and_cached() {
+async fn remote_connection_close_with_error_is_reported() {
     let (mut server_connection, mut client_connection) = establish_connection_pair().await;
 
     let (server_result, client_result) = tokio::time::timeout(Duration::from_secs(10), async {
@@ -250,29 +252,31 @@ async fn remote_connection_close_with_error_is_reported_and_cached() {
         "remote close with error must be reported as an outcome, got {client_result:?}"
     );
 
-    let again = client_connection
+    let error = client_connection
         .on_close()
         .await
-        .expect("the outcome is cached");
+        .expect_err("the outcome was already observed");
     assert!(
-        matches!(&again, ConnectionOutcome::RemoteClosedWithError(error) if error == &expected),
-        "the cached outcome must keep the remote error, got {again:?}"
+        matches!(error, ConnectionError::AlreadyClosed),
+        "a later call must report AlreadyClosed, got {error:?}"
     );
 }
 
-/// Repeated local connection closes report the same clean outcome.
+/// Repeated local connection closes report `AlreadyClosed` after the outcome
+/// was observed once.
 #[tokio::test]
-async fn repeated_connection_close_reports_the_same_clean_outcome() {
+async fn repeated_connection_close_reports_already_closed() {
     let (_server_connection, mut client_connection) = establish_connection_pair().await;
 
     client_connection.close().await.expect("local close failed");
-    assert!(matches!(
-        client_connection.on_close().await,
-        Ok(ConnectionOutcome::Closed)
-    ));
+    let error = client_connection
+        .on_close()
+        .await
+        .expect_err("the outcome was already observed");
+    assert!(matches!(error, ConnectionError::AlreadyClosed));
     assert!(matches!(
         client_connection.try_close(),
-        Ok(ConnectionOutcome::Closed)
+        Err(TryCloseError::AlreadyClosed)
     ));
 }
 
