@@ -282,9 +282,15 @@ impl LinkOutcome {
 /// record it, and nothing changed.
 #[derive(Debug, thiserror::Error)]
 pub(crate) enum ApplyRemoteDetachError {
-    /// The link was never attached
-    #[error("The link is not attached")]
-    NotAttached,
+    /// The link was never attached (defensive)
+    ///
+    /// A remote detach cannot reach a link that was never attached: the
+    /// session routes an incoming detach by the peer's input handle, which
+    /// only exists after the peer's attach, and every call site either
+    /// pre-checks the link state or only observes relayed frames. Seeing this
+    /// indicates a broken library invariant.
+    #[error("An internal invariant was violated")]
+    InvariantViolation,
 
     /// The link was already suspended by a previous detach
     #[error("The link is already detached")]
@@ -298,7 +304,7 @@ pub(crate) enum ApplyRemoteDetachError {
 impl From<ApplyRemoteDetachError> for LinkStateError {
     fn from(value: ApplyRemoteDetachError) -> Self {
         match value {
-            ApplyRemoteDetachError::NotAttached => LinkStateError::InvariantViolation,
+            ApplyRemoteDetachError::InvariantViolation => LinkStateError::InvariantViolation,
             ApplyRemoteDetachError::AlreadyDetached(remote_error) => {
                 LinkStateError::LinkDetached(LinkOutcome::Detached { remote_error })
             }
