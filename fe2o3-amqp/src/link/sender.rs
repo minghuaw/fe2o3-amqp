@@ -793,7 +793,7 @@ where
         match outcome {
             SenderAttachExchange::Complete => {}
             // The reachable map-carrying exchanges are the peer's reply during
-            // the crossed close: fail the deliveries it still considers
+            // the simultaneous detach: fail the deliveries it still considers
             // unsettled with the detach outcome that ended the link, and let
             // `reattach_then_close` send the closing detach.
             SenderAttachExchange::IncompleteUnsettled(resuming_deliveries)
@@ -1689,11 +1689,11 @@ mod tests {
     /// - sending our closing detach releases the link from the session
     ///   (`Session::on_outgoing_detach`), so the link must be reattached
     ///   (`reattach_then_close` -> `reallocate_output_handle` ->
-    ///   `allocate_link`) to re-register it; otherwise the peer's crossed
+    ///   `allocate_link`) to re-register it; otherwise the peer's simultaneous
     ///   `Attach`/`Detach` could not be routed to the link and would end the
     ///   session;
     /// - with both sides reattaching, each side's attach exchange accepts the
-    ///   peer's `Attach` as its answer, so the crossed detaches converge
+    ///   peer's `Attach` as its answer, so the simultaneous detaches converge
     ///   symmetrically without depending on whether the peer drives its
     ///   reattach.
     ///
@@ -2661,12 +2661,12 @@ mod tests {
         ));
     }
 
-    /// A crossed close on a link with a pending delivery (the peer answers our
+    /// A simultaneous detach on a link with a pending delivery (the peer answers our
     /// non-closing detach with a closing one) completes as
     /// `LinkOutcome::Closed`, failing the delivery with the close outcome
     /// instead of returning `IllegalState`.
     #[tokio::test]
-    async fn crossed_close_fails_pending_delivery_with_closed_status() {
+    async fn simultaneous_detach_fails_pending_delivery_with_closed_status() {
         let (mut inner, session_rx, outgoing_rx, incoming_tx) =
             make_sender_inner_with_channels(4096);
 
@@ -2708,10 +2708,10 @@ mod tests {
         assert!(matches!(&inner.link.local_state, LinkState::Closed(_)));
     }
 
-    /// A crossed close reports the peer's crossing detach error to the
+    /// A simultaneous detach reports the peer's detach error to the
     /// deliveries that cannot be resumed.
     #[tokio::test]
-    async fn crossed_close_reports_the_peer_error_to_resuming_deliveries() {
+    async fn simultaneous_detach_reports_the_peer_error_to_resuming_deliveries() {
         let (mut inner, session_rx, outgoing_rx, incoming_tx) =
             make_sender_inner_with_channels(4096);
 
@@ -2758,7 +2758,7 @@ mod tests {
         ));
     }
 
-    /// The closing side of a crossed close also reports the peer's crossing
+    /// The closing side of a simultaneous detach also reports the peer's
     /// detach error to the deliveries that cannot be resumed.
     #[tokio::test]
     async fn closing_side_reports_the_peer_error_to_resuming_deliveries() {
