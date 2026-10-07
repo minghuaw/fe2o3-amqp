@@ -168,7 +168,7 @@ impl<R> SessionHandle<R> {
             Err(TryRecvError::Empty) => Err(TryEndError::RemoteEndNotReceived),
             Err(TryRecvError::Closed) => {
                 self.is_ended = true;
-                Err(TryEndError::Stopped(Box::new(Error::IllegalState)))
+                Err(TryEndError::Stopped(Box::new(Error::InvariantViolation)))
             }
         }
     }
@@ -256,7 +256,7 @@ impl<R> SessionHandle<R> {
             }
             Err(_) => {
                 self.is_ended = true;
-                Err(Error::IllegalState)
+                Err(Error::InvariantViolation)
             }
         }
     }
@@ -1486,6 +1486,62 @@ mod tests {
         assert!(matches!(
             handle.try_end(),
             Err(super::TryEndError::AlreadyEnded)
+        ));
+    }
+
+    /// An outcome channel dropped without a result (the engine stopped without
+    /// reporting) is an internal invariant violation.
+    #[tokio::test]
+    async fn dropped_outcome_reports_invariant_violation() {
+        use tokio::sync::{mpsc, oneshot};
+
+        let (control, _control_rx) = mpsc::channel(8);
+        let (outgoing, _outgoing_rx) = mpsc::channel(8);
+        let (outcome_tx, outcome) =
+            oneshot::channel::<Result<super::SessionOutcome, super::Error>>();
+        drop(outcome_tx);
+        let mut handle = super::SessionHandle {
+            is_ended: false,
+            control,
+            engine_handle: tokio::spawn(async {}),
+            outcome,
+            outgoing,
+            session_stop_reason: Arc::new(OnceLock::new()),
+            max_frame_size: 0,
+            link_listener: (),
+        };
+
+        let error = handle.on_end().await.expect_err("an internal error");
+        assert!(matches!(error, super::Error::InvariantViolation));
+    }
+
+    /// `try_end` on an engine that stopped without reporting an outcome
+    /// reports an internal invariant violation.
+    #[tokio::test]
+    async fn try_end_with_dropped_outcome_reports_invariant_violation() {
+        use tokio::sync::{mpsc, oneshot};
+
+        let (control, _control_rx) = mpsc::channel(8);
+        let (outgoing, _outgoing_rx) = mpsc::channel(8);
+        let (outcome_tx, outcome) =
+            oneshot::channel::<Result<super::SessionOutcome, super::Error>>();
+        drop(outcome_tx);
+        let mut handle = super::SessionHandle {
+            is_ended: false,
+            control,
+            engine_handle: tokio::spawn(async {}),
+            outcome,
+            outgoing,
+            session_stop_reason: Arc::new(OnceLock::new()),
+            max_frame_size: 0,
+            link_listener: (),
+        };
+
+        let error = handle.try_end().expect_err("an internal error");
+        assert!(matches!(
+            error,
+            super::TryEndError::Stopped(error)
+                if matches!(*error, super::Error::InvariantViolation)
         ));
     }
 }
