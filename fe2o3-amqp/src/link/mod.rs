@@ -990,7 +990,7 @@ pub(crate) mod test_util {
     //! `close_with_error` or the suspending side via `detach_with_error`).
 
     use fe2o3_amqp_types::{
-        definitions::Handle,
+        definitions::{self, Handle},
         performatives::{Attach, Detach},
     };
     use tokio::sync::mpsc;
@@ -1010,12 +1010,15 @@ pub(crate) mod test_util {
     /// 3. on the link's `Attach`, reply with the peer's `Attach`;
     /// 4. on the link's second detach, reply with a closing detach.
     ///
+    /// The first (crossing) detach reply carries `peer_detach_error`.
+    ///
     /// Returns `(saw_attach, detaches)`.
     pub(crate) async fn drive_simultaneous_detach_race(
         mut session_rx: mpsc::Receiver<SessionControl>,
         mut outgoing_rx: mpsc::Receiver<LinkFrame>,
         initial_incoming_tx: mpsc::Sender<LinkFrame>,
         peer_attach: Attach,
+        peer_detach_error: Option<definitions::Error>,
     ) -> (bool, usize) {
         let mut incoming_tx = initial_incoming_tx;
         let mut saw_attach = false;
@@ -1045,11 +1048,16 @@ pub(crate) mod test_util {
                         // reply with the opposite `closed`. Second: the reply
                         // to the closing detach we sent after reattaching.
                         let closed = if detaches == 1 { !detach.closed } else { true };
+                        let error = if detaches == 1 {
+                            peer_detach_error.clone()
+                        } else {
+                            None
+                        };
                         let _ = incoming_tx
                             .send(LinkFrame::Detach(Detach {
                                 handle: Handle(0),
                                 closed,
-                                error: None,
+                                error,
                             }))
                             .await;
                         if detaches >= 2 {
