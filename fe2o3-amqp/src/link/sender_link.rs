@@ -100,7 +100,7 @@ where
         let input_handle = self
             .input_handle
             .clone()
-            .ok_or(TransferError::NotAttached)?;
+            .ok_or(LinkStateError::InvariantViolation)?;
 
         // The connection engine publishes the negotiated encoder max frame
         // length before the connection handle is created; links are only
@@ -302,7 +302,7 @@ where
         let handle = self
             .output_handle
             .clone()
-            .ok_or(TransferError::NotAttached)?
+            .ok_or(LinkStateError::InvariantViolation)?
             .into();
 
         let settled = match self.snd_settle_mode {
@@ -955,9 +955,7 @@ fn sender_detach_failure(
             Some(error) => SenderAttachError::RemoteClosedWithError(error.clone()),
             None => attach_error,
         },
-        DetachError::IllegalState | DetachError::InvariantViolation | DetachError::NotAttached => {
-            attach_error
-        }
+        DetachError::IllegalState | DetachError::InvariantViolation => attach_error,
     }
 }
 
