@@ -74,10 +74,10 @@
     resume retries them, and a terminal close or a dropped sender fails them with
     `LinkDetached` instead of losing their settlement channels.
 14. **Breaking**: transfer failures now carry their cause instead of the catch-all `IllegalState`.
-    `SendError`, `PostError` and `ControllerSendError` gain `NotAttached` (the link endpoint has
-    no local handle) and `FrameSizeTooSmall` (the negotiated max-frame-size cannot fit the
+    `SendError`, `PostError` and `ControllerSendError` gain `FrameSizeTooSmall` (the negotiated
+    max-frame-size cannot fit the
     serialized transfer performative, which previously underflowed the payload bound and could
-    panic or emit an oversized frame); `RecvError` gains `NotAttached` on the receiving side.
+    panic or emit an oversized frame).
     `MessageEncodeError` is now a struct carrying the underlying `serde_amqp::Error`, exposed by
     the `MessageEncodeError` variants of `SendError`, `PostError` and `ControllerSendError`; and
     the typo'd `RecvError::TransactionalAcquisitionIsNotImeplemented` is renamed to
@@ -163,9 +163,10 @@
     and a `Flow`/`Disposition` frame reaching the receiver stream reported `IllegalState`
     instead of an internal-invariant failure. `Flow`/`Disposition` leaks now close the link
     with `amqp:internal-error` and report `LinkStateError::InvariantViolation`. Local
-    producers were reclassified: attach serialization, a missing output handle and a missing
-    delivery tag report `InvariantViolation`; flow and disposition operations on a link
-    without a local handle report the new `LinkStateError::NotAttached`.
+    producers were reclassified: attach serialization and a missing local handle report
+    `InvariantViolation`, and a transfer that arrives while the link is not attached
+    reports the state-aware outcome (`LinkDetached`/`SessionStopped`) or
+    `InvariantViolation`.
 25. **Breaking**: local session/connection state-machine violations are now answered with
     `amqp:internal-error` instead of `amqp:illegal-state` (which is reserved for frames
     the peer is not permitted to send): `session::Error` and `session::BeginError` gain

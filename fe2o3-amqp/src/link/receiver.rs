@@ -748,7 +748,7 @@ impl ReceiverDisposer {
                 let handle: Handle = self
                     .output_handle
                     .clone()
-                    .ok_or(DispositionError::NotAttached)?
+                    .ok_or(DispositionError::InvariantViolation)?
                     .into();
                 let delivery_count = {
                     let mut guard = self.flow_state.lock.write();
@@ -2482,10 +2482,10 @@ mod tests {
         ));
     }
 
-    /// Sending a flow on a link without a local handle reports the state as
-    /// `NotAttached` instead of the former catch-all `IllegalState`.
+    /// Sending a flow on a link without a local handle is an internal
+    /// invariant violation: the endpoint cannot be observed in that state.
     #[tokio::test]
-    async fn send_flow_without_handle_reports_not_attached() {
+    async fn send_flow_without_handle_is_invariant_violation() {
         let (mut inner, _session_rx, _outgoing_rx, _incoming_tx) =
             make_receiver_inner_with_channels(4096);
         inner.link.output_handle = None;
@@ -2500,7 +2500,74 @@ mod tests {
         )
         .await;
 
-        assert!(matches!(result, Err(FlowError::NotAttached)));
+        assert!(matches!(result, Err(FlowError::InvariantViolation)));
+    }
+
+    /// A transfer that arrives after the link detached reports the terminal
+    /// outcome instead of an error about a missing handle.
+    #[tokio::test]
+    async fn transfer_on_detached_link_reports_the_outcome() {
+        let (mut inner, _session_rx, _outgoing_rx, incoming_tx) =
+            make_receiver_inner_with_channels(4096);
+        let peer_error = definitions::Error::new(
+            definitions::AmqpError::ResourceLimitExceeded,
+            Some("no capacity".to_string()),
+            None,
+        );
+        inner.link.local_state = LinkState::Detached(Some(peer_error.clone()));
+
+        incoming_tx
+            .send(make_link_frame(
+                make_incoming_transfer(0, Some(b"tag0".to_vec()), false, false),
+                encoded_message_payload("m"),
+            ))
+            .await
+            .expect("the incoming end is open");
+
+        let error = inner
+            .recv::<String>()
+            .await
+            .expect_err("the transfer must fail");
+        assert!(matches!(
+            error,
+            RecvError::LinkDetached(LinkOutcome::Detached { remote_error: Some(ref error) })
+                if error == &peer_error
+        ));
+    }
+
+    /// A transfer that arrives after the session stopped reports the stop
+    /// reason, which takes precedence over the link's own state.
+    #[tokio::test]
+    async fn transfer_on_stopped_session_reports_the_stop() {
+        let (mut inner, _session_rx, _outgoing_rx, incoming_tx) =
+            make_receiver_inner_with_channels(4096);
+        inner.link.local_state = LinkState::Detached(None);
+        inner
+            .link
+            .session_stop_reason
+            .set(SessionStopped::Outcome(
+                crate::session::SessionOutcome::Ended,
+            ))
+            .expect("the stop reason is unset");
+
+        incoming_tx
+            .send(make_link_frame(
+                make_incoming_transfer(0, Some(b"tag0".to_vec()), false, false),
+                encoded_message_payload("m"),
+            ))
+            .await
+            .expect("the incoming end is open");
+
+        let error = inner
+            .recv::<String>()
+            .await
+            .expect_err("the transfer must fail");
+        assert!(matches!(
+            error,
+            RecvError::LinkStateError(LinkStateError::SessionStopped(SessionStopped::Outcome(
+                crate::session::SessionOutcome::Ended
+            )))
+        ));
     }
 
     /// A receiver whose channel closed while its link is terminal reports the

@@ -1004,7 +1004,7 @@ impl SenderInner<SenderLink<Target>> {
             .link
             .output_handle
             .clone()
-            .ok_or(SendError::NotAttached)?
+            .ok_or(LinkStateError::InvariantViolation)?
             .into();
         let transfer = Transfer {
             handle,
@@ -1042,7 +1042,7 @@ impl SenderInner<SenderLink<Target>> {
             .link
             .output_handle
             .clone()
-            .ok_or(SendError::NotAttached)?
+            .ok_or(LinkStateError::InvariantViolation)?
             .into();
         let settled = match self.link.snd_settle_mode {
             SenderSettleMode::Settled => true,
@@ -1079,7 +1079,7 @@ impl SenderInner<SenderLink<Target>> {
             .link
             .output_handle
             .clone()
-            .ok_or(SendError::NotAttached)?
+            .ok_or(LinkStateError::InvariantViolation)?
             .into();
         let transfer = Transfer {
             handle,
@@ -1804,10 +1804,10 @@ mod tests {
         }
     }
 
-    /// A link without a local handle is not attached, so a transfer reports
-    /// `NotAttached` instead of the catch-all `IllegalState`.
+    /// A linked endpoint without its remote handle is an internal invariant
+    /// violation: the endpoint cannot be observed in that state.
     #[tokio::test]
-    async fn send_without_input_handle_returns_not_attached() {
+    async fn send_without_input_handle_is_invariant_violation() {
         let inner = make_sender_inner(4096); // input_handle is None
         let (outgoing_tx, mut outgoing_rx) = mpsc::channel::<LinkFrame>(16);
 
@@ -1820,13 +1820,17 @@ mod tests {
             )
             .await;
 
-        assert!(matches!(result, Err(TransferError::NotAttached)));
+        assert!(matches!(
+            result,
+            Err(TransferError::LinkState(LinkStateError::InvariantViolation))
+        ));
         assert!(outgoing_rx.try_recv().is_err());
     }
 
-    /// Generating a transfer without a local handle is not attached.
+    /// Generating a transfer without a local handle is an internal invariant
+    /// violation: the endpoint cannot be observed in that state.
     #[test]
-    fn generate_transfer_without_output_handle_returns_not_attached() {
+    fn generate_transfer_without_output_handle_is_invariant_violation() {
         let mut inner = make_sender_inner(4096);
         inner.link.output_handle = None;
 
@@ -1838,7 +1842,10 @@ mod tests {
             false,
         );
 
-        assert!(matches!(result, Err(TransferError::NotAttached)));
+        assert!(matches!(
+            result,
+            Err(TransferError::LinkState(LinkStateError::InvariantViolation))
+        ));
     }
 
     /// A max-frame-size that cannot even fit the serialized transfer
