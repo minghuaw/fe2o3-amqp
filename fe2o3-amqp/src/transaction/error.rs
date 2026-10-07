@@ -172,6 +172,7 @@ impl From<LinkStateError> for ControllerSendError {
     fn from(value: LinkStateError) -> Self {
         match value {
             LinkStateError::LinkDetached(status) => Self::LinkDetached(status),
+            LinkStateError::NotAttached => Self::NotAttached,
             other => Self::LinkStateError(other),
         }
     }
@@ -293,6 +294,7 @@ impl From<LinkStateError> for PostError {
     fn from(value: LinkStateError) -> Self {
         match value {
             LinkStateError::LinkDetached(status) => Self::LinkDetached(status),
+            LinkStateError::NotAttached => Self::NotAttached,
             other => Self::LinkStateError(other),
         }
     }

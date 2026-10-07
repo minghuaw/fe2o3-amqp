@@ -396,7 +396,7 @@ where
         let delivery_tag = transfer
             .delivery_tag
             .clone()
-            .ok_or(LinkStateError::IllegalState)?;
+            .ok_or(LinkStateError::InvariantViolation)?;
         if self.is_settled_on_send(&transfer) {
             self.send_transfer_without_modifying_unsettled_map(writer, transfer, payload)
                 .await?;
@@ -903,7 +903,6 @@ where
         match attach_error {
             SenderAttachError::SessionStopped(_)
             | SenderAttachError::SessionNotMapped
-            | SenderAttachError::IllegalState
             | SenderAttachError::InvariantViolation
             | SenderAttachError::NonAttachFrameReceived
             | SenderAttachError::UnexpectedUnsettledMap
@@ -934,6 +933,7 @@ where
             }
 
             SenderAttachError::CoordinatorIsNotImplemented
+            | SenderAttachError::IllegalState
             | SenderAttachError::SourceAddressIsSomeWhenDynamicIsTrue
             | SenderAttachError::TargetAddressIsNoneWhenDynamicIsTrue
             | SenderAttachError::DynamicNodePropertiesIsSomeWhenDynamicIsFalse => {
@@ -962,7 +962,9 @@ fn sender_detach_failure(
             Some(error) => SenderAttachError::RemoteClosedWithError(error.clone()),
             None => attach_error,
         },
-        DetachError::IllegalState | DetachError::InvariantViolation => attach_error,
+        DetachError::IllegalState | DetachError::InvariantViolation | DetachError::NotAttached => {
+            attach_error
+        }
     }
 }
 
