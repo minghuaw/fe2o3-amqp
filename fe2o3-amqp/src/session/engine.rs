@@ -763,9 +763,8 @@ where
             _ => SessionStopped::Outcome(SessionOutcome::Ended),
         };
         self.session.set_session_stop_reason(session_stop_reason);
-        let _ =
-            connection::deallocate_session(&mut self.conn_control, self.session.outgoing_channel())
-                .await;
+        connection::deallocate_session(&mut self.conn_control, self.session.outgoing_channel())
+            .await;
         // A session that reached a terminal state reports the outcome it stopped
         // with; the connection stopping first is a failure of the session's end
         // operation (`Err(ConnectionStopped)`), consistent with link operations

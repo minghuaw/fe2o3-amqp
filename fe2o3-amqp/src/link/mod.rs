@@ -575,7 +575,7 @@ where
                 let _ = self.output_handle.take();
                 Ok(status)
             }
-            LinkState::Unattached => Err(ApplyRemoteDetachError::NotAttached),
+            LinkState::Unattached => Err(ApplyRemoteDetachError::InvariantViolation),
             LinkState::Detached(remote_error) => Err(ApplyRemoteDetachError::AlreadyDetached(
                 remote_error.clone(),
             )),
