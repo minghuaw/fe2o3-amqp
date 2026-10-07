@@ -109,7 +109,7 @@ impl From<NegotiationError> for OpenError {
             },
             NegotiationError::DecodeError(val) => Self::DecodeError(val),
             NegotiationError::NotImplemented(description) => Self::NotImplemented(description),
-            NegotiationError::IllegalState => Self::IllegalState,
+            NegotiationError::InvariantViolation => Self::InvariantViolation,
 
             #[cfg(feature = "scram")]
             NegotiationError::ScramError(e) => Self::ScramError(e),
@@ -306,10 +306,6 @@ pub(crate) enum AllocSessionError {
 
     #[error("Reached connection channel max")]
     ChannelMaxReached,
-}
-
-pub(crate) enum DeallocateSessionError {
-    IllegalState,
 }
 
 /// Error associated with trying to close the connection

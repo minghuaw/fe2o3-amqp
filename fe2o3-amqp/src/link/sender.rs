@@ -553,7 +553,9 @@ impl Sender {
             Err(ApplyRemoteDetachError::AlreadyClosed(remote_error)) => {
                 Ok(LinkOutcome::Closed { remote_error })
             }
-            Err(ApplyRemoteDetachError::NotAttached) => Err(LinkStateError::InvariantViolation),
+            Err(ApplyRemoteDetachError::InvariantViolation) => {
+                Err(LinkStateError::InvariantViolation)
+            }
         }
     }
 }

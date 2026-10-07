@@ -283,14 +283,23 @@ impl<R> ConnectionHandle<R> {
     }
 }
 
+/// Best-effort deallocate a session's outgoing channel from the connection.
+///
+/// The send fails only when the connection engine has already stopped (its
+/// `ConnectionControl` receiver was dropped). That is a normal teardown race:
+/// a connection close ends its sessions, and the session engine exits
+/// independently, so either side may finish first. The failure is ignored
+/// because the connection is already gone, there is nothing left to
+/// deallocate, and the session's end/stop outcome is delivered separately.
 pub(crate) async fn deallocate_session(
     control: &mut Sender<ConnectionControl>,
     channel: OutgoingChannel,
-) -> Result<(), DeallocateSessionError> {
-    control
+) {
+    // A failed send means the connection engine already stopped; ignoring it
+    // is safe because the connection cleaned up its sessions on the way down.
+    let _ = control
         .send(ConnectionControl::DeallocateSession(channel))
-        .await
-        .map_err(|_| DeallocateSessionError::IllegalState)
+        .await;
 }
 
 /// An AMQP 1.0 Connection.
