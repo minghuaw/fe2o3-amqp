@@ -197,8 +197,7 @@ impl TxnCoordinator {
                     // Session must have already stopped
                     Running::Stop
                 }
-                crate::link::LinkStateError::InvariantViolation
-                | crate::link::LinkStateError::NotAttached => {
+                crate::link::LinkStateError::InvariantViolation => {
                     #[cfg(feature = "tracing")]
                     tracing::error!(?error);
                     #[cfg(feature = "log")]
@@ -229,16 +228,6 @@ impl TxnCoordinator {
                     #[cfg(feature = "log")]
                     log::error!("detach_error = {:?}", _err);
                 }
-                Running::Stop
-            }
-            RecvError::NotAttached => {
-                #[cfg(feature = "tracing")]
-                tracing::error!(?error);
-                #[cfg(feature = "log")]
-                log::error!("error = {:?}", error);
-                let error = definitions::Error::new(AmqpError::IllegalState, None, None);
-                // TODO: detach instead of closing
-                let _ = self.inner.close_with_error(Some(error)).await;
                 Running::Stop
             }
             RecvError::TransferLimitExceeded => {
@@ -323,7 +312,7 @@ impl TxnCoordinator {
                     // Session must have already dropped
                     Running::Stop
                 }
-                LinkStateError::InvariantViolation | LinkStateError::NotAttached => {
+                LinkStateError::InvariantViolation => {
                     #[cfg(feature = "tracing")]
                     tracing::error!(?disposition_error);
                     #[cfg(feature = "log")]

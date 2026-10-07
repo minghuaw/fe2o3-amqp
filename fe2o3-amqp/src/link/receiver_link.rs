@@ -53,7 +53,7 @@ where
         let handle = self
             .output_handle
             .clone()
-            .ok_or(Self::FlowError::NotAttached)?
+            .ok_or(Self::FlowError::InvariantViolation)?
             .into();
 
         let flow = self.get_link_flow(handle, link_credit, drain, echo, include_properties);
@@ -139,7 +139,17 @@ where
     {
         match self.local_state {
             LinkState::Attached | LinkState::IncompleteAttachExchanged => {}
-            _ => return Err(ReceiverTransferError::NotAttached),
+            _ => {
+                // A transfer that arrives when the link is not attached is
+                // classified from the recorded state: a terminal link reports
+                // its outcome, a stopped session its stop reason, and anything
+                // else is a defensive invariant violation.
+                return Err(link_error_from_closed_channel(
+                    &self.session_stop_reason,
+                    &self.local_state,
+                )
+                .into());
+            }
         }
 
         // ReceiverFlowState will not wait until link credit is available.
@@ -221,7 +231,7 @@ where
         let link_output_handle = self
             .output_handle
             .clone()
-            .ok_or(ReceiverTransferError::NotAttached)?
+            .ok_or(LinkStateError::InvariantViolation)?
             .into();
 
         let delivery = Delivery {
@@ -416,7 +426,7 @@ impl ReceiverLink<Target> {
             let handle = self
                 .output_handle
                 .clone()
-                .ok_or(FlowError::NotAttached)?
+                .ok_or(FlowError::InvariantViolation)?
                 .into();
 
             let flow = self.get_link_flow(handle, link_credit, drain, echo, include_properties);
@@ -938,9 +948,7 @@ fn receiver_detach_failure(
             Some(error) => ReceiverAttachError::RemoteClosedWithError(error.clone()),
             None => attach_error,
         },
-        DetachError::IllegalState | DetachError::InvariantViolation | DetachError::NotAttached => {
-            attach_error
-        }
+        DetachError::IllegalState | DetachError::InvariantViolation => attach_error,
     }
 }
 
