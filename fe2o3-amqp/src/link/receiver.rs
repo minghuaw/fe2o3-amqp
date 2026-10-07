@@ -2484,8 +2484,6 @@ mod tests {
         drop(outcome_tx);
         SessionHandle {
             is_ended: false,
-            terminal_outcome: None,
-            terminated_with_error: false,
             control,
             engine_handle: tokio::spawn(async {}),
             outcome,

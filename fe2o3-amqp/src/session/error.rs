@@ -179,6 +179,10 @@ pub enum Error {
     #[cfg(all(feature = "transaction", feature = "acceptor"))]
     #[error("Unknown transaction ID")]
     UnknownTxnId,
+
+    /// The session already ended and its outcome was already observed
+    #[error("The session is already ended")]
+    AlreadyEnded,
 }
 
 impl From<SessionInnerError> for Error {
@@ -260,6 +264,10 @@ pub enum TryEndError {
     /// The exchange of end frame is not completed because it has not received a remote end frame
     #[error("The session has not received a remote end frame")]
     RemoteEndNotReceived,
+
+    /// The session is already ended and its outcome was already observed
+    #[error("The session is already ended")]
+    AlreadyEnded,
 
     /// The session stopped with a local error
     #[error("The session stopped with an error: {0}")]
