@@ -180,6 +180,12 @@
     connection was still opening) instead of an artificial unexpected-EOF IO error; a
     close before the open exchange completes simply stops.
 
+26. **Bugfix**: `TxnAcquisition` now clears the link's `txn-id` when dropped even
+    after a direct discharge through `txn_mut()`, which bypasses `cleanup()` and
+    previously left the id on the link so a later `acquire` reported a local error.
+    The defensive `acquire` check reports `FlowError::InvariantViolation` instead of
+    the peer-only `IllegalState`, as do the internal transaction disposition sends.
+
 ## 0.18.2
 
 **Bugfix**: an unsettled delivery is now registered before its transfer reaches the session, preventing `send` from hanging when the peer settles immediately.

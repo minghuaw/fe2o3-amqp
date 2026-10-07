@@ -387,6 +387,12 @@ pub trait TransactionAcquisition:
     /// This will set the `txn-id` property in the link's flow and send a flow frame with the
     /// given credit. The returned [`TxnAcquisition`] can be used to receive and retire the
     /// acquired deliveries.
+    ///
+    /// The transaction id is retired by [`TxnAcquisition::commit`],
+    /// [`TxnAcquisition::rollback`], [`TxnAcquisition::cleanup`] or its `Drop`
+    /// implementation. Acquiring a link that still carries a transaction id is
+    /// impossible by contract and reports [`FlowError::InvariantViolation`]
+    /// (defensive).
     fn acquire<'r>(
         self,
         recver: &'r mut Receiver,
@@ -399,7 +405,7 @@ pub trait TransactionAcquisition:
                 match &mut writer.properties {
                     Some(fields) => {
                         if fields.contains_key(TXN_ID_KEY) {
-                            return Err(FlowError::IllegalState);
+                            return Err(FlowError::InvariantViolation);
                         }
 
                         fields.insert(Symbol::from(TXN_ID_KEY), value);
