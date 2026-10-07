@@ -514,7 +514,10 @@ impl Sender {
     /// link is left `Detached` or `Closed` (its output handle is released),
     /// and a later `close()` finishes without sending another detach. A link
     /// that already reached a terminal outcome reports that stored outcome
-    /// immediately, including the peer's error, if any.
+    /// immediately, including the peer's error, if any. This may be called
+    /// again on a terminal link: it re-reads the link's stored state and
+    /// reports the same outcome, so the state rather than a consumed result is
+    /// the source of truth.
     ///
     /// # Errors
     ///
