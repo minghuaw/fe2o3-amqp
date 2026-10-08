@@ -4,7 +4,7 @@ use std::{convert::Infallible, io};
 
 use bytes::Bytes;
 use fe2o3_amqp_types::{definitions, primitives::Binary, sasl::SaslCode};
-use tokio::{sync::mpsc, task::JoinError};
+use tokio::sync::mpsc;
 
 use crate::{
     connection::ConnectionOutcome,
@@ -266,25 +266,9 @@ pub enum Error {
     #[error("Not found {:?}", .0)]
     NotFound(Option<String>),
 
-    /// Not allowed
-    #[error("Not allowd {:?}", .0)]
-    NotAllowed(Option<String>),
-
     /// The connection is already closed and its outcome was already observed
     #[error("The connection is already closed")]
     AlreadyClosed,
-
-    /// Remote peer closed connection
-    #[error("Remote peer closed")]
-    RemoteClosed,
-
-    /// Remote peer closed connection with error
-    #[error("Remote peer closed connection with error {}", .0)]
-    RemoteClosedWithError(definitions::Error),
-
-    /// This could occur only when the user attempts to close the connection
-    #[error(transparent)]
-    JoinError(#[from] JoinError),
 }
 
 impl From<ConnectionInnerError> for Error {
@@ -296,8 +280,11 @@ impl From<ConnectionInnerError> for Error {
             ConnectionInnerError::InvariantViolation => Self::InvariantViolation,
             ConnectionInnerError::NotImplemented(val) => Self::NotImplemented(val),
             ConnectionInnerError::NotFound(val) => Self::NotFound(val),
-            ConnectionInnerError::RemoteClosed => Self::RemoteClosed,
-            ConnectionInnerError::RemoteClosedWithError(val) => Self::RemoteClosedWithError(val),
+            // A remote close is converted into the connection outcome by the
+            // engine before it reaches this conversion (see `event_loop`).
+            ConnectionInnerError::RemoteClosed | ConnectionInnerError::RemoteClosedWithError(_) => {
+                Self::InternalError
+            }
         }
     }
 }
@@ -307,8 +294,11 @@ impl From<ConnectionStateError> for Error {
         match error {
             ConnectionStateError::IllegalState => Self::IllegalState,
             ConnectionStateError::InvariantViolation => Self::InvariantViolation,
-            ConnectionStateError::RemoteClosed => Self::RemoteClosed,
-            ConnectionStateError::RemoteClosedWithError(val) => Self::RemoteClosedWithError(val),
+            // A remote close is converted into the connection outcome by the
+            // engine before it reaches this conversion (see `event_loop`).
+            ConnectionStateError::RemoteClosed | ConnectionStateError::RemoteClosedWithError(_) => {
+                Self::InternalError
+            }
             ConnectionStateError::TransportError(val) => Self::TransportError(val),
         }
     }

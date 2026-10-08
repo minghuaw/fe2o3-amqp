@@ -206,14 +206,6 @@ pub enum Error {
     #[error("Found Transfer frame being sent to a Sender")]
     TransferFrameToSender,
 
-    /// Remote session ended
-    #[error("Remote session ended")]
-    RemoteEnded,
-
-    /// Remote session ended with error
-    #[error("Remote ended with error")]
-    RemoteEndedWithError(definitions::Error),
-
     /// Unknown transaction ID
     #[cfg(all(feature = "transaction", feature = "acceptor"))]
     #[error("Unknown transaction ID")]
@@ -236,8 +228,11 @@ impl From<SessionInnerError> for Error {
             SessionInnerError::InvariantViolation => Self::InvariantViolation,
             SessionInnerError::ConnectionStopped(reason) => Self::ConnectionStopped(reason),
             SessionInnerError::TransferFrameToSender => Self::TransferFrameToSender,
-            SessionInnerError::RemoteEnded => Self::RemoteEnded,
-            SessionInnerError::RemoteEndedWithError(err) => Self::RemoteEndedWithError(err),
+            // A remote end is converted into the session outcome by the engine
+            // before it reaches this conversion (see `event_loop`).
+            SessionInnerError::RemoteEnded | SessionInnerError::RemoteEndedWithError(_) => {
+                Self::InternalError
+            }
 
             #[cfg(not(target_arch = "wasm32"))]
             #[cfg(all(feature = "transaction", feature = "acceptor"))]
@@ -261,8 +256,11 @@ impl From<SessionStateError> for Error {
             SessionStateError::IllegalState => Self::IllegalState,
             SessionStateError::InvariantViolation => Self::InvariantViolation,
             SessionStateError::ConnectionStopped(reason) => Self::ConnectionStopped(reason),
-            SessionStateError::RemoteEnded => Self::RemoteEnded,
-            SessionStateError::RemoteEndedWithError(err) => Self::RemoteEndedWithError(err),
+            // A remote end is converted into the session outcome by the engine
+            // before it reaches this conversion (see `event_loop`).
+            SessionStateError::RemoteEnded | SessionStateError::RemoteEndedWithError(_) => {
+                Self::InternalError
+            }
         }
     }
 }
