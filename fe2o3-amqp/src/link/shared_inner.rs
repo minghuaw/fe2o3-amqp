@@ -223,7 +223,7 @@ where
                     reattach_then_close(self, status.clone()).await?;
                     Ok(status)
                 } else {
-                    self.link_mut().on_detach_reply(remote_detach)
+                    self.link_mut().on_matching_detach_reply(remote_detach)
                 }
             }
             LinkState::DetachSent => {
@@ -235,7 +235,7 @@ where
                     reattach_then_close(self, status.clone()).await?;
                     Ok(status)
                 } else {
-                    self.link_mut().on_detach_reply(remote_detach)
+                    self.link_mut().on_matching_detach_reply(remote_detach)
                 }
             }
             LinkState::Detached(remote_error) => Ok(LinkOutcome::Detached {
@@ -265,7 +265,7 @@ where
                 // closing handshake.
                 let remote_detach = recv_remote_detach(self).await?;
                 if remote_detach.closed {
-                    self.link_mut().on_detach_reply(remote_detach)
+                    self.link_mut().on_matching_detach_reply(remote_detach)
                 } else {
                     // The peer suspended: reattach and close so the link is left
                     // `Closed` (AMQP 1.0 §2.6.6).
@@ -306,7 +306,7 @@ where
                 let remote_detach = recv_remote_detach(self).await?; // cancel safe
                 if remote_detach.closed {
                     // The peer's error, if any, is surfaced in the returned status
-                    self.link_mut().on_detach_reply(remote_detach)
+                    self.link_mut().on_matching_detach_reply(remote_detach)
                 } else {
                     // Peer suspended while we were closing: record it, then
                     // reattach (re-registers the link) and close (§2.6.6).
@@ -346,7 +346,7 @@ where
                 // Wait for remote detach
                 let remote_detach = recv_remote_detach(self).await?; // cancel safe
                 if remote_detach.closed {
-                    self.link_mut().on_detach_reply(remote_detach)
+                    self.link_mut().on_matching_detach_reply(remote_detach)
                 } else {
                     // Peer suspended while we were closing: reattach
                     // (re-registers the link) and close (§2.6.6).
@@ -402,7 +402,15 @@ where
     }
     link_inner.send_detach(true, None).await?; // cancel safe
     let remote_detach = recv_remote_detach(link_inner).await?; // cancel safe
-    link_inner.link_mut().on_detach_reply(remote_detach)?;
+    if !remote_detach.closed {
+        // §2.6.6: the simultaneous detach was already resolved by reattaching
+        // and re-sending a closing detach, so the peer must answer with a
+        // closing detach. A non-closing reply here is a peer violation.
+        return Err(DetachError::IllegalState);
+    }
+    link_inner
+        .link_mut()
+        .on_matching_detach_reply(remote_detach)?;
     Ok(())
 }
 

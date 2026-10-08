@@ -26,25 +26,33 @@ use super::{OutputHandle, Settlement};
 pub(crate) trait LinkDetach {
     type DetachError: Send;
 
-    /// Handle a detach the peer sends **in reply to a detach/close this link
-    /// sent itself** (from `close()`, `detach()`, or the attach-error paths).
+    /// Handle the detach reply that **matches** a detach/close this link sent
+    /// itself (from `close()`, `detach()`, or the attach-error paths).
     ///
     /// The relay forwards such a reply without answering it; the link's own
     /// close/detach procedure consumes the frame and completes here. Only the
-    /// matching reply transitions are accepted:
+    /// reply whose `closed` flag matches the detach we sent is accepted:
     ///
     /// - `DetachSent` + non-closing → `Detached`
     /// - `CloseSent` + closing → `Closed`
     ///
-    /// A simultaneous detach is `IllegalState`. In both accepted transitions the
-    /// output handle is released and the peer's `error` field, if any, is
-    /// reported in the returned [`LinkOutcome`], so the close/detach
-    /// procedure can propagate it to its caller.
+    /// A simultaneous detach (crossing `closed` flags) must be resolved by the
+    /// caller first — by reattaching and then sending a closing detach
+    /// (AMQP 1.0 §2.6.6) — and must never be passed here; every other
+    /// non-matching state is a caller-contract violation (a defensive
+    /// invariant violation). In both accepted transitions the output handle is
+    /// released and the peer's `error` field, if any, is reported in the
+    /// returned [`LinkOutcome`], so the close/detach procedure can propagate it
+    /// to its caller.
     ///
     /// A detach the peer sends on its own is answered by the relay already,
     /// so the engine records it with [`Self::apply_remote_detach_outcome`]
-    /// instead; that method accepts simultaneous detaches and any attached state.
-    fn on_detach_reply(&mut self, detach: Detach) -> Result<LinkOutcome, Self::DetachError>;
+    /// instead; that method accepts simultaneous detaches and any attached
+    /// state.
+    fn on_matching_detach_reply(
+        &mut self,
+        detach: Detach,
+    ) -> Result<LinkOutcome, Self::DetachError>;
 
     async fn send_detach(
         &mut self,
@@ -58,7 +66,7 @@ pub(crate) trait LinkDetach {
     /// already sent the reply, or the link is being dropped. Nothing is
     /// sent.
     ///
-    /// Unlike [`Self::on_detach_reply`], which only accepts the reply that
+    /// Unlike [`Self::on_matching_detach_reply`], which only accepts the reply that
     /// matches the detach/close this link sent, this accepts any attached
     /// state — including a simultaneous detach — and moves the link to `Closed`
     /// (closing) or `Detached` (non-closing), releasing the output handle.
