@@ -24,9 +24,9 @@ use super::{
     sender::SenderInner,
     state::{LinkFlowState, LinkFlowStateInner, LinkState},
     target_archetype::VerifyTargetArchetype,
-    ArcUnsettledMap, DeliveryFailure, LinkStateError, Receiver, ReceiverAttachError,
-    ReceiverFlowState, ReceiverLink, ReceiverRelayFlowState, Sender, SenderAttachError,
-    SenderFlowState, SenderLink, SenderRelayFlowState, SessionStopped,
+    ArcUnsettledMap, DeliveryFailure, LinkError, Receiver, ReceiverAttachError, ReceiverFlowState,
+    ReceiverLink, ReceiverRelayFlowState, Sender, SenderAttachError, SenderFlowState, SenderLink,
+    SenderRelayFlowState, SessionStopped,
 };
 
 cfg_transaction! {
@@ -565,7 +565,7 @@ where
                 #[cfg(feature = "log")]
                 log::debug!("exchange = {:?}", exchange);
                 exchange.complete_or_fail_deliveries(
-                    DeliveryFailure::LinkState(LinkStateError::IllegalState),
+                    DeliveryFailure::LinkState(LinkError::IllegalState),
                     SenderAttachError::UnexpectedUnsettledMap,
                 )?
             }
