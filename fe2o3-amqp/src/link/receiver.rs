@@ -342,6 +342,12 @@ impl Receiver {
     ///
     /// This function is cancel-safe. See [#22](https://github.com/minghuaw/fe2o3-amqp/issues/22)
     /// for more details.
+    /// # Errors
+    ///
+    /// Returns [`RecvError`] if the delivery cannot be received. A peer detach
+    /// is reported as `LinkDetached`, a stopped session as `SessionStopped`,
+    /// and an oversized or malformed delivery detaches the link before
+    /// reporting the failure. [`RecvError::recovery`] classifies the next step.
     pub async fn recv<T>(&mut self) -> Result<Delivery<T>, RecvError>
     where
         for<'de> T: FromBody<'de> + Send,
@@ -350,6 +356,11 @@ impl Receiver {
     }
 
     /// Set the link credit. This will stop draining if the link is in a draining cycle
+    /// # Errors
+    ///
+    /// Returns [`FlowError`] if the flow state cannot be sent, e.g.
+    /// `SessionStopped` when the session (or its connection) stopped first or
+    /// `LinkDetached` when the peer detached the link.
     pub async fn set_credit(&mut self, credit: SequenceNo) -> Result<(), LinkError> {
         self.inner.set_credit(credit).await
     }
@@ -358,11 +369,21 @@ impl Receiver {
     ///
     /// This will send a `Flow` performative with the `drain` field set to true.
     /// Setting the credit will set the `drain` field to false and stop draining
+    /// # Errors
+    ///
+    /// Returns [`FlowError`] if the flow state cannot be sent, e.g.
+    /// `SessionStopped` when the session (or its connection) stopped first or
+    /// `LinkDetached` when the peer detached the link.
     pub async fn drain(&mut self) -> Result<(), LinkError> {
         self.inner.drain().await
     }
 
     /// Send the link properties to the remote peer via a `Flow` performative
+    /// # Errors
+    ///
+    /// Returns [`FlowError`] if the flow state cannot be sent, e.g.
+    /// `SessionStopped` when the session (or its connection) stopped first or
+    /// `LinkDetached` when the peer detached the link.
     pub async fn send_properties(&self) -> Result<(), FlowError> {
         self.inner.send_properties().await
     }
@@ -372,6 +393,12 @@ impl Receiver {
     /// This will send a `Detach` performative with the `closed` field set to false. If the remote
     /// peer responds with a Detach performative whose `closed` field is set to true, the link will
     /// re-attach and then close by exchanging closing Detach performatives.
+    /// # Errors
+    ///
+    /// Returns [`LinkError`] if the detach/close exchange fails, e.g.
+    /// `SessionStopped` when the session (or its connection) stopped first.
+    /// On failure the returned `DetachedSender`/`DetachedReceiver` can still
+    /// be resumed or closed.
     pub async fn detach(
         mut self,
     ) -> Result<(DetachedReceiver, LinkOutcome), (DetachedReceiver, DetachError)> {
@@ -396,6 +423,12 @@ impl Receiver {
     /// This will send a `Detach` performative with the `closed` field set to false. If the remote
     /// peer responds with a Detach performative whose `closed` field is set to true, the link will
     /// re-attach and then close by exchanging closing Detach performatives.
+    /// # Errors
+    ///
+    /// Returns [`LinkError`] if the detach/close exchange fails, e.g.
+    /// `SessionStopped` when the session (or its connection) stopped first.
+    /// On failure the returned `DetachedSender`/`DetachedReceiver` can still
+    /// be resumed or closed.
     pub async fn detach_with_error(
         mut self,
         error: impl Into<definitions::Error>,
@@ -420,6 +453,12 @@ impl Receiver {
         /// Detach the link with a timeout
         ///
         /// This simply wraps [`detach`](#method.detach) with a `timeout`
+        /// # Errors
+        ///
+        /// Returns [`LinkError`] if the detach/close exchange fails, e.g.
+        /// `SessionStopped` when the session (or its connection) stopped first.
+        /// On failure the returned `DetachedSender`/`DetachedReceiver` can still
+        /// be resumed or closed.
         pub async fn detach_with_timeout(
             self,
             duration: Duration,
@@ -470,6 +509,12 @@ impl Receiver {
     /// This will send a Detach performative with the `closed` field set to true.
     /// The returned [`LinkOutcome`] carries the error the peer attached to
     /// its closing detach, if any.
+    /// # Errors
+    ///
+    /// Returns [`LinkError`] if the detach/close exchange fails, e.g.
+    /// `SessionStopped` when the session (or its connection) stopped first.
+    /// On failure the returned `DetachedSender`/`DetachedReceiver` can still
+    /// be resumed or closed.
     pub async fn close(mut self) -> Result<LinkOutcome, DetachError> {
         self.inner.close_with_error(None).await
     }
@@ -477,6 +522,12 @@ impl Receiver {
     /// Close the link with an error.
     ///
     /// This will send a Detach performative with the `closed` field set to true.
+    /// # Errors
+    ///
+    /// Returns [`LinkError`] if the detach/close exchange fails, e.g.
+    /// `SessionStopped` when the session (or its connection) stopped first.
+    /// On failure the returned `DetachedSender`/`DetachedReceiver` can still
+    /// be resumed or closed.
     pub async fn close_with_error(
         mut self,
         error: impl Into<definitions::Error>,
@@ -499,6 +550,11 @@ impl Receiver {
     /// let delivery: Delivery<Value> = receiver.recv().await.unwrap();
     /// receiver.accept(&delivery).await.unwrap();
     /// ```
+    /// # Errors
+    ///
+    /// Returns [`DispositionError`] if the disposition cannot be sent, e.g.
+    /// `SessionStopped` when the session (or its connection) stopped first or
+    /// `LinkDetached` when the peer detached the link.
     pub async fn accept(
         &self,
         delivery_info: impl Into<DeliveryInfo>,
@@ -521,6 +577,11 @@ impl Receiver {
     /// let delivery2: Delivery<Value> = receiver.recv().await.unwrap();
     /// receiver.accept_all(vec![&delivery1, &delivery2]).await.unwrap();
     /// ```
+    /// # Errors
+    ///
+    /// Returns [`DispositionError`] if the disposition cannot be sent, e.g.
+    /// `SessionStopped` when the session (or its connection) stopped first or
+    /// `LinkDetached` when the peer detached the link.
     pub async fn accept_all(
         &self,
         deliveries: impl IntoIterator<Item = impl Into<DeliveryInfo>>,
@@ -533,6 +594,11 @@ impl Receiver {
     /// to `Reject`
     ///
     /// This will not send disposition if the delivery is not found in the local unsettled map.
+    /// # Errors
+    ///
+    /// Returns [`DispositionError`] if the disposition cannot be sent, e.g.
+    /// `SessionStopped` when the session (or its connection) stopped first or
+    /// `LinkDetached` when the peer detached the link.
     pub async fn reject(
         &self,
         delivery_info: impl Into<DeliveryInfo>,
@@ -548,6 +614,11 @@ impl Receiver {
     /// to `Reject`
     ///
     /// Only deliveries that are found in the local unsettled map will be included in the disposition frame(s).
+    /// # Errors
+    ///
+    /// Returns [`DispositionError`] if the disposition cannot be sent, e.g.
+    /// `SessionStopped` when the session (or its connection) stopped first or
+    /// `LinkDetached` when the peer detached the link.
     pub async fn reject_all(
         &self,
         deliveries: impl IntoIterator<Item = impl Into<DeliveryInfo>>,
@@ -563,6 +634,11 @@ impl Receiver {
     /// to `Release`
     ///
     /// This will not send disposition if the delivery is not found in the local unsettled map.
+    /// # Errors
+    ///
+    /// Returns [`DispositionError`] if the disposition cannot be sent, e.g.
+    /// `SessionStopped` when the session (or its connection) stopped first or
+    /// `LinkDetached` when the peer detached the link.
     pub async fn release(
         &self,
         delivery_info: impl Into<DeliveryInfo>,
@@ -575,6 +651,11 @@ impl Receiver {
     /// to `Release`
     ///
     /// Only deliveries that are found in the local unsettled map will be included in the disposition frame(s).
+    /// # Errors
+    ///
+    /// Returns [`DispositionError`] if the disposition cannot be sent, e.g.
+    /// `SessionStopped` when the session (or its connection) stopped first or
+    /// `LinkDetached` when the peer detached the link.
     pub async fn release_all(
         &self,
         deliveries: impl IntoIterator<Item = impl Into<DeliveryInfo>>,

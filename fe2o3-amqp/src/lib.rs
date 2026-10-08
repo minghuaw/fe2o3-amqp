@@ -184,6 +184,61 @@
 //! examples requires a local broker running. One broker that can be used on Windows is
 //! [TestAmqpBroker](https://azure.github.io/amqpnetlite/articles/hello_amqp.html).
 //!
+//! # Error handling
+//!
+//! Operations report failures as typed errors and terminal outcomes as data.
+//!
+//! ## Outcomes are data
+//!
+//! Ending or closing completes an exchange even when the peer attached an error:
+//! `Session::end`/`Session::close`, `Connection::close` and the link
+//! `detach()`/`close()` calls return the outcome (`SessionOutcome`,
+//! `ConnectionOutcome`, `LinkOutcome`) instead of an error. Use
+//! `LinkOutcome::remote_error()` and the `*WithError` variants of
+//! `SessionOutcome`/`ConnectionOutcome` to inspect the peer's error. When the
+//! session (or its connection) stopped first, link operations report
+//! `SessionStopped`, which carries either the session's `SessionOutcome` or the
+//! connection's `ConnectionOutcome`.
+//!
+//! The close/end outcome is delivered once: a later call reports
+//! `Error::AlreadyEnded`/`Error::AlreadyClosed`; use `is_ended`/`is_closed` to
+//! query the state. The non-blocking `try_end`/`try_close` initiate the exchange
+//! at most once and return `Ok(None)` while it is in progress and
+//! `Ok(Some(outcome))` once it completed; pair them with `on_end`/`on_close` to
+//! await the outcome.
+//!
+//! ## Error classification
+//!
+//! - `IllegalState` - the peer sent a frame that is not permitted in the current
+//!   state; the library answers where the protocol requires it with a closing
+//!   detach (or end/close).
+//! - `SessionStopped`, `LinkDetached`, `ConnectionLost` - the endpoint reached a
+//!   terminal state or the transport ended before the close exchange.
+//! - `InvariantViolation` - a defensive error for a path that is impossible by
+//!   construction; seeing one is a bug in the library.
+//! - `InternalError` - an internal failure that can occur in principle, for
+//!   example the engine task stopped without reporting its outcome.
+//! - `IllegalDeliveryState`, `NonTerminalDeliveryState`, `MessageEncodeError`,
+//!   `MessageSizeExceeded`, `FrameSizeTooSmall` - operation-specific failures.
+//!
+//! ## Recovery
+//!
+//! Every link error tells the caller what to do next via `recovery()` and
+//! `ErrorRecovery`:
+//!
+//! ```rust,ignore
+//! match sender.send("hello").await {
+//!     Err(error) => match error.recovery() {
+//!         ErrorRecovery::UseLink => { /* the link is still usable */ }
+//!         ErrorRecovery::ReattachLink => { /* detach, then resume the link */ }
+//!         ErrorRecovery::ReconnectSession => { /* resume on a new session */ }
+//!         ErrorRecovery::ReconnectConnection => { /* resume on a new connection */ }
+//!         ErrorRecovery::NewLink => { /* attach a new link */ }
+//!     },
+//!     Ok(outcome) => { /* the delivery settled */ }
+//! }
+//! ```
+//!
 //! # WebAssembly support
 //!
 //! Experimental support for `wasm32-unknown-unknown` target is added since "0.8.11" and requires use of

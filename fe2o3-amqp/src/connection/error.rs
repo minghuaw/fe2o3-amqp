@@ -61,8 +61,8 @@ pub enum OpenError {
     #[error(transparent)]
     ScramError(#[from] ScramErrorKind),
 
-    /// Illegal local connection state
-    #[error("Illegal local state")]
+    /// The peer sent a frame that is not permitted in the current connection state
+    #[error("The peer sent a frame that is not permitted in the current connection state")]
     IllegalState,
 
     /// The transport closed before the connection was opened
@@ -129,8 +129,8 @@ impl From<Infallible> for OpenError {
 /// Error the connection state
 #[derive(Debug, thiserror::Error)]
 pub(crate) enum ConnectionStateError {
-    /// Illegal local connection state
-    #[error("Illegal local state")]
+    /// The peer sent a frame that is not permitted in the current connection state
+    #[error("The peer sent a frame that is not permitted in the current connection state")]
     IllegalState,
 
     /// An internal invariant was violated (defensive)
@@ -174,8 +174,8 @@ pub(crate) enum ConnectionInnerError {
     #[error(transparent)]
     TransportError(#[from] transport::Error),
 
-    /// Illegal local connection state
-    #[error("Illegal local state")]
+    /// The peer sent a frame that is not permitted in the current connection state
+    #[error("The peer sent a frame that is not permitted in the current connection state")]
     IllegalState,
 
     /// The transport closed without the AMQP close exchange
@@ -234,8 +234,8 @@ pub enum Error {
     #[error(transparent)]
     TransportError(#[from] transport::Error),
 
-    /// Illegal local connection state
-    #[error("Illegal local state")]
+    /// The peer sent a frame that is not permitted in the current connection state
+    #[error("The peer sent a frame that is not permitted in the current connection state")]
     IllegalState,
 
     /// The transport closed without the AMQP close exchange

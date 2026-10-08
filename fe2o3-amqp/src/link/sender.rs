@@ -220,6 +220,12 @@ impl Sender {
     /// detach, if any. If the remote peer answers with a closing detach, the
     /// Sender re-attaches and completes the closing handshake (AMQP 1.0
     /// §2.6.6), and the status is `Closed`.
+    /// # Errors
+    ///
+    /// Returns [`LinkError`] if the detach/close exchange fails, e.g.
+    /// `SessionStopped` when the session (or its connection) stopped first.
+    /// On failure the returned `DetachedSender`/`DetachedReceiver` can still
+    /// be resumed or closed.
     pub async fn detach(
         mut self,
     ) -> Result<(DetachedSender, LinkOutcome), (DetachedSender, DetachError)> {
@@ -230,6 +236,12 @@ impl Sender {
     }
 
     /// Detach the link with an error
+    /// # Errors
+    ///
+    /// Returns [`LinkError`] if the detach/close exchange fails, e.g.
+    /// `SessionStopped` when the session (or its connection) stopped first.
+    /// On failure the returned `DetachedSender`/`DetachedReceiver` can still
+    /// be resumed or closed.
     pub async fn detach_with_error(
         mut self,
         error: impl Into<definitions::Error>,
@@ -244,6 +256,12 @@ impl Sender {
         /// Detach the link with a timeout
         ///
         /// This simply wraps [`detach`](#method.detach) with a `timeout`
+        /// # Errors
+        ///
+        /// Returns [`LinkError`] if the detach/close exchange fails, e.g.
+        /// `SessionStopped` when the session (or its connection) stopped first.
+        /// On failure the returned `DetachedSender`/`DetachedReceiver` can still
+        /// be resumed or closed.
         pub async fn detach_with_timeout(
             self,
             duration: Duration,
@@ -298,11 +316,23 @@ impl Sender {
     /// This will set the `closed` field in the Detach performative to true.
     /// The returned [`LinkOutcome`] carries the error the peer attached to
     /// its closing detach, if any.
+    /// # Errors
+    ///
+    /// Returns [`LinkError`] if the detach/close exchange fails, e.g.
+    /// `SessionStopped` when the session (or its connection) stopped first.
+    /// On failure the returned `DetachedSender`/`DetachedReceiver` can still
+    /// be resumed or closed.
     pub async fn close(mut self) -> Result<LinkOutcome, DetachError> {
         self.inner.close_with_error(None).await
     }
 
     /// Close the link with an error
+    /// # Errors
+    ///
+    /// Returns [`LinkError`] if the detach/close exchange fails, e.g.
+    /// `SessionStopped` when the session (or its connection) stopped first.
+    /// On failure the returned `DetachedSender`/`DetachedReceiver` can still
+    /// be resumed or closed.
     pub async fn close_with_error(
         mut self,
         error: impl Into<definitions::Error>,
@@ -419,6 +449,13 @@ impl Sender {
     /// Because this method borrows the sender while it waits, use
     /// [`send_batchable`](#method.send_batchable) if the link may need to be
     /// resumed (its future does not borrow the sender).
+    /// # Errors
+    ///
+    /// Returns [`SendError`] if the message cannot be sent or the delivery
+    /// fails. [`SendError::recovery`] classifies whether the link can still be
+    /// used, must be resumed, or replaced; a peer detach is reported as
+    /// `LinkDetached` carrying the peer's error, and a stopped session as
+    /// `SessionStopped`.
     pub async fn send<T: SerializableBody>(
         &mut self,
         sendable: impl Into<Sendable<T>>,
@@ -437,6 +474,13 @@ impl Sender {
     ///
     /// This is useful when the message is large and you want to avoid cloning it because the
     /// message may be used again after the send operation.
+    /// # Errors
+    ///
+    /// Returns [`SendError`] if the message cannot be sent or the delivery
+    /// fails. [`SendError::recovery`] classifies whether the link can still be
+    /// used, must be resumed, or replaced; a peer detach is reported as
+    /// `LinkDetached` carrying the peer's error, and a stopped session as
+    /// `SessionStopped`.
     pub async fn send_ref<T: SerializableBody>(
         &mut self,
         sendable: &Sendable<T>,
@@ -481,6 +525,11 @@ impl Sender {
     /// let fut = sender.send_batchable("HELLO AMQP").await.unwrap();
     /// let result = fut.await;
     /// ```
+    /// # Errors
+    ///
+    /// Returns [`SendError`] if the message cannot be handed to the link; a
+    /// failure of the settlement itself is reported by the returned future,
+    /// whose [`SendError::recovery`] classifies the next step.
     pub async fn send_batchable<T: SerializableBody>(
         &mut self,
         sendable: impl Into<Sendable<T>>,
@@ -497,6 +546,11 @@ impl Sender {
     ///
     /// This is useful when the message is large and you want to avoid cloning it because the
     /// message may be used again after the send operation.
+    /// # Errors
+    ///
+    /// Returns [`SendError`] if the message cannot be handed to the link; a
+    /// failure of the settlement itself is reported by the returned future,
+    /// whose [`SendError::recovery`] classifies the next step.
     pub async fn send_batchable_ref<T: SerializableBody>(
         &mut self,
         sendable: &Sendable<T>,

@@ -73,8 +73,10 @@ pub(crate) trait LinkDetach {
     ///
     /// # Errors
     ///
-    /// `IllegalState` means the outcome was not recorded and nothing changed
-    /// (the link is `Unattached`, already `Detached`, or already `Closed`).
+    /// [`ApplyRemoteDetachError::InvariantViolation`] means the outcome was not
+    /// recorded and nothing changed (the link was never attached);
+    /// `AlreadyDetached`/`AlreadyClosed` report the outcome the link already
+    /// stored, including the peer's error, if any.
     fn apply_remote_detach_outcome(
         &mut self,
         detach: Detach,
