@@ -437,9 +437,9 @@ impl FromDeliveryFailure for SendResult {
     fn from_oneshot_recv_error(_: RecvError) -> Self {
         // The settlement channel died without the session recording a stop.
         // The session relay and the link endpoint fail the pending deliveries
-        // before they drop their maps, so this is defensive only; the link
-        // state cannot be classified from here.
-        Err(LinkStateError::InvariantViolation.into())
+        // before they drop their maps, so this normally cannot happen; the
+        // link state cannot be classified from here.
+        Err(LinkStateError::InternalError.into())
     }
 
     fn from_session_stop_reason(reason: SessionStopped) -> Self {
@@ -655,7 +655,7 @@ mod tests {
         drop(tx);
 
         match fut.await {
-            Err(SendError::LinkStateError(LinkStateError::InvariantViolation)) => {}
+            Err(SendError::LinkStateError(LinkStateError::InternalError)) => {}
             other => panic!("unexpected result: {:?}", other),
         }
     }
