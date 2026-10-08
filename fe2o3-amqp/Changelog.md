@@ -196,6 +196,15 @@
     duplicate `Close`/`End` frame or reports a spurious internal error; the exchange
     is initiated at most once and the later call awaits the same outcome.
 
+28. **Breaking**: the new `InternalError` separates internal failures that can
+    occur in principle (an engine task ended without reporting its outcome, a
+    session stop reason was not recorded, a delivery settlement channel died, a
+    `Flow`/`Disposition` frame leaked into the receiver stream) from the
+    defensive `InvariantViolation`, which marks paths that are impossible by
+    construction. Both answer `amqp:internal-error`. `LinkStateError`,
+    `SenderAttachError`/`ReceiverAttachError`, `session::Error` and
+    `connection::Error` gain `InternalError`.
+
 ## 0.18.2
 
 **Bugfix**: an unsettled delivery is now registered before its transfer reaches the session, preventing `send` from hanging when the peer settles immediately.

@@ -201,8 +201,8 @@ impl<R> ConnectionHandle<R> {
             Err(TryRecvError::Empty) => Ok(None),
             Err(TryRecvError::Closed) => {
                 self.is_closed = true;
-                // The engine somehow has already stopped running
-                Err(Error::InvariantViolation)
+                // The engine stopped without reporting its outcome.
+                Err(Error::InternalError)
             }
         }
     }
@@ -289,7 +289,8 @@ impl<R> ConnectionHandle<R> {
             }
             Err(_) => {
                 self.is_closed = true;
-                Err(Error::InvariantViolation)
+                // The engine stopped without reporting its outcome.
+                Err(Error::InternalError)
             }
         }
     }
@@ -1028,9 +1029,9 @@ mod tests {
     }
 
     /// An outcome channel dropped without a result (the engine stopped without
-    /// reporting) is an internal invariant violation.
+    /// reporting) is an internal error.
     #[tokio::test]
-    async fn dropped_outcome_reports_invariant_violation() {
+    async fn dropped_outcome_reports_internal_error() {
         use std::sync::{Arc, OnceLock};
         use tokio::sync::oneshot;
 
@@ -1051,13 +1052,13 @@ mod tests {
         };
 
         let error = handle.on_close().await.expect_err("an internal error");
-        assert!(matches!(error, super::Error::InvariantViolation));
+        assert!(matches!(error, super::Error::InternalError));
     }
 
     /// `try_close` on an engine that stopped without reporting an outcome
-    /// reports an internal invariant violation.
+    /// reports an internal error.
     #[tokio::test]
-    async fn try_close_with_dropped_outcome_reports_invariant_violation() {
+    async fn try_close_with_dropped_outcome_reports_internal_error() {
         use std::sync::{Arc, OnceLock};
         use tokio::sync::oneshot;
 
@@ -1078,7 +1079,7 @@ mod tests {
         };
 
         let error = handle.try_close().expect_err("an internal error");
-        assert!(matches!(error, super::Error::InvariantViolation));
+        assert!(matches!(error, super::Error::InternalError));
     }
 
     /// `try_close` enqueues the `Close` control at most once, even when
