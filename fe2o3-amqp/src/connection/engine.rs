@@ -712,16 +712,20 @@ where
         // in the channel. Instead, it is usually desirable to perform a “clean” shutdown.
         // To do this, the receiver first closes the channels, which will prevent any
         // further messages to be sent into them.
-        let close = self.transport.close().await.map_err(Into::into);
-        let result = outcome.and(close).map_err(Into::into);
+        let close = self
+            .transport
+            .close()
+            .await
+            .map_err(ConnectionInnerError::TransportError);
+        let result: Result<(), ConnectionInnerError> = outcome.and(close);
 
         // Publish the stop reason before the channels are closed, so every
         // session that wakes on the channel closure sees it.
         let connection_stop_reason = match &result {
-            Err(Error::RemoteClosedWithError(error)) => {
+            Err(ConnectionInnerError::RemoteClosedWithError(error)) => {
                 ConnectionOutcome::RemoteClosedWithError(error.clone())
             }
-            Err(Error::RemoteClosed) => ConnectionOutcome::RemoteClosed,
+            Err(ConnectionInnerError::RemoteClosed) => ConnectionOutcome::RemoteClosed,
             _ => ConnectionOutcome::Closed,
         };
         self.connection
@@ -744,8 +748,10 @@ where
             .cloned()
             .unwrap_or(ConnectionOutcome::Closed);
         let result = match result {
-            Ok(()) | Err(Error::RemoteClosed) | Err(Error::RemoteClosedWithError(_)) => Ok(status),
-            Err(other) => Err(other),
+            Ok(())
+            | Err(ConnectionInnerError::RemoteClosed)
+            | Err(ConnectionInnerError::RemoteClosedWithError(_)) => Ok(status),
+            Err(other) => Err(other.into()),
         };
         let _ = tx.send(result);
     }
