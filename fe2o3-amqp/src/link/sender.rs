@@ -1999,6 +1999,41 @@ mod tests {
         ));
     }
 
+    /// A non-closing detach that crosses an attach rejection is the §2.6.6
+    /// simultaneous-detach conflict; the rejection keeps the primary attach
+    /// error instead of reporting a spurious failure.
+    #[tokio::test]
+    async fn rejection_detach_racing_a_peer_detach_keeps_the_primary_error() {
+        let (mut inner, _session_rx, mut outgoing_rx, incoming_tx) =
+            make_sender_inner_with_channels(4096);
+
+        let (result, ()) = tokio::join!(
+            inner.handle_attach_error(SenderAttachError::SndSettleModeNotSupported),
+            async {
+                // The rejection sends a closing detach; answer it with a
+                // non-closing detach, crossing it.
+                match outgoing_rx.recv().await.expect("expected a closing detach") {
+                    LinkFrame::Detach(detach) => assert!(detach.closed),
+                    other => panic!("expected Detach, got {other:?}"),
+                }
+
+                incoming_tx
+                    .send(LinkFrame::Detach(Detach {
+                        handle: fe2o3_amqp_types::definitions::Handle(0),
+                        closed: false,
+                        error: None,
+                    }))
+                    .await
+                    .expect("the incoming end is open");
+            }
+        );
+
+        assert!(matches!(
+            result,
+            SenderAttachError::SndSettleModeNotSupported
+        ));
+    }
+
     /// A rejected attach whose closing detach cannot be sent because the link
     /// is already terminal keeps the attach error when the stored outcome has
     /// no remote error.
@@ -2061,6 +2096,57 @@ mod tests {
         assert!(matches!(
             result,
             SenderAttachError::RemoteClosedWithError(ref error) if error == &peer_error
+        ));
+    }
+
+    /// `on_matching_detach_reply` accepts only the reply matching the detach
+    /// this link sent; a crossing (simultaneous) detach never reaches it and
+    /// is a caller-contract violation.
+    #[test]
+    fn on_matching_detach_reply_accepts_only_matching_replies() {
+        use crate::endpoint::LinkDetach as _;
+        use fe2o3_amqp_types::definitions::Handle;
+
+        let (mut inner, _session_rx, _outgoing_rx, _incoming_tx) =
+            make_sender_inner_with_channels(4096);
+
+        let detach = |closed| Detach {
+            handle: Handle(0),
+            closed,
+            error: None,
+        };
+
+        // CloseSent + closing → Closed
+        inner.link.local_state = LinkState::CloseSent;
+        let status = inner
+            .link
+            .on_matching_detach_reply(detach(true))
+            .expect("the matching reply is accepted");
+        assert!(matches!(status, LinkOutcome::Closed { remote_error: None }));
+
+        // DetachSent + non-closing → Detached
+        inner.link.local_state = LinkState::DetachSent;
+        let status = inner
+            .link
+            .on_matching_detach_reply(detach(false))
+            .expect("the matching reply is accepted");
+        assert!(matches!(
+            status,
+            LinkOutcome::Detached { remote_error: None }
+        ));
+
+        // CloseSent + non-closing → caller-contract violation
+        inner.link.local_state = LinkState::CloseSent;
+        assert!(matches!(
+            inner.link.on_matching_detach_reply(detach(false)),
+            Err(LinkStateError::InvariantViolation)
+        ));
+
+        // DetachSent + closing → caller-contract violation (routed to reattach)
+        inner.link.local_state = LinkState::DetachSent;
+        assert!(matches!(
+            inner.link.on_matching_detach_reply(detach(true)),
+            Err(LinkStateError::InvariantViolation)
         ));
     }
 

@@ -167,6 +167,9 @@
     `InvariantViolation`, and a transfer that arrives while the link is not attached
     reports the state-aware outcome (`LinkDetached`/`SessionStopped`) or
     `InvariantViolation`.
+    A closing detach answered with a non-closing detach after the AMQP 1.0 §2.6.6
+    reattach reports `IllegalState`; a non-closing detach crossing an attach
+    rejection keeps the rejection's primary attach error.
 25. **Breaking**: local session/connection state-machine violations are now answered with
     `amqp:internal-error` instead of `amqp:illegal-state` (which is reserved for frames
     the peer is not permitted to send): `session::Error` and `session::BeginError` gain
