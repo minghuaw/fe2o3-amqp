@@ -13,7 +13,7 @@ use tokio::sync::{mpsc, Notify};
 use crate::{
     connection::DEFAULT_OUTGOING_BUFFER_SIZE,
     endpoint::{LinkExt, OutputHandle},
-    link::{Link, LinkIncomingItem, LinkRelay},
+    link::{AttachMode, Link, LinkIncomingItem, LinkRelay},
     session::{self, SessionHandle},
     util::{Consumer, Producer},
 };
@@ -24,9 +24,9 @@ use super::{
     sender::SenderInner,
     state::{LinkFlowState, LinkFlowStateInner, LinkState},
     target_archetype::VerifyTargetArchetype,
-    ArcUnsettledMap, Receiver, ReceiverAttachError, ReceiverFlowState, ReceiverLink,
-    ReceiverRelayFlowState, Sender, SenderAttachError, SenderFlowState, SenderLink,
-    SenderRelayFlowState, SessionStopReason,
+    ArcUnsettledMap, DeliveryFailure, LinkError, Receiver, ReceiverAttachError, ReceiverFlowState,
+    ReceiverLink, ReceiverRelayFlowState, Sender, SenderAttachError, SenderFlowState, SenderLink,
+    SenderRelayFlowState, SessionStopped,
 };
 
 cfg_transaction! {
@@ -419,7 +419,7 @@ impl<Role, T, NameState, SS, TS> Builder<Role, T, NameState, SS, TS> {
         unsettled: ArcUnsettledMap<M>,
         output_handle: OutputHandle,
         flow_state_consumer: C,
-        session_stop_reason: Arc<OnceLock<SessionStopReason>>,
+        session_stop_reason: Arc<OnceLock<SessionStopped>>,
         max_frame_size: usize,
         // state_code: Arc<AtomicU8>,
     ) -> Link<Role, T, C, M> {
@@ -556,7 +556,7 @@ where
         );
 
         match link
-            .exchange_attach(&session.outgoing, &mut incoming_rx, false)
+            .exchange_attach(&session.outgoing, &mut incoming_rx, AttachMode::Resume)
             .await
         {
             Ok(exchange) => {
@@ -564,7 +564,10 @@ where
                 tracing::debug!(?exchange);
                 #[cfg(feature = "log")]
                 log::debug!("exchange = {:?}", exchange);
-                exchange.complete_or(SenderAttachError::IllegalState)?
+                exchange.complete_or_fail_deliveries(
+                    DeliveryFailure::LinkState(LinkError::IllegalState),
+                    SenderAttachError::UnexpectedUnsettledMap,
+                )?
             }
             Err(attach_error) => {
                 #[cfg(feature = "tracing")]
@@ -590,6 +593,7 @@ where
             session: session.control.clone(),
             outgoing,
             incoming: incoming_rx,
+            pending_redeliveries: Vec::new(),
         };
         Ok(inner)
     }
@@ -679,10 +683,10 @@ where
         );
 
         match link
-            .exchange_attach(&session.outgoing, &mut incoming_rx, false)
+            .exchange_attach(&session.outgoing, &mut incoming_rx, AttachMode::Resume)
             .await
         {
-            Ok(outcome) => outcome.complete_or(ReceiverAttachError::IllegalState)?,
+            Ok(outcome) => outcome.complete_or(ReceiverAttachError::UnexpectedUnsettledMap)?,
             Err(attach_error) => {
                 let err = link
                     .handle_attach_error(

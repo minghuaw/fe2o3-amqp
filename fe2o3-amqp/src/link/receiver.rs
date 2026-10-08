@@ -4,9 +4,7 @@ use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::{Arc, OnceLock};
 
 use fe2o3_amqp_types::{
-    definitions::{
-        self, DeliveryTag, Fields, Handle, LinkError, ReceiverSettleMode, Role, SequenceNo,
-    },
+    definitions::{self, DeliveryTag, Fields, Handle, ReceiverSettleMode, Role, SequenceNo},
     messaging::{
         Accepted, Address, DeliveryState, FromBody, Modified, Rejected, Released, Source, Target,
     },
@@ -33,17 +31,22 @@ use super::{
     incomplete_transfer::IncompleteTransfer,
     receiver_link::count_number_of_sections_and_offset,
     role,
-    shared_inner::{LinkEndpointInner, LinkEndpointInnerDetach, LinkEndpointInnerReattach},
-    ArcReceiverUnsettledMap, DetachThenResumeReceiverError, DispositionError, FlowError,
-    IllegalLinkStateError, LinkFrame, LinkRelay, LinkStateError, MessageSizeExceeded,
+    shared_inner::{
+        illegal_state_error, internal_error, LinkEndpointInner, LinkEndpointInnerDetach,
+        LinkEndpointInnerReattach, PeerViolationCloseExt,
+    },
+    state::LinkState,
+    ArcReceiverUnsettledMap, AttachMode, DetachThenResumeReceiverError, DispositionError,
+    FlowError, LinkError, LinkFrame, LinkOutcome, LinkRelay, MessageSizeExceeded,
     ReceiverAttachError, ReceiverAttachExchange, ReceiverFlowState, ReceiverLink,
-    ReceiverResumeError, ReceiverResumeErrorKind, ReceiverTransferError, RecvError,
-    SessionStopReason, DEFAULT_CREDIT,
+    ReceiverResumeError, ReceiverResumeErrorKind, ReceiverTransferError, RecvError, SessionStopped,
+    DEFAULT_CREDIT,
 };
 
-cfg_transaction! {
-    use fe2o3_amqp_types::definitions::AmqpError;
-}
+use super::{link_error_from_closed_channel, link_state_error_from_stop_reason};
+
+#[cfg(feature = "transaction")]
+use super::shared_inner::TxnAcquisitionCloseExt;
 
 #[cfg(docsrs)]
 use fe2o3_amqp_types::{
@@ -339,6 +342,12 @@ impl Receiver {
     ///
     /// This function is cancel-safe. See [#22](https://github.com/minghuaw/fe2o3-amqp/issues/22)
     /// for more details.
+    /// # Errors
+    ///
+    /// Returns [`RecvError`] if the delivery cannot be received. A peer detach
+    /// is reported as `LinkDetached`, a stopped session as `SessionStopped`,
+    /// and an oversized or malformed delivery detaches the link before
+    /// reporting the failure. [`RecvError::recovery`] classifies the next step.
     pub async fn recv<T>(&mut self) -> Result<Delivery<T>, RecvError>
     where
         for<'de> T: FromBody<'de> + Send,
@@ -347,7 +356,12 @@ impl Receiver {
     }
 
     /// Set the link credit. This will stop draining if the link is in a draining cycle
-    pub async fn set_credit(&mut self, credit: SequenceNo) -> Result<(), IllegalLinkStateError> {
+    /// # Errors
+    ///
+    /// Returns [`FlowError`] if the flow state cannot be sent, e.g.
+    /// `SessionStopped` when the session (or its connection) stopped first or
+    /// `LinkDetached` when the peer detached the link.
+    pub async fn set_credit(&mut self, credit: SequenceNo) -> Result<(), LinkError> {
         self.inner.set_credit(credit).await
     }
 
@@ -355,11 +369,21 @@ impl Receiver {
     ///
     /// This will send a `Flow` performative with the `drain` field set to true.
     /// Setting the credit will set the `drain` field to false and stop draining
-    pub async fn drain(&mut self) -> Result<(), IllegalLinkStateError> {
+    /// # Errors
+    ///
+    /// Returns [`FlowError`] if the flow state cannot be sent, e.g.
+    /// `SessionStopped` when the session (or its connection) stopped first or
+    /// `LinkDetached` when the peer detached the link.
+    pub async fn drain(&mut self) -> Result<(), LinkError> {
         self.inner.drain().await
     }
 
     /// Send the link properties to the remote peer via a `Flow` performative
+    /// # Errors
+    ///
+    /// Returns [`FlowError`] if the flow state cannot be sent, e.g.
+    /// `SessionStopped` when the session (or its connection) stopped first or
+    /// `LinkDetached` when the peer detached the link.
     pub async fn send_properties(&self) -> Result<(), FlowError> {
         self.inner.send_properties().await
     }
@@ -369,11 +393,22 @@ impl Receiver {
     /// This will send a `Detach` performative with the `closed` field set to false. If the remote
     /// peer responds with a Detach performative whose `closed` field is set to true, the link will
     /// re-attach and then close by exchanging closing Detach performatives.
-    pub async fn detach(mut self) -> Result<DetachedReceiver, (DetachedReceiver, DetachError)> {
+    /// # Errors
+    ///
+    /// Returns [`LinkError`] if the detach/close exchange fails, e.g.
+    /// `SessionStopped` when the session (or its connection) stopped first.
+    /// On failure the returned `DetachedSender`/`DetachedReceiver` can still
+    /// be resumed or closed.
+    pub async fn detach(
+        mut self,
+    ) -> Result<(DetachedReceiver, LinkOutcome), (DetachedReceiver, DetachError)> {
         match self.inner.detach_with_error(None).await {
-            Ok(_) => Ok(DetachedReceiver {
-                inner: Box::new(self.inner),
-            }),
+            Ok(status) => Ok((
+                DetachedReceiver {
+                    inner: Box::new(self.inner),
+                },
+                status,
+            )),
             Err(err) => Err((
                 DetachedReceiver {
                     inner: Box::new(self.inner),
@@ -388,14 +423,23 @@ impl Receiver {
     /// This will send a `Detach` performative with the `closed` field set to false. If the remote
     /// peer responds with a Detach performative whose `closed` field is set to true, the link will
     /// re-attach and then close by exchanging closing Detach performatives.
+    /// # Errors
+    ///
+    /// Returns [`LinkError`] if the detach/close exchange fails, e.g.
+    /// `SessionStopped` when the session (or its connection) stopped first.
+    /// On failure the returned `DetachedSender`/`DetachedReceiver` can still
+    /// be resumed or closed.
     pub async fn detach_with_error(
         mut self,
         error: impl Into<definitions::Error>,
-    ) -> Result<DetachedReceiver, (DetachedReceiver, DetachError)> {
+    ) -> Result<(DetachedReceiver, LinkOutcome), (DetachedReceiver, DetachError)> {
         match self.inner.detach_with_error(Some(error.into())).await {
-            Ok(_) => Ok(DetachedReceiver {
-                inner: Box::new(self.inner),
-            }),
+            Ok(status) => Ok((
+                DetachedReceiver {
+                    inner: Box::new(self.inner),
+                },
+                status,
+            )),
             Err(err) => Err((
                 DetachedReceiver {
                     inner: Box::new(self.inner),
@@ -409,10 +453,19 @@ impl Receiver {
         /// Detach the link with a timeout
         ///
         /// This simply wraps [`detach`](#method.detach) with a `timeout`
+        /// # Errors
+        ///
+        /// Returns [`LinkError`] if the detach/close exchange fails, e.g.
+        /// `SessionStopped` when the session (or its connection) stopped first.
+        /// On failure the returned `DetachedSender`/`DetachedReceiver` can still
+        /// be resumed or closed.
         pub async fn detach_with_timeout(
             self,
             duration: Duration,
-        ) -> Result<Result<DetachedReceiver, (DetachedReceiver, DetachError)>, Elapsed> {
+        ) -> Result<
+            Result<(DetachedReceiver, LinkOutcome), (DetachedReceiver, DetachError)>,
+            Elapsed,
+        > {
             timeout(duration, self.detach()).await
         }
     }
@@ -428,41 +481,57 @@ impl Receiver {
         new_session: &SessionHandle<R>,
     ) -> Result<ReceiverAttachExchange, DetachThenResumeReceiverError> {
         // detach the link
-        let detach_result = self
-            .inner
-            .detach_with_error(None)
-            .await
-            .map_err(DetachThenResumeReceiverError::from);
+        let detach_result = self.inner.detach_with_error(None).await;
+
+        // If the peer closed the link instead of suspending it, the link can
+        // no longer be resumed. The status is carried by the resume error.
+        if let Ok(status) = &detach_result {
+            if status.is_closed() {
+                return Err(DetachThenResumeReceiverError::Resume(
+                    ReceiverResumeErrorKind::LinkDetached(status.clone()),
+                ));
+            }
+        }
 
         // re-attach the link
-        let is_reattaching = self.inner.switch_session(new_session);
-        let exchange_result = self
-            .inner
-            .resume_incoming_attach(None, is_reattaching)
-            .await
-            .map_err(DetachThenResumeReceiverError::from);
+        self.inner.switch_session(new_session);
+        let exchange_result = self.inner.resume_incoming_attach(None).await;
 
         match (detach_result, exchange_result) {
             (_, Ok(exchange)) => Ok(exchange),
-            (Ok(_), Err(err)) => Err(err),
-            (Err(err), Err(_)) => Err(err),
+            (Ok(_), Err(err)) => Err(DetachThenResumeReceiverError::Resume(err)),
+            (Err(err), Err(_)) => Err(DetachThenResumeReceiverError::Detach(err)),
         }
     }
 
     /// Close the link.
     ///
     /// This will send a Detach performative with the `closed` field set to true.
-    pub async fn close(mut self) -> Result<(), DetachError> {
+    /// The returned [`LinkOutcome`] carries the error the peer attached to
+    /// its closing detach, if any.
+    /// # Errors
+    ///
+    /// Returns [`LinkError`] if the detach/close exchange fails, e.g.
+    /// `SessionStopped` when the session (or its connection) stopped first.
+    /// On failure the returned `DetachedSender`/`DetachedReceiver` can still
+    /// be resumed or closed.
+    pub async fn close(mut self) -> Result<LinkOutcome, DetachError> {
         self.inner.close_with_error(None).await
     }
 
     /// Close the link with an error.
     ///
     /// This will send a Detach performative with the `closed` field set to true.
+    /// # Errors
+    ///
+    /// Returns [`LinkError`] if the detach/close exchange fails, e.g.
+    /// `SessionStopped` when the session (or its connection) stopped first.
+    /// On failure the returned `DetachedSender`/`DetachedReceiver` can still
+    /// be resumed or closed.
     pub async fn close_with_error(
         mut self,
         error: impl Into<definitions::Error>,
-    ) -> Result<(), DetachError> {
+    ) -> Result<LinkOutcome, DetachError> {
         // Stop link transfer before closing
         self.set_credit(0).await?;
         self.inner.close_with_error(Some(error.into())).await
@@ -481,6 +550,11 @@ impl Receiver {
     /// let delivery: Delivery<Value> = receiver.recv().await.unwrap();
     /// receiver.accept(&delivery).await.unwrap();
     /// ```
+    /// # Errors
+    ///
+    /// Returns [`DispositionError`] if the disposition cannot be sent, e.g.
+    /// `SessionStopped` when the session (or its connection) stopped first or
+    /// `LinkDetached` when the peer detached the link.
     pub async fn accept(
         &self,
         delivery_info: impl Into<DeliveryInfo>,
@@ -503,6 +577,11 @@ impl Receiver {
     /// let delivery2: Delivery<Value> = receiver.recv().await.unwrap();
     /// receiver.accept_all(vec![&delivery1, &delivery2]).await.unwrap();
     /// ```
+    /// # Errors
+    ///
+    /// Returns [`DispositionError`] if the disposition cannot be sent, e.g.
+    /// `SessionStopped` when the session (or its connection) stopped first or
+    /// `LinkDetached` when the peer detached the link.
     pub async fn accept_all(
         &self,
         deliveries: impl IntoIterator<Item = impl Into<DeliveryInfo>>,
@@ -515,6 +594,11 @@ impl Receiver {
     /// to `Reject`
     ///
     /// This will not send disposition if the delivery is not found in the local unsettled map.
+    /// # Errors
+    ///
+    /// Returns [`DispositionError`] if the disposition cannot be sent, e.g.
+    /// `SessionStopped` when the session (or its connection) stopped first or
+    /// `LinkDetached` when the peer detached the link.
     pub async fn reject(
         &self,
         delivery_info: impl Into<DeliveryInfo>,
@@ -530,6 +614,11 @@ impl Receiver {
     /// to `Reject`
     ///
     /// Only deliveries that are found in the local unsettled map will be included in the disposition frame(s).
+    /// # Errors
+    ///
+    /// Returns [`DispositionError`] if the disposition cannot be sent, e.g.
+    /// `SessionStopped` when the session (or its connection) stopped first or
+    /// `LinkDetached` when the peer detached the link.
     pub async fn reject_all(
         &self,
         deliveries: impl IntoIterator<Item = impl Into<DeliveryInfo>>,
@@ -545,6 +634,11 @@ impl Receiver {
     /// to `Release`
     ///
     /// This will not send disposition if the delivery is not found in the local unsettled map.
+    /// # Errors
+    ///
+    /// Returns [`DispositionError`] if the disposition cannot be sent, e.g.
+    /// `SessionStopped` when the session (or its connection) stopped first or
+    /// `LinkDetached` when the peer detached the link.
     pub async fn release(
         &self,
         delivery_info: impl Into<DeliveryInfo>,
@@ -557,6 +651,11 @@ impl Receiver {
     /// to `Release`
     ///
     /// Only deliveries that are found in the local unsettled map will be included in the disposition frame(s).
+    /// # Errors
+    ///
+    /// Returns [`DispositionError`] if the disposition cannot be sent, e.g.
+    /// `SessionStopped` when the session (or its connection) stopped first or
+    /// `LinkDetached` when the peer detached the link.
     pub async fn release_all(
         &self,
         deliveries: impl IntoIterator<Item = impl Into<DeliveryInfo>>,
@@ -654,7 +753,7 @@ pub struct ReceiverDisposer {
     output_handle: Option<OutputHandle>,
     processed: Arc<AtomicU32>,
     credit_mode: CreditMode,
-    session_stop_reason: Arc<OnceLock<SessionStopReason>>,
+    session_stop_reason: Arc<OnceLock<SessionStopped>>,
 }
 
 impl ReceiverDisposer {
@@ -714,10 +813,7 @@ impl ReceiverDisposer {
             self.outgoing
                 .send(LinkFrame::Disposition(disposition))
                 .await
-                .map_err(|_| match self.session_stop_reason.get() {
-                    Some(reason) => DispositionError::SessionStopped(reason.clone()),
-                    None => DispositionError::IllegalState, // defensive: no stop reason recorded; failure is link-local
-                })?;
+                .map_err(|_| link_state_error_from_stop_reason(&self.session_stop_reason))?;
         }
 
         let prev = self.processed.fetch_add(1, Ordering::Release);
@@ -731,7 +827,7 @@ impl ReceiverDisposer {
                 let handle: Handle = self
                     .output_handle
                     .clone()
-                    .ok_or(DispositionError::IllegalState)?
+                    .ok_or(DispositionError::InvariantViolation)?
                     .into();
                 let delivery_count = {
                     let mut guard = self.flow_state.lock.write();
@@ -751,10 +847,7 @@ impl ReceiverDisposer {
                 self.outgoing
                     .send(LinkFrame::Flow(flow))
                     .await
-                    .map_err(|_| match self.session_stop_reason.get() {
-                        Some(reason) => DispositionError::SessionStopped(reason.clone()),
-                        None => DispositionError::IllegalState, // defensive: no stop reason recorded; failure is link-local
-                    })?;
+                    .map_err(|_| link_state_error_from_stop_reason(&self.session_stop_reason))?;
             }
         }
         Ok(())
@@ -849,7 +942,7 @@ impl<L: endpoint::ReceiverLink> Drop for ReceiverInner<L> {
     fn drop(&mut self) {
         // A detach the relay already answered may be waiting in the engine's
         // channel. Apply it so the link state matches the detach; and once
-        // any detach was drained, the peer has already ended the link, so
+        // any detach was drained, the peer has already detached the link, so
         // the closing detach this drop would otherwise send would be a
         // duplicate.
         let mut remote_detach_received = false;
@@ -921,6 +1014,10 @@ where
         &mut self.incoming
     }
 
+    fn local_state(&self) -> &LinkState {
+        <L as endpoint::LinkExt>::local_state(&self.link)
+    }
+
     fn buffer_size(&self) -> usize {
         self.buffer_size
     }
@@ -942,16 +1039,16 @@ where
         &self.session
     }
 
-    fn session_stop_reason(&self) -> &Arc<OnceLock<SessionStopReason>> {
+    fn session_stop_reason(&self) -> &Arc<OnceLock<SessionStopped>> {
         self.link().session_stop_reason()
     }
 
     async fn exchange_attach(
         &mut self,
-        is_reattaching: bool,
+        mode: AttachMode,
     ) -> Result<ReceiverAttachExchange, <Self::Link as LinkAttach>::AttachError> {
         self.link
-            .exchange_attach(&self.outgoing, &mut self.incoming, is_reattaching)
+            .exchange_attach(&self.outgoing, &mut self.incoming, mode)
             .await
     }
 
@@ -990,14 +1087,17 @@ where
     fn handle_reattach_outcome(
         &mut self,
         outcome: ReceiverAttachExchange,
+        _detach_outcome: LinkOutcome,
     ) -> Result<&mut Self, L::AttachError> {
         match outcome {
-            ReceiverAttachExchange::Complete => Ok(self),
-            //  Re-attach should have None valued unsettled, so this should be invalid
-            ReceiverAttachExchange::IncompleteUnsettled | ReceiverAttachExchange::Resume => {
-                Err(ReceiverAttachError::IllegalState)
-            }
+            ReceiverAttachExchange::Complete => {}
+            // The reachable map-carrying exchanges are the peer's reply during
+            // the simultaneous detach. The receiver's outstanding deliveries are
+            // tracked by the application, so there is nothing to resume here:
+            // the link is closed next by `reattach_then_close`.
+            ReceiverAttachExchange::IncompleteUnsettled | ReceiverAttachExchange::Resume => {}
         }
+        Ok(self)
     }
 }
 
@@ -1018,9 +1118,9 @@ fn ensure_delivery_identity(transfer: &Transfer) -> Result<(), ReceiverTransferE
 impl<L> ReceiverInner<L>
 where
     L: endpoint::ReceiverLink<
-            FlowError = IllegalLinkStateError,
+            FlowError = LinkError,
             TransferError = ReceiverTransferError,
-            DispositionError = IllegalLinkStateError,
+            DispositionError = LinkError,
             AttachError = ReceiverAttachError,
             DetachError = DetachError,
         > + LinkExt<FlowState = ReceiverFlowState, Unsettled = ArcReceiverUnsettledMap>
@@ -1050,19 +1150,16 @@ where
         for<'de> T: FromBody<'de> + Send,
     {
         // When the session or the connection stops, the channel closes and this
-        // returns `RecvError::LinkStateError(SessionStopped(reason))` with the
+        // returns `RecvError::SessionStopped(reason)` with the
         // stop reason observed by the link.
         let frame = match self.incoming.recv().await {
             // cancel safe
             Some(frame) => frame,
             None => {
-                return Err(match self.link().session_stop_reason().get() {
-                    Some(reason) => {
-                        RecvError::LinkStateError(LinkStateError::SessionStopped(reason.clone()))
-                    }
-                    // defensive: no stop reason recorded; failure is link-local
-                    None => RecvError::LinkStateError(LinkStateError::IllegalState),
-                });
+                return Err(RecvError::from(link_error_from_closed_channel(
+                    self.link().session_stop_reason(),
+                    self.link().local_state(),
+                )));
             }
         };
 
@@ -1071,36 +1168,42 @@ where
             // records the outcome here. Reported as-is even when the session
             // is stopping: a stop without a detach shows up as the channel
             // closing (`None` above).
-            LinkFrame::Detach(detach) => {
-                let closed = detach.closed;
-                self.link
-                    .apply_remote_detach_outcome(detach)
-                    .map_err(Into::into)
-                    .and_then(|_| match closed {
-                        true => Err(LinkStateError::RemoteClosed.into()),
-                        false => Err(LinkStateError::RemoteDetached.into()),
-                    })
-            }
+            LinkFrame::Detach(detach) => match self.link.apply_remote_detach_outcome(detach) {
+                Ok(status) => Err(RecvError::LinkDetached(status)),
+                Err(err) => Err(RecvError::from(err)),
+            },
             LinkFrame::Transfer {
                 input_handle: _,
                 performative,
                 payload,
             } => self.on_incoming_transfer(performative, payload).await, // cancel safe
-            LinkFrame::Attach(_) => Err(LinkStateError::IllegalState.into()),
+            LinkFrame::Attach(_) => {
+                // The session forwards a peer Attach for this link; receiving
+                // one here means the peer violated the link state machine.
+                self.close_on_peer_violation(illegal_state_error()).await;
+                Err(LinkError::IllegalState.into())
+            }
             LinkFrame::Flow(_) | LinkFrame::Disposition(_) => {
                 // Flow and Disposition are handled by LinkRelay which runs
-                // in the session loop
-                unreachable!()
+                // in the session loop; report a defensive failure instead of
+                // panicking if one ever reaches the link stream.
+                #[cfg(feature = "tracing")]
+                tracing::error!("Unexpected Flow or Disposition frame in the receiver stream");
+                #[cfg(feature = "log")]
+                log::error!("Unexpected Flow or Disposition frame in the receiver stream");
+                self.close_on_peer_violation(internal_error(
+                    "Unexpected Flow or Disposition frame in the receiver stream",
+                ))
+                .await;
+                Err(LinkError::InternalError.into())
             }
             #[cfg(feature = "transaction")]
             LinkFrame::Acquisition(_) => {
-                let error = definitions::Error::new(
-                    AmqpError::NotImplemented,
-                    "Transactional acquisition is not implemented".to_string(),
-                    None,
-                );
-                self.close_with_error(Some(error)).await?; // FIXME: cancel safe? if oneshot chanenl is cancel safe
-                Err(RecvError::TransactionalAcquisitionIsNotImeplemented)
+                // A receiver is never expected to receive an acquisition, but
+                // if one arrives the link is terminated with
+                // `amqp:not-implemented` (AMQP 1.0 §4.4.3).
+                self.close_on_acquisition_not_implemented().await;
+                Err(RecvError::AcquisitionNotImplemented)
             }
         }
     }
@@ -1288,14 +1391,14 @@ where
         self.incomplete_transfer.take();
 
         let error = definitions::Error::new(
-            LinkError::MessageSizeExceeded,
+            definitions::LinkError::MessageSizeExceeded,
             Some(format!(
                 "received message larger than max size of {max_size}"
             )),
             None,
         );
         match self.close_with_error(Some(error)).await {
-            Ok(()) => RecvError::MessageSizeExceeded(MessageSizeExceeded {
+            Ok(_) => RecvError::MessageSizeExceeded(MessageSizeExceeded {
                 size: total_size,
                 max_size,
             }),
@@ -1435,7 +1538,7 @@ where
     ///
     /// This is cancel safe as internanlly it only `.await` on sending over `tokio::mpsc::Sender`
     #[inline]
-    pub async fn set_credit(&mut self, credit: SequenceNo) -> Result<(), IllegalLinkStateError> {
+    pub async fn set_credit(&mut self, credit: SequenceNo) -> Result<(), LinkError> {
         self.processed.store(0, Ordering::Release);
         if let CreditMode::Auto(_) = self.credit_mode {
             self.credit_mode = CreditMode::Auto(credit)
@@ -1533,29 +1636,26 @@ impl ReceiverInner<ReceiverLink<Target>> {
     /// The new session may belong to a different connection whose negotiated
     /// max frame size differs, so the link's `max_frame_size` is refreshed
     /// from the new session before any attach/transfer frame is sent.
-    pub(crate) fn switch_session<R>(&mut self, new_session: &SessionHandle<R>) -> bool {
-        let is_reattaching = !self.session.same_channel(&new_session.control);
+    pub(crate) fn switch_session<R>(&mut self, new_session: &SessionHandle<R>) {
         self.session = new_session.control.clone();
         self.outgoing = new_session.outgoing.clone();
         self.link.max_frame_size = new_session.max_frame_size();
-        is_reattaching
     }
 
     pub(crate) async fn resume_incoming_attach(
         &mut self,
         mut initial_remote_attach: Option<Attach>,
-        is_reattaching: bool,
     ) -> Result<ReceiverAttachExchange, ReceiverResumeErrorKind> {
         self.reallocate_output_handle().await?;
 
         let exchange = match initial_remote_attach.take() {
             Some(remote_attach) => {
                 self.link
-                    .send_attach(&self.outgoing, is_reattaching)
+                    .send_attach(&self.outgoing, AttachMode::Resume)
                     .await?;
                 self.link.on_incoming_attach(remote_attach)?
             }
-            None => self.exchange_attach(is_reattaching).await?,
+            None => self.exchange_attach(AttachMode::Resume).await?,
         };
         #[cfg(feature = "tracing")]
         tracing::debug!(?exchange);
@@ -1706,16 +1806,8 @@ impl DetachedReceiver {
         &mut self.inner.link.target
     }
 
-    async fn resume_inner(
-        mut self,
-        is_reattaching: bool,
-    ) -> Result<ResumingReceiver, ReceiverResumeError> {
-        let exchange = try_as_recver!(
-            self,
-            self.inner
-                .resume_incoming_attach(None, is_reattaching)
-                .await
-        );
+    async fn resume_inner(mut self) -> Result<ResumingReceiver, ReceiverResumeError> {
+        let exchange = try_as_recver!(self, self.inner.resume_incoming_attach(None).await);
         let receiver = Receiver { inner: *self.inner };
         let resuming_receiver = match exchange {
             ReceiverAttachExchange::Complete => ResumingReceiver::Complete(receiver),
@@ -1733,16 +1825,15 @@ impl DetachedReceiver {
     /// times if there are unsettled deliveries.
     #[cfg_attr(feature = "tracing", tracing::instrument(skip(self)))]
     pub async fn resume(self) -> Result<ResumingReceiver, ReceiverResumeError> {
-        self.resume_inner(false).await
+        self.resume_inner().await
     }
 
     cfg_not_wasm32! {
         async fn resume_with_timeout_inner(
             mut self,
             duration: Duration,
-            is_reattaching: bool,
         ) -> Result<ResumingReceiver, ReceiverResumeError> {
-            let fut = self.inner.resume_incoming_attach(None, is_reattaching);
+            let fut = self.inner.resume_incoming_attach(None);
 
             match tokio::time::timeout(duration, fut).await {
                 Ok(Ok(exchange)) => {
@@ -1781,7 +1872,7 @@ impl DetachedReceiver {
             self,
             duration: Duration,
         ) -> Result<ResumingReceiver, ReceiverResumeError> {
-            self.resume_with_timeout_inner(duration, false).await
+            self.resume_with_timeout_inner(duration).await
         }
     }
 
@@ -1793,9 +1884,9 @@ impl DetachedReceiver {
         mut self,
         session: &SessionHandle<R>,
     ) -> Result<ResumingReceiver, ReceiverResumeError> {
-        let is_reattaching = self.inner.switch_session(session);
+        self.inner.switch_session(session);
 
-        self.resume_inner(is_reattaching).await
+        self.resume_inner().await
     }
 
     /// Resume the receiver link on the original session with an Attach sent by the remote peer
@@ -1808,9 +1899,7 @@ impl DetachedReceiver {
     ) -> Result<ResumingReceiver, ReceiverResumeError> {
         let exchange = try_as_recver!(
             self,
-            self.inner
-                .resume_incoming_attach(Some(remote_attach), false)
-                .await
+            self.inner.resume_incoming_attach(Some(remote_attach)).await
         );
         let receiver = Receiver { inner: *self.inner };
         let resuming_receiver = match exchange {
@@ -1832,13 +1921,11 @@ impl DetachedReceiver {
         remote_attach: Attach,
         session: &SessionHandle<R>,
     ) -> Result<ResumingReceiver, ReceiverResumeError> {
-        let is_reattaching = self.inner.switch_session(session);
+        self.inner.switch_session(session);
 
         let exchange = try_as_recver!(
             self,
-            self.inner
-                .resume_incoming_attach(Some(remote_attach), is_reattaching)
-                .await
+            self.inner.resume_incoming_attach(Some(remote_attach)).await
         );
         let receiver = Receiver { inner: *self.inner };
         let resuming_receiver = match exchange {
@@ -1861,8 +1948,8 @@ impl DetachedReceiver {
             session: &SessionHandle<R>,
             duration: Duration,
         ) -> Result<ResumingReceiver, ReceiverResumeError> {
-            let is_reattaching = self.inner.switch_session(session);
-            self.resume_with_timeout_inner(duration, is_reattaching).await
+            self.inner.switch_session(session);
+            self.resume_with_timeout_inner(duration).await
         }
 
         /// Resume the receiver link on the original session with an Attach sent by the remote peer
@@ -1874,7 +1961,7 @@ impl DetachedReceiver {
             remote_attach: Attach,
             duration: Duration,
         ) -> Result<ResumingReceiver, ReceiverResumeError> {
-            let fut = self.inner.resume_incoming_attach(Some(remote_attach), false);
+            let fut = self.inner.resume_incoming_attach(Some(remote_attach));
 
             match tokio::time::timeout(duration, fut).await {
                 Ok(Ok(exchange)) => {
@@ -1912,9 +1999,9 @@ impl DetachedReceiver {
             session: &SessionHandle<R>,
             duration: Duration,
         ) -> Result<ResumingReceiver, ReceiverResumeError> {
-            let is_reattaching = self.inner.switch_session(session);
+            self.inner.switch_session(session);
 
-            let fut = self.inner.resume_incoming_attach(Some(remote_attach), is_reattaching);
+            let fut = self.inner.resume_incoming_attach(Some(remote_attach));
 
             match tokio::time::timeout(duration, fut).await {
                 Ok(Ok(exchange)) => {
@@ -1950,7 +2037,9 @@ mod tests {
     use crate::endpoint::OutputHandle;
     use crate::link::state::{LinkFlowState, LinkFlowStateInner, LinkState};
     use crate::util::Sealed;
-    use fe2o3_amqp_types::{definitions::SenderSettleMode, messaging::Received};
+    use fe2o3_amqp_types::{
+        definitions::SenderSettleMode, messaging::Received, primitives::OrderedMap,
+    };
     use tokio::sync::oneshot;
 
     fn make_flow_state(link_credit: u32) -> ReceiverFlowState {
@@ -2347,6 +2436,297 @@ mod tests {
         result.expect_err("a malformed delivery must fail")
     }
 
+    /// A remote-initiated transactional acquisition is never expected on a
+    /// receiver, but if one arrives the link is terminated with
+    /// `amqp:not-implemented` (AMQP 1.0 §4.4.3) and
+    /// `RecvError::AcquisitionNotImplemented` is reported.
+    #[cfg(feature = "transaction")]
+    #[tokio::test]
+    async fn acquisition_terminates_link_with_not_implemented() {
+        let (mut inner, _session_rx, mut outgoing_rx, incoming_tx) =
+            make_receiver_inner_with_channels(4096);
+
+        incoming_tx
+            .send(LinkFrame::Acquisition(DeliveryTag::from(vec![0x01])))
+            .await
+            .expect("the incoming end is open");
+
+        let error = recv_expecting_fatal_close(
+            &mut inner,
+            &mut outgoing_rx,
+            &incoming_tx,
+            definitions::AmqpError::NotImplemented.into(),
+        )
+        .await;
+
+        assert!(matches!(error, RecvError::AcquisitionNotImplemented));
+    }
+
+    /// A peer Attach relayed to an attached receiver violates the link state
+    /// machine: the link is terminated with `amqp:illegal-state` and
+    /// `RecvError::IllegalState` is reported.
+    #[tokio::test]
+    async fn unexpected_attach_terminates_link_with_illegal_state() {
+        let (mut inner, _session_rx, mut outgoing_rx, incoming_tx) =
+            make_receiver_inner_with_channels(4096);
+
+        incoming_tx
+            .send(LinkFrame::Attach(peer_sender_attach()))
+            .await
+            .expect("the incoming end is open");
+
+        let error = recv_expecting_fatal_close(
+            &mut inner,
+            &mut outgoing_rx,
+            &incoming_tx,
+            definitions::AmqpError::IllegalState.into(),
+        )
+        .await;
+
+        assert!(matches!(error, RecvError::IllegalState));
+    }
+
+    /// A peer-driven `IllegalState` attach rejection terminates the link with
+    /// a closing `amqp:illegal-state` detach.
+    #[tokio::test]
+    async fn illegal_state_attach_rejection_terminates_link() {
+        let (mut inner, _session_rx, mut outgoing_rx, incoming_tx) =
+            make_receiver_inner_with_channels(4096);
+
+        let (result, ()) = tokio::join!(
+            inner.handle_attach_error(ReceiverAttachError::IllegalState),
+            async {
+                match outgoing_rx.recv().await.expect("expected a closing detach") {
+                    LinkFrame::Detach(detach) => {
+                        assert!(detach.closed, "the link must be terminated");
+                        let error = detach
+                            .error
+                            .as_ref()
+                            .expect("the detach must carry the error");
+                        assert_eq!(error.condition, definitions::AmqpError::IllegalState.into());
+                    }
+                    other => panic!("expected Detach, got {other:?}"),
+                }
+
+                // Answer the closing detach to complete the close handshake.
+                incoming_tx
+                    .send(LinkFrame::Detach(Detach {
+                        handle: Handle(0),
+                        closed: true,
+                        error: None,
+                    }))
+                    .await
+                    .expect("the incoming end is open");
+            }
+        );
+
+        assert!(matches!(result, ReceiverAttachError::IllegalState));
+    }
+
+    /// Flow and Disposition frames are handled by the session loop; one that
+    /// reaches the receiver stream is an internal invariant violation: the
+    /// link is terminated with `amqp:internal-error` and
+    /// `RecvError::InternalError` is reported.
+    #[tokio::test]
+    async fn unexpected_flow_terminates_link_with_internal_error() {
+        let (mut inner, _session_rx, mut outgoing_rx, incoming_tx) =
+            make_receiver_inner_with_channels(4096);
+
+        incoming_tx
+            .send(LinkFrame::Disposition(Disposition {
+                role: Role::Receiver,
+                first: 0,
+                last: None,
+                settled: false,
+                state: None,
+                batchable: false,
+            }))
+            .await
+            .expect("the incoming end is open");
+
+        let error = recv_expecting_fatal_close(
+            &mut inner,
+            &mut outgoing_rx,
+            &incoming_tx,
+            definitions::AmqpError::InternalError.into(),
+        )
+        .await;
+
+        assert!(matches!(error, RecvError::InternalError));
+    }
+
+    /// Sending a flow on a link without a local handle is an internal
+    /// invariant violation: the endpoint cannot be observed in that state.
+    #[tokio::test]
+    async fn send_flow_without_handle_is_invariant_violation() {
+        let (mut inner, _session_rx, _outgoing_rx, _incoming_tx) =
+            make_receiver_inner_with_channels(4096);
+        inner.link.output_handle = None;
+
+        let result = endpoint::ReceiverLink::send_flow(
+            &inner.link,
+            &inner.outgoing,
+            None,
+            None,
+            false,
+            false,
+        )
+        .await;
+
+        assert!(matches!(result, Err(FlowError::InvariantViolation)));
+    }
+
+    /// A transfer that arrives after the link detached reports the terminal
+    /// outcome instead of an error about a missing handle.
+    #[tokio::test]
+    async fn transfer_on_detached_link_reports_the_outcome() {
+        let (mut inner, _session_rx, _outgoing_rx, incoming_tx) =
+            make_receiver_inner_with_channels(4096);
+        let peer_error = definitions::Error::new(
+            definitions::AmqpError::ResourceLimitExceeded,
+            Some("no capacity".to_string()),
+            None,
+        );
+        inner.link.local_state = LinkState::Detached(Some(peer_error.clone()));
+
+        incoming_tx
+            .send(make_link_frame(
+                make_incoming_transfer(0, Some(b"tag0".to_vec()), false, false),
+                encoded_message_payload("m"),
+            ))
+            .await
+            .expect("the incoming end is open");
+
+        let error = inner
+            .recv::<String>()
+            .await
+            .expect_err("the transfer must fail");
+        assert!(matches!(
+            error,
+            RecvError::LinkDetached(LinkOutcome::Detached { remote_error: Some(ref error) })
+                if error == &peer_error
+        ));
+    }
+
+    /// A transfer that arrives after the session stopped reports the stop
+    /// reason, which takes precedence over the link's own state.
+    #[tokio::test]
+    async fn transfer_on_stopped_session_reports_the_stop() {
+        let (mut inner, _session_rx, _outgoing_rx, incoming_tx) =
+            make_receiver_inner_with_channels(4096);
+        inner.link.local_state = LinkState::Detached(None);
+        inner
+            .link
+            .session_stop_reason
+            .set(SessionStopped::Outcome(
+                crate::session::SessionOutcome::Ended,
+            ))
+            .expect("the stop reason is unset");
+
+        incoming_tx
+            .send(make_link_frame(
+                make_incoming_transfer(0, Some(b"tag0".to_vec()), false, false),
+                encoded_message_payload("m"),
+            ))
+            .await
+            .expect("the incoming end is open");
+
+        let error = inner
+            .recv::<String>()
+            .await
+            .expect_err("the transfer must fail");
+        assert!(matches!(
+            error,
+            RecvError::SessionStopped(SessionStopped::Outcome(
+                crate::session::SessionOutcome::Ended
+            ))
+        ));
+    }
+
+    /// A receiver whose channel closed while its link is terminal reports the
+    /// outcome the link already reached.
+    #[tokio::test]
+    async fn recv_on_terminal_link_with_closed_channel_reports_detached() {
+        let (mut inner, _session_rx, _outgoing_rx, incoming_tx) =
+            make_receiver_inner_with_channels(4096);
+        inner.link.local_state = LinkState::Detached(None);
+        drop(incoming_tx);
+
+        let result = inner.recv::<String>().await;
+
+        assert!(matches!(
+            result,
+            Err(RecvError::LinkDetached(LinkOutcome::Detached {
+                remote_error: None
+            }))
+        ));
+    }
+
+    /// A rejected attach whose closing detach cannot be sent because the link
+    /// is already terminal keeps the attach error when the stored outcome has
+    /// no remote error.
+    #[tokio::test]
+    async fn rejection_detach_on_terminal_link_keeps_primary_error() {
+        let (mut inner, _session_rx, _outgoing_rx, _incoming_tx) =
+            make_receiver_inner_with_channels(4096);
+        inner.link.local_state = LinkState::Detached(None);
+
+        let result = inner
+            .handle_attach_error(ReceiverAttachError::CoordinatorIsNotImplemented)
+            .await;
+
+        assert!(matches!(
+            result,
+            ReceiverAttachError::CoordinatorIsNotImplemented
+        ));
+    }
+
+    /// A rejected attach whose closing detach cannot be sent reports the
+    /// remote error stored in the terminal outcome.
+    #[tokio::test]
+    async fn rejection_detach_on_terminal_link_reports_remote_error() {
+        let (mut inner, _session_rx, _outgoing_rx, _incoming_tx) =
+            make_receiver_inner_with_channels(4096);
+        let peer_error = definitions::Error::new(
+            definitions::AmqpError::ResourceLimitExceeded,
+            Some("no capacity".to_string()),
+            None,
+        );
+        inner.link.local_state = LinkState::Detached(Some(peer_error.clone()));
+
+        let result = inner
+            .handle_attach_error(ReceiverAttachError::CoordinatorIsNotImplemented)
+            .await;
+
+        assert!(matches!(
+            result,
+            ReceiverAttachError::RemoteClosedWithError(ref error) if error == &peer_error
+        ));
+    }
+
+    /// The immediate-detach rejection path classifies an already terminal
+    /// link the same way.
+    #[tokio::test]
+    async fn immediate_rejection_detach_on_terminal_link_reports_remote_error() {
+        let (mut inner, _session_rx, _outgoing_rx, _incoming_tx) =
+            make_receiver_inner_with_channels(4096);
+        let peer_error = definitions::Error::new(
+            definitions::AmqpError::ResourceLimitExceeded,
+            Some("no capacity".to_string()),
+            None,
+        );
+        inner.link.local_state = LinkState::Detached(Some(peer_error.clone()));
+
+        let result = inner
+            .handle_attach_error(ReceiverAttachError::IncomingSourceIsNone)
+            .await;
+
+        assert!(matches!(
+            result,
+            ReceiverAttachError::RemoteClosedWithError(ref error) if error == &peer_error
+        ));
+    }
+
     /// The minimal `Attach` a sender peer sends for this receiver link: it
     /// must carry a source and an initial delivery count so
     /// `on_incoming_attach` accepts it.
@@ -2372,10 +2752,12 @@ mod tests {
     fn make_session_handle(max_frame_size: usize) -> SessionHandle<()> {
         let (control, _control_rx) = mpsc::channel::<SessionControl>(16);
         let (outgoing_tx, _outgoing_rx) = mpsc::channel::<LinkFrame>(16);
-        let (outcome_tx, outcome) = oneshot::channel::<Result<(), crate::session::error::Error>>();
+        let (outcome_tx, outcome) =
+            oneshot::channel::<Result<crate::link::SessionOutcome, crate::session::error::Error>>();
         drop(outcome_tx);
         SessionHandle {
             is_ended: false,
+            end_sent: false,
             control,
             engine_handle: tokio::spawn(async {}),
             outcome,
@@ -2391,15 +2773,13 @@ mod tests {
         let mut inner = make_receiver_inner(4092);
         let session_b = make_session_handle(1020);
 
-        // Switching to a different session marks the link as reattaching and
-        // refreshes the link's max frame size from the new session
-        let is_reattaching = inner.switch_session(&session_b);
-        assert!(is_reattaching);
+        // Switching to a different session refreshes the link's max frame
+        // size from the new session
+        inner.switch_session(&session_b);
         assert_eq!(inner.link.max_frame_size, 1020);
 
-        // Switching to the same session does not mark the link as reattaching
-        let is_reattaching = inner.switch_session(&session_b);
-        assert!(!is_reattaching);
+        // Switching to the same session is idempotent
+        inner.switch_session(&session_b);
         assert_eq!(inner.link.max_frame_size, 1020);
     }
 
@@ -2456,12 +2836,12 @@ mod tests {
             &mut inner,
             &mut outgoing_rx,
             &incoming_tx,
-            definitions::ErrorCondition::from(LinkError::MessageSizeExceeded),
+            definitions::ErrorCondition::from(definitions::LinkError::MessageSizeExceeded),
         )
         .await;
         assert_message_size_exceeded(error, 120, 100);
         assert!(inner.incomplete_transfer.is_none());
-        assert!(matches!(inner.link.local_state, LinkState::Closed));
+        assert!(matches!(inner.link.local_state, LinkState::Closed(_)));
     }
 
     /// A delivery spanning three or more frames must detach the link as soon
@@ -2501,12 +2881,12 @@ mod tests {
             &mut inner,
             &mut outgoing_rx,
             &incoming_tx,
-            definitions::ErrorCondition::from(LinkError::MessageSizeExceeded),
+            definitions::ErrorCondition::from(definitions::LinkError::MessageSizeExceeded),
         )
         .await;
         assert_message_size_exceeded(error, 101, 100);
         assert!(inner.incomplete_transfer.is_none());
-        assert!(matches!(inner.link.local_state, LinkState::Closed));
+        assert!(matches!(inner.link.local_state, LinkState::Closed(_)));
     }
 
     /// A tagless-continuation delivery whose total size is exactly the limit
@@ -2570,7 +2950,7 @@ mod tests {
         )
         .await;
         assert!(matches!(error, RecvError::DeliveryTagIsNone));
-        assert!(matches!(inner.link.local_state, LinkState::Closed));
+        assert!(matches!(inner.link.local_state, LinkState::Closed(_)));
 
         // Missing delivery-id
         let (mut inner, _session_rx, mut outgoing_rx, incoming_tx) =
@@ -2589,7 +2969,7 @@ mod tests {
         )
         .await;
         assert!(matches!(error, RecvError::DeliveryIdIsNone));
-        assert!(matches!(inner.link.local_state, LinkState::Closed));
+        assert!(matches!(inner.link.local_state, LinkState::Closed(_)));
     }
 
     /// The mandatory delivery-id and delivery-tag are required on the first
@@ -2615,7 +2995,7 @@ mod tests {
         )
         .await;
         assert!(matches!(error, RecvError::DeliveryTagIsNone));
-        assert!(matches!(inner.link.local_state, LinkState::Closed));
+        assert!(matches!(inner.link.local_state, LinkState::Closed(_)));
 
         // Missing delivery-id
         let (mut inner, _session_rx, mut outgoing_rx, incoming_tx) =
@@ -2634,7 +3014,7 @@ mod tests {
         )
         .await;
         assert!(matches!(error, RecvError::DeliveryIdIsNone));
-        assert!(matches!(inner.link.local_state, LinkState::Closed));
+        assert!(matches!(inner.link.local_state, LinkState::Closed(_)));
     }
 
     /// A state-carrying transfer with no buffered delivery and no delivery-tag
@@ -2662,7 +3042,7 @@ mod tests {
         )
         .await;
         assert!(matches!(error, RecvError::DeliveryTagIsNone));
-        assert!(matches!(inner.link.local_state, LinkState::Closed));
+        assert!(matches!(inner.link.local_state, LinkState::Closed(_)));
     }
 
     /// A continuation that explicitly names a different delivery while one is
@@ -2698,7 +3078,7 @@ mod tests {
             error,
             RecvError::InconsistentFieldInMultiFrameDelivery
         ));
-        assert!(matches!(inner.link.local_state, LinkState::Closed));
+        assert!(matches!(inner.link.local_state, LinkState::Closed(_)));
     }
 
     /// A continuation whose present message-format differs from the first
@@ -2737,7 +3117,7 @@ mod tests {
             error,
             RecvError::InconsistentFieldInMultiFrameDelivery
         ));
-        assert!(matches!(inner.link.local_state, LinkState::Closed));
+        assert!(matches!(inner.link.local_state, LinkState::Closed(_)));
     }
 
     /// An aborted transfer matching the buffered delivery discards its chunks
@@ -2890,7 +3270,7 @@ mod tests {
             error,
             RecvError::InconsistentFieldInMultiFrameDelivery
         ));
-        assert!(matches!(inner.link.local_state, LinkState::Closed));
+        assert!(matches!(inner.link.local_state, LinkState::Closed(_)));
     }
 
     /// AMQP 1.0 §2.6.13: a resumed delivery that is not in the local
@@ -3000,6 +3380,58 @@ mod tests {
         ));
     }
 
+    /// AMQP 1.0 §2.6.13: target-only deliveries (local unsettled entries
+    /// absent from a complete remote map) MUST be considered settled.
+    #[test]
+    fn receiver_reconciles_target_only_deliveries() {
+        let (mut inner, _session_rx, _outgoing_rx, _incoming_tx) =
+            make_receiver_inner_with_channels(4096);
+        seed_unsettled(&inner.link.unsettled, &[vec![1], vec![2]]);
+
+        // Remote map has only tag 1 (complete): tag 2 is target-only.
+        let mut remote = OrderedMap::new();
+        remote.insert(DeliveryTag::from(vec![1u8]), None);
+        let _ = inner.link.handle_unsettled_in_attach(Some(remote), false);
+
+        let lock = inner.link.unsettled.read();
+        let map = lock.as_ref().unwrap();
+        assert!(map.contains_key(&DeliveryTag::from(vec![1u8])));
+        assert!(!map.contains_key(&DeliveryTag::from(vec![2u8])));
+    }
+
+    /// An incomplete remote map is not evidence of settlement, so local
+    /// entries are left untouched.
+    #[test]
+    fn receiver_keeps_deliveries_on_incomplete_remote_map() {
+        let (mut inner, _session_rx, _outgoing_rx, _incoming_tx) =
+            make_receiver_inner_with_channels(4096);
+        seed_unsettled(&inner.link.unsettled, &[vec![1]]);
+
+        let _ = inner
+            .link
+            .handle_unsettled_in_attach(Some(OrderedMap::new()), true);
+
+        let lock = inner.link.unsettled.read();
+        assert!(lock
+            .as_ref()
+            .unwrap()
+            .contains_key(&DeliveryTag::from(vec![1u8])));
+    }
+
+    /// A `None` remote map (peer reattached without unsettled state) settles
+    /// every target-only delivery.
+    #[test]
+    fn receiver_clears_deliveries_on_missing_remote_map() {
+        let (mut inner, _session_rx, _outgoing_rx, _incoming_tx) =
+            make_receiver_inner_with_channels(4096);
+        seed_unsettled(&inner.link.unsettled, &[vec![1], vec![2]]);
+
+        let _ = inner.link.handle_unsettled_in_attach(None, false);
+
+        let lock = inner.link.unsettled.read();
+        assert!(lock.as_ref().unwrap().is_empty());
+    }
+
     /// A peer that suspends (non-closing detach) while this side is closing
     /// triggers the AMQP 1.0 §2.6.6 simultaneous-detach handshake.
     ///
@@ -3010,11 +3442,11 @@ mod tests {
     /// - sending our closing detach releases the link from the session
     ///   (`Session::on_outgoing_detach`), so the link must be reattached
     ///   (`reattach_then_close` -> `reallocate_output_handle` ->
-    ///   `allocate_link`) to re-register it; otherwise the peer's crossed
+    ///   `allocate_link`) to re-register it; otherwise the peer's simultaneous
     ///   `Attach`/`Detach` could not be routed to the link and would end the
     ///   session;
     /// - with both sides reattaching, each side's attach exchange accepts the
-    ///   peer's `Attach` as its answer, so the crossed detaches converge
+    ///   peer's `Attach` as its answer, so the simultaneous detaches converge
     ///   symmetrically without depending on whether the peer drives its
     ///   reattach.
     ///
@@ -3031,6 +3463,7 @@ mod tests {
                 outgoing_rx,
                 incoming_tx,
                 peer_sender_attach(),
+                None,
             ),
         );
 
@@ -3040,14 +3473,14 @@ mod tests {
             "expected a detach before and after the reattach"
         );
         assert!(result.is_ok(), "close must complete: {result:?}");
-        assert!(matches!(&inner.link.local_state, LinkState::Closed));
+        assert!(matches!(&inner.link.local_state, LinkState::Closed(_)));
     }
 
     /// A peer that closes (closing detach) while this side is suspending
     /// triggers the AMQP 1.0 §2.6.6 simultaneous-detach handshake. The spec
     /// assigns the reattach to this side (the non-closing/suspending side),
     /// which reattaches and then sends a closing detach; the link ends
-    /// `Closed`, so the local detach fails with `ClosedByRemote`.
+    /// `Closed`, reported as a `LinkOutcome::Closed` outcome.
     ///
     /// The peer's frames are scripted, so this is deterministic.
     #[tokio::test]
@@ -3062,6 +3495,7 @@ mod tests {
                 outgoing_rx,
                 incoming_tx,
                 peer_sender_attach(),
+                None,
             ),
         );
 
@@ -3070,7 +3504,10 @@ mod tests {
             detaches, 2,
             "expected a detach before and after the reattach"
         );
-        assert!(matches!(result, Err(DetachError::ClosedByRemote)));
-        assert!(matches!(&inner.link.local_state, LinkState::Closed));
+        assert!(matches!(
+            result,
+            Ok(LinkOutcome::Closed { remote_error: None })
+        ));
+        assert!(matches!(&inner.link.local_state, LinkState::Closed(_)));
     }
 }

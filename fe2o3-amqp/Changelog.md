@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+> **Draft - not final**: the entries below are still being edited while the error-type refactoring
+> is in progress; wording and numbering may change before release.
+
 1. **Bugfix**: receive-side `max-message-size` enforcement now counts the buffered payload
    of tagless continuation frames, and an oversized delivery detaches the link with
    `amqp:link:message-size-exceeded` instead of leaving the link usable.
@@ -11,7 +14,201 @@
 3. **Bugfix**: aborted deliveries are settled and discarded consistently on both sides, and
    the sender now completes the resumption `Resume` exchange.
 4. Added `ErrorRecovery` and `recovery()` on `SendError`/`RecvError` to tell whether a failed
-   link operation requires a reattach, a new session or connection, or a new link.
+   link operation requires a reattach, a new session or connection, or a new link; `LinkDetached`
+   outcomes are classified as reattach (`Detached`) or new link (`Closed`).
+5. **Breaking**: a peer-initiated link detach/close is now reported as an outcome instead of a
+   link-state error. `LinkError` no longer carries `RemoteDetached`, `RemoteDetachedWithError`,
+   `RemoteClosed` or `RemoteClosedWithError`; the new `LinkOutcome` (`Detached`/`Closed` plus the
+   peer's optional error) is carried by `SendError::LinkDetached`, `RecvError::LinkDetached`,
+   `PostError::LinkDetached` and `ControllerSendError::LinkDetached`, and exposes `is_closed()` and
+   `remote_error()` to inspect the outcome. `Sender::on_detach` returns
+   `Result<LinkOutcome, LinkError>`; the deprecated `DetachError::DetachedByRemote` is
+   removed. The dead `SendError::Detached(DetachError)` and `From<DetachError> for SendError` are
+   removed as well.
+6. **Breaking**: the link-state error is renamed `LinkError` (previously `LinkStateError`),
+   carrying `IllegalState` (peer frames only), `InvariantViolation`, `InternalError`,
+   `LinkDetached` and `SessionStopped`; `DetachError`, `DispositionError` and `FlowError`
+   remain aliases of it. `IllegalLinkStateError` is merged into it and the deprecated alias
+   is removed. `UnexpectedFrame` moved from the link-state error to
+   `SendError`/`PostError`/`ControllerSendError`.
+7. **Bugfix**: link resumption now carries unsettled deliveries. The sender advertises its unsettled
+   map on (re)attach and re-sends the deliveries after the link is resumed on another session or
+   connection, so a `send_batchable` future resolves with the peer's disposition instead of failing
+   with `SessionStopped`. Same-session resume (`DetachedSender::resume()`) now completes instead of
+   returning an `IllegalState` attach error when there are unsettled deliveries (#396).
+8. **Breaking**: `DetachError` is now a type alias of `LinkError` and the peer's detach/close
+   outcome is returned directly. `detach()`/`detach_with_error()` return
+   `(DetachedSender, LinkOutcome)` (receiver: `(DetachedReceiver, LinkOutcome)`);
+   `close()`/`close_with_error()` on `Sender`, `Receiver` and `Controller` return `LinkOutcome`,
+   so the error the peer attached to its closing detach is surfaced instead of being dropped.
+   `DetachError::ClosedByRemote`, `RemoteDetachedWithError` and `RemoteClosedWithError` are
+   removed: the AMQP 1.0 §2.6.6 simultaneous detach is reported as `LinkOutcome::Closed`.
+   `SenderResumeErrorKind`/`ReceiverResumeErrorKind` gain `LinkDetached(LinkOutcome)`, and
+   `detach_then_resume_on_session` reports a link the peer detached closed through the existing
+   `Resume` variant without attempting to resume it. `SenderAttachError`/`ReceiverAttachError`
+   no longer carry the unproduced `UnexpectedFrame` and once again report
+   `RemoteClosedWithError` from the peer's detach reply (the `TryFrom<DetachError>` conversions
+   become the infallible `From<LinkError>`). `PostError::Detached` and
+   `ControllerSendError::Detached` are removed, and `ReceiverResumeErrorKind::DetachError` is
+   folded into its `FlowError(LinkError)`.
+9. **Bugfix**: resuming attaches now always carry a non-null `unsettled` map (empty when nothing is
+   unsettled) so they cannot be mistaken for a pipelined re-attach (AMQP 1.0 §2.6.5).
+   Deliveries only the peer considers unsettled are no longer answered with a resumed transfer
+   (§2.6.13, §2.7.5), and the receiver settles deliveries only it considers unsettled
+   by comparing the attach maps.
+10. **Bugfix**: resuming a link whose unsettled map does not fit one attach frame now performs the
+    AMQP 1.0 §2.6.13 reduce/suspend/re-attempt cycle. A detach is allowed from the in-progress
+    attach states, the link is re-registered before each re-attempt, and buffered source-only
+    deliveries are re-sent as new deliveries once the exchange completes (including when both maps
+    are empty). The loop is bounded and returns the new `SenderResumeErrorKind::IncompleteUnsettled`
+    if the unsettled map never becomes complete.
+11. **Bugfix**: `close()` on a link whose detach was answered by a suspension now completes the
+    AMQP 1.0 §2.6.6 reattach-then-close handshake and returns `LinkOutcome::Closed`; the
+    reattach carries a null `unsettled` map (§2.7.3), any deliveries the peer still considers
+    unsettled are failed with `LinkDetached(Closed)`, and previously the outcome was recorded
+    while the link was left detached.
+12. `OwnedDischargeError` routes link-state errors from closing the control link to its `DetachError`
+    variant. Control-link failures are exposed as `DeclareError`/`DischargeError` (aliases of
+    `ControllerSendError`); the owned errors keep their names, and the coordinator-internal errors
+    are named `CoordinatorAllocTxnIdError`/`CoordinatorDischargeError`.
+13. **Bugfix**: deliveries buffered for redelivery during resumption (the peer's unsettled map
+    lacked their tags) are now kept on the link until they can be re-sent: a failed or aborted
+    resume retries them, and a terminal close or a dropped sender fails them with
+    `LinkDetached` instead of losing their settlement channels.
+14. **Breaking**: transfer failures now carry their cause instead of the catch-all `IllegalState`.
+    `SendError`, `PostError` and `ControllerSendError` gain `FrameSizeTooSmall` (the negotiated
+    max-frame-size cannot fit the serialized transfer performative, which previously
+    underflowed the payload bound and could panic or emit an oversized frame).
+    `MessageEncodeError` is now a struct carrying the underlying `serde_amqp::Error`, exposed by
+    the `MessageEncodeError` variants of `SendError`, `PostError` and `ControllerSendError`; and
+    the typo'd `RecvError::TransactionalAcquisitionIsNotImeplemented` is renamed to
+    `AcquisitionNotImplemented`.
+
+15. **Breaking**: a remote-initiated transactional acquisition on a sender link is not
+    supported yet; the link is terminated with an `amqp:not-implemented` detach
+    (AMQP 1.0 §4.4.3) and the send fails with the new `SendError::AcquisitionNotImplemented`
+    (mirrored in `PostError` and `ControllerSendError`) instead of `ExpectImmediateDetach`.
+    Full support is tracked separately (#385).
+
+16. **Breaking**: the detach-race error is renamed from `ExpectImmediateDetach` to
+    `UnexpectedFrame` on `SendError`/`PostError`/`ControllerSendError`; it is produced only
+    when a frame other than the expected detach arrives while a transfer waits for link credit
+    (a protocol violation). A closed incoming channel without a recorded session stop reason
+    reports the link's terminal outcome when it has one and `InternalError` otherwise.
+
+17. **Breaking**: `SenderAttachError` and `ReceiverAttachError` gain `UnexpectedUnsettledMap`:
+    a client-initiated attach whose peer reply carries an unsettled map now reports it instead
+    of `IllegalState`, and the sender fails the deliveries pending resumption with
+    `DeliveryFailure::LinkState(IllegalState)` instead of dropping their settlement channels.
+
+18. **Bugfix**: link failures are now derived from the link's local state when its incoming
+    channel closes without a recorded session stop. A concurrent send that consumed the peer's
+    detach no longer leaves a later `on_detach`, `recv` or send reporting `IllegalState` (or
+    waiting for a frame that will not come): the link reports the `LinkDetached(Detached)` or
+    `LinkDetached(Closed)` outcome it already reached. `Sender::on_detach` on an already
+    terminal link returns the stored `LinkOutcome` immediately, `send_detach` on a terminal
+    link reports the outcome as `LinkDetached(status)`, and the session relay now fails the
+    deliveries still pending on a sender link with the peer's actual `Detached`/`Closed`
+    outcome (including its error) when the link endpoint is gone or the peer closed the link,
+    instead of letting their settlement channels drop. The deliveries failed by the
+    AMQP 1.0 §2.6.6 simultaneous-detach handshake likewise report the peer's detach
+    outcome (including its error) instead of a synthesized close.
+
+19. **Bugfix**: when this side rejects an incoming attach, a rejection detach that could not
+    be sent is now classified against the attach failure. If the link already reached a
+    terminal outcome, the remote error stored in that outcome is reported as
+    `RemoteClosedWithError`; otherwise the attach error stays the primary error, and a session
+    stop always wins. The immediate-detach rejection paths also no longer wait for a detach
+    reply after sending the detach failed.
+
+20. **Breaking**: the session and connection handles deliver the end/close outcome once,
+    like joining the engine task: `Session::end`/`close`/`end_with_error`/`on_end` and
+    `Connection::close`/`close_with_error`/`on_close` return the outcome a single time
+    and later calls report `Error::AlreadyEnded`/`Error::AlreadyClosed`. `try_end`/
+    `try_close` are the non-blocking counterparts: they initiate the end/close at most
+    once and report `Ok(None)` while the exchange is in progress, `Ok(Some(outcome))`
+    once it completes, and `Err(Error::AlreadyEnded/AlreadyClosed)` after the outcome
+    was observed (`TryEndError`/`TryCloseError` are removed). Use `on_end`/`on_close`
+    to await an initiated exchange; neither an outcome nor an error is replayed.
+
+21. **Breaking**: the close/detach outcome types are renamed to a consistent family:
+    `DetachStatus` -> `LinkOutcome`, `SessionStopReason` -> `SessionOutcome`, and
+    `ConnectionStopReason` -> `ConnectionOutcome`. `SessionOutcome` is self-contained: the
+    connection's own outcome is not embedded in it (see item 23).
+
+22. **Breaking**: the session and connection close APIs now report the terminal outcome as
+    data: `Session::end`/`end_with_error`/`close`/`on_end` and `SessionHandle::try_end`
+    return `Result<SessionOutcome, Error>`, and `Connection::close`/`close_with_error`/
+    `on_close` and `ConnectionHandle::try_close` return `Result<ConnectionOutcome, Error>`.
+    A completed exchange is `Ok` even when the peer attached an error, which is carried by
+    `RemoteEndedWithError`/`RemoteClosedWithError`; `Err` is reserved for local failures:
+    the connection stopping first (`Error::ConnectionStopped(reason)`), invariant
+    violations, and transport errors. `end_with_error`/`close_with_error` report
+    `EndedWithError`/`ClosedWithError`; `try_end`/`try_close` wrap the outcome in an
+    `Option` where `None` means the exchange is still in progress.
+
+23. **Breaking**: a session-dependent operation that failed because the session stopped now
+    reports the separate `SessionStopped` type: `SessionStopped::Outcome(SessionOutcome)`
+    when the session reached its own outcome, or
+    `SessionStopped::ConnectionStopped(ConnectionOutcome)` when the session ended with its
+    connection. It is used by `LinkError::SessionStopped`, the attach errors'
+    `SessionStopped`, `AllocLinkError::SessionStopped`, `AcceptorAttachError::SessionStopped`,
+    and `FromDeliveryFailure::from_session_stop_reason`. `SessionOutcome` is a
+    connection-free leaf; a connection stopping is a failure of the session's own end
+    operation (`Err(Error::ConnectionStopped)`), consistent with links failing when their
+    session stopped.
+
+24. **Breaking**: peer violations in the link layer are now answered consistently. A frame
+    the session forwards that is not permitted in the current state (an `Attach` on an
+    attached link, or any other unexpected frame) terminates the link with an
+    `amqp:illegal-state` detach; the attach rejections previously reported `IllegalState`
+    without closing the link, `SendError::UnexpectedFrame` was reported without a detach,
+    and a `Flow`/`Disposition` frame reaching the receiver stream reported `IllegalState`
+    instead of an internal-invariant failure. `Flow`/`Disposition` leaks now close the link
+    with `amqp:internal-error` and report `LinkError::InternalError`. Local
+    producers were reclassified: attach serialization and a missing local handle report
+    `InvariantViolation`, and a transfer that arrives while the link is not attached
+    reports the state-aware outcome (`LinkDetached`/`SessionStopped`) or
+    `InvariantViolation`.
+    A closing detach answered with a non-closing detach after the AMQP 1.0 §2.6.6
+    reattach reports `IllegalState`; a non-closing detach crossing an attach
+    rejection keeps the rejection's primary attach error.
+
+25. **Breaking**: local session/connection failures are classified as internal failures
+    instead of the peer-only `amqp:illegal-state`: `session::Error`/`session::BeginError`
+    and `connection::Error`/`OpenError` gain the defensive `InvariantViolation`, which
+    marks paths that are impossible by construction, and the new `InternalError` for
+    internal failures that can occur in principle (an engine task ended without reporting
+    its outcome, a session stop reason was not recorded, a delivery settlement channel
+    died, a `Flow`/`Disposition` frame leaked into the receiver stream). Both answer
+    `amqp:internal-error`, and the same split applies to `LinkError`, `SenderAttachError`
+    and `ReceiverAttachError`. Frames that race an ending session or a closing connection
+    are discarded: an outgoing link/session frame that can no longer be forwarded is
+    dropped instead of failing the session/connection, and a duplicate or late `End` is
+    ignored. A transport that ends without the AMQP close exchange now reports the new
+    `ConnectionLost` error (`OpenError::ConnectionLost` when the connection was still
+    opening) instead of an artificial unexpected-EOF IO error; a close before the open
+    exchange completes simply stops.
+
+26. **Bugfix**: `TxnAcquisition` now clears the link's `txn-id` when dropped even
+    after a direct discharge through `txn_mut()`, which bypasses `cleanup()` and
+    previously left the id on the link so a later `acquire` reported a local error.
+    The defensive `acquire` check reports `FlowError::InvariantViolation` instead of
+    the peer-only `IllegalState`, as do the internal transaction disposition sends.
+
+27. **Bugfix**: a close/end that was initiated (by `try_close`/`try_end`) and then
+    followed by a blocking `close`/`end` or a dropped handle no longer sends a
+    duplicate `Close`/`End` frame or reports a spurious internal error; the exchange
+    is initiated at most once and the later call awaits the same outcome.
+
+28. **Breaking**: the link-state variants are flattened into the public errors:
+    `SendError`, `RecvError`, `PostError` and `ControllerSendError` carry `IllegalState`,
+    `InvariantViolation`, `InternalError`, `LinkDetached` and `SessionStopped` directly
+    instead of nesting `LinkError`, and their catch-all conversions are removed. `LinkError`
+    remains the error type for detach, flow and disposition operations. The unobservable
+    `session::Error::RemoteEnded`/`RemoteEndedWithError` variants and the dead
+    `connection::Error::RemoteClosed`/`RemoteClosedWithError`/`JoinError`/`NotAllowed`
+    variants are removed; a remote close is reported through the connection outcome only.
 
 ## 0.18.2
 

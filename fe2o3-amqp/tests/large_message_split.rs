@@ -293,7 +293,7 @@ async fn resume_on_new_connection_refreshes_max_frame_size() {
     });
 
     // Detach on A and resume the sender on connection B's session
-    let detached = sender.detach().await.unwrap();
+    let (detached, _status) = sender.detach().await.unwrap();
     recv_a_task.await.unwrap();
     let mut sender = common::expect_ok!(detached.resume_on_session(&session_b)).await;
 

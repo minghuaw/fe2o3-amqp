@@ -2,7 +2,7 @@
 
 use std::{marker::PhantomData, sync::Arc};
 
-use fe2o3_amqp_types::definitions::{Fields, SequenceNo};
+use fe2o3_amqp_types::definitions::{self, Fields, SequenceNo};
 use parking_lot::RwLock;
 
 use crate::{
@@ -15,7 +15,7 @@ use super::{role, ReceiverTransferError, SenderFlowState};
 /// Link state.
 ///
 /// There is no official definition of the link state in the specification
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum LinkState {
     /// The initial state after initialization
     Unattached,
@@ -41,14 +41,14 @@ pub enum LinkState {
     /// A non-closing detach frame has been sent
     DetachSent,
 
-    /// The link is detached
-    Detached,
+    /// The peer suspended the link; carries the peer's error from the detach
+    Detached(Option<definitions::Error>),
 
     /// A closing detach frame has been sent
     CloseSent,
 
-    /// The link is closed
-    Closed,
+    /// The peer closed the link; carries the peer's error from the detach
+    Closed(Option<definitions::Error>),
 }
 
 #[derive(Debug)]

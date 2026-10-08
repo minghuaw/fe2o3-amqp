@@ -121,6 +121,25 @@ pub(crate) enum SenderAttachExchange {
     Resume(Vec<(DeliveryTag, ResumingDelivery)>),
 }
 
+/// Whether an outgoing `Attach` continues an existing link (resume) or
+/// re-creates it (reattach).
+///
+/// The two are distinguished on the wire by the `unsettled` field:
+///
+/// - [`AttachMode::Resume`] advertises the unsettled map (a non-null, possibly
+///   empty map), so the peer can reconcile outstanding deliveries (AMQP 1.0
+///   §2.6.3/§2.6.13).
+/// - [`AttachMode::Reattach`] forces `unsettled` to be null; per §2.7.3 a
+///   genuine reattach, such as the one completing the §2.6.6 simultaneous-detach race,
+///   MUST NOT carry an unsettled map.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum AttachMode {
+    /// Continue an existing (suspended) link; advertise the unsettled map.
+    Resume,
+    /// Re-create the link; send a null unsettled map.
+    Reattach,
+}
+
 impl std::fmt::Debug for SenderAttachExchange {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
@@ -132,10 +151,19 @@ impl std::fmt::Debug for SenderAttachExchange {
 }
 
 impl SenderAttachExchange {
-    pub fn complete_or<E>(self, err: E) -> Result<(), E> {
+    /// Fail the deliveries of a non-complete exchange with `failure` instead
+    /// of dropping their settlement channels, then return `err`.
+    pub(crate) fn complete_or_fail_deliveries<E>(
+        self,
+        failure: DeliveryFailure,
+        err: E,
+    ) -> Result<(), E> {
         match self {
             Self::Complete => Ok(()),
-            _ => Err(err),
+            Self::IncompleteUnsettled(deliveries) | Self::Resume(deliveries) => {
+                resumption::fail_resuming_deliveries(deliveries, failure);
+                Err(err)
+            }
         }
     }
 }
@@ -208,7 +236,7 @@ pub(crate) struct Link<R, T, F, M> {
     pub(crate) unsettled: ArcUnsettledMap<M>,
 
     /// Why the session (or its connection) stopped, shared from the session
-    pub(crate) session_stop_reason: Arc<OnceLock<SessionStopReason>>,
+    pub(crate) session_stop_reason: Arc<OnceLock<SessionStopped>>,
 
     /// The negotiated max frame size (encoder max frame length), shared from
     /// the session and the connection; used to split transfers and attach
@@ -228,18 +256,24 @@ where
 {
     fn get_unsettled_map(
         &self,
-        is_reattaching: bool,
         partial_unsettled: usize,
+        is_resuming: bool,
     ) -> Option<OrderedMap<DeliveryTag, Option<DeliveryState>>> {
-        // When reattaching (as opposed to resuming), the unsettled map MUST be null.
-        if is_reattaching {
-            return None;
-        }
-
         let guard = self.unsettled.read();
-        let map = guard.as_ref()?;
+        let map = match guard.as_ref() {
+            Some(map) if !map.is_empty() => map,
+            // A resuming attach MUST carry a non-null unsettled field so it
+            // cannot be mistaken for a pipelined re-attach (AMQP 1.0 §2.6.5);
+            // an empty-but-present map is used when nothing is unsettled.
+            _ => {
+                return if is_resuming {
+                    Some(OrderedMap::new())
+                } else {
+                    None
+                };
+            }
+        };
         match (map.len(), partial_unsettled) {
-            (0, _) => None,
             (_, 0..=1) => {
                 let v = map
                     .iter()
@@ -258,17 +292,17 @@ where
         }
     }
 
-    fn as_complete_attach(&self, handle: OutputHandle, is_reattaching: bool) -> Attach {
-        self.as_attach_inner(handle, is_reattaching, 1)
+    fn as_complete_attach(&self, handle: OutputHandle, is_resuming: bool) -> Attach {
+        self.as_attach_inner(handle, 1, is_resuming)
     }
 
     fn as_attach_inner(
         &self,
         handle: OutputHandle,
-        is_reattaching: bool,
         partial_unsettled: usize,
+        is_resuming: bool,
     ) -> Attach {
-        let unsettled = self.get_unsettled_map(is_reattaching, partial_unsettled);
+        let unsettled = self.get_unsettled_map(partial_unsettled, is_resuming);
 
         let max_message_size = match self.max_message_size {
             0 => None,
@@ -305,19 +339,19 @@ where
         &self,
         max_frame_size: usize,
         handle: OutputHandle,
-        is_reattaching: bool,
+        is_resuming: bool,
     ) -> Result<Attach, SendAttachErrorKind> {
         let mut denominator = 1usize; // This is going to be the denominator
 
-        let mut attach = self.as_attach_inner(handle.clone(), is_reattaching, denominator);
+        let mut attach = self.as_attach_inner(handle.clone(), denominator, is_resuming);
         // `SizeSerializer` computes the serialized size without allocating a
         // buffer; only the size is needed here.
-        while serialized_size(&attach).map_err(|_| SendAttachErrorKind::IllegalState)? // This should not happen
+        while serialized_size(&attach).map_err(|_| SendAttachErrorKind::InvariantViolation)? // This should not happen
             > max_frame_size
         {
             denominator *= 2;
 
-            attach = self.as_attach_inner(handle.clone(), is_reattaching, denominator);
+            attach = self.as_attach_inner(handle.clone(), denominator, is_resuming);
         }
 
         Ok(attach)
@@ -330,49 +364,54 @@ where
     pub(crate) async fn send_attach_inner(
         &mut self,
         writer: &mpsc::Sender<LinkFrame>,
-        is_reattaching: bool,
+        mode: AttachMode,
     ) -> Result<(), SendAttachErrorKind> {
         // Create Attach frame
         let handle = match &self.output_handle {
             Some(h) => h.clone(),
-            None => return Err(SendAttachErrorKind::IllegalState),
+            None => return Err(SendAttachErrorKind::InvariantViolation),
         };
 
-        let unsettled_map_len = if is_reattaching {
-            // If reattaching, the unsettled map MUST be null
-            //
-            // It is ok to clear the map here because link will always try to send attach
-            // before it handles the remote attach.
-            let mut guard = self.unsettled.write();
-            *guard = None;
-            None
-        } else {
+        // A resuming attach carries a non-null unsettled map, including an
+        // empty-but-present map when nothing is unsettled. A reattach, such as
+        // the one completing the AMQP 1.0 §2.6.6 simultaneous-detach race, MUST carry a
+        // null `unsettled` field (§2.7.3).
+        let is_resuming = matches!(mode, AttachMode::Resume)
+            && matches!(
+                self.local_state,
+                LinkState::Detached(_) | LinkState::DetachSent
+            );
+
+        // Advertise the unsettled map on (re)attach so the peer can reconcile
+        // outstanding deliveries; resumption re-sends them.
+        let unsettled_map_len = {
             let guard = self.unsettled.read();
             guard.as_ref().map(|m| m.len())
         };
 
-        let attach = match unsettled_map_len {
-            Some(0) | None => self.as_complete_attach(handle, is_reattaching),
+        let mut attach = match unsettled_map_len {
+            Some(0) | None => self.as_complete_attach(handle, is_resuming),
             Some(_) => {
                 // The connection engine publishes the negotiated encoder max
                 // frame size before the connection handle is created; links
                 // are only attached after the connection is opened, so the
                 // value is always populated.
-                self.as_maybe_incomplete_attach(self.max_frame_size, handle, is_reattaching)?
+                self.as_maybe_incomplete_attach(self.max_frame_size, handle, is_resuming)?
             }
         };
+        if matches!(mode, AttachMode::Reattach) {
+            attach.unsettled = None;
+            attach.incomplete_unsettled = false;
+        }
         let incomplete_unsettled = attach.incomplete_unsettled;
         let frame = LinkFrame::Attach(attach);
 
         match self.local_state {
             LinkState::Unattached
-            | LinkState::Detached // May attempt to resume
+            | LinkState::Detached(_) // May attempt to resume
             | LinkState::DetachSent => {
                 writer.send(frame).await // cancel safe
-                    .map_err(|_| match self.session_stop_reason.get() {
-                        Some(reason) => SendAttachErrorKind::SessionStopped(reason.clone()),
-                        None => SendAttachErrorKind::IllegalState, // defensive: no stop reason recorded; failure is link-local
-                    })?;
+                    .map_err(|_| link_state_error_from_stop_reason(&self.session_stop_reason))?;
                 if incomplete_unsettled {
                     self.local_state = LinkState::IncompleteAttachSent
                 } else {
@@ -381,17 +420,14 @@ where
             }
             LinkState::AttachReceived => {
                 writer.send(frame).await // cancel safe
-                    .map_err(|_| match self.session_stop_reason.get() {
-                        Some(reason) => SendAttachErrorKind::SessionStopped(reason.clone()),
-                        None => SendAttachErrorKind::IllegalState, // defensive: no stop reason recorded; failure is link-local
-                    })?;
+                    .map_err(|_| link_state_error_from_stop_reason(&self.session_stop_reason))?;
                 if incomplete_unsettled {
                     self.local_state = LinkState::IncompleteAttachExchanged
                 } else {
                     self.local_state = LinkState::Attached
                 }
             }
-            _ => return Err(SendAttachErrorKind::IllegalState),
+            _ => return Err(SendAttachErrorKind::InvariantViolation),
         }
 
         Ok(())
@@ -408,7 +444,10 @@ where
     type DetachError = DetachError;
 
     #[cfg_attr(feature = "tracing", tracing::instrument(skip_all))]
-    fn on_detach_reply(&mut self, detach: Detach) -> Result<(), Self::DetachError> {
+    fn on_matching_detach_reply(
+        &mut self,
+        detach: Detach,
+    ) -> Result<LinkOutcome, Self::DetachError> {
         #[cfg(feature = "tracing")]
         tracing::trace!(detach = ?detach);
         #[cfg(feature = "log")]
@@ -419,17 +458,17 @@ where
         // session relay at arrival and recorded via
         // `apply_remote_detach_outcome`.
         //
-        // A crossing detach (closed while DetachSent, or open while
+        // A simultaneous detach (closed while DetachSent, or open while
         // CloseSent) must not be applied here: the caller reattaches first
         // (§2.6.6). Without this check `apply_remote_detach_outcome` would
         // terminalize the link and break that handshake.
         match self.local_state {
             LinkState::DetachSent if !detach.closed => {}
             LinkState::CloseSent if detach.closed => {}
-            _ => return Err(DetachError::IllegalState),
+            _ => return Err(DetachError::InvariantViolation),
         }
         self.apply_remote_detach_outcome(detach)
-            .map_err(DetachError::from)
+            .map_err(|_| DetachError::InvariantViolation)
     }
 
     /// # Cancel safety
@@ -442,11 +481,43 @@ where
         closed: bool,
         error: Option<definitions::Error>,
     ) -> Result<(), Self::DetachError> {
-        // Change the state whether sending the detach frame succeeds or not
+        // Change the state whether sending the detach frame succeeds or not.
+        //
+        // A detach is valid not only from `Attached`: it may also be sent while
+        // an attach exchange is still in progress (including the
+        // `IncompleteAttach*` states used by the AMQP 1.0 §2.6.13
+        // reduce/suspend/re-attempt cycle), matching the states accepted by
+        // `LinkEndpointInnerDetach::detach_with_error`.
         match (&self.local_state, closed) {
-            (LinkState::Attached, false) => self.local_state = LinkState::DetachSent,
-            (LinkState::Attached, true) => self.local_state = LinkState::CloseSent,
-            _ => return Err(DetachError::IllegalState),
+            (
+                LinkState::Attached
+                | LinkState::AttachSent
+                | LinkState::AttachReceived
+                | LinkState::IncompleteAttachSent
+                | LinkState::IncompleteAttachReceived
+                | LinkState::IncompleteAttachExchanged,
+                false,
+            ) => self.local_state = LinkState::DetachSent,
+            (
+                LinkState::Attached
+                | LinkState::AttachSent
+                | LinkState::AttachReceived
+                | LinkState::IncompleteAttachSent
+                | LinkState::IncompleteAttachReceived
+                | LinkState::IncompleteAttachExchanged,
+                true,
+            ) => self.local_state = LinkState::CloseSent,
+            (LinkState::Detached(remote_error), _) => {
+                return Err(DetachError::LinkDetached(LinkOutcome::Detached {
+                    remote_error: remote_error.clone(),
+                }));
+            }
+            (LinkState::Closed(remote_error), _) => {
+                return Err(DetachError::LinkDetached(LinkOutcome::Closed {
+                    remote_error: remote_error.clone(),
+                }));
+            }
+            _ => return Err(DetachError::InvariantViolation),
         };
 
         match self.output_handle.clone() {
@@ -466,15 +537,12 @@ where
                 let result = writer
                     .send(LinkFrame::Detach(detach))
                     .await // cancel safe
-                    .map_err(|_| match self.session_stop_reason.get() {
-                        Some(reason) => DetachError::SessionStopped(reason.clone()),
-                        None => DetachError::IllegalState, // defensive: no stop reason recorded; failure is link-local
-                    });
+                    .map_err(|_| detach_error_from_stop_reason(&self.session_stop_reason));
 
                 self.output_handle.take();
                 result
             }
-            None => Err(DetachError::IllegalState),
+            None => Err(DetachError::InvariantViolation),
         }
     }
 
@@ -483,8 +551,8 @@ where
     fn apply_remote_detach_outcome(
         &mut self,
         detach: Detach,
-    ) -> Result<(), ApplyRemoteDetachError> {
-        match self.local_state {
+    ) -> Result<LinkOutcome, ApplyRemoteDetachError> {
+        match self.local_state.clone() {
             LinkState::Attached
             | LinkState::AttachSent
             | LinkState::AttachReceived
@@ -493,24 +561,30 @@ where
             | LinkState::IncompleteAttachReceived
             | LinkState::DetachSent
             | LinkState::CloseSent => {
-                self.local_state = if detach.closed {
-                    LinkState::Closed
+                let status = if detach.closed {
+                    LinkOutcome::Closed {
+                        remote_error: detach.error.clone(),
+                    }
                 } else {
-                    LinkState::Detached
+                    LinkOutcome::Detached {
+                        remote_error: detach.error.clone(),
+                    }
+                };
+                self.local_state = if detach.closed {
+                    LinkState::Closed(detach.error)
+                } else {
+                    LinkState::Detached(detach.error)
                 };
                 let _ = self.output_handle.take();
-                match (detach.closed, detach.error) {
-                    (true, Some(error)) => {
-                        Err(ApplyRemoteDetachError::RemoteClosedWithError(error))
-                    }
-                    (true, None) => Ok(()),
-                    (false, Some(error)) => {
-                        Err(ApplyRemoteDetachError::RemoteDetachedWithError(error))
-                    }
-                    (false, None) => Ok(()),
-                }
+                Ok(status)
             }
-            _ => Err(ApplyRemoteDetachError::IllegalState),
+            LinkState::Unattached => Err(ApplyRemoteDetachError::InvariantViolation),
+            LinkState::Detached(remote_error) => Err(ApplyRemoteDetachError::AlreadyDetached(
+                remote_error.clone(),
+            )),
+            LinkState::Closed(remote_error) => {
+                Err(ApplyRemoteDetachError::AlreadyClosed(remote_error.clone()))
+            }
         }
     }
 }
@@ -805,9 +879,9 @@ impl LinkRelay<OutputHandle> {
     ///
     /// If the peer detached the link on its own, also returns the reply
     /// detach for the session to send back, and fails the still-pending
-    /// deliveries when the detach closes the link. If the detach instead
-    /// answers one the link sent itself, returns `None`: the engine's own
-    /// close/detach procedure is waiting for it.
+    /// deliveries when the detach closes the link or the endpoint is already
+    /// gone. If the detach instead answers one the link sent itself, returns
+    /// `None`: the engine's own close/detach procedure is waiting for it.
     ///
     /// Cancel safe: only `.await`s on sending over `tokio::mpsc::Sender`.
     pub(crate) async fn on_incoming_detach(
@@ -832,14 +906,18 @@ impl LinkRelay<OutputHandle> {
                     // link endpoint's local handshake consumes the forwarded
                     // frame — unless the endpoint was dropped, in which case
                     // the forward fails and nothing else would fail the
-                    // deliveries that are still pending on the closed link.
-                    if forward_result.is_err() && detach.closed {
+                    // deliveries that are still pending on the link.
+                    if forward_result.is_err() {
                         fail_pending_unsettled(unsettled, &detach);
                     }
                     return None;
                 }
 
-                if detach.closed {
+                // A remote-initiated closing detach destroys the link, so the
+                // pending deliveries can no longer be settled. A non-closing
+                // detach suspends it instead: a live endpoint keeps the
+                // deliveries resumable, but a dropped endpoint cannot.
+                if detach.closed || forward_result.is_err() {
                     fail_pending_unsettled(unsettled, &detach);
                 }
 
@@ -873,12 +951,17 @@ impl LinkRelay<OutputHandle> {
 /// drop path and the relay cannot fail the same delivery twice.
 fn fail_pending_unsettled(unsettled: &ArcSenderUnsettledMap, detach: &Detach) {
     if let Some(entries) = unsettled.write().take() {
+        let status = if detach.closed {
+            LinkOutcome::Closed {
+                remote_error: detach.error.clone(),
+            }
+        } else {
+            LinkOutcome::Detached {
+                remote_error: detach.error.clone(),
+            }
+        };
         for (_, entry) in entries {
-            let error = match detach.error.clone() {
-                Some(error) => LinkStateError::RemoteClosedWithError(error),
-                None => LinkStateError::RemoteClosed,
-            };
-            let _ = entry.fail(error);
+            let _ = entry.fail(DeliveryFailure::LinkDetached(status.clone()));
         }
     }
 }
@@ -910,7 +993,7 @@ pub(crate) mod test_util {
     //! `close_with_error` or the suspending side via `detach_with_error`).
 
     use fe2o3_amqp_types::{
-        definitions::Handle,
+        definitions::{self, Handle},
         performatives::{Attach, Detach},
     };
     use tokio::sync::mpsc;
@@ -930,12 +1013,15 @@ pub(crate) mod test_util {
     /// 3. on the link's `Attach`, reply with the peer's `Attach`;
     /// 4. on the link's second detach, reply with a closing detach.
     ///
+    /// The peer's simultaneous detach reply carries `peer_detach_error`.
+    ///
     /// Returns `(saw_attach, detaches)`.
     pub(crate) async fn drive_simultaneous_detach_race(
         mut session_rx: mpsc::Receiver<SessionControl>,
         mut outgoing_rx: mpsc::Receiver<LinkFrame>,
         initial_incoming_tx: mpsc::Sender<LinkFrame>,
         peer_attach: Attach,
+        peer_detach_error: Option<definitions::Error>,
     ) -> (bool, usize) {
         let mut incoming_tx = initial_incoming_tx;
         let mut saw_attach = false;
@@ -965,11 +1051,16 @@ pub(crate) mod test_util {
                         // reply with the opposite `closed`. Second: the reply
                         // to the closing detach we sent after reattaching.
                         let closed = if detaches == 1 { !detach.closed } else { true };
+                        let error = if detaches == 1 {
+                            peer_detach_error.clone()
+                        } else {
+                            None
+                        };
                         let _ = incoming_tx
                             .send(LinkFrame::Detach(Detach {
                                 handle: Handle(0),
                                 closed,
-                                error: None,
+                                error,
                             }))
                             .await;
                         if detaches >= 2 {

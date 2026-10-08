@@ -23,10 +23,10 @@ use tokio::{
 };
 
 use crate::{
-    connection::ConnectionStopReason,
+    connection::ConnectionOutcome,
     control::SessionControl,
     endpoint::{self, IncomingChannel, InputHandle, LinkFlow, OutgoingChannel, OutputHandle},
-    link::{LinkFrame, LinkRelay, SessionStopReason},
+    link::{LinkFrame, LinkRelay},
     util::{is_consecutive, Constant},
     Payload,
 };
@@ -36,7 +36,7 @@ cfg_transaction! {
 
     use crate::{
         endpoint::{HandleDeclare, HandleDischarge},
-        transaction::AllocTxnIdError,
+        transaction::CoordinatorAllocTxnIdError,
     };
 }
 
@@ -44,10 +44,13 @@ pub(crate) mod engine;
 pub(crate) mod frame;
 
 pub mod error;
+/// The outcome of a session's end, re-exported from [`crate::link`] where it
+/// is defined next to the link outcome.
+pub use crate::link::{SessionOutcome, SessionStopped};
 use error::{
     connection_stop_reason_or_closed, AllocLinkError, SessionInnerError, SessionStateError,
 };
-pub use error::{BeginError, Error, TryEndError};
+pub use error::{BeginError, Error};
 
 mod builder;
 pub use builder::*;
@@ -66,16 +69,23 @@ pub const DEFAULT_WINDOW: Uint = 5000;
 /// - `R`: The type of the listener for the link. This will be `()` on the client side.
 #[allow(dead_code)]
 pub struct SessionHandle<R> {
-    /// This value should only be changed in the `on_end` method
+    /// Whether the terminal end outcome was already observed; set in
+    /// `on_end`/`try_end`. Later terminal calls report
+    /// [`Error::AlreadyEnded`].
     pub(crate) is_ended: bool,
+    /// Whether an `End` control was already enqueued for the engine. Set by
+    /// `try_end`/`end`/`end_with_error` and checked by [`Drop`], so an end is
+    /// initiated at most once even when a non-blocking probe is followed by a
+    /// blocking end.
+    pub(crate) end_sent: bool,
     pub(crate) control: mpsc::Sender<SessionControl>,
     pub(crate) engine_handle: JoinHandle<()>,
-    pub(crate) outcome: oneshot::Receiver<Result<(), Error>>,
+    pub(crate) outcome: oneshot::Receiver<Result<SessionOutcome, Error>>,
 
     // outgoing for Link
     pub(crate) outgoing: mpsc::Sender<LinkFrame>,
     /// Why the session (or its connection) stopped, shared with the links
-    pub(crate) session_stop_reason: Arc<OnceLock<SessionStopReason>>,
+    pub(crate) session_stop_reason: Arc<OnceLock<SessionStopped>>,
     /// The negotiated max frame size (encoder max frame length), shared from
     /// the connection and with the links
     pub(crate) max_frame_size: usize,
@@ -90,6 +100,12 @@ impl<R> std::fmt::Debug for SessionHandle<R> {
 
 impl<R> Drop for SessionHandle<R> {
     fn drop(&mut self) {
+        // The end was already observed or initiated; do not send a second End
+        // frame (a duplicate `try_end` followed by a drop would otherwise
+        // send one after the session's End).
+        if self.is_ended || self.end_sent {
+            return;
+        }
         if let Err(_error) = self.control.try_send(SessionControl::End(None)) {
             #[cfg(any(feature = "log", feature = "tracing"))]
             {
@@ -104,13 +120,15 @@ impl<R> Drop for SessionHandle<R> {
                 #[cfg(feature = "log")]
                 log::warn!("Failed to enqueue End frame on session drop: {reason}");
             }
+        } else {
+            self.end_sent = true;
         }
     }
 }
 
 impl<R> SessionHandle<R> {
     /// The shared stop reason cell, used by links to observe why the session stopped
-    pub(crate) fn session_stop_reason(&self) -> &Arc<OnceLock<SessionStopReason>> {
+    pub(crate) fn session_stop_reason(&self) -> &Arc<OnceLock<SessionStopped>> {
         &self.session_stop_reason
     }
 
@@ -129,29 +147,53 @@ impl<R> SessionHandle<R> {
         }
     }
 
-    /// Tries to end the session
+    /// Tries to end the session without blocking.
+    ///
+    /// The `End` exchange is initiated at most once: a later `try_end` or
+    /// `end` does not send a second `End` frame. This reports the outcome if
+    /// it has arrived and [`None`] while the exchange is still in progress;
+    /// use [`on_end`](#method.on_end) to await the outcome.
+    ///
+    /// The end outcome is delivered once; a session whose outcome was already
+    /// observed reports [`Error::AlreadyEnded`]. Use
+    /// [`is_ended`](#method.is_ended) to query the state instead.
     ///
     /// # Returns
     ///
-    /// - `Ok(Ok(()))` if the session has ended successfully
-    /// - `Ok(Err(_))` if an error occurred during the session ending on either side
-    /// - `Err(TryEndError::AlreadyEnded)` if the session has already ended
-    /// - `Err(TryEndError::RemoteEndNotReceived)` if the remote end has not been received yet
-    pub fn try_end(&mut self) -> Result<Result<(), Error>, TryEndError> {
+    /// - `Ok(Some(outcome))` if the session ended by itself
+    /// - `Ok(None)` if the end exchange is still in progress
+    /// - `Err(error)` if the session stopped with a local error (including its
+    ///   connection stopping first)
+    /// - `Err(Error::AlreadyEnded)` if the outcome was already observed
+    /// # Errors
+    ///
+    /// Returns [`Error`] if the session stopped with a local failure or the
+    /// outcome was already observed (`Error::AlreadyEnded`); `Ok(None)` means
+    /// the end exchange is still in progress, use [`on_end`](#method.on_end)
+    /// to await it.
+    pub fn try_end(&mut self) -> Result<Option<SessionOutcome>, Error> {
         if self.is_ended {
-            return Err(TryEndError::AlreadyEnded);
+            return Err(Error::AlreadyEnded);
         }
 
-        let _ = self.control.try_send(SessionControl::End(None));
+        if !self.end_sent && self.control.try_send(SessionControl::End(None)).is_ok() {
+            self.end_sent = true;
+        }
+
         match self.outcome.try_recv() {
-            Ok(res) => {
+            Ok(Ok(outcome)) => {
                 self.is_ended = true;
-                Ok(res)
+                Ok(Some(outcome))
             }
-            Err(TryRecvError::Empty) => Err(TryEndError::RemoteEndNotReceived),
+            Ok(Err(error)) => {
+                self.is_ended = true;
+                Err(error)
+            }
+            Err(TryRecvError::Empty) => Ok(None),
             Err(TryRecvError::Closed) => {
                 self.is_ended = true;
-                Ok(Err(Error::IllegalState))
+                // The engine stopped without reporting its outcome.
+                Err(Error::InternalError)
             }
         }
     }
@@ -159,21 +201,35 @@ impl<R> SessionHandle<R> {
     cfg_not_wasm32! {
         /// End the session
         ///
-        /// If the connection stopped before the session, the session ends with it and
-        /// this method returns `Ok`; connection-level errors are reported through the
-        /// [`ConnectionHandle`](crate::connection::ConnectionHandle).
+        /// If the connection stopped before the session, the end exchange cannot
+        /// complete and this method returns `Err(Error::ConnectionStopped(reason))`,
+        /// consistent with link operations that fail when their session stopped.
         ///
-        /// An `Error::IllegalState` will be returned if called after any of [`end`](#method.end),
-        /// [`end_with_error`](#method.end_with_error), [`on_end`](#on_end) has beend executed. This
-        /// will cause the JoinHandle to be polled after completion, which causes a panic.
+        /// The end outcome is delivered once: the returned [`SessionOutcome`] reports
+        /// how the session ended (locally or by the remote) and carries the error the
+        /// peer or this side attached to the end, if any. Calling this after the
+        /// outcome was already observed reports [`Error::AlreadyEnded`]; use
+        /// [`is_ended`](#method.is_ended) to query the state instead.
         ///
         /// # wasm32 support
         ///
         /// This method is not supported on wasm32 targets, please use `drop()` instead.
-        pub async fn end(&mut self) -> Result<(), Error> {
-            // If sending is unsuccessful, the `SessionEngine` event loop is
-            // already dropped, this should be reflected by `JoinError` then.
-            let _ = self.control.send(SessionControl::End(None)).await;
+        /// # Errors
+        ///
+        /// Returns [`Error`] if the session stopped with a local failure
+        /// (`Error::ConnectionStopped` when the connection stopped first) or the
+        /// outcome was already observed (`Error::AlreadyEnded`). A remote end is
+        /// reported as the returned [`SessionOutcome`], not as an error.
+        pub async fn end(&mut self) -> Result<SessionOutcome, Error> {
+            if self.is_ended {
+                return Err(Error::AlreadyEnded);
+            }
+            if !self.end_sent {
+                // If sending is unsuccessful, the `SessionEngine` event loop
+                // is already dropped; the outcome channel reports it.
+                let _ = self.control.send(SessionControl::End(None)).await;
+                self.end_sent = true;
+            }
             self.on_end().await
         }
 
@@ -182,51 +238,85 @@ impl<R> SessionHandle<R> {
         /// # wasm32 support
         ///
         /// This method is not supported on wasm32 targets, please use `drop()` instead.
-        pub async fn close(&mut self) -> Result<(), Error> {
+        /// # Errors
+        ///
+        /// Returns [`Error`] if the session stopped with a local failure
+        /// (`Error::ConnectionStopped` when the connection stopped first) or the
+        /// outcome was already observed (`Error::AlreadyEnded`). A remote end is
+        /// reported as the returned [`SessionOutcome`], not as an error.
+        pub async fn close(&mut self) -> Result<SessionOutcome, Error> {
             self.end().await
         }
 
         /// End the session with an error
         ///
-        /// An `Error::IllegalState` will be returned if called after any of [`end`](#method.end),
-        /// [`end_with_error`](#method.end_with_error), [`on_end`](#on_end) has beend executed.
-        /// This will cause the JoinHandle to be polled after completion, which causes a panic.
+        /// On success the returned [`SessionOutcome`] is
+        /// [`EndedWithError`](SessionOutcome::EndedWithError). The outcome is delivered
+        /// once; calling this after the outcome was already observed reports
+        /// [`Error::AlreadyEnded`].
+        ///
+        /// If an end exchange was already initiated (by `try_end` or `end`),
+        /// no second `End` frame is sent and this error is not attached; the
+        /// initiated exchange is awaited instead.
         ///
         /// # wasm32 support
         ///
         /// This method is not supported on wasm32 targets, please use `drop()` instead.
+        /// # Errors
+        ///
+        /// Returns [`Error`] if the session stopped with a local failure
+        /// (`Error::ConnectionStopped` when the connection stopped first) or the
+        /// outcome was already observed (`Error::AlreadyEnded`). A remote end is
+        /// reported as the returned [`SessionOutcome`], not as an error.
         pub async fn end_with_error(
             &mut self,
             error: impl Into<definitions::Error>,
-        ) -> Result<(), Error> {
-            // If sending is unsuccessful, the `SessionEngine` event loop is
-            // already dropped, this should be reflected by `JoinError` then.
-            let _ = self
-                .control
-                .send(SessionControl::End(Some(error.into())))
-                .await;
+        ) -> Result<SessionOutcome, Error> {
+            if self.is_ended {
+                return Err(Error::AlreadyEnded);
+            }
+            if !self.end_sent {
+                // If sending is unsuccessful, the `SessionEngine` event loop
+                // is already dropped; the outcome channel reports it.
+                let _ = self
+                    .control
+                    .send(SessionControl::End(Some(error.into())))
+                    .await;
+                self.end_sent = true;
+            }
             self.on_end().await
         }
     }
 
     /// Returns when the underlying event loop has stopped
     ///
-    /// An `Error::IllegalState` will be returned if called after any of [`end`](#method.end),
-    /// [`end_with_error`](#method.end_with_error), [`on_end`](#on_end) has beend executed. This
-    /// will cause the JoinHandle to be polled after completion, which causes a panic.
-    pub async fn on_end(&mut self) -> Result<(), Error> {
+    /// The end outcome is delivered once. If the connection stopped first, this
+    /// reports `Err(Error::ConnectionStopped(reason))`; a session whose outcome was
+    /// already observed reports [`Error::AlreadyEnded`]. Use
+    /// [`is_ended`](#method.is_ended) to query the state instead.
+    /// # Errors
+    ///
+    /// Returns [`Error`] if the session stopped with a local failure
+    /// (`Error::ConnectionStopped` when the connection stopped first) or the
+    /// outcome was already observed (`Error::AlreadyEnded`). A remote end is
+    /// reported as the returned [`SessionOutcome`], not as an error.
+    pub async fn on_end(&mut self) -> Result<SessionOutcome, Error> {
         if self.is_ended {
-            return Err(Error::IllegalState);
+            return Err(Error::AlreadyEnded);
         }
-
         match (&mut self.outcome).await {
-            Ok(res) => {
+            Ok(Ok(outcome)) => {
                 self.is_ended = true;
-                res
+                Ok(outcome)
+            }
+            Ok(Err(error)) => {
+                self.is_ended = true;
+                Err(error)
             }
             Err(_) => {
                 self.is_ended = true;
-                Err(Error::IllegalState)
+                // The engine stopped without reporting its outcome.
+                Err(Error::InternalError)
             }
         }
     }
@@ -240,7 +330,7 @@ pub(crate) async fn allocate_link(
     control: &mpsc::Sender<SessionControl>,
     link_name: String,
     link_relay: LinkRelay<()>,
-    session_stop_reason: &Arc<OnceLock<SessionStopReason>>,
+    session_stop_reason: &Arc<OnceLock<SessionStopped>>,
 ) -> Result<OutputHandle, AllocLinkError> {
     let (responder, resp_rx) = oneshot::channel();
 
@@ -257,7 +347,7 @@ pub(crate) async fn allocate_link(
             log::warn!(
                 "allocate_link: session stop reason not recorded; reporting SessionStopped(Ended)"
             );
-            SessionStopReason::Ended
+            SessionStopped::Outcome(SessionOutcome::Ended)
         }
     };
 
@@ -321,11 +411,11 @@ pub struct Session {
 
     /// Why this session (or its connection) stopped, shared with the links
     /// and the session handle
-    pub(crate) session_stop_reason: Arc<OnceLock<SessionStopReason>>,
+    pub(crate) session_stop_reason: Arc<OnceLock<SessionStopped>>,
 
     /// Why the connection stopped, shared with the connection engine and the
     /// connection handle
-    pub(crate) connection_stop_reason: Arc<OnceLock<ConnectionStopReason>>,
+    pub(crate) connection_stop_reason: Arc<OnceLock<ConnectionOutcome>>,
 
     // local amqp states
     pub(crate) local_state: SessionState,
@@ -596,15 +686,15 @@ impl endpoint::Session for Session {
         &self.local_state
     }
 
-    fn set_session_stop_reason(&mut self, reason: SessionStopReason) {
+    fn set_session_stop_reason(&mut self, reason: SessionStopped) {
         let _ = self.session_stop_reason.set(reason);
     }
 
-    fn session_stop_reason(&self) -> &Arc<OnceLock<SessionStopReason>> {
+    fn session_stop_reason(&self) -> &Arc<OnceLock<SessionStopped>> {
         &self.session_stop_reason
     }
 
-    fn connection_stop_reason(&self) -> &Arc<OnceLock<ConnectionStopReason>> {
+    fn connection_stop_reason(&self) -> &Arc<OnceLock<ConnectionOutcome>> {
         &self.connection_stop_reason
     }
 
@@ -639,7 +729,9 @@ impl endpoint::Session for Session {
                             log::warn!(
                                 "allocate_link: session stop reason not recorded; reporting SessionStopped(Ended)"
                             );
-                            AllocLinkError::SessionStopped(SessionStopReason::Ended)
+                            AllocLinkError::SessionStopped(SessionStopped::Outcome(
+                                SessionOutcome::Ended,
+                            ))
                         }
                         // Not begun yet (or fully ended without a recorded stop):
                         // the session exists but is not mapped
@@ -964,7 +1056,16 @@ impl endpoint::Session for Session {
                 }
                 Ok(())
             }
-            _ => Err(SessionStateError::IllegalState), // End session with illegal state?
+            // A late or duplicate `End` arrives when the session has not
+            // begun or has already received its `End`; it is ignored because
+            // the session already reached its terminal state.
+            _ => {
+                #[cfg(feature = "tracing")]
+                tracing::trace!(?end, "ignoring a late or duplicate incoming End");
+                #[cfg(feature = "log")]
+                log::trace!("ignoring a late or duplicate incoming End: {:?}", end);
+                Ok(())
+            }
         }
     }
 
@@ -1007,7 +1108,7 @@ impl endpoint::Session for Session {
                 })?;
                 self.local_state = SessionState::Mapped;
             }
-            _ => return Err(SessionStateError::IllegalState),
+            _ => return Err(SessionStateError::InvariantViolation),
         }
 
         Ok(())
@@ -1024,7 +1125,7 @@ impl endpoint::Session for Session {
                 false => self.local_state = SessionState::EndSent,
             },
             SessionState::EndReceived => self.local_state = SessionState::Unmapped,
-            _ => return Err(SessionStateError::IllegalState),
+            _ => return Err(SessionStateError::InvariantViolation),
         }
 
         let frame = SessionFrame::new(self.outgoing_channel, SessionFrameBody::End(End { error }));
@@ -1189,9 +1290,9 @@ cfg_transaction! {
         // This should be unreachable, but an error is probably a better way
         fn allocate_transaction_id(
             &mut self,
-        ) -> Result<fe2o3_amqp_types::transaction::TransactionId, AllocTxnIdError> {
+        ) -> Result<fe2o3_amqp_types::transaction::TransactionId, CoordinatorAllocTxnIdError> {
             // Err(Error::amqp_error(AmqpError::NotImplemented, "Resource side transaction is not enabled".to_string()))
-            Err(AllocTxnIdError::NotImplemented)
+            Err(CoordinatorAllocTxnIdError::NotImplemented)
         }
     }
 
@@ -1314,5 +1415,252 @@ mod tests {
         session.need_flow_count = u32::MAX;
 
         assert!(session.maybe_outgoing_session_flow().is_none());
+    }
+
+    /// Sending `begin` from a state that already sent one is an internal
+    /// invariant violation, not a peer violation.
+    #[tokio::test]
+    async fn send_begin_in_wrong_state_is_invariant_violation() {
+        let mut session = mapped_session();
+        session.local_state = SessionState::BeginSent;
+        let (writer, _rx) = tokio::sync::mpsc::channel(8);
+
+        let result = session.send_begin(&writer).await;
+
+        assert!(matches!(
+            result,
+            Err(crate::session::error::SessionStateError::InvariantViolation)
+        ));
+    }
+
+    /// Sending `end` from a state that already sent one is an internal
+    /// invariant violation, not a peer violation.
+    #[tokio::test]
+    async fn send_end_in_wrong_state_is_invariant_violation() {
+        let mut session = mapped_session();
+        session.local_state = SessionState::EndSent;
+        let (writer, _rx) = tokio::sync::mpsc::channel(8);
+
+        let result = session.send_end(&writer, None).await;
+
+        assert!(matches!(
+            result,
+            Err(crate::session::error::SessionStateError::InvariantViolation)
+        ));
+    }
+
+    /// A duplicate incoming `End` is ignored once the session already received
+    /// one.
+    #[test]
+    fn duplicate_incoming_end_is_ignored() {
+        use crate::endpoint::IncomingChannel;
+        use fe2o3_amqp_types::performatives::End;
+
+        let mut session = mapped_session();
+        session.local_state = SessionState::EndReceived;
+
+        let result = session.on_incoming_end(IncomingChannel(0), End { error: None });
+
+        assert!(result.is_ok());
+    }
+
+    /// A session that stopped with a local (non-outcome) error reports that
+    /// error once; later calls report `AlreadyEnded` because the outcome was
+    /// already observed.
+    #[tokio::test]
+    async fn terminal_local_error_then_already_ended() {
+        use tokio::sync::{mpsc, oneshot};
+
+        let (control, _control_rx) = mpsc::channel(8);
+        let (outgoing, _outgoing_rx) = mpsc::channel(8);
+        let (outcome_tx, outcome) =
+            oneshot::channel::<Result<super::SessionOutcome, super::Error>>();
+        outcome_tx
+            .send(Err(super::Error::IllegalState))
+            .expect("the receiver is held");
+        let mut handle = super::SessionHandle {
+            is_ended: false,
+            end_sent: false,
+            control,
+            engine_handle: tokio::spawn(async {}),
+            outcome,
+            outgoing,
+            session_stop_reason: Arc::new(OnceLock::new()),
+            max_frame_size: 0,
+            link_listener: (),
+        };
+
+        let error = handle.on_end().await.expect_err("a local error");
+        assert!(matches!(error, super::Error::IllegalState));
+
+        let error = handle
+            .on_end()
+            .await
+            .expect_err("the outcome was already observed");
+        assert!(matches!(error, super::Error::AlreadyEnded));
+
+        assert!(matches!(handle.try_end(), Err(super::Error::AlreadyEnded)));
+    }
+
+    /// A session that stopped with its connection reports the connection stop
+    /// as an error once; later calls report `AlreadyEnded`.
+    #[tokio::test]
+    async fn terminal_connection_stop_then_already_ended() {
+        use crate::connection::ConnectionOutcome;
+        use tokio::sync::{mpsc, oneshot};
+
+        let (control, _control_rx) = mpsc::channel(8);
+        let (outgoing, _outgoing_rx) = mpsc::channel(8);
+        let (outcome_tx, outcome) =
+            oneshot::channel::<Result<super::SessionOutcome, super::Error>>();
+        outcome_tx
+            .send(Err(super::Error::ConnectionStopped(
+                ConnectionOutcome::RemoteClosed,
+            )))
+            .expect("the receiver is held");
+        let mut handle = super::SessionHandle {
+            is_ended: false,
+            end_sent: false,
+            control,
+            engine_handle: tokio::spawn(async {}),
+            outcome,
+            outgoing,
+            session_stop_reason: Arc::new(OnceLock::new()),
+            max_frame_size: 0,
+            link_listener: (),
+        };
+
+        let error = handle.on_end().await.expect_err("the connection stopped");
+        assert!(matches!(
+            error,
+            super::Error::ConnectionStopped(ConnectionOutcome::RemoteClosed)
+        ));
+
+        let error = handle
+            .on_end()
+            .await
+            .expect_err("the outcome was already observed");
+        assert!(matches!(error, super::Error::AlreadyEnded));
+
+        assert!(matches!(handle.try_end(), Err(super::Error::AlreadyEnded)));
+    }
+
+    /// An outcome channel dropped without a result (the engine stopped without
+    /// reporting) is an internal error.
+    #[tokio::test]
+    async fn dropped_outcome_reports_internal_error() {
+        use tokio::sync::{mpsc, oneshot};
+
+        let (control, _control_rx) = mpsc::channel(8);
+        let (outgoing, _outgoing_rx) = mpsc::channel(8);
+        let (outcome_tx, outcome) =
+            oneshot::channel::<Result<super::SessionOutcome, super::Error>>();
+        drop(outcome_tx);
+        let mut handle = super::SessionHandle {
+            is_ended: false,
+            end_sent: false,
+            control,
+            engine_handle: tokio::spawn(async {}),
+            outcome,
+            outgoing,
+            session_stop_reason: Arc::new(OnceLock::new()),
+            max_frame_size: 0,
+            link_listener: (),
+        };
+
+        let error = handle.on_end().await.expect_err("an internal error");
+        assert!(matches!(error, super::Error::InternalError));
+    }
+
+    /// `try_end` on an engine that stopped without reporting an outcome
+    /// reports an internal error.
+    #[tokio::test]
+    async fn try_end_with_dropped_outcome_reports_internal_error() {
+        use tokio::sync::{mpsc, oneshot};
+
+        let (control, _control_rx) = mpsc::channel(8);
+        let (outgoing, _outgoing_rx) = mpsc::channel(8);
+        let (outcome_tx, outcome) =
+            oneshot::channel::<Result<super::SessionOutcome, super::Error>>();
+        drop(outcome_tx);
+        let mut handle = super::SessionHandle {
+            is_ended: false,
+            end_sent: false,
+            control,
+            engine_handle: tokio::spawn(async {}),
+            outcome,
+            outgoing,
+            session_stop_reason: Arc::new(OnceLock::new()),
+            max_frame_size: 0,
+            link_listener: (),
+        };
+
+        let error = handle.try_end().expect_err("an internal error");
+        assert!(matches!(error, super::Error::InternalError));
+    }
+
+    /// `try_end` enqueues the `End` control at most once, even when followed
+    /// by another `try_end` or a drop.
+    #[tokio::test]
+    async fn try_end_sends_the_end_once() {
+        use tokio::sync::{mpsc, oneshot};
+
+        let (control, mut control_rx) = mpsc::channel(8);
+        let (outgoing, _outgoing_rx) = mpsc::channel(8);
+        let (_outcome_tx, outcome) =
+            oneshot::channel::<Result<super::SessionOutcome, super::Error>>();
+        let mut handle = super::SessionHandle {
+            is_ended: false,
+            end_sent: false,
+            control,
+            engine_handle: tokio::spawn(async {}),
+            outcome,
+            outgoing,
+            session_stop_reason: Arc::new(OnceLock::new()),
+            max_frame_size: 0,
+            link_listener: (),
+        };
+
+        assert!(matches!(handle.try_end(), Ok(None)));
+        assert!(matches!(
+            control_rx.try_recv(),
+            Ok(super::SessionControl::End(None))
+        ));
+
+        // A second probe and the drop do not enqueue another End.
+        assert!(matches!(handle.try_end(), Ok(None)));
+        drop(handle);
+        assert!(control_rx.try_recv().is_err());
+    }
+
+    /// `try_end` reports the outcome once and then `AlreadyEnded`.
+    #[tokio::test]
+    async fn try_end_reports_the_outcome_once() {
+        use tokio::sync::{mpsc, oneshot};
+
+        let (control, _control_rx) = mpsc::channel(8);
+        let (outgoing, _outgoing_rx) = mpsc::channel(8);
+        let (outcome_tx, outcome) =
+            oneshot::channel::<Result<super::SessionOutcome, super::Error>>();
+        outcome_tx
+            .send(Ok(super::SessionOutcome::Ended))
+            .expect("the receiver is held");
+        let mut handle = super::SessionHandle {
+            is_ended: false,
+            end_sent: false,
+            control,
+            engine_handle: tokio::spawn(async {}),
+            outcome,
+            outgoing,
+            session_stop_reason: Arc::new(OnceLock::new()),
+            max_frame_size: 0,
+            link_listener: (),
+        };
+
+        assert!(matches!(
+            handle.try_end(),
+            Ok(Some(super::SessionOutcome::Ended))
+        ));
+        assert!(matches!(handle.try_end(), Err(super::Error::AlreadyEnded)));
     }
 }

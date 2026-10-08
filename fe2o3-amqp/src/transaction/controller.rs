@@ -6,14 +6,14 @@ use fe2o3_amqp_types::{
 use tokio::sync::{oneshot, Mutex};
 
 use crate::{
-    endpoint::Settlement,
+    endpoint::{LinkExt as _, Settlement},
     link::{
         self,
         builder::{WithSource, WithoutName, WithoutTarget},
         role,
         sender::SenderInner,
         shared_inner::LinkEndpointInnerDetach,
-        LinkStateError, SendError, SenderAttachError, SenderLink,
+        DeliveryFailure, SendError, SenderAttachError, SenderLink,
     },
     session::SessionHandle,
     Sendable,
@@ -48,7 +48,7 @@ pub struct Controller {
 async fn send_on_control_link<T>(
     sender: &mut SenderInner<ControlLink>,
     sendable: Sendable<T>,
-) -> Result<oneshot::Receiver<Result<Option<DeliveryState>, LinkStateError>>, link::SendError>
+) -> Result<oneshot::Receiver<Result<Option<DeliveryState>, DeliveryFailure>>, link::SendError>
 where
     T: SerializableBody,
 {
@@ -82,9 +82,11 @@ pub(crate) async fn declare_on_link(
     let outcome = send_on_control_link(inner, sendable)
         .await?
         .await
-        .map_err(|_| match inner.link.session_stop_reason.get() {
-            Some(reason) => LinkStateError::SessionStopped(reason.clone()),
-            None => LinkStateError::IllegalState, // defensive: no stop reason recorded; failure is link-local
+        .map_err(|_| {
+            link::link_error_from_closed_channel(
+                &inner.link.session_stop_reason,
+                inner.link.local_state(),
+            )
         })?;
     let outcome = outcome?;
     outcome
@@ -115,9 +117,11 @@ pub(crate) async fn discharge_on_link(
     let outcome = send_on_control_link(inner, sendable)
         .await?
         .await
-        .map_err(|_| match inner.link.session_stop_reason.get() {
-            Some(reason) => LinkStateError::SessionStopped(reason.clone()),
-            None => LinkStateError::IllegalState, // defensive: no stop reason recorded; failure is link-local
+        .map_err(|_| {
+            link::link_error_from_closed_channel(
+                &inner.link.session_stop_reason,
+                inner.link.local_state(),
+            )
         })?;
     let outcome = outcome?;
     outcome
@@ -153,12 +157,12 @@ impl Controller {
     pub async fn close_with_error(
         mut self,
         error: definitions::Error,
-    ) -> Result<(), link::DetachError> {
+    ) -> Result<link::LinkOutcome, link::DetachError> {
         self.inner.get_mut().close_with_error(Some(error)).await
     }
 
     /// Close the link
-    pub async fn close(mut self) -> Result<(), link::DetachError> {
+    pub async fn close(mut self) -> Result<link::LinkOutcome, link::DetachError> {
         self.inner.get_mut().close_with_error(None).await
     }
 

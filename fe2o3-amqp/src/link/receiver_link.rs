@@ -53,17 +53,14 @@ where
         let handle = self
             .output_handle
             .clone()
-            .ok_or(Self::FlowError::IllegalState)?
+            .ok_or(Self::FlowError::InvariantViolation)?
             .into();
 
         let flow = self.get_link_flow(handle, link_credit, drain, echo, include_properties);
         writer
             .send(LinkFrame::Flow(flow))
             .await // cancel safe
-            .map_err(|_| match self.session_stop_reason.get() {
-                Some(reason) => Self::FlowError::SessionStopped(reason.clone()),
-                None => Self::FlowError::IllegalState, // defensive: no stop reason recorded; failure is link-local
-            })
+            .map_err(|_| link_state_error_from_stop_reason(&self.session_stop_reason))
     }
 
     fn on_transfer_state(
@@ -142,7 +139,17 @@ where
     {
         match self.local_state {
             LinkState::Attached | LinkState::IncompleteAttachExchanged => {}
-            _ => return Err(ReceiverTransferError::IllegalState),
+            _ => {
+                // A transfer that arrives when the link is not attached is
+                // classified from the recorded state: a terminal link reports
+                // its outcome, a stopped session its stop reason, and anything
+                // else is a defensive invariant violation.
+                return Err(link_error_from_closed_channel(
+                    &self.session_stop_reason,
+                    &self.local_state,
+                )
+                .into());
+            }
         }
 
         // ReceiverFlowState will not wait until link credit is available.
@@ -224,7 +231,7 @@ where
         let link_output_handle = self
             .output_handle
             .clone()
-            .ok_or(ReceiverTransferError::IllegalState)?
+            .ok_or(LinkError::InvariantViolation)?
             .into();
 
         let delivery = Delivery {
@@ -297,10 +304,7 @@ where
             writer
                 .send(frame)
                 .await // cancel safe
-                .map_err(|_| match self.session_stop_reason.get() {
-                    Some(reason) => Self::DispositionError::SessionStopped(reason.clone()),
-                    None => Self::DispositionError::IllegalState, // defensive: no stop reason recorded; failure is link-local
-                })?;
+                .map_err(|_| link_state_error_from_stop_reason(&self.session_stop_reason))?;
         }
 
         Ok(())
@@ -422,25 +426,46 @@ impl ReceiverLink<Target> {
             let handle = self
                 .output_handle
                 .clone()
-                .ok_or(FlowError::IllegalState)?
+                .ok_or(FlowError::InvariantViolation)?
                 .into();
 
             let flow = self.get_link_flow(handle, link_credit, drain, echo, include_properties);
             writer
                 .blocking_send(LinkFrame::Flow(flow))
-                .map_err(|_| match self.session_stop_reason.get() {
-                    Some(reason) => FlowError::SessionStopped(reason.clone()),
-                    None => FlowError::IllegalState, // defensive: no stop reason recorded; failure is link-local
-                })
+                .map_err(|_| link_state_error_from_stop_reason(&self.session_stop_reason))
         }
     }
 }
 
 impl<T> ReceiverLink<T> {
-    fn handle_unsettled_in_attach(
+    pub(crate) fn handle_unsettled_in_attach(
         &mut self,
         remote_unsettled: Option<OrderedMap<DeliveryTag, Option<DeliveryState>>>,
+        remote_incomplete_unsettled: bool,
     ) -> ReceiverAttachExchange {
+        // AMQP 1.0 §2.6.13: with a complete remote map, deliveries that only
+        // this side considers unsettled (target-only) MUST be considered
+        // settled. Absence from an incomplete map is not evidence of
+        // settlement, so nothing is removed in that case.
+        if !remote_incomplete_unsettled {
+            let mut guard = self.unsettled.write();
+            if let Some(local) = guard.as_mut() {
+                match &remote_unsettled {
+                    Some(remote) => {
+                        let stale: Vec<DeliveryTag> = local
+                            .keys()
+                            .filter(|tag| !remote.contains_key(*tag))
+                            .cloned()
+                            .collect();
+                        for tag in stale {
+                            let _ = local.swap_remove(&tag);
+                        }
+                    }
+                    None => local.clear(),
+                }
+            }
+        }
+
         let remote_is_empty = match remote_unsettled {
             Some(map) => map.is_empty(),
             None => true,
@@ -511,10 +536,7 @@ impl<T> ReceiverLink<T> {
         writer
             .send(frame)
             .await // cancel safe
-            .map_err(|_| match self.session_stop_reason.get() {
-                Some(reason) => DispositionError::SessionStopped(reason.clone()),
-                None => DispositionError::IllegalState, // defensive: no stop reason recorded; failure is link-local
-            })
+            .map_err(|_| link_state_error_from_stop_reason(&self.session_stop_reason))
     }
 
     fn get_link_flow(
@@ -655,13 +677,13 @@ where
             (LinkState::IncompleteAttachSent, false) => {
                 self.local_state = LinkState::IncompleteAttachExchanged;
             }
-            (LinkState::Unattached, false) | (LinkState::Detached, false) => {
+            (LinkState::Unattached, false) | (LinkState::Detached(_), false) => {
                 self.local_state = LinkState::AttachReceived; // re-attaching
             }
             (LinkState::AttachSent, true) | (LinkState::IncompleteAttachSent, true) => {
                 self.local_state = LinkState::IncompleteAttachExchanged;
             }
-            (LinkState::Unattached, true) | (LinkState::Detached, true) => {
+            (LinkState::Unattached, true) | (LinkState::Detached(_), true) => {
                 self.local_state = LinkState::IncompleteAttachReceived; // re-attaching
             }
             _ => return Err(ReceiverAttachError::IllegalState),
@@ -742,7 +764,8 @@ where
         }
 
         // Ok(Self::AttachExchange::Complete)
-        Ok(self.handle_unsettled_in_attach(remote_attach.unsettled))
+        let incomplete_unsettled = remote_attach.incomplete_unsettled;
+        Ok(self.handle_unsettled_in_attach(remote_attach.unsettled, incomplete_unsettled))
     }
 
     /// # Cancel safety
@@ -753,9 +776,9 @@ where
     async fn send_attach(
         &mut self,
         writer: &mpsc::Sender<LinkFrame>,
-        is_reattaching: bool,
+        mode: AttachMode,
     ) -> Result<(), Self::AttachError> {
-        self.send_attach_inner(writer, is_reattaching).await?;
+        self.send_attach_inner(writer, mode).await?;
         Ok(())
     }
 }
@@ -795,7 +818,7 @@ where
         &mut self.output_handle
     }
 
-    fn session_stop_reason(&self) -> &Arc<OnceLock<SessionStopReason>> {
+    fn session_stop_reason(&self) -> &Arc<OnceLock<SessionStopped>> {
         &self.session_stop_reason
     }
 
@@ -842,19 +865,17 @@ where
         &mut self,
         writer: &mpsc::Sender<LinkFrame>,
         reader: &mut mpsc::Receiver<LinkFrame>,
-        is_reattaching: bool,
+        mode: AttachMode,
     ) -> Result<Self::AttachExchange, ReceiverAttachError> {
         // Send out local attach
-        self.send_attach(writer, is_reattaching).await?;
+        self.send_attach(writer, mode).await?;
 
         // Wait for remote attach
         let remote_attach = match reader
             .recv()
             .await // cancel safe
-            .ok_or_else(|| match self.session_stop_reason.get() {
-                Some(reason) => ReceiverAttachError::SessionStopped(reason.clone()),
-                None => ReceiverAttachError::IllegalState, // defensive: no stop reason recorded; failure is link-local
-            })? {
+            .ok_or_else(|| receiver_attach_error_from_stop_reason(&self.session_stop_reason))?
+        {
             LinkFrame::Attach(attach) => attach,
             _ => return Err(ReceiverAttachError::NonAttachFrameReceived),
         };
@@ -872,9 +893,7 @@ where
         match attach_error {
             // Errors that indicate failed attachment
             ReceiverAttachError::SessionStopped(_)
-            | ReceiverAttachError::IllegalState
             | ReceiverAttachError::NonAttachFrameReceived
-            | ReceiverAttachError::ExpectImmediateDetach
             | ReceiverAttachError::RemoteClosedWithError(_) => attach_error,
 
             ReceiverAttachError::DuplicatedLinkName => {
@@ -887,44 +906,74 @@ where
                     .send(SessionControl::End(Some(error)))
                     .await
                     .map(|_| attach_error)
-                    .unwrap_or(match self.session_stop_reason.get() {
-                        Some(reason) => ReceiverAttachError::SessionStopped(reason.clone()),
-                        None => ReceiverAttachError::IllegalState, // defensive: no stop reason recorded; failure is link-local
-                    })
+                    .unwrap_or(receiver_attach_error_from_stop_reason(
+                        &self.session_stop_reason,
+                    ))
             }
 
             // ReceiverAttachError::SndSettleModeNotSupported
             ReceiverAttachError::IncomingSourceIsNone => {
                 // Just send detach immediately
-                let err = self
-                    .send_detach(writer, true, None)
-                    .await
-                    .map(|_| attach_error)
-                    .unwrap_or(match self.session_stop_reason.get() {
-                        Some(reason) => ReceiverAttachError::SessionStopped(reason.clone()),
-                        None => ReceiverAttachError::IllegalState, // defensive: no stop reason recorded; failure is link-local
-                    });
-                recv_detach(self, reader, err).await
+                match self.send_detach(writer, true, None).await {
+                    Ok(()) => recv_detach(self, reader, attach_error).await,
+                    Err(detach_error) => receiver_detach_failure(detach_error, attach_error),
+                }
             }
 
             ReceiverAttachError::CoordinatorIsNotImplemented
+            | ReceiverAttachError::IllegalState
             | ReceiverAttachError::InitialDeliveryCountIsNone
             | ReceiverAttachError::SourceAddressIsNoneWhenDynamicIsTrue
             | ReceiverAttachError::TargetAddressIsSomeWhenDynamicIsTrue
             | ReceiverAttachError::DynamicNodePropertiesIsSomeWhenDynamicIsFalse => {
-                match (&attach_error).try_into() {
-                    Ok(error) => match self.send_detach(writer, true, Some(error)).await {
-                        Ok(_) => recv_detach(self, reader, attach_error).await,
-                        Err(_) => match self.session_stop_reason.get() {
-                            Some(reason) => ReceiverAttachError::SessionStopped(reason.clone()),
-                            None => ReceiverAttachError::IllegalState, // defensive: no stop reason recorded; failure is link-local
-                        },
-                    },
-                    Err(_) => attach_error,
-                }
+                try_detach_with_error(self, attach_error, writer, reader).await
             }
             _ => attach_error,
         }
+    }
+}
+
+/// Classify a rejected attach whose closing detach could not be sent.
+///
+/// An already terminal link is not a failure by itself: when the stored
+/// outcome carries a remote error the remote error is reported, otherwise the
+/// attach failure stays the primary error. A session stop always wins.
+fn receiver_detach_failure(
+    detach_error: DetachError,
+    attach_error: ReceiverAttachError,
+) -> ReceiverAttachError {
+    match detach_error {
+        DetachError::SessionStopped(reason) => ReceiverAttachError::SessionStopped(reason),
+        DetachError::LinkDetached(status) => match status.remote_error() {
+            Some(error) => ReceiverAttachError::RemoteClosedWithError(error.clone()),
+            None => attach_error,
+        },
+        DetachError::IllegalState
+        | DetachError::InvariantViolation
+        | DetachError::InternalError => attach_error,
+    }
+}
+
+async fn try_detach_with_error<T>(
+    link: &mut ReceiverLink<T>,
+    attach_error: ReceiverAttachError,
+    writer: &mpsc::Sender<LinkFrame>,
+    reader: &mut mpsc::Receiver<LinkFrame>,
+) -> ReceiverAttachError
+where
+    T: Into<TargetArchetype>
+        + TryFrom<TargetArchetype>
+        + VerifyTargetArchetype
+        + Clone
+        + Send
+        + Sync,
+{
+    match (&attach_error).try_into() {
+        Ok(error) => match link.send_detach(writer, true, Some(error)).await {
+            Ok(()) => recv_detach(link, reader, attach_error).await,
+            Err(detach_error) => receiver_detach_failure(detach_error, attach_error),
+        },
+        Err(_) => attach_error,
     }
 }
 
@@ -942,15 +991,31 @@ where
         + Sync,
 {
     match reader.recv().await {
-        Some(LinkFrame::Detach(remote_detach)) => match link.on_detach_reply(remote_detach) {
-            Ok(_) => err,
-            Err(detach_error) => detach_error.try_into().unwrap_or(err),
-        },
+        Some(LinkFrame::Detach(remote_detach)) => {
+            if !remote_detach.closed {
+                // §2.6.6: the peer's non-closing detach crossed our rejection
+                // closing detach, so the peer must reattach and then close.
+                // The attach already failed, so the primary attach error
+                // stands (the reattach dance is not completed on this path).
+                #[cfg(feature = "tracing")]
+                tracing::debug!(
+                    "peer detach crossed the rejection detach; keeping the attach error"
+                );
+                #[cfg(feature = "log")]
+                log::debug!("peer detach crossed the rejection detach; keeping the attach error");
+                return err;
+            }
+
+            match link.on_matching_detach_reply(remote_detach) {
+                Ok(status) => match status.remote_error() {
+                    Some(error) => ReceiverAttachError::RemoteClosedWithError(error.clone()),
+                    None => err,
+                },
+                Err(detach_error) => ReceiverAttachError::from(detach_error),
+            }
+        }
         Some(_) => ReceiverAttachError::NonAttachFrameReceived,
-        None => match link.session_stop_reason.get() {
-            Some(reason) => ReceiverAttachError::SessionStopped(reason.clone()),
-            None => ReceiverAttachError::IllegalState, // defensive: no stop reason recorded; failure is link-local
-        },
+        None => receiver_attach_error_from_stop_reason(&link.session_stop_reason),
     }
 }
 
