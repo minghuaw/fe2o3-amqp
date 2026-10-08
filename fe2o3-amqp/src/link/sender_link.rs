@@ -100,7 +100,7 @@ where
         let input_handle = self
             .input_handle
             .clone()
-            .ok_or(LinkStateError::InvariantViolation)?;
+            .ok_or(LinkError::InvariantViolation)?;
 
         // The connection engine publishes the negotiated encoder max frame
         // length before the connection handle is created; links are only
@@ -302,7 +302,7 @@ where
         let handle = self
             .output_handle
             .clone()
-            .ok_or(LinkStateError::InvariantViolation)?
+            .ok_or(LinkError::InvariantViolation)?
             .into();
 
         let settled = match self.snd_settle_mode {
@@ -395,7 +395,7 @@ where
         let delivery_tag = transfer
             .delivery_tag
             .clone()
-            .ok_or(LinkStateError::InvariantViolation)?;
+            .ok_or(LinkError::InvariantViolation)?;
         if self.is_settled_on_send(&transfer) {
             self.send_transfer_without_modifying_unsettled_map(writer, transfer, payload)
                 .await?;
@@ -558,7 +558,7 @@ async fn send_transfer(
     transfer: Transfer,
     payload: Payload,
     session_stop_reason: &OnceLock<SessionStopped>,
-) -> Result<(), LinkStateError> {
+) -> Result<(), LinkError> {
     let frame = LinkFrame::Transfer {
         input_handle,
         performative: transfer,
@@ -579,7 +579,7 @@ async fn send_disposition(
     state: Option<DeliveryState>,
     batchable: bool,
     session_stop_reason: &OnceLock<SessionStopped>,
-) -> Result<(), LinkStateError> {
+) -> Result<(), LinkError> {
     let disposition = Disposition {
         role: Role::Sender,
         first,

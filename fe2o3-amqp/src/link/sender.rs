@@ -37,8 +37,8 @@ use super::{
         LinkEndpointInnerReattach, PeerViolationCloseExt,
     },
     state::LinkState,
-    ArcSenderUnsettledMap, AttachMode, DeliveryFailure, DetachThenResumeSenderError, LinkFrame,
-    LinkOutcome, LinkRelay, LinkStateError, MessageSizeExceeded, SendError, SenderAttachError,
+    ArcSenderUnsettledMap, AttachMode, DeliveryFailure, DetachThenResumeSenderError, LinkError,
+    LinkFrame, LinkOutcome, LinkRelay, MessageSizeExceeded, SendError, SenderAttachError,
     SenderAttachExchange, SenderFlowState, SenderLink, SenderResumeError, SenderResumeErrorKind,
     SessionStopped, TransferError,
 };
@@ -522,10 +522,10 @@ impl Sender {
     ///
     /// # Errors
     ///
-    /// [`LinkStateError::InvariantViolation`] if the link is unattached, or
-    /// [`LinkStateError::SessionStopped`] if the session (or its connection)
+    /// [`LinkError::InvariantViolation`] if the link is unattached, or
+    /// [`LinkError::SessionStopped`] if the session (or its connection)
     /// stopped first.
-    pub async fn on_detach(&mut self) -> Result<LinkOutcome, LinkStateError> {
+    pub async fn on_detach(&mut self) -> Result<LinkOutcome, LinkError> {
         // A terminal link already produced the outcome this method waits for;
         // report it instead of waiting for a frame that will not come.
         match &self.inner.link.local_state {
@@ -539,7 +539,7 @@ impl Sender {
                     remote_error: remote_error.clone(),
                 });
             }
-            LinkState::Unattached => return Err(LinkStateError::InvariantViolation),
+            LinkState::Unattached => return Err(LinkError::InvariantViolation),
             _ => {}
         }
 
@@ -553,9 +553,7 @@ impl Sender {
             Err(ApplyRemoteDetachError::AlreadyClosed(remote_error)) => {
                 Ok(LinkOutcome::Closed { remote_error })
             }
-            Err(ApplyRemoteDetachError::InvariantViolation) => {
-                Err(LinkStateError::InvariantViolation)
-            }
+            Err(ApplyRemoteDetachError::InvariantViolation) => Err(LinkError::InvariantViolation),
         }
     }
 }
@@ -1006,7 +1004,7 @@ impl SenderInner<SenderLink<Target>> {
             .link
             .output_handle
             .clone()
-            .ok_or(LinkStateError::InvariantViolation)?
+            .ok_or(LinkError::InvariantViolation)?
             .into();
         let transfer = Transfer {
             handle,
@@ -1044,7 +1042,7 @@ impl SenderInner<SenderLink<Target>> {
             .link
             .output_handle
             .clone()
-            .ok_or(LinkStateError::InvariantViolation)?
+            .ok_or(LinkError::InvariantViolation)?
             .into();
         let settled = match self.link.snd_settle_mode {
             SenderSettleMode::Settled => true,
@@ -1081,7 +1079,7 @@ impl SenderInner<SenderLink<Target>> {
             .link
             .output_handle
             .clone()
-            .ok_or(LinkStateError::InvariantViolation)?
+            .ok_or(LinkError::InvariantViolation)?
             .into();
         let transfer = Transfer {
             handle,
@@ -1825,7 +1823,7 @@ mod tests {
 
         assert!(matches!(
             result,
-            Err(TransferError::LinkState(LinkStateError::InvariantViolation))
+            Err(TransferError::LinkState(LinkError::InvariantViolation))
         ));
         assert!(outgoing_rx.try_recv().is_err());
     }
@@ -1847,7 +1845,7 @@ mod tests {
 
         assert!(matches!(
             result,
-            Err(TransferError::LinkState(LinkStateError::InvariantViolation))
+            Err(TransferError::LinkState(LinkError::InvariantViolation))
         ));
     }
 
@@ -1889,7 +1887,7 @@ mod tests {
 
         assert!(matches!(
             result,
-            Err(TransferError::LinkState(LinkStateError::InternalError))
+            Err(TransferError::LinkState(LinkError::InternalError))
         ));
     }
 
@@ -1907,7 +1905,7 @@ mod tests {
 
         assert!(matches!(
             result,
-            Err(TransferError::LinkState(LinkStateError::LinkDetached(
+            Err(TransferError::LinkState(LinkError::LinkDetached(
                 LinkOutcome::Detached { remote_error: None }
             )))
         ));
@@ -1926,7 +1924,7 @@ mod tests {
 
         assert!(matches!(
             result,
-            Err(LinkStateError::LinkDetached(LinkOutcome::Detached {
+            Err(LinkError::LinkDetached(LinkOutcome::Detached {
                 remote_error: None
             }))
         ));
@@ -1948,12 +1946,12 @@ mod tests {
         let error = inner
             .link
             .apply_remote_detach_outcome(detach)
-            .map_err(LinkStateError::from)
+            .map_err(LinkError::from)
             .unwrap_err();
 
         assert!(matches!(
             error,
-            LinkStateError::LinkDetached(LinkOutcome::Detached { remote_error: None })
+            LinkError::LinkDetached(LinkOutcome::Detached { remote_error: None })
         ));
     }
 
@@ -1990,11 +1988,11 @@ mod tests {
                 closed: false,
                 error: None,
             })
-            .map_err(LinkStateError::from)
+            .map_err(LinkError::from)
             .unwrap_err();
         assert!(matches!(
             error,
-            LinkStateError::LinkDetached(LinkOutcome::Closed {
+            LinkError::LinkDetached(LinkOutcome::Closed {
                 remote_error: Some(ref error)
             }) if error == &peer_error
         ));
@@ -2140,14 +2138,14 @@ mod tests {
         inner.link.local_state = LinkState::CloseSent;
         assert!(matches!(
             inner.link.on_matching_detach_reply(detach(false)),
-            Err(LinkStateError::InvariantViolation)
+            Err(LinkError::InvariantViolation)
         ));
 
         // DetachSent + closing → caller-contract violation (routed to reattach)
         inner.link.local_state = LinkState::DetachSent;
         assert!(matches!(
             inner.link.on_matching_detach_reply(detach(true)),
-            Err(LinkStateError::InvariantViolation)
+            Err(LinkError::InvariantViolation)
         ));
     }
 
@@ -2200,7 +2198,7 @@ mod tests {
         let mut sender = Sender { inner };
         let error = sender.on_detach().await.expect_err("unattached link");
 
-        assert!(matches!(error, LinkStateError::InvariantViolation));
+        assert!(matches!(error, LinkError::InvariantViolation));
     }
 
     /// A non-complete attach exchange fails its pending deliveries instead of
@@ -2217,7 +2215,7 @@ mod tests {
         )]);
 
         let result = exchange.complete_or_fail_deliveries(
-            DeliveryFailure::LinkState(LinkStateError::IllegalState),
+            DeliveryFailure::LinkState(LinkError::IllegalState),
             SenderAttachError::UnexpectedUnsettledMap,
         );
 
@@ -2227,9 +2225,7 @@ mod tests {
         ));
         assert!(matches!(
             rx.try_recv(),
-            Ok(Err(DeliveryFailure::LinkState(
-                LinkStateError::IllegalState
-            )))
+            Ok(Err(DeliveryFailure::LinkState(LinkError::IllegalState)))
         ));
     }
 
@@ -2240,7 +2236,7 @@ mod tests {
         let exchange = SenderAttachExchange::Complete;
 
         let result = exchange.complete_or_fail_deliveries(
-            DeliveryFailure::LinkState(LinkStateError::IllegalState),
+            DeliveryFailure::LinkState(LinkError::IllegalState),
             SenderAttachError::UnexpectedUnsettledMap,
         );
 
