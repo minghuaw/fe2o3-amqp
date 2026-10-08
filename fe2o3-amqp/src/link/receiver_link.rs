@@ -989,13 +989,29 @@ where
         + Sync,
 {
     match reader.recv().await {
-        Some(LinkFrame::Detach(remote_detach)) => match link.on_detach_reply(remote_detach) {
-            Ok(status) => match status.remote_error() {
-                Some(error) => ReceiverAttachError::RemoteClosedWithError(error.clone()),
-                None => err,
-            },
-            Err(detach_error) => ReceiverAttachError::from(detach_error),
-        },
+        Some(LinkFrame::Detach(remote_detach)) => {
+            if !remote_detach.closed {
+                // §2.6.6: the peer's non-closing detach crossed our rejection
+                // closing detach, so the peer must reattach and then close.
+                // The attach already failed, so the primary attach error
+                // stands (the reattach dance is not completed on this path).
+                #[cfg(feature = "tracing")]
+                tracing::debug!(
+                    "peer detach crossed the rejection detach; keeping the attach error"
+                );
+                #[cfg(feature = "log")]
+                log::debug!("peer detach crossed the rejection detach; keeping the attach error");
+                return err;
+            }
+
+            match link.on_matching_detach_reply(remote_detach) {
+                Ok(status) => match status.remote_error() {
+                    Some(error) => ReceiverAttachError::RemoteClosedWithError(error.clone()),
+                    None => err,
+                },
+                Err(detach_error) => ReceiverAttachError::from(detach_error),
+            }
+        }
         Some(_) => ReceiverAttachError::NonAttachFrameReceived,
         None => receiver_attach_error_from_stop_reason(&link.session_stop_reason),
     }

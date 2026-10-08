@@ -444,7 +444,10 @@ where
     type DetachError = DetachError;
 
     #[cfg_attr(feature = "tracing", tracing::instrument(skip_all))]
-    fn on_detach_reply(&mut self, detach: Detach) -> Result<LinkOutcome, Self::DetachError> {
+    fn on_matching_detach_reply(
+        &mut self,
+        detach: Detach,
+    ) -> Result<LinkOutcome, Self::DetachError> {
         #[cfg(feature = "tracing")]
         tracing::trace!(detach = ?detach);
         #[cfg(feature = "log")]
