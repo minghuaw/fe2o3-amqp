@@ -4,9 +4,7 @@ use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::{Arc, OnceLock};
 
 use fe2o3_amqp_types::{
-    definitions::{
-        self, DeliveryTag, Fields, Handle, LinkError, ReceiverSettleMode, Role, SequenceNo,
-    },
+    definitions::{self, DeliveryTag, Fields, Handle, ReceiverSettleMode, Role, SequenceNo},
     messaging::{
         Accepted, Address, DeliveryState, FromBody, Modified, Rejected, Released, Source, Target,
     },
@@ -39,7 +37,7 @@ use super::{
     },
     state::LinkState,
     ArcReceiverUnsettledMap, AttachMode, DetachThenResumeReceiverError, DispositionError,
-    FlowError, LinkFrame, LinkOutcome, LinkRelay, LinkStateError, MessageSizeExceeded,
+    FlowError, LinkError, LinkFrame, LinkOutcome, LinkRelay, MessageSizeExceeded,
     ReceiverAttachError, ReceiverAttachExchange, ReceiverFlowState, ReceiverLink,
     ReceiverResumeError, ReceiverResumeErrorKind, ReceiverTransferError, RecvError, SessionStopped,
     DEFAULT_CREDIT,
@@ -352,7 +350,7 @@ impl Receiver {
     }
 
     /// Set the link credit. This will stop draining if the link is in a draining cycle
-    pub async fn set_credit(&mut self, credit: SequenceNo) -> Result<(), LinkStateError> {
+    pub async fn set_credit(&mut self, credit: SequenceNo) -> Result<(), LinkError> {
         self.inner.set_credit(credit).await
     }
 
@@ -360,7 +358,7 @@ impl Receiver {
     ///
     /// This will send a `Flow` performative with the `drain` field set to true.
     /// Setting the credit will set the `drain` field to false and stop draining
-    pub async fn drain(&mut self) -> Result<(), LinkStateError> {
+    pub async fn drain(&mut self) -> Result<(), LinkError> {
         self.inner.drain().await
     }
 
@@ -1039,9 +1037,9 @@ fn ensure_delivery_identity(transfer: &Transfer) -> Result<(), ReceiverTransferE
 impl<L> ReceiverInner<L>
 where
     L: endpoint::ReceiverLink<
-            FlowError = LinkStateError,
+            FlowError = LinkError,
             TransferError = ReceiverTransferError,
-            DispositionError = LinkStateError,
+            DispositionError = LinkError,
             AttachError = ReceiverAttachError,
             DetachError = DetachError,
         > + LinkExt<FlowState = ReceiverFlowState, Unsettled = ArcReceiverUnsettledMap>
@@ -1071,7 +1069,7 @@ where
         for<'de> T: FromBody<'de> + Send,
     {
         // When the session or the connection stops, the channel closes and this
-        // returns `RecvError::LinkStateError(SessionStopped(reason))` with the
+        // returns `RecvError::SessionStopped(reason)` with the
         // stop reason observed by the link.
         let frame = match self.incoming.recv().await {
             // cancel safe
@@ -1101,7 +1099,7 @@ where
                 // The session forwards a peer Attach for this link; receiving
                 // one here means the peer violated the link state machine.
                 self.close_on_peer_violation(illegal_state_error()).await;
-                Err(LinkStateError::IllegalState.into())
+                Err(LinkError::IllegalState.into())
             }
             LinkFrame::Flow(_)
             | LinkFrame::Disposition(_)
@@ -1123,7 +1121,7 @@ where
                     "Unexpected Flow, Disposition or local transfer frame in the receiver stream",
                 ))
                 .await;
-                Err(LinkStateError::InternalError.into())
+                Err(LinkError::InternalError.into())
             }
             #[cfg(feature = "transaction")]
             LinkFrame::Acquisition(_) => {
@@ -1319,7 +1317,7 @@ where
         self.incomplete_transfer.take();
 
         let error = definitions::Error::new(
-            LinkError::MessageSizeExceeded,
+            definitions::LinkError::MessageSizeExceeded,
             Some(format!(
                 "received message larger than max size of {max_size}"
             )),
@@ -1466,7 +1464,7 @@ where
     ///
     /// This is cancel safe as internanlly it only `.await` on sending over `tokio::mpsc::Sender`
     #[inline]
-    pub async fn set_credit(&mut self, credit: SequenceNo) -> Result<(), LinkStateError> {
+    pub async fn set_credit(&mut self, credit: SequenceNo) -> Result<(), LinkError> {
         self.processed.store(0, Ordering::Release);
         if let CreditMode::Auto(_) = self.credit_mode {
             self.credit_mode = CreditMode::Auto(credit)
@@ -2395,7 +2393,7 @@ mod tests {
 
     /// A peer Attach relayed to an attached receiver violates the link state
     /// machine: the link is terminated with `amqp:illegal-state` and
-    /// `RecvError::LinkStateError(IllegalState)` is reported.
+    /// `RecvError::IllegalState` is reported.
     #[tokio::test]
     async fn unexpected_attach_terminates_link_with_illegal_state() {
         let (mut inner, _session_rx, mut outgoing_rx, incoming_tx) =
@@ -2414,10 +2412,7 @@ mod tests {
         )
         .await;
 
-        assert!(matches!(
-            error,
-            RecvError::LinkStateError(LinkStateError::IllegalState)
-        ));
+        assert!(matches!(error, RecvError::IllegalState));
     }
 
     /// A peer-driven `IllegalState` attach rejection terminates the link with
@@ -2460,7 +2455,7 @@ mod tests {
     /// Flow and Disposition frames are handled by the session loop; one that
     /// reaches the receiver stream is an internal invariant violation: the
     /// link is terminated with `amqp:internal-error` and
-    /// `RecvError::LinkStateError(InvariantViolation)` is reported.
+    /// `RecvError::InternalError` is reported.
     #[tokio::test]
     async fn unexpected_flow_terminates_link_with_internal_error() {
         let (mut inner, _session_rx, mut outgoing_rx, incoming_tx) =
@@ -2486,10 +2481,7 @@ mod tests {
         )
         .await;
 
-        assert!(matches!(
-            error,
-            RecvError::LinkStateError(LinkStateError::InternalError)
-        ));
+        assert!(matches!(error, RecvError::InternalError));
     }
 
     /// Sending a flow on a link without a local handle is an internal
@@ -2574,9 +2566,9 @@ mod tests {
             .expect_err("the transfer must fail");
         assert!(matches!(
             error,
-            RecvError::LinkStateError(LinkStateError::SessionStopped(SessionStopped::Outcome(
+            RecvError::SessionStopped(SessionStopped::Outcome(
                 crate::session::SessionOutcome::Ended
-            )))
+            ))
         ));
     }
 
@@ -2773,7 +2765,7 @@ mod tests {
             &mut inner,
             &mut outgoing_rx,
             &incoming_tx,
-            definitions::ErrorCondition::from(LinkError::MessageSizeExceeded),
+            definitions::ErrorCondition::from(definitions::LinkError::MessageSizeExceeded),
         )
         .await;
         assert_message_size_exceeded(error, 120, 100);
@@ -2818,7 +2810,7 @@ mod tests {
             &mut inner,
             &mut outgoing_rx,
             &incoming_tx,
-            definitions::ErrorCondition::from(LinkError::MessageSizeExceeded),
+            definitions::ErrorCondition::from(definitions::LinkError::MessageSizeExceeded),
         )
         .await;
         assert_message_size_exceeded(error, 101, 100);
