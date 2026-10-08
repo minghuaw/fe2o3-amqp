@@ -69,12 +69,15 @@ pub enum OpenError {
     #[error("The connection was lost")]
     ConnectionLost,
 
-    /// An internal invariant was violated; this indicates a bug in the library
+    /// An internal invariant was violated (defensive)
+    ///
+    /// This is a safeguard for a path that is impossible by construction; it
+    /// cannot occur unless the library breaks its own invariants.
     #[error("An internal invariant was violated")]
     InvariantViolation,
 
     /// Not implemented
-    #[error("Not implemented")]
+    #[error("Not implemented {:?}", .0)]
     NotImplemented(Option<String>),
 
     /// Decode error
@@ -130,7 +133,10 @@ pub(crate) enum ConnectionStateError {
     #[error("Illegal local state")]
     IllegalState,
 
-    /// An internal invariant was violated; this indicates a bug in the library
+    /// An internal invariant was violated (defensive)
+    ///
+    /// This is a safeguard for a path that is impossible by construction; it
+    /// cannot occur unless the library breaks its own invariants.
     #[error("An internal invariant was violated")]
     InvariantViolation,
 
@@ -176,7 +182,10 @@ pub(crate) enum ConnectionInnerError {
     #[error("The connection was lost")]
     ConnectionLost,
 
-    /// An internal invariant was violated; this indicates a bug in the library
+    /// An internal invariant was violated (defensive)
+    ///
+    /// This is a safeguard for a path that is impossible by construction; it
+    /// cannot occur unless the library breaks its own invariants.
     #[error("An internal invariant was violated")]
     InvariantViolation,
 
@@ -233,9 +242,21 @@ pub enum Error {
     #[error("The connection was lost")]
     ConnectionLost,
 
-    /// An internal invariant was violated; this indicates a bug in the library
+    /// An internal invariant was violated (defensive)
+    ///
+    /// This is a safeguard for a path that is impossible by construction; it
+    /// cannot occur unless the library breaks its own invariants.
     #[error("An internal invariant was violated")]
     InvariantViolation,
+
+    /// An internal failure that can occur in principle
+    ///
+    /// Reported when the connection stopped because an internal operation
+    /// failed without a more specific classification, e.g. the engine task
+    /// stopped without reporting its outcome. Both this and
+    /// [`Self::InvariantViolation`] answer `amqp:internal-error`.
+    #[error("An internal error occurred")]
+    InternalError,
 
     /// Not implemented
     #[error("Not implemented {:?}", .0)]

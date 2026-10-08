@@ -904,6 +904,7 @@ where
             SenderAttachError::SessionStopped(_)
             | SenderAttachError::SessionNotMapped
             | SenderAttachError::InvariantViolation
+            | SenderAttachError::InternalError
             | SenderAttachError::NonAttachFrameReceived
             | SenderAttachError::UnexpectedUnsettledMap
             | SenderAttachError::RemoteClosedWithError(_) => attach_error,
@@ -962,7 +963,9 @@ fn sender_detach_failure(
             Some(error) => SenderAttachError::RemoteClosedWithError(error.clone()),
             None => attach_error,
         },
-        DetachError::IllegalState | DetachError::InvariantViolation => attach_error,
+        DetachError::IllegalState
+        | DetachError::InvariantViolation
+        | DetachError::InternalError => attach_error,
     }
 }
 
