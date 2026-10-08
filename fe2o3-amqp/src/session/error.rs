@@ -12,8 +12,8 @@ use crate::{
 /// Error with ending a session
 #[derive(Debug, thiserror::Error)]
 pub(crate) enum SessionStateError {
-    /// Illegal session state
-    #[error("Illegal session state")]
+    /// The peer sent a frame that is not permitted in the current session state
+    #[error("The peer sent a frame that is not permitted in the current session state")]
     IllegalState,
 
     /// An internal invariant was violated (defensive)
@@ -39,8 +39,8 @@ pub(crate) enum SessionStateError {
 /// Error with beginning a session
 #[derive(Debug, thiserror::Error)]
 pub enum BeginError {
-    /// Illegal session state
-    #[error("Illegal session state")]
+    /// The peer sent a frame that is not permitted in the current session state
+    #[error("The peer sent a frame that is not permitted in the current session state")]
     IllegalState,
 
     /// An internal invariant was violated (defensive)
@@ -107,8 +107,8 @@ pub(crate) enum SessionInnerError {
     #[error("An attach was received using a handle that is already in use for an attached link.")]
     HandleInUse,
 
-    /// Illegal sesesion state
-    #[error("Illegal session state")]
+    /// The peer sent a frame that is not permitted in the current session state
+    #[error("The peer sent a frame that is not permitted in the current session state")]
     IllegalState,
 
     /// An internal invariant was violated (defensive)
@@ -178,8 +178,8 @@ pub enum Error {
     #[error("An attach was received using a handle that is already in use for an attached link.")]
     HandleInUse,
 
-    /// Illegal sesesion state
-    #[error("Illegal session state")]
+    /// The peer sent a frame that is not permitted in the current session state
+    #[error("The peer sent a frame that is not permitted in the current session state")]
     IllegalState,
 
     /// An internal invariant was violated (defensive)
