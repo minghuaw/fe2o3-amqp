@@ -92,34 +92,34 @@ fn warn_unrecorded_stop_reason() {
 }
 
 /// The [`LinkStateError`] for an operation that failed because the session (or
-/// its connection) stopped; [`LinkStateError::IllegalState`] when no stop
+/// its connection) stopped; [`LinkStateError::InvariantViolation`] when no stop
 /// reason was recorded (defensive).
 pub(crate) fn link_state_error_from_stop_reason(cell: &OnceLock<SessionStopped>) -> LinkStateError {
     match cell.get() {
         Some(reason) => LinkStateError::SessionStopped(reason.clone()),
         None => {
             warn_unrecorded_stop_reason();
-            LinkStateError::IllegalState
+            LinkStateError::InvariantViolation
         }
     }
 }
 
 /// The [`DetachError`] for an operation that failed because the session (or
-/// its connection) stopped; [`DetachError::IllegalState`] when no stop reason
-/// was recorded (defensive).
+/// its connection) stopped; [`DetachError::InvariantViolation`] when no stop
+/// reason was recorded (defensive).
 pub(crate) fn detach_error_from_stop_reason(cell: &OnceLock<SessionStopped>) -> DetachError {
     match cell.get() {
         Some(reason) => DetachError::SessionStopped(reason.clone()),
         None => {
             warn_unrecorded_stop_reason();
-            DetachError::IllegalState
+            DetachError::InvariantViolation
         }
     }
 }
 
 /// The [`SenderAttachError`] for an attach that failed because the session (or
-/// its connection) stopped; [`SenderAttachError::IllegalState`] when no stop
-/// reason was recorded (defensive).
+/// its connection) stopped; [`SenderAttachError::InvariantViolation`] when no
+/// stop reason was recorded (defensive).
 pub(crate) fn sender_attach_error_from_stop_reason(
     cell: &OnceLock<SessionStopped>,
 ) -> SenderAttachError {
@@ -127,14 +127,14 @@ pub(crate) fn sender_attach_error_from_stop_reason(
         Some(reason) => SenderAttachError::SessionStopped(reason.clone()),
         None => {
             warn_unrecorded_stop_reason();
-            SenderAttachError::IllegalState
+            SenderAttachError::InvariantViolation
         }
     }
 }
 
 /// The [`ReceiverAttachError`] for an attach that failed because the session
-/// (or its connection) stopped; [`ReceiverAttachError::IllegalState`] when no
-/// stop reason was recorded (defensive).
+/// (or its connection) stopped; [`ReceiverAttachError::InvariantViolation`]
+/// when no stop reason was recorded (defensive).
 pub(crate) fn receiver_attach_error_from_stop_reason(
     cell: &OnceLock<SessionStopped>,
 ) -> ReceiverAttachError {
@@ -142,7 +142,7 @@ pub(crate) fn receiver_attach_error_from_stop_reason(
         Some(reason) => ReceiverAttachError::SessionStopped(reason.clone()),
         None => {
             warn_unrecorded_stop_reason();
-            ReceiverAttachError::IllegalState
+            ReceiverAttachError::InvariantViolation
         }
     }
 }
@@ -282,9 +282,15 @@ impl LinkOutcome {
 /// record it, and nothing changed.
 #[derive(Debug, thiserror::Error)]
 pub(crate) enum ApplyRemoteDetachError {
-    /// The link was never attached
-    #[error("The link is not attached")]
-    NotAttached,
+    /// The link was never attached (defensive)
+    ///
+    /// A remote detach cannot reach a link that was never attached: the
+    /// session routes an incoming detach by the peer's input handle, which
+    /// only exists after the peer's attach, and every call site either
+    /// pre-checks the link state or only observes relayed frames. Seeing this
+    /// indicates a broken library invariant.
+    #[error("An internal invariant was violated")]
+    InvariantViolation,
 
     /// The link was already suspended by a previous detach
     #[error("The link is already detached")]
@@ -298,7 +304,7 @@ pub(crate) enum ApplyRemoteDetachError {
 impl From<ApplyRemoteDetachError> for LinkStateError {
     fn from(value: ApplyRemoteDetachError) -> Self {
         match value {
-            ApplyRemoteDetachError::NotAttached => LinkStateError::InvariantViolation,
+            ApplyRemoteDetachError::InvariantViolation => LinkStateError::InvariantViolation,
             ApplyRemoteDetachError::AlreadyDetached(remote_error) => {
                 LinkStateError::LinkDetached(LinkOutcome::Detached { remote_error })
             }
@@ -315,10 +321,6 @@ pub(crate) enum TransferError {
     /// A local link-state failure
     #[error(transparent)]
     LinkState(#[from] LinkStateError),
-
-    /// The link endpoint has no local handle, i.e. the link is not attached
-    #[error("The link is not attached")]
-    NotAttached,
 
     /// The performative could not be serialized
     #[error(transparent)]
@@ -349,7 +351,6 @@ impl From<TransferError> for SendError {
     fn from(value: TransferError) -> Self {
         match value {
             TransferError::LinkState(error) => error.into(),
-            TransferError::NotAttached => SendError::NotAttached,
             TransferError::MessageEncodeError(error) => SendError::MessageEncodeError(error),
             TransferError::FrameSizeTooSmall => SendError::FrameSizeTooSmall,
             #[cfg(feature = "transaction")]
@@ -506,10 +507,6 @@ pub enum SendError {
     /// The peer detached the link before the delivery was settled
     #[error("The peer detached the link: {:?}", .0)]
     LinkDetached(LinkOutcome),
-
-    /// The link endpoint has no local handle, i.e. the link is not attached
-    #[error("The link is not attached")]
-    NotAttached,
 
     /// The negotiated max frame size cannot fit even the serialized transfer
     /// performative, so the message cannot be sent. `max-frame-size` is
@@ -759,7 +756,7 @@ impl<'a> TryFrom<&'a SenderAttachError> for definitions::Error {
 pub enum LinkStateError {
     /// The peer sent a frame that is not permitted in the current state
     /// (`amqp:illegal-state`)
-    #[error("Illegal local state")]
+    #[error("The peer sent a frame that is not permitted in the current state")]
     IllegalState,
 
     /// An internal invariant was violated; this indicates a bug in the library
@@ -778,9 +775,9 @@ pub enum LinkStateError {
 /// Errors associated with receiving a transfer
 #[derive(Debug, thiserror::Error)]
 pub(crate) enum ReceiverTransferError {
-    /// The link endpoint has no local handle, i.e. the link is not attached
-    #[error("The link is not attached")]
-    NotAttached,
+    /// A local link-state failure
+    #[error(transparent)]
+    LinkState(#[from] LinkStateError),
 
     /// The peer sent more message transfers than currently allowed on the link.
     #[error("The peer sent more message transfers than currently allowed on the link")]
@@ -852,10 +849,6 @@ pub enum RecvError {
     #[error("The peer detached the link: {:?}", .0)]
     LinkDetached(LinkOutcome),
 
-    /// The link endpoint has no local handle, i.e. the link is not attached
-    #[error("The link is not attached")]
-    NotAttached,
-
     /// The peer sent more message transfers than currently allowed on the link.
     #[error("The peer sent more message transfers than currently allowed on the link")]
     TransferLimitExceeded,
@@ -896,6 +889,7 @@ pub enum RecvError {
 impl From<ReceiverTransferError> for RecvError {
     fn from(value: ReceiverTransferError) -> Self {
         match value {
+            ReceiverTransferError::LinkState(error) => error.into(),
             ReceiverTransferError::TransferLimitExceeded => RecvError::TransferLimitExceeded,
             ReceiverTransferError::DeliveryIdIsNone => RecvError::DeliveryIdIsNone,
             ReceiverTransferError::DeliveryTagIsNone => RecvError::DeliveryTagIsNone,
@@ -906,7 +900,6 @@ impl From<ReceiverTransferError> for RecvError {
             ReceiverTransferError::InconsistentFieldInMultiFrameDelivery => {
                 RecvError::InconsistentFieldInMultiFrameDelivery
             }
-            ReceiverTransferError::NotAttached => RecvError::NotAttached,
         }
     }
 }
@@ -952,9 +945,7 @@ impl SendError {
             | Self::IllegalDeliveryState
             | Self::MessageSizeExceeded(_)
             | Self::MessageEncodeError(_) => ErrorRecovery::UseLink,
-            Self::NotAttached | Self::AcquisitionNotImplemented | Self::UnexpectedFrame => {
-                ErrorRecovery::NewLink
-            }
+            Self::AcquisitionNotImplemented | Self::UnexpectedFrame => ErrorRecovery::NewLink,
             // `max-frame-size` is negotiated per connection (AMQP 1.0 §2.4.1),
             // so a new link on the same connection inherits the same limit;
             // only a new connection can change it.
@@ -974,7 +965,6 @@ impl RecvError {
             | Self::IllegalRcvSettleModeInTransfer => ErrorRecovery::UseLink,
             Self::DeliveryIdIsNone
             | Self::DeliveryTagIsNone
-            | Self::NotAttached
             | Self::MessageSizeExceeded(_)
             | Self::InconsistentFieldInMultiFrameDelivery
             | Self::AcquisitionNotImplemented => ErrorRecovery::NewLink,
@@ -1296,7 +1286,10 @@ mod tests {
             SendError::MessageEncodeError(message_encode_error()).recovery(),
             ErrorRecovery::UseLink
         );
-        assert_eq!(SendError::NotAttached.recovery(), ErrorRecovery::NewLink);
+        assert_eq!(
+            SendError::LinkStateError(LinkStateError::InvariantViolation).recovery(),
+            ErrorRecovery::NewLink
+        );
         assert_eq!(
             SendError::FrameSizeTooSmall.recovery(),
             ErrorRecovery::ReconnectConnection
@@ -1370,7 +1363,10 @@ mod tests {
             RecvError::InconsistentFieldInMultiFrameDelivery.recovery(),
             ErrorRecovery::NewLink
         );
-        assert_eq!(RecvError::NotAttached.recovery(), ErrorRecovery::NewLink);
+        assert_eq!(
+            RecvError::LinkStateError(LinkStateError::InvariantViolation).recovery(),
+            ErrorRecovery::NewLink
+        );
         assert_eq!(
             RecvError::AcquisitionNotImplemented.recovery(),
             ErrorRecovery::NewLink
@@ -1380,8 +1376,18 @@ mod tests {
     #[test]
     fn receiver_transfer_error_mapping() {
         assert!(matches!(
-            RecvError::from(ReceiverTransferError::NotAttached),
-            RecvError::NotAttached
+            RecvError::from(ReceiverTransferError::LinkState(
+                LinkStateError::InvariantViolation
+            )),
+            RecvError::LinkStateError(LinkStateError::InvariantViolation)
+        ));
+
+        let status = LinkOutcome::Detached { remote_error: None };
+        assert!(matches!(
+            RecvError::from(ReceiverTransferError::LinkState(
+                LinkStateError::LinkDetached(status)
+            )),
+            RecvError::LinkDetached(_)
         ));
     }
 

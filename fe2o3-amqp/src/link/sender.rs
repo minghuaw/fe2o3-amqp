@@ -33,7 +33,8 @@ use super::{
     resumption::{fail_resuming_deliveries, ResumingDelivery},
     role,
     shared_inner::{
-        recv_remote_detach, LinkEndpointInner, LinkEndpointInnerDetach, LinkEndpointInnerReattach,
+        illegal_state_error, recv_remote_detach, LinkEndpointInner, LinkEndpointInnerDetach,
+        LinkEndpointInnerReattach, PeerViolationCloseExt,
     },
     state::LinkState,
     ArcSenderUnsettledMap, AttachMode, DeliveryFailure, DetachThenResumeSenderError, LinkFrame,
@@ -552,7 +553,9 @@ impl Sender {
             Err(ApplyRemoteDetachError::AlreadyClosed(remote_error)) => {
                 Ok(LinkOutcome::Closed { remote_error })
             }
-            Err(ApplyRemoteDetachError::NotAttached) => Err(LinkStateError::InvariantViolation),
+            Err(ApplyRemoteDetachError::InvariantViolation) => {
+                Err(LinkStateError::InvariantViolation)
+            }
         }
     }
 }
@@ -931,6 +934,13 @@ where
                 self.close_on_acquisition_not_implemented().await;
                 return Err(E::from(TransferError::AcquisitionNotImplemented));
             }
+            Err(TransferError::UnexpectedFrame) => {
+                // The session only forwards a peer Attach as a link frame; a
+                // transfer that sees one means the peer violated the link
+                // state machine.
+                self.close_on_peer_violation(illegal_state_error()).await;
+                return Err(E::from(TransferError::UnexpectedFrame));
+            }
             Err(error) => return Err(error.into()),
         };
         Ok(settlement)
@@ -996,7 +1006,7 @@ impl SenderInner<SenderLink<Target>> {
             .link
             .output_handle
             .clone()
-            .ok_or(SendError::NotAttached)?
+            .ok_or(LinkStateError::InvariantViolation)?
             .into();
         let transfer = Transfer {
             handle,
@@ -1034,7 +1044,7 @@ impl SenderInner<SenderLink<Target>> {
             .link
             .output_handle
             .clone()
-            .ok_or(SendError::NotAttached)?
+            .ok_or(LinkStateError::InvariantViolation)?
             .into();
         let settled = match self.link.snd_settle_mode {
             SenderSettleMode::Settled => true,
@@ -1071,7 +1081,7 @@ impl SenderInner<SenderLink<Target>> {
             .link
             .output_handle
             .clone()
-            .ok_or(SendError::NotAttached)?
+            .ok_or(LinkStateError::InvariantViolation)?
             .into();
         let transfer = Transfer {
             handle,
@@ -1109,6 +1119,14 @@ impl SenderInner<SenderLink<Target>> {
                 self.pending_redeliveries.push(unsettled_message);
                 self.close_on_acquisition_not_implemented().await;
                 return Err(SendError::AcquisitionNotImplemented);
+            }
+            Err(TransferError::UnexpectedFrame) => {
+                // The session only forwards a peer Attach as a link frame; a
+                // transfer that sees one means the peer violated the link
+                // state machine.
+                self.pending_redeliveries.push(unsettled_message);
+                self.close_on_peer_violation(illegal_state_error()).await;
+                return Err(SendError::UnexpectedFrame);
             }
             Err(error) => {
                 self.pending_redeliveries.push(unsettled_message);
@@ -1788,10 +1806,10 @@ mod tests {
         }
     }
 
-    /// A link without a local handle is not attached, so a transfer reports
-    /// `NotAttached` instead of the catch-all `IllegalState`.
+    /// A linked endpoint without its remote handle is an internal invariant
+    /// violation: the endpoint cannot be observed in that state.
     #[tokio::test]
-    async fn send_without_input_handle_returns_not_attached() {
+    async fn send_without_input_handle_is_invariant_violation() {
         let inner = make_sender_inner(4096); // input_handle is None
         let (outgoing_tx, mut outgoing_rx) = mpsc::channel::<LinkFrame>(16);
 
@@ -1804,13 +1822,17 @@ mod tests {
             )
             .await;
 
-        assert!(matches!(result, Err(TransferError::NotAttached)));
+        assert!(matches!(
+            result,
+            Err(TransferError::LinkState(LinkStateError::InvariantViolation))
+        ));
         assert!(outgoing_rx.try_recv().is_err());
     }
 
-    /// Generating a transfer without a local handle is not attached.
+    /// Generating a transfer without a local handle is an internal invariant
+    /// violation: the endpoint cannot be observed in that state.
     #[test]
-    fn generate_transfer_without_output_handle_returns_not_attached() {
+    fn generate_transfer_without_output_handle_is_invariant_violation() {
         let mut inner = make_sender_inner(4096);
         inner.link.output_handle = None;
 
@@ -1822,7 +1844,10 @@ mod tests {
             false,
         );
 
-        assert!(matches!(result, Err(TransferError::NotAttached)));
+        assert!(matches!(
+            result,
+            Err(TransferError::LinkState(LinkStateError::InvariantViolation))
+        ));
     }
 
     /// A max-frame-size that cannot even fit the serialized transfer
@@ -1974,6 +1999,41 @@ mod tests {
         ));
     }
 
+    /// A non-closing detach that crosses an attach rejection is the §2.6.6
+    /// simultaneous-detach conflict; the rejection keeps the primary attach
+    /// error instead of reporting a spurious failure.
+    #[tokio::test]
+    async fn rejection_detach_racing_a_peer_detach_keeps_the_primary_error() {
+        let (mut inner, _session_rx, mut outgoing_rx, incoming_tx) =
+            make_sender_inner_with_channels(4096);
+
+        let (result, ()) = tokio::join!(
+            inner.handle_attach_error(SenderAttachError::SndSettleModeNotSupported),
+            async {
+                // The rejection sends a closing detach; answer it with a
+                // non-closing detach, crossing it.
+                match outgoing_rx.recv().await.expect("expected a closing detach") {
+                    LinkFrame::Detach(detach) => assert!(detach.closed),
+                    other => panic!("expected Detach, got {other:?}"),
+                }
+
+                incoming_tx
+                    .send(LinkFrame::Detach(Detach {
+                        handle: fe2o3_amqp_types::definitions::Handle(0),
+                        closed: false,
+                        error: None,
+                    }))
+                    .await
+                    .expect("the incoming end is open");
+            }
+        );
+
+        assert!(matches!(
+            result,
+            SenderAttachError::SndSettleModeNotSupported
+        ));
+    }
+
     /// A rejected attach whose closing detach cannot be sent because the link
     /// is already terminal keeps the attach error when the stored outcome has
     /// no remote error.
@@ -2036,6 +2096,57 @@ mod tests {
         assert!(matches!(
             result,
             SenderAttachError::RemoteClosedWithError(ref error) if error == &peer_error
+        ));
+    }
+
+    /// `on_matching_detach_reply` accepts only the reply matching the detach
+    /// this link sent; a crossing (simultaneous) detach never reaches it and
+    /// is a caller-contract violation.
+    #[test]
+    fn on_matching_detach_reply_accepts_only_matching_replies() {
+        use crate::endpoint::LinkDetach as _;
+        use fe2o3_amqp_types::definitions::Handle;
+
+        let (mut inner, _session_rx, _outgoing_rx, _incoming_tx) =
+            make_sender_inner_with_channels(4096);
+
+        let detach = |closed| Detach {
+            handle: Handle(0),
+            closed,
+            error: None,
+        };
+
+        // CloseSent + closing → Closed
+        inner.link.local_state = LinkState::CloseSent;
+        let status = inner
+            .link
+            .on_matching_detach_reply(detach(true))
+            .expect("the matching reply is accepted");
+        assert!(matches!(status, LinkOutcome::Closed { remote_error: None }));
+
+        // DetachSent + non-closing → Detached
+        inner.link.local_state = LinkState::DetachSent;
+        let status = inner
+            .link
+            .on_matching_detach_reply(detach(false))
+            .expect("the matching reply is accepted");
+        assert!(matches!(
+            status,
+            LinkOutcome::Detached { remote_error: None }
+        ));
+
+        // CloseSent + non-closing → caller-contract violation
+        inner.link.local_state = LinkState::CloseSent;
+        assert!(matches!(
+            inner.link.on_matching_detach_reply(detach(false)),
+            Err(LinkStateError::InvariantViolation)
+        ));
+
+        // DetachSent + closing → caller-contract violation (routed to reattach)
+        inner.link.local_state = LinkState::DetachSent;
+        assert!(matches!(
+            inner.link.on_matching_detach_reply(detach(true)),
+            Err(LinkStateError::InvariantViolation)
         ));
     }
 
@@ -2204,6 +2315,92 @@ mod tests {
         );
 
         assert!(matches!(result, Err(SendError::AcquisitionNotImplemented)));
+    }
+
+    /// The session only forwards a peer Attach as a link frame; a transfer
+    /// that sees one terminates the link with a closing `amqp:illegal-state`
+    /// detach and reports `SendError::UnexpectedFrame`.
+    #[tokio::test]
+    async fn unexpected_frame_terminates_link_with_illegal_state() {
+        let (mut inner, _session_rx, mut outgoing_rx, incoming_tx) =
+            make_sender_inner_with_channels(4096);
+
+        incoming_tx
+            .send(LinkFrame::Attach(peer_receiver_attach()))
+            .await
+            .expect("the incoming end is open");
+
+        let (result, ()) = tokio::join!(
+            inner.send_payload::<SendError>(Payload::from_static(b"m"), 0, None, None, false,),
+            async {
+                match outgoing_rx.recv().await.expect("expected a closing detach") {
+                    LinkFrame::Detach(detach) => {
+                        assert!(detach.closed, "the link must be terminated");
+                        let error = detach
+                            .error
+                            .as_ref()
+                            .expect("the detach must carry the error");
+                        assert_eq!(
+                            error.condition,
+                            fe2o3_amqp_types::definitions::AmqpError::IllegalState.into()
+                        );
+                    }
+                    other => panic!("expected Detach, got {other:?}"),
+                }
+
+                // Answer the closing detach to complete the close handshake.
+                incoming_tx
+                    .send(LinkFrame::Detach(Detach {
+                        handle: fe2o3_amqp_types::definitions::Handle(0),
+                        closed: true,
+                        error: None,
+                    }))
+                    .await
+                    .expect("the incoming end is open");
+            }
+        );
+
+        assert!(matches!(result, Err(SendError::UnexpectedFrame)));
+    }
+
+    /// A peer-driven `IllegalState` attach rejection terminates the link with
+    /// a closing `amqp:illegal-state` detach.
+    #[tokio::test]
+    async fn illegal_state_attach_rejection_terminates_link() {
+        let (mut inner, _session_rx, mut outgoing_rx, incoming_tx) =
+            make_sender_inner_with_channels(4096);
+
+        let (result, ()) = tokio::join!(
+            inner.handle_attach_error(SenderAttachError::IllegalState),
+            async {
+                match outgoing_rx.recv().await.expect("expected a closing detach") {
+                    LinkFrame::Detach(detach) => {
+                        assert!(detach.closed, "the link must be terminated");
+                        let error = detach
+                            .error
+                            .as_ref()
+                            .expect("the detach must carry the error");
+                        assert_eq!(
+                            error.condition,
+                            fe2o3_amqp_types::definitions::AmqpError::IllegalState.into()
+                        );
+                    }
+                    other => panic!("expected Detach, got {other:?}"),
+                }
+
+                // Answer the closing detach to complete the close handshake.
+                incoming_tx
+                    .send(LinkFrame::Detach(Detach {
+                        handle: fe2o3_amqp_types::definitions::Handle(0),
+                        closed: true,
+                        error: None,
+                    }))
+                    .await
+                    .expect("the incoming end is open");
+            }
+        );
+
+        assert!(matches!(result, SenderAttachError::IllegalState));
     }
 
     /// A channel to the session with no room left, so a hand-over stays pending until the

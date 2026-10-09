@@ -100,10 +100,6 @@ pub enum ControllerSendError {
     #[error("The peer detached the link: {:?}", .0)]
     LinkDetached(LinkOutcome),
 
-    /// The link endpoint has no local handle, i.e. the link is not attached
-    #[error("The link is not attached")]
-    NotAttached,
-
     /// The negotiated max frame size cannot fit even the serialized transfer
     /// performative, so the message cannot be sent
     #[error("The negotiated max frame size is too small for the transfer performative")]
@@ -147,7 +143,6 @@ impl From<SendError> for ControllerSendError {
         match value {
             SendError::LinkStateError(state) => Self::LinkStateError(state),
             SendError::LinkDetached(status) => Self::LinkDetached(status),
-            SendError::NotAttached => Self::NotAttached,
             SendError::FrameSizeTooSmall => Self::FrameSizeTooSmall,
             SendError::AcquisitionNotImplemented => Self::AcquisitionNotImplemented,
             SendError::NonTerminalDeliveryState => Self::NonTerminalDeliveryState,
@@ -245,10 +240,6 @@ pub enum PostError {
     #[error("The peer detached the link: {:?}", .0)]
     LinkDetached(LinkOutcome),
 
-    /// The link endpoint has no local handle, i.e. the link is not attached
-    #[error("The link is not attached")]
-    NotAttached,
-
     /// The negotiated max frame size cannot fit even the serialized transfer
     /// performative, so the message cannot be sent
     #[error("The negotiated max frame size is too small for the transfer performative")]
@@ -308,7 +299,6 @@ impl From<TransferError> for PostError {
     fn from(value: TransferError) -> Self {
         match value {
             TransferError::LinkState(error) => error.into(),
-            TransferError::NotAttached => Self::NotAttached,
             TransferError::MessageEncodeError(error) => Self::MessageEncodeError(error),
             TransferError::FrameSizeTooSmall => Self::FrameSizeTooSmall,
             TransferError::AcquisitionNotImplemented => Self::AcquisitionNotImplemented,

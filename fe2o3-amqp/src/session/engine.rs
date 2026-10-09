@@ -413,7 +413,21 @@ where
     ) -> Result<Running, SessionInnerError> {
         match self.session.local_state() {
             SessionState::Mapped => {}
-            _ => return Err(SessionInnerError::IllegalState), // End session with illegal state
+            _state => {
+                // The session is ending, so the frame can no longer be
+                // forwarded; discard it instead of failing the session.
+                #[cfg(feature = "tracing")]
+                tracing::warn!(
+                    "dropping a link frame sent while the session is not mapped: {:?}",
+                    _state
+                );
+                #[cfg(feature = "log")]
+                log::warn!(
+                    "dropping a link frame sent while the session is not mapped: {:?}",
+                    _state
+                );
+                return Ok(Running::Continue);
+            }
         }
 
         let outgoing_item = match frame {
@@ -447,8 +461,13 @@ where
             #[cfg(feature = "transaction")]
             LinkFrame::Acquisition(_) => {
                 // This is purely used to notify the sender about a txn
-                // acquisition and never belongs to the outgoing direction.
-                return Err(SessionInnerError::IllegalState);
+                // acquisition and never belongs to the outgoing direction;
+                // discard the notification.
+                #[cfg(feature = "tracing")]
+                tracing::warn!("dropping a txn acquisition notification on the outgoing direction");
+                #[cfg(feature = "log")]
+                log::warn!("dropping a txn acquisition notification on the outgoing direction");
+                return Ok(Running::Continue);
             }
         };
 
@@ -494,6 +513,14 @@ where
             }
             SessionInnerError::IllegalState => {
                 let error = Error::new(AmqpError::IllegalState, None, None);
+                self.end_session(Some(error)).await
+            }
+            SessionInnerError::InvariantViolation => {
+                let error = Error::new(
+                    AmqpError::InternalError,
+                    Some(String::from("An internal invariant was violated")),
+                    None,
+                );
                 self.end_session(Some(error)).await
             }
             SessionInnerError::ConnectionStopped(reason) => {
@@ -736,9 +763,8 @@ where
             _ => SessionStopped::Outcome(SessionOutcome::Ended),
         };
         self.session.set_session_stop_reason(session_stop_reason);
-        let _ =
-            connection::deallocate_session(&mut self.conn_control, self.session.outgoing_channel())
-                .await;
+        connection::deallocate_session(&mut self.conn_control, self.session.outgoing_channel())
+            .await;
         // A session that reached a terminal state reports the outcome it stopped
         // with; the connection stopping first is a failure of the session's end
         // operation (`Err(ConnectionStopped)`), consistent with link operations

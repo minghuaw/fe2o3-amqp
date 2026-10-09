@@ -129,10 +129,46 @@ where
     ) -> Result<LinkOutcome, <Self::Link as LinkDetach>::DetachError>;
 }
 
+/// Link endpoints that must terminate the link when the peer sends a frame
+/// that is not permitted in the current state.
+pub(crate) trait PeerViolationCloseExt: LinkEndpointInnerDetach {
+    /// Best-effort close the link with the given error because the peer
+    /// violated the link state machine. The caller reports the frame error.
+    async fn close_on_peer_violation(&mut self, error: definitions::Error);
+}
+
+impl<T> PeerViolationCloseExt for T
+where
+    T: LinkEndpointInnerDetach,
+{
+    async fn close_on_peer_violation(&mut self, error: definitions::Error) {
+        let _ = self.close_with_error(Some(error)).await;
+    }
+}
+
+/// The `amqp:illegal-state` error for a frame the peer sent that is not
+/// permitted in the current state.
+pub(crate) fn illegal_state_error() -> definitions::Error {
+    definitions::Error::new(
+        definitions::AmqpError::IllegalState,
+        "The peer sent a frame that is not permitted in the current state".to_string(),
+        None,
+    )
+}
+
+/// The `amqp:internal-error` error for an internal invariant violation.
+pub(crate) fn internal_error(description: &str) -> definitions::Error {
+    definitions::Error::new(
+        definitions::AmqpError::InternalError,
+        description.to_string(),
+        None,
+    )
+}
+
 /// Link endpoints that must terminate the link when a remote-initiated
 /// transactional acquisition arrives, since it is not supported.
 #[cfg(feature = "transaction")]
-pub(crate) trait TxnAcquisitionCloseExt: LinkEndpointInnerDetach {
+pub(crate) trait TxnAcquisitionCloseExt: PeerViolationCloseExt {
     /// Best-effort terminate the link with `amqp:not-implemented` because a
     /// remote-initiated transactional acquisition is not supported
     /// (AMQP 1.0 §4.4.3). The caller reports the acquisition error.
@@ -142,7 +178,7 @@ pub(crate) trait TxnAcquisitionCloseExt: LinkEndpointInnerDetach {
 #[cfg(feature = "transaction")]
 impl<T> TxnAcquisitionCloseExt for T
 where
-    T: LinkEndpointInnerDetach,
+    T: PeerViolationCloseExt,
 {
     async fn close_on_acquisition_not_implemented(&mut self) {
         let error = definitions::Error::new(
@@ -150,7 +186,7 @@ where
             "Transactional acquisition is not implemented".to_string(),
             None,
         );
-        let _ = self.close_with_error(Some(error)).await;
+        self.close_on_peer_violation(error).await;
     }
 }
 
@@ -187,7 +223,7 @@ where
                     reattach_then_close(self, status.clone()).await?;
                     Ok(status)
                 } else {
-                    self.link_mut().on_detach_reply(remote_detach)
+                    self.link_mut().on_matching_detach_reply(remote_detach)
                 }
             }
             LinkState::DetachSent => {
@@ -199,7 +235,7 @@ where
                     reattach_then_close(self, status.clone()).await?;
                     Ok(status)
                 } else {
-                    self.link_mut().on_detach_reply(remote_detach)
+                    self.link_mut().on_matching_detach_reply(remote_detach)
                 }
             }
             LinkState::Detached(remote_error) => Ok(LinkOutcome::Detached {
@@ -229,7 +265,7 @@ where
                 // closing handshake.
                 let remote_detach = recv_remote_detach(self).await?;
                 if remote_detach.closed {
-                    self.link_mut().on_detach_reply(remote_detach)
+                    self.link_mut().on_matching_detach_reply(remote_detach)
                 } else {
                     // The peer suspended: reattach and close so the link is left
                     // `Closed` (AMQP 1.0 §2.6.6).
@@ -270,7 +306,7 @@ where
                 let remote_detach = recv_remote_detach(self).await?; // cancel safe
                 if remote_detach.closed {
                     // The peer's error, if any, is surfaced in the returned status
-                    self.link_mut().on_detach_reply(remote_detach)
+                    self.link_mut().on_matching_detach_reply(remote_detach)
                 } else {
                     // Peer suspended while we were closing: record it, then
                     // reattach (re-registers the link) and close (§2.6.6).
@@ -310,7 +346,7 @@ where
                 // Wait for remote detach
                 let remote_detach = recv_remote_detach(self).await?; // cancel safe
                 if remote_detach.closed {
-                    self.link_mut().on_detach_reply(remote_detach)
+                    self.link_mut().on_matching_detach_reply(remote_detach)
                 } else {
                     // Peer suspended while we were closing: reattach
                     // (re-registers the link) and close (§2.6.6).
@@ -366,7 +402,15 @@ where
     }
     link_inner.send_detach(true, None).await?; // cancel safe
     let remote_detach = recv_remote_detach(link_inner).await?; // cancel safe
-    link_inner.link_mut().on_detach_reply(remote_detach)?;
+    if !remote_detach.closed {
+        // §2.6.6: the simultaneous detach was already resolved by reattaching
+        // and re-sending a closing detach, so the peer must answer with a
+        // closing detach. A non-closing reply here is a peer violation.
+        return Err(DetachError::IllegalState);
+    }
+    link_inner
+        .link_mut()
+        .on_matching_detach_reply(remote_detach)?;
     Ok(())
 }
 

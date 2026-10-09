@@ -69,8 +69,16 @@ pub enum NegotiationError {
     #[error("Not implemented")]
     NotImplemented(Option<String>),
 
-    #[error("Illegal state")]
-    IllegalState,
+    /// An internal invariant was violated (defensive)
+    ///
+    /// The header negotiation helpers only accept the connection states in
+    /// which each operation is permitted, and their only caller
+    /// (`Transport::negotiate_amqp_header`) starts from
+    /// `ConnectionState::Start` and always sends before receiving, so no other
+    /// state can reach them. This variant exists so that a broken call graph
+    /// fails instead of panicking.
+    #[error("An internal invariant was violated")]
+    InvariantViolation,
 
     #[error("SASL error code {:?}, additional data: {:?}", .code, .additional_data)]
     SaslError {

@@ -179,7 +179,7 @@ impl<R> ConnectionHandle<R> {
             Err(TryRecvError::Closed) => {
                 self.is_closed = true;
                 // The engine somehow has already stopped running
-                Err(TryCloseError::Stopped(Box::new(Error::IllegalState)))
+                Err(TryCloseError::Stopped(Box::new(Error::InvariantViolation)))
             }
         }
     }
@@ -256,7 +256,7 @@ impl<R> ConnectionHandle<R> {
             }
             Err(_) => {
                 self.is_closed = true;
-                Err(Error::IllegalState)
+                Err(Error::InvariantViolation)
             }
         }
     }
@@ -283,14 +283,23 @@ impl<R> ConnectionHandle<R> {
     }
 }
 
+/// Best-effort deallocate a session's outgoing channel from the connection.
+///
+/// The send fails only when the connection engine has already stopped (its
+/// `ConnectionControl` receiver was dropped). That is a normal teardown race:
+/// a connection close ends its sessions, and the session engine exits
+/// independently, so either side may finish first. The failure is ignored
+/// because the connection is already gone, there is nothing left to
+/// deallocate, and the session's end/stop outcome is delivered separately.
 pub(crate) async fn deallocate_session(
     control: &mut Sender<ConnectionControl>,
     channel: OutgoingChannel,
-) -> Result<(), DeallocateSessionError> {
-    control
+) {
+    // A failed send means the connection engine already stopped; ignoring it
+    // is safe because the connection cleaned up its sessions on the way down.
+    let _ = control
         .send(ConnectionControl::DeallocateSession(channel))
-        .await
-        .map_err(|_| DeallocateSessionError::IllegalState)
+        .await;
 }
 
 /// An AMQP 1.0 Connection.
@@ -786,7 +795,7 @@ impl endpoint::Connection for Connection {
             ConnectionState::HeaderExchange => self.local_state = ConnectionState::OpenSent,
             ConnectionState::OpenReceived => self.local_state = ConnectionState::Opened,
             ConnectionState::HeaderSent => self.local_state = ConnectionState::OpenPipe,
-            _ => return Err(Self::OpenError::IllegalState),
+            _ => return Err(Self::OpenError::InvariantViolation),
         }
 
         Ok(())
@@ -820,7 +829,7 @@ impl endpoint::Connection for Connection {
                 true => self.local_state = ConnectionState::Discarding,
                 false => self.local_state = ConnectionState::OpenClosePipe,
             },
-            _ => return Err(CloseError::IllegalState),
+            _ => return Err(CloseError::InvariantViolation),
         }
         Ok(())
     }
@@ -981,6 +990,115 @@ mod tests {
         assert!(matches!(
             handle.try_close(),
             Err(super::TryCloseError::AlreadyClosed)
+        ));
+    }
+
+    /// An outcome channel dropped without a result (the engine stopped without
+    /// reporting) is an internal invariant violation.
+    #[tokio::test]
+    async fn dropped_outcome_reports_invariant_violation() {
+        use std::sync::{Arc, OnceLock};
+        use tokio::sync::oneshot;
+
+        let (control, _control_rx) = mpsc::channel(8);
+        let (outgoing, _outgoing_rx) = mpsc::channel(8);
+        let (outcome_tx, outcome) = oneshot::channel::<Result<ConnectionOutcome, super::Error>>();
+        drop(outcome_tx);
+        let mut handle = super::ConnectionHandle {
+            is_closed: false,
+            control,
+            handle: tokio::spawn(async {}),
+            outcome,
+            outgoing,
+            connection_stop_reason: Arc::new(OnceLock::new()),
+            max_frame_size: 0,
+            session_listener: (),
+        };
+
+        let error = handle.on_close().await.expect_err("an internal error");
+        assert!(matches!(error, super::Error::InvariantViolation));
+    }
+
+    /// `try_close` on an engine that stopped without reporting an outcome
+    /// reports an internal invariant violation.
+    #[tokio::test]
+    async fn try_close_with_dropped_outcome_reports_invariant_violation() {
+        use std::sync::{Arc, OnceLock};
+        use tokio::sync::oneshot;
+
+        let (control, _control_rx) = mpsc::channel(8);
+        let (outgoing, _outgoing_rx) = mpsc::channel(8);
+        let (outcome_tx, outcome) = oneshot::channel::<Result<ConnectionOutcome, super::Error>>();
+        drop(outcome_tx);
+        let mut handle = super::ConnectionHandle {
+            is_closed: false,
+            control,
+            handle: tokio::spawn(async {}),
+            outcome,
+            outgoing,
+            connection_stop_reason: Arc::new(OnceLock::new()),
+            max_frame_size: 0,
+            session_listener: (),
+        };
+
+        let error = handle.try_close().expect_err("an internal error");
+        assert!(matches!(
+            error,
+            super::TryCloseError::Stopped(error)
+                if matches!(*error, super::Error::InvariantViolation)
+        ));
+    }
+
+    /// A sink that accepts every frame, for testing frame-writing methods.
+    struct NullSink;
+
+    impl futures_util::Sink<crate::frames::amqp::Frame> for NullSink {
+        type Error = crate::transport::Error;
+
+        fn poll_ready(
+            self: std::pin::Pin<&mut Self>,
+            _: &mut std::task::Context<'_>,
+        ) -> std::task::Poll<Result<(), Self::Error>> {
+            std::task::Poll::Ready(Ok(()))
+        }
+
+        fn start_send(
+            self: std::pin::Pin<&mut Self>,
+            _: crate::frames::amqp::Frame,
+        ) -> Result<(), Self::Error> {
+            Ok(())
+        }
+
+        fn poll_flush(
+            self: std::pin::Pin<&mut Self>,
+            _: &mut std::task::Context<'_>,
+        ) -> std::task::Poll<Result<(), Self::Error>> {
+            std::task::Poll::Ready(Ok(()))
+        }
+
+        fn poll_close(
+            self: std::pin::Pin<&mut Self>,
+            _: &mut std::task::Context<'_>,
+        ) -> std::task::Poll<Result<(), Self::Error>> {
+            std::task::Poll::Ready(Ok(()))
+        }
+    }
+
+    /// A `send_close` from a state that cannot send a Close is an internal
+    /// invariant violation.
+    #[tokio::test]
+    async fn send_close_in_wrong_state_is_invariant_violation() {
+        let mut connection = Connection::new(ConnectionState::End, test_open());
+        let mut sink = NullSink;
+
+        let error = connection
+            .send_close(&mut sink, None)
+            .await
+            .expect_err("the close must be rejected");
+
+        assert!(matches!(
+            error,
+            super::ConnectionStateError::InvariantViolation
         ));
     }
 }

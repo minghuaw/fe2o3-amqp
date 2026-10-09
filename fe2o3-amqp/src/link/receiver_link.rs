@@ -53,7 +53,7 @@ where
         let handle = self
             .output_handle
             .clone()
-            .ok_or(Self::FlowError::IllegalState)?
+            .ok_or(Self::FlowError::InvariantViolation)?
             .into();
 
         let flow = self.get_link_flow(handle, link_credit, drain, echo, include_properties);
@@ -139,7 +139,17 @@ where
     {
         match self.local_state {
             LinkState::Attached | LinkState::IncompleteAttachExchanged => {}
-            _ => return Err(ReceiverTransferError::NotAttached),
+            _ => {
+                // A transfer that arrives when the link is not attached is
+                // classified from the recorded state: a terminal link reports
+                // its outcome, a stopped session its stop reason, and anything
+                // else is a defensive invariant violation.
+                return Err(link_error_from_closed_channel(
+                    &self.session_stop_reason,
+                    &self.local_state,
+                )
+                .into());
+            }
         }
 
         // ReceiverFlowState will not wait until link credit is available.
@@ -221,7 +231,7 @@ where
         let link_output_handle = self
             .output_handle
             .clone()
-            .ok_or(ReceiverTransferError::NotAttached)?
+            .ok_or(LinkStateError::InvariantViolation)?
             .into();
 
         let delivery = Delivery {
@@ -416,7 +426,7 @@ impl ReceiverLink<Target> {
             let handle = self
                 .output_handle
                 .clone()
-                .ok_or(FlowError::IllegalState)?
+                .ok_or(FlowError::InvariantViolation)?
                 .into();
 
             let flow = self.get_link_flow(handle, link_credit, drain, echo, include_properties);
@@ -883,7 +893,6 @@ where
         match attach_error {
             // Errors that indicate failed attachment
             ReceiverAttachError::SessionStopped(_)
-            | ReceiverAttachError::IllegalState
             | ReceiverAttachError::NonAttachFrameReceived
             | ReceiverAttachError::RemoteClosedWithError(_) => attach_error,
 
@@ -912,6 +921,7 @@ where
             }
 
             ReceiverAttachError::CoordinatorIsNotImplemented
+            | ReceiverAttachError::IllegalState
             | ReceiverAttachError::InitialDeliveryCountIsNone
             | ReceiverAttachError::SourceAddressIsNoneWhenDynamicIsTrue
             | ReceiverAttachError::TargetAddressIsSomeWhenDynamicIsTrue
@@ -979,13 +989,29 @@ where
         + Sync,
 {
     match reader.recv().await {
-        Some(LinkFrame::Detach(remote_detach)) => match link.on_detach_reply(remote_detach) {
-            Ok(status) => match status.remote_error() {
-                Some(error) => ReceiverAttachError::RemoteClosedWithError(error.clone()),
-                None => err,
-            },
-            Err(detach_error) => ReceiverAttachError::from(detach_error),
-        },
+        Some(LinkFrame::Detach(remote_detach)) => {
+            if !remote_detach.closed {
+                // §2.6.6: the peer's non-closing detach crossed our rejection
+                // closing detach, so the peer must reattach and then close.
+                // The attach already failed, so the primary attach error
+                // stands (the reattach dance is not completed on this path).
+                #[cfg(feature = "tracing")]
+                tracing::debug!(
+                    "peer detach crossed the rejection detach; keeping the attach error"
+                );
+                #[cfg(feature = "log")]
+                log::debug!("peer detach crossed the rejection detach; keeping the attach error");
+                return err;
+            }
+
+            match link.on_matching_detach_reply(remote_detach) {
+                Ok(status) => match status.remote_error() {
+                    Some(error) => ReceiverAttachError::RemoteClosedWithError(error.clone()),
+                    None => err,
+                },
+                Err(detach_error) => ReceiverAttachError::from(detach_error),
+            }
+        }
         Some(_) => ReceiverAttachError::NonAttachFrameReceived,
         None => receiver_attach_error_from_stop_reason(&link.session_stop_reason),
     }
