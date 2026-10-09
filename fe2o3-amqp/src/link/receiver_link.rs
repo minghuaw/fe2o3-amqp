@@ -231,7 +231,7 @@ where
         let link_output_handle = self
             .output_handle
             .clone()
-            .ok_or(LinkStateError::InvariantViolation)?
+            .ok_or(LinkError::InvariantViolation)?
             .into();
 
         let delivery = Delivery {

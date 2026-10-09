@@ -165,6 +165,12 @@ impl<R> SessionHandle<R> {
     /// - `Err(error)` if the session stopped with a local error (including its
     ///   connection stopping first)
     /// - `Err(Error::AlreadyEnded)` if the outcome was already observed
+    /// # Errors
+    ///
+    /// Returns [`Error`] if the session stopped with a local failure or the
+    /// outcome was already observed (`Error::AlreadyEnded`); `Ok(None)` means
+    /// the end exchange is still in progress, use [`on_end`](#method.on_end)
+    /// to await it.
     pub fn try_end(&mut self) -> Result<Option<SessionOutcome>, Error> {
         if self.is_ended {
             return Err(Error::AlreadyEnded);
@@ -208,6 +214,12 @@ impl<R> SessionHandle<R> {
         /// # wasm32 support
         ///
         /// This method is not supported on wasm32 targets, please use `drop()` instead.
+        /// # Errors
+        ///
+        /// Returns [`Error`] if the session stopped with a local failure
+        /// (`Error::ConnectionStopped` when the connection stopped first) or the
+        /// outcome was already observed (`Error::AlreadyEnded`). A remote end is
+        /// reported as the returned [`SessionOutcome`], not as an error.
         pub async fn end(&mut self) -> Result<SessionOutcome, Error> {
             if self.is_ended {
                 return Err(Error::AlreadyEnded);
@@ -226,6 +238,12 @@ impl<R> SessionHandle<R> {
         /// # wasm32 support
         ///
         /// This method is not supported on wasm32 targets, please use `drop()` instead.
+        /// # Errors
+        ///
+        /// Returns [`Error`] if the session stopped with a local failure
+        /// (`Error::ConnectionStopped` when the connection stopped first) or the
+        /// outcome was already observed (`Error::AlreadyEnded`). A remote end is
+        /// reported as the returned [`SessionOutcome`], not as an error.
         pub async fn close(&mut self) -> Result<SessionOutcome, Error> {
             self.end().await
         }
@@ -244,6 +262,12 @@ impl<R> SessionHandle<R> {
         /// # wasm32 support
         ///
         /// This method is not supported on wasm32 targets, please use `drop()` instead.
+        /// # Errors
+        ///
+        /// Returns [`Error`] if the session stopped with a local failure
+        /// (`Error::ConnectionStopped` when the connection stopped first) or the
+        /// outcome was already observed (`Error::AlreadyEnded`). A remote end is
+        /// reported as the returned [`SessionOutcome`], not as an error.
         pub async fn end_with_error(
             &mut self,
             error: impl Into<definitions::Error>,
@@ -270,6 +294,12 @@ impl<R> SessionHandle<R> {
     /// reports `Err(Error::ConnectionStopped(reason))`; a session whose outcome was
     /// already observed reports [`Error::AlreadyEnded`]. Use
     /// [`is_ended`](#method.is_ended) to query the state instead.
+    /// # Errors
+    ///
+    /// Returns [`Error`] if the session stopped with a local failure
+    /// (`Error::ConnectionStopped` when the connection stopped first) or the
+    /// outcome was already observed (`Error::AlreadyEnded`). A remote end is
+    /// reported as the returned [`SessionOutcome`], not as an error.
     pub async fn on_end(&mut self) -> Result<SessionOutcome, Error> {
         if self.is_ended {
             return Err(Error::AlreadyEnded);

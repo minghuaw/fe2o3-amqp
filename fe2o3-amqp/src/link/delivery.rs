@@ -21,7 +21,7 @@ use crate::{
 };
 use crate::{util::AsDeliveryState, Payload};
 
-use super::{DeliveryFailure, LinkOutcome, LinkStateError, SendError, SessionStopped};
+use super::{DeliveryFailure, LinkError, LinkOutcome, SendError, SessionStopped};
 
 /// Delivery information that is needed for disposing a message
 #[derive(Clone)]
@@ -426,7 +426,7 @@ pub trait FromDeliveryFailure {
 
     /// how to interprete a link-state error delivered through the settlement
     /// channel (e.g. the remote closed the link while the delivery was pending)
-    fn from_link_state_error(error: LinkStateError) -> Self;
+    fn from_link_state_error(error: LinkError) -> Self;
 
     /// how to interprete a peer detach/close delivered through the settlement
     /// channel while the delivery was pending
@@ -439,14 +439,14 @@ impl FromDeliveryFailure for SendResult {
         // The session relay and the link endpoint fail the pending deliveries
         // before they drop their maps, so this normally cannot happen; the
         // link state cannot be classified from here.
-        Err(LinkStateError::InternalError.into())
+        Err(LinkError::InternalError.into())
     }
 
     fn from_session_stop_reason(reason: SessionStopped) -> Self {
-        Err(LinkStateError::SessionStopped(reason).into())
+        Err(LinkError::SessionStopped(reason).into())
     }
 
-    fn from_link_state_error(error: LinkStateError) -> Self {
+    fn from_link_state_error(error: LinkError) -> Self {
         Err(error.into())
     }
 
@@ -555,7 +555,7 @@ mod tests {
     use crate::Sendable;
 
     use super::{DeliveryFut, FromDeliveryFailure, SendResult, SessionStopped};
-    use crate::link::{DeliveryFailure, LinkOutcome, LinkStateError, SendError};
+    use crate::link::{DeliveryFailure, LinkError, LinkOutcome, SendError};
 
     struct Foo {}
 
@@ -607,7 +607,7 @@ mod tests {
             );
         let result = <SendResult as FromDeliveryFailure>::from_session_stop_reason(reason.clone());
         match result {
-            Err(SendError::LinkStateError(LinkStateError::SessionStopped(actual))) => {
+            Err(SendError::SessionStopped(actual)) => {
                 assert_eq!(actual, reason);
             }
             other => panic!("unexpected result: {:?}", other),
@@ -634,8 +634,8 @@ mod tests {
         drop(tx);
 
         match fut.await {
-            Err(SendError::LinkStateError(LinkStateError::SessionStopped(
-                SessionStopped::ConnectionStopped(crate::connection::ConnectionOutcome::Closed),
+            Err(SendError::SessionStopped(SessionStopped::ConnectionStopped(
+                crate::connection::ConnectionOutcome::Closed,
             ))) => {}
             other => panic!("unexpected result: {:?}", other),
         }
@@ -655,18 +655,17 @@ mod tests {
         drop(tx);
 
         match fut.await {
-            Err(SendError::LinkStateError(LinkStateError::InternalError)) => {}
+            Err(SendError::InternalError) => {}
             other => panic!("unexpected result: {:?}", other),
         }
     }
 
     #[test]
     fn test_send_result_from_link_state_error() {
-        let result = <SendResult as FromDeliveryFailure>::from_link_state_error(
-            LinkStateError::IllegalState,
-        );
+        let result =
+            <SendResult as FromDeliveryFailure>::from_link_state_error(LinkError::IllegalState);
         match result {
-            Err(SendError::LinkStateError(LinkStateError::IllegalState)) => {}
+            Err(SendError::IllegalState) => {}
             other => panic!("unexpected result: {:?}", other),
         }
     }

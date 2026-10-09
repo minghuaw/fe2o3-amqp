@@ -10,8 +10,8 @@ use crate::{
 };
 
 use super::{
-    link_error_from_closed_channel, state::LinkState, AttachMode, DetachError, LinkFrame,
-    LinkOutcome, LinkRelay, LinkStateError, SessionStopped,
+    link_error_from_closed_channel, state::LinkState, AttachMode, DetachError, LinkError,
+    LinkFrame, LinkOutcome, LinkRelay, SessionStopped,
 };
 
 pub(crate) trait LinkEndpointInner
@@ -417,7 +417,7 @@ where
 /// # Cancel safety
 ///
 /// This is cancel safe because it only `.await` on `recv()` from a `tokio::mpsc::Receiver`
-pub(super) async fn recv_remote_detach<T>(link_inner: &mut T) -> Result<Detach, LinkStateError>
+pub(super) async fn recv_remote_detach<T>(link_inner: &mut T) -> Result<Detach, LinkError>
 where
     T: LinkEndpointInner + LinkEndpointInnerReattach + Send + Sync,
     T::Link: LinkDetach<DetachError = DetachError>,

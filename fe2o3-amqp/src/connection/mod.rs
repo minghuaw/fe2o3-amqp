@@ -175,6 +175,12 @@ impl<R> ConnectionHandle<R> {
     /// - `Ok(None)` if the close exchange is still in progress
     /// - `Err(error)` if the connection stopped with a local error
     /// - `Err(Error::AlreadyClosed)` if the outcome was already observed
+    /// # Errors
+    ///
+    /// Returns [`Error`] if the connection stopped with a local failure or the
+    /// outcome was already observed (`Error::AlreadyClosed`); `Ok(None)` means
+    /// the close exchange is still in progress, use
+    /// [`on_close`](#method.on_close) to await it.
     pub fn try_close(&mut self) -> Result<Option<ConnectionOutcome>, Error> {
         if self.is_closed {
             return Err(Error::AlreadyClosed);
@@ -222,6 +228,13 @@ impl<R> ConnectionHandle<R> {
         /// # wasm32 support
         ///
         /// This method is not supported in wasm32 targets, please use `drop()` instead.
+        /// # Errors
+        ///
+        /// Returns [`Error`] if the connection stopped with a local failure or
+        /// the outcome was already observed (`Error::AlreadyClosed`). A remote
+        /// close is reported as the returned [`ConnectionOutcome`], not as an
+        /// error; a transport that ended without the close exchange reports
+        /// `Error::ConnectionLost`.
         pub async fn close(&mut self) -> Result<ConnectionOutcome, Error> {
             if self.is_closed {
                 return Err(Error::AlreadyClosed);
@@ -249,6 +262,13 @@ impl<R> ConnectionHandle<R> {
         /// # wasm32 support
         ///
         /// This method is not supported in wasm32 targets, please use `drop()` instead.
+        /// # Errors
+        ///
+        /// Returns [`Error`] if the connection stopped with a local failure or
+        /// the outcome was already observed (`Error::AlreadyClosed`). A remote
+        /// close is reported as the returned [`ConnectionOutcome`], not as an
+        /// error; a transport that ended without the close exchange reports
+        /// `Error::ConnectionLost`.
         pub async fn close_with_error(
             &mut self,
             error: impl Into<definitions::Error>,
@@ -274,6 +294,13 @@ impl<R> ConnectionHandle<R> {
     /// The close outcome is delivered once; a connection whose outcome was
     /// already observed reports [`Error::AlreadyClosed`]. Use
     /// [`is_closed`](#method.is_closed) to query the state instead.
+    /// # Errors
+    ///
+    /// Returns [`Error`] if the connection stopped with a local failure or
+    /// the outcome was already observed (`Error::AlreadyClosed`). A remote
+    /// close is reported as the returned [`ConnectionOutcome`], not as an
+    /// error; a transport that ended without the close exchange reports
+    /// `Error::ConnectionLost`.
     pub async fn on_close(&mut self) -> Result<ConnectionOutcome, Error> {
         if self.is_closed {
             return Err(Error::AlreadyClosed);

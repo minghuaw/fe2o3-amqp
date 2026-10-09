@@ -2,7 +2,7 @@ use fe2o3_amqp_types::messaging::{Accepted, DeliveryState, Outcome, Rejected};
 
 use crate::link::{
     delivery::{FromDeliveryFailure, FromDeliveryState, FromPreSettled},
-    DetachError, LinkOutcome, DeliveryFailure, LinkStateError,
+    DetachError, LinkOutcome, DeliveryFailure, LinkError,
     MessageEncodeError, MessageSizeExceeded, SendError, SenderAttachError, SessionStopped,
     TransferError,
 };
@@ -92,9 +92,25 @@ cfg_acceptor! {
 /// Errors with sending message on the control link
 #[derive(Debug, thiserror::Error)]
 pub enum ControllerSendError {
-    /// Errors found in link state
-    #[error("Local error: {:?}", .0)]
-    LinkStateError(LinkStateError),
+    /// The peer sent a frame that is not permitted in the current state
+    /// (`amqp:illegal-state`)
+    #[error("The peer sent a frame that is not permitted in the current state")]
+    IllegalState,
+
+    /// An internal invariant was violated (defensive)
+    ///
+    /// This is a safeguard for a path that is impossible by construction; it
+    /// cannot occur unless the library breaks its own invariants.
+    #[error("An internal invariant was violated")]
+    InvariantViolation,
+
+    /// An internal failure that can occur in principle
+    #[error("An internal error occurred")]
+    InternalError,
+
+    /// The session (or its connection) stopped before the delivery was settled
+    #[error("The session stopped before the delivery was settled: {:?}", .0)]
+    SessionStopped(SessionStopped),
 
     /// The peer detached the link before the delivery was settled
     #[error("The peer detached the link: {:?}", .0)]
@@ -141,7 +157,10 @@ pub enum ControllerSendError {
 impl From<SendError> for ControllerSendError {
     fn from(value: SendError) -> Self {
         match value {
-            SendError::LinkStateError(state) => Self::LinkStateError(state),
+            SendError::IllegalState => Self::IllegalState,
+            SendError::InvariantViolation => Self::InvariantViolation,
+            SendError::InternalError => Self::InternalError,
+            SendError::SessionStopped(reason) => Self::SessionStopped(reason),
             SendError::LinkDetached(status) => Self::LinkDetached(status),
             SendError::FrameSizeTooSmall => Self::FrameSizeTooSmall,
             SendError::AcquisitionNotImplemented => Self::AcquisitionNotImplemented,
@@ -163,11 +182,14 @@ impl From<DeliveryFailure> for ControllerSendError {
     }
 }
 
-impl From<LinkStateError> for ControllerSendError {
-    fn from(value: LinkStateError) -> Self {
+impl From<LinkError> for ControllerSendError {
+    fn from(value: LinkError) -> Self {
         match value {
-            LinkStateError::LinkDetached(status) => Self::LinkDetached(status),
-            other => Self::LinkStateError(other),
+            LinkError::IllegalState => Self::IllegalState,
+            LinkError::InvariantViolation => Self::InvariantViolation,
+            LinkError::InternalError => Self::InternalError,
+            LinkError::SessionStopped(reason) => Self::SessionStopped(reason),
+            LinkError::LinkDetached(status) => Self::LinkDetached(status),
         }
     }
 }
@@ -220,8 +242,8 @@ impl From<ControllerSendError> for OwnedDischargeError {
     }
 }
 
-impl From<LinkStateError> for OwnedDischargeError {
-    fn from(value: LinkStateError) -> Self {
+impl From<LinkError> for OwnedDischargeError {
+    fn from(value: LinkError) -> Self {
         Self::DetachError(value)
     }
 }
@@ -232,9 +254,25 @@ impl From<LinkStateError> for OwnedDischargeError {
 /// are interpreted
 #[derive(Debug, thiserror::Error)]
 pub enum PostError {
-    /// Errors found in link state
-    #[error("Local error: {:?}", .0)]
-    LinkStateError(LinkStateError),
+    /// The peer sent a frame that is not permitted in the current state
+    /// (`amqp:illegal-state`)
+    #[error("The peer sent a frame that is not permitted in the current state")]
+    IllegalState,
+
+    /// An internal invariant was violated (defensive)
+    ///
+    /// This is a safeguard for a path that is impossible by construction; it
+    /// cannot occur unless the library breaks its own invariants.
+    #[error("An internal invariant was violated")]
+    InvariantViolation,
+
+    /// An internal failure that can occur in principle
+    #[error("An internal error occurred")]
+    InternalError,
+
+    /// The session (or its connection) stopped before the delivery was settled
+    #[error("The session stopped before the delivery was settled: {:?}", .0)]
+    SessionStopped(SessionStopped),
 
     /// The peer detached the link before the delivery was settled
     #[error("The peer detached the link: {:?}", .0)]
@@ -280,11 +318,14 @@ impl From<serde_amqp::Error> for PostError {
     }
 }
 
-impl From<LinkStateError> for PostError {
-    fn from(value: LinkStateError) -> Self {
+impl From<LinkError> for PostError {
+    fn from(value: LinkError) -> Self {
         match value {
-            LinkStateError::LinkDetached(status) => Self::LinkDetached(status),
-            other => Self::LinkStateError(other),
+            LinkError::IllegalState => Self::IllegalState,
+            LinkError::InvariantViolation => Self::InvariantViolation,
+            LinkError::InternalError => Self::InternalError,
+            LinkError::SessionStopped(reason) => Self::SessionStopped(reason),
+            LinkError::LinkDetached(status) => Self::LinkDetached(status),
         }
     }
 }
@@ -344,14 +385,14 @@ impl FromDeliveryFailure for PostResult {
     fn from_oneshot_recv_error(_: tokio::sync::oneshot::error::RecvError) -> Self {
         // The session relay and the link endpoint fail the pending deliveries
         // before they drop their maps, so this is defensive only.
-        Err(PostError::LinkStateError(LinkStateError::InvariantViolation))
+        Err(PostError::InvariantViolation)
     }
 
     fn from_session_stop_reason(reason: SessionStopped) -> Self {
-        Err(PostError::LinkStateError(LinkStateError::SessionStopped(reason)))
+        Err(PostError::SessionStopped(reason))
     }
 
-    fn from_link_state_error(error: LinkStateError) -> Self {
+    fn from_link_state_error(error: LinkError) -> Self {
         Err(error.into())
     }
 
@@ -364,14 +405,14 @@ impl FromDeliveryFailure for PostResult {
 mod tests {
     use fe2o3_amqp_types::definitions;
 
-    use super::{LinkOutcome, FromDeliveryFailure, LinkStateError, PostError, PostResult};
+    use super::{LinkOutcome, FromDeliveryFailure, LinkError, PostError, PostResult};
 
     #[test]
     fn test_post_result_from_link_state_error() {
         let result =
-            <PostResult as FromDeliveryFailure>::from_link_state_error(LinkStateError::IllegalState);
+            <PostResult as FromDeliveryFailure>::from_link_state_error(LinkError::IllegalState);
         match result {
-            Err(PostError::LinkStateError(LinkStateError::IllegalState)) => {}
+            Err(PostError::IllegalState) => {}
             other => panic!("unexpected result: {:?}", other),
         }
     }

@@ -37,8 +37,8 @@ use super::{
         LinkEndpointInnerReattach, PeerViolationCloseExt,
     },
     state::LinkState,
-    ArcSenderUnsettledMap, AttachMode, DeliveryFailure, DetachThenResumeSenderError, LinkFrame,
-    LinkOutcome, LinkRelay, LinkStateError, MessageSizeExceeded, SendError, SenderAttachError,
+    ArcSenderUnsettledMap, AttachMode, DeliveryFailure, DetachThenResumeSenderError, LinkError,
+    LinkFrame, LinkOutcome, LinkRelay, MessageSizeExceeded, SendError, SenderAttachError,
     SenderAttachExchange, SenderFlowState, SenderLink, SenderResumeError, SenderResumeErrorKind,
     SessionStopped, TransferError,
 };
@@ -220,6 +220,12 @@ impl Sender {
     /// detach, if any. If the remote peer answers with a closing detach, the
     /// Sender re-attaches and completes the closing handshake (AMQP 1.0
     /// §2.6.6), and the status is `Closed`.
+    /// # Errors
+    ///
+    /// Returns [`LinkError`] if the detach/close exchange fails, e.g.
+    /// `SessionStopped` when the session (or its connection) stopped first.
+    /// On failure the returned `DetachedSender`/`DetachedReceiver` can still
+    /// be resumed or closed.
     pub async fn detach(
         mut self,
     ) -> Result<(DetachedSender, LinkOutcome), (DetachedSender, DetachError)> {
@@ -230,6 +236,12 @@ impl Sender {
     }
 
     /// Detach the link with an error
+    /// # Errors
+    ///
+    /// Returns [`LinkError`] if the detach/close exchange fails, e.g.
+    /// `SessionStopped` when the session (or its connection) stopped first.
+    /// On failure the returned `DetachedSender`/`DetachedReceiver` can still
+    /// be resumed or closed.
     pub async fn detach_with_error(
         mut self,
         error: impl Into<definitions::Error>,
@@ -244,6 +256,12 @@ impl Sender {
         /// Detach the link with a timeout
         ///
         /// This simply wraps [`detach`](#method.detach) with a `timeout`
+        /// # Errors
+        ///
+        /// Returns [`LinkError`] if the detach/close exchange fails, e.g.
+        /// `SessionStopped` when the session (or its connection) stopped first.
+        /// On failure the returned `DetachedSender`/`DetachedReceiver` can still
+        /// be resumed or closed.
         pub async fn detach_with_timeout(
             self,
             duration: Duration,
@@ -298,11 +316,23 @@ impl Sender {
     /// This will set the `closed` field in the Detach performative to true.
     /// The returned [`LinkOutcome`] carries the error the peer attached to
     /// its closing detach, if any.
+    /// # Errors
+    ///
+    /// Returns [`LinkError`] if the detach/close exchange fails, e.g.
+    /// `SessionStopped` when the session (or its connection) stopped first.
+    /// On failure the returned `DetachedSender`/`DetachedReceiver` can still
+    /// be resumed or closed.
     pub async fn close(mut self) -> Result<LinkOutcome, DetachError> {
         self.inner.close_with_error(None).await
     }
 
     /// Close the link with an error
+    /// # Errors
+    ///
+    /// Returns [`LinkError`] if the detach/close exchange fails, e.g.
+    /// `SessionStopped` when the session (or its connection) stopped first.
+    /// On failure the returned `DetachedSender`/`DetachedReceiver` can still
+    /// be resumed or closed.
     pub async fn close_with_error(
         mut self,
         error: impl Into<definitions::Error>,
@@ -419,6 +449,13 @@ impl Sender {
     /// Because this method borrows the sender while it waits, use
     /// [`send_batchable`](#method.send_batchable) if the link may need to be
     /// resumed (its future does not borrow the sender).
+    /// # Errors
+    ///
+    /// Returns [`SendError`] if the message cannot be sent or the delivery
+    /// fails. [`SendError::recovery`] classifies whether the link can still be
+    /// used, must be resumed, or replaced; a peer detach is reported as
+    /// `LinkDetached` carrying the peer's error, and a stopped session as
+    /// `SessionStopped`.
     pub async fn send<T: SerializableBody>(
         &mut self,
         sendable: impl Into<Sendable<T>>,
@@ -437,6 +474,13 @@ impl Sender {
     ///
     /// This is useful when the message is large and you want to avoid cloning it because the
     /// message may be used again after the send operation.
+    /// # Errors
+    ///
+    /// Returns [`SendError`] if the message cannot be sent or the delivery
+    /// fails. [`SendError::recovery`] classifies whether the link can still be
+    /// used, must be resumed, or replaced; a peer detach is reported as
+    /// `LinkDetached` carrying the peer's error, and a stopped session as
+    /// `SessionStopped`.
     pub async fn send_ref<T: SerializableBody>(
         &mut self,
         sendable: &Sendable<T>,
@@ -481,6 +525,11 @@ impl Sender {
     /// let fut = sender.send_batchable("HELLO AMQP").await.unwrap();
     /// let result = fut.await;
     /// ```
+    /// # Errors
+    ///
+    /// Returns [`SendError`] if the message cannot be handed to the link; a
+    /// failure of the settlement itself is reported by the returned future,
+    /// whose [`SendError::recovery`] classifies the next step.
     pub async fn send_batchable<T: SerializableBody>(
         &mut self,
         sendable: impl Into<Sendable<T>>,
@@ -497,6 +546,11 @@ impl Sender {
     ///
     /// This is useful when the message is large and you want to avoid cloning it because the
     /// message may be used again after the send operation.
+    /// # Errors
+    ///
+    /// Returns [`SendError`] if the message cannot be handed to the link; a
+    /// failure of the settlement itself is reported by the returned future,
+    /// whose [`SendError::recovery`] classifies the next step.
     pub async fn send_batchable_ref<T: SerializableBody>(
         &mut self,
         sendable: &Sendable<T>,
@@ -522,10 +576,10 @@ impl Sender {
     ///
     /// # Errors
     ///
-    /// [`LinkStateError::InvariantViolation`] if the link is unattached, or
-    /// [`LinkStateError::SessionStopped`] if the session (or its connection)
+    /// [`LinkError::InvariantViolation`] if the link is unattached, or
+    /// [`LinkError::SessionStopped`] if the session (or its connection)
     /// stopped first.
-    pub async fn on_detach(&mut self) -> Result<LinkOutcome, LinkStateError> {
+    pub async fn on_detach(&mut self) -> Result<LinkOutcome, LinkError> {
         // A terminal link already produced the outcome this method waits for;
         // report it instead of waiting for a frame that will not come.
         match &self.inner.link.local_state {
@@ -539,7 +593,7 @@ impl Sender {
                     remote_error: remote_error.clone(),
                 });
             }
-            LinkState::Unattached => return Err(LinkStateError::InvariantViolation),
+            LinkState::Unattached => return Err(LinkError::InvariantViolation),
             _ => {}
         }
 
@@ -553,9 +607,7 @@ impl Sender {
             Err(ApplyRemoteDetachError::AlreadyClosed(remote_error)) => {
                 Ok(LinkOutcome::Closed { remote_error })
             }
-            Err(ApplyRemoteDetachError::InvariantViolation) => {
-                Err(LinkStateError::InvariantViolation)
-            }
+            Err(ApplyRemoteDetachError::InvariantViolation) => Err(LinkError::InvariantViolation),
         }
     }
 }
@@ -1006,7 +1058,7 @@ impl SenderInner<SenderLink<Target>> {
             .link
             .output_handle
             .clone()
-            .ok_or(LinkStateError::InvariantViolation)?
+            .ok_or(LinkError::InvariantViolation)?
             .into();
         let transfer = Transfer {
             handle,
@@ -1044,7 +1096,7 @@ impl SenderInner<SenderLink<Target>> {
             .link
             .output_handle
             .clone()
-            .ok_or(LinkStateError::InvariantViolation)?
+            .ok_or(LinkError::InvariantViolation)?
             .into();
         let settled = match self.link.snd_settle_mode {
             SenderSettleMode::Settled => true,
@@ -1081,7 +1133,7 @@ impl SenderInner<SenderLink<Target>> {
             .link
             .output_handle
             .clone()
-            .ok_or(LinkStateError::InvariantViolation)?
+            .ok_or(LinkError::InvariantViolation)?
             .into();
         let transfer = Transfer {
             handle,
@@ -1825,7 +1877,7 @@ mod tests {
 
         assert!(matches!(
             result,
-            Err(TransferError::LinkState(LinkStateError::InvariantViolation))
+            Err(TransferError::LinkState(LinkError::InvariantViolation))
         ));
         assert!(outgoing_rx.try_recv().is_err());
     }
@@ -1847,7 +1899,7 @@ mod tests {
 
         assert!(matches!(
             result,
-            Err(TransferError::LinkState(LinkStateError::InvariantViolation))
+            Err(TransferError::LinkState(LinkError::InvariantViolation))
         ));
     }
 
@@ -1889,7 +1941,7 @@ mod tests {
 
         assert!(matches!(
             result,
-            Err(TransferError::LinkState(LinkStateError::InternalError))
+            Err(TransferError::LinkState(LinkError::InternalError))
         ));
     }
 
@@ -1907,7 +1959,7 @@ mod tests {
 
         assert!(matches!(
             result,
-            Err(TransferError::LinkState(LinkStateError::LinkDetached(
+            Err(TransferError::LinkState(LinkError::LinkDetached(
                 LinkOutcome::Detached { remote_error: None }
             )))
         ));
@@ -1926,7 +1978,7 @@ mod tests {
 
         assert!(matches!(
             result,
-            Err(LinkStateError::LinkDetached(LinkOutcome::Detached {
+            Err(LinkError::LinkDetached(LinkOutcome::Detached {
                 remote_error: None
             }))
         ));
@@ -1948,12 +2000,12 @@ mod tests {
         let error = inner
             .link
             .apply_remote_detach_outcome(detach)
-            .map_err(LinkStateError::from)
+            .map_err(LinkError::from)
             .unwrap_err();
 
         assert!(matches!(
             error,
-            LinkStateError::LinkDetached(LinkOutcome::Detached { remote_error: None })
+            LinkError::LinkDetached(LinkOutcome::Detached { remote_error: None })
         ));
     }
 
@@ -1990,11 +2042,11 @@ mod tests {
                 closed: false,
                 error: None,
             })
-            .map_err(LinkStateError::from)
+            .map_err(LinkError::from)
             .unwrap_err();
         assert!(matches!(
             error,
-            LinkStateError::LinkDetached(LinkOutcome::Closed {
+            LinkError::LinkDetached(LinkOutcome::Closed {
                 remote_error: Some(ref error)
             }) if error == &peer_error
         ));
@@ -2140,14 +2192,14 @@ mod tests {
         inner.link.local_state = LinkState::CloseSent;
         assert!(matches!(
             inner.link.on_matching_detach_reply(detach(false)),
-            Err(LinkStateError::InvariantViolation)
+            Err(LinkError::InvariantViolation)
         ));
 
         // DetachSent + closing → caller-contract violation (routed to reattach)
         inner.link.local_state = LinkState::DetachSent;
         assert!(matches!(
             inner.link.on_matching_detach_reply(detach(true)),
-            Err(LinkStateError::InvariantViolation)
+            Err(LinkError::InvariantViolation)
         ));
     }
 
@@ -2200,7 +2252,7 @@ mod tests {
         let mut sender = Sender { inner };
         let error = sender.on_detach().await.expect_err("unattached link");
 
-        assert!(matches!(error, LinkStateError::InvariantViolation));
+        assert!(matches!(error, LinkError::InvariantViolation));
     }
 
     /// A non-complete attach exchange fails its pending deliveries instead of
@@ -2217,7 +2269,7 @@ mod tests {
         )]);
 
         let result = exchange.complete_or_fail_deliveries(
-            DeliveryFailure::LinkState(LinkStateError::IllegalState),
+            DeliveryFailure::LinkState(LinkError::IllegalState),
             SenderAttachError::UnexpectedUnsettledMap,
         );
 
@@ -2227,9 +2279,7 @@ mod tests {
         ));
         assert!(matches!(
             rx.try_recv(),
-            Ok(Err(DeliveryFailure::LinkState(
-                LinkStateError::IllegalState
-            )))
+            Ok(Err(DeliveryFailure::LinkState(LinkError::IllegalState)))
         ));
     }
 
@@ -2240,7 +2290,7 @@ mod tests {
         let exchange = SenderAttachExchange::Complete;
 
         let result = exchange.complete_or_fail_deliveries(
-            DeliveryFailure::LinkState(LinkStateError::IllegalState),
+            DeliveryFailure::LinkState(LinkError::IllegalState),
             SenderAttachError::UnexpectedUnsettledMap,
         );
 

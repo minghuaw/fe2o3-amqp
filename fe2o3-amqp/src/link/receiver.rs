@@ -4,9 +4,7 @@ use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::{Arc, OnceLock};
 
 use fe2o3_amqp_types::{
-    definitions::{
-        self, DeliveryTag, Fields, Handle, LinkError, ReceiverSettleMode, Role, SequenceNo,
-    },
+    definitions::{self, DeliveryTag, Fields, Handle, ReceiverSettleMode, Role, SequenceNo},
     messaging::{
         Accepted, Address, DeliveryState, FromBody, Modified, Rejected, Released, Source, Target,
     },
@@ -39,7 +37,7 @@ use super::{
     },
     state::LinkState,
     ArcReceiverUnsettledMap, AttachMode, DetachThenResumeReceiverError, DispositionError,
-    FlowError, LinkFrame, LinkOutcome, LinkRelay, LinkStateError, MessageSizeExceeded,
+    FlowError, LinkError, LinkFrame, LinkOutcome, LinkRelay, MessageSizeExceeded,
     ReceiverAttachError, ReceiverAttachExchange, ReceiverFlowState, ReceiverLink,
     ReceiverResumeError, ReceiverResumeErrorKind, ReceiverTransferError, RecvError, SessionStopped,
     DEFAULT_CREDIT,
@@ -344,6 +342,12 @@ impl Receiver {
     ///
     /// This function is cancel-safe. See [#22](https://github.com/minghuaw/fe2o3-amqp/issues/22)
     /// for more details.
+    /// # Errors
+    ///
+    /// Returns [`RecvError`] if the delivery cannot be received. A peer detach
+    /// is reported as `LinkDetached`, a stopped session as `SessionStopped`,
+    /// and an oversized or malformed delivery detaches the link before
+    /// reporting the failure. [`RecvError::recovery`] classifies the next step.
     pub async fn recv<T>(&mut self) -> Result<Delivery<T>, RecvError>
     where
         for<'de> T: FromBody<'de> + Send,
@@ -352,7 +356,12 @@ impl Receiver {
     }
 
     /// Set the link credit. This will stop draining if the link is in a draining cycle
-    pub async fn set_credit(&mut self, credit: SequenceNo) -> Result<(), LinkStateError> {
+    /// # Errors
+    ///
+    /// Returns [`FlowError`] if the flow state cannot be sent, e.g.
+    /// `SessionStopped` when the session (or its connection) stopped first or
+    /// `LinkDetached` when the peer detached the link.
+    pub async fn set_credit(&mut self, credit: SequenceNo) -> Result<(), LinkError> {
         self.inner.set_credit(credit).await
     }
 
@@ -360,11 +369,21 @@ impl Receiver {
     ///
     /// This will send a `Flow` performative with the `drain` field set to true.
     /// Setting the credit will set the `drain` field to false and stop draining
-    pub async fn drain(&mut self) -> Result<(), LinkStateError> {
+    /// # Errors
+    ///
+    /// Returns [`FlowError`] if the flow state cannot be sent, e.g.
+    /// `SessionStopped` when the session (or its connection) stopped first or
+    /// `LinkDetached` when the peer detached the link.
+    pub async fn drain(&mut self) -> Result<(), LinkError> {
         self.inner.drain().await
     }
 
     /// Send the link properties to the remote peer via a `Flow` performative
+    /// # Errors
+    ///
+    /// Returns [`FlowError`] if the flow state cannot be sent, e.g.
+    /// `SessionStopped` when the session (or its connection) stopped first or
+    /// `LinkDetached` when the peer detached the link.
     pub async fn send_properties(&self) -> Result<(), FlowError> {
         self.inner.send_properties().await
     }
@@ -374,6 +393,12 @@ impl Receiver {
     /// This will send a `Detach` performative with the `closed` field set to false. If the remote
     /// peer responds with a Detach performative whose `closed` field is set to true, the link will
     /// re-attach and then close by exchanging closing Detach performatives.
+    /// # Errors
+    ///
+    /// Returns [`LinkError`] if the detach/close exchange fails, e.g.
+    /// `SessionStopped` when the session (or its connection) stopped first.
+    /// On failure the returned `DetachedSender`/`DetachedReceiver` can still
+    /// be resumed or closed.
     pub async fn detach(
         mut self,
     ) -> Result<(DetachedReceiver, LinkOutcome), (DetachedReceiver, DetachError)> {
@@ -398,6 +423,12 @@ impl Receiver {
     /// This will send a `Detach` performative with the `closed` field set to false. If the remote
     /// peer responds with a Detach performative whose `closed` field is set to true, the link will
     /// re-attach and then close by exchanging closing Detach performatives.
+    /// # Errors
+    ///
+    /// Returns [`LinkError`] if the detach/close exchange fails, e.g.
+    /// `SessionStopped` when the session (or its connection) stopped first.
+    /// On failure the returned `DetachedSender`/`DetachedReceiver` can still
+    /// be resumed or closed.
     pub async fn detach_with_error(
         mut self,
         error: impl Into<definitions::Error>,
@@ -422,6 +453,12 @@ impl Receiver {
         /// Detach the link with a timeout
         ///
         /// This simply wraps [`detach`](#method.detach) with a `timeout`
+        /// # Errors
+        ///
+        /// Returns [`LinkError`] if the detach/close exchange fails, e.g.
+        /// `SessionStopped` when the session (or its connection) stopped first.
+        /// On failure the returned `DetachedSender`/`DetachedReceiver` can still
+        /// be resumed or closed.
         pub async fn detach_with_timeout(
             self,
             duration: Duration,
@@ -472,6 +509,12 @@ impl Receiver {
     /// This will send a Detach performative with the `closed` field set to true.
     /// The returned [`LinkOutcome`] carries the error the peer attached to
     /// its closing detach, if any.
+    /// # Errors
+    ///
+    /// Returns [`LinkError`] if the detach/close exchange fails, e.g.
+    /// `SessionStopped` when the session (or its connection) stopped first.
+    /// On failure the returned `DetachedSender`/`DetachedReceiver` can still
+    /// be resumed or closed.
     pub async fn close(mut self) -> Result<LinkOutcome, DetachError> {
         self.inner.close_with_error(None).await
     }
@@ -479,6 +522,12 @@ impl Receiver {
     /// Close the link with an error.
     ///
     /// This will send a Detach performative with the `closed` field set to true.
+    /// # Errors
+    ///
+    /// Returns [`LinkError`] if the detach/close exchange fails, e.g.
+    /// `SessionStopped` when the session (or its connection) stopped first.
+    /// On failure the returned `DetachedSender`/`DetachedReceiver` can still
+    /// be resumed or closed.
     pub async fn close_with_error(
         mut self,
         error: impl Into<definitions::Error>,
@@ -501,6 +550,11 @@ impl Receiver {
     /// let delivery: Delivery<Value> = receiver.recv().await.unwrap();
     /// receiver.accept(&delivery).await.unwrap();
     /// ```
+    /// # Errors
+    ///
+    /// Returns [`DispositionError`] if the disposition cannot be sent, e.g.
+    /// `SessionStopped` when the session (or its connection) stopped first or
+    /// `LinkDetached` when the peer detached the link.
     pub async fn accept(
         &self,
         delivery_info: impl Into<DeliveryInfo>,
@@ -523,6 +577,11 @@ impl Receiver {
     /// let delivery2: Delivery<Value> = receiver.recv().await.unwrap();
     /// receiver.accept_all(vec![&delivery1, &delivery2]).await.unwrap();
     /// ```
+    /// # Errors
+    ///
+    /// Returns [`DispositionError`] if the disposition cannot be sent, e.g.
+    /// `SessionStopped` when the session (or its connection) stopped first or
+    /// `LinkDetached` when the peer detached the link.
     pub async fn accept_all(
         &self,
         deliveries: impl IntoIterator<Item = impl Into<DeliveryInfo>>,
@@ -535,6 +594,11 @@ impl Receiver {
     /// to `Reject`
     ///
     /// This will not send disposition if the delivery is not found in the local unsettled map.
+    /// # Errors
+    ///
+    /// Returns [`DispositionError`] if the disposition cannot be sent, e.g.
+    /// `SessionStopped` when the session (or its connection) stopped first or
+    /// `LinkDetached` when the peer detached the link.
     pub async fn reject(
         &self,
         delivery_info: impl Into<DeliveryInfo>,
@@ -550,6 +614,11 @@ impl Receiver {
     /// to `Reject`
     ///
     /// Only deliveries that are found in the local unsettled map will be included in the disposition frame(s).
+    /// # Errors
+    ///
+    /// Returns [`DispositionError`] if the disposition cannot be sent, e.g.
+    /// `SessionStopped` when the session (or its connection) stopped first or
+    /// `LinkDetached` when the peer detached the link.
     pub async fn reject_all(
         &self,
         deliveries: impl IntoIterator<Item = impl Into<DeliveryInfo>>,
@@ -565,6 +634,11 @@ impl Receiver {
     /// to `Release`
     ///
     /// This will not send disposition if the delivery is not found in the local unsettled map.
+    /// # Errors
+    ///
+    /// Returns [`DispositionError`] if the disposition cannot be sent, e.g.
+    /// `SessionStopped` when the session (or its connection) stopped first or
+    /// `LinkDetached` when the peer detached the link.
     pub async fn release(
         &self,
         delivery_info: impl Into<DeliveryInfo>,
@@ -577,6 +651,11 @@ impl Receiver {
     /// to `Release`
     ///
     /// Only deliveries that are found in the local unsettled map will be included in the disposition frame(s).
+    /// # Errors
+    ///
+    /// Returns [`DispositionError`] if the disposition cannot be sent, e.g.
+    /// `SessionStopped` when the session (or its connection) stopped first or
+    /// `LinkDetached` when the peer detached the link.
     pub async fn release_all(
         &self,
         deliveries: impl IntoIterator<Item = impl Into<DeliveryInfo>>,
@@ -1039,9 +1118,9 @@ fn ensure_delivery_identity(transfer: &Transfer) -> Result<(), ReceiverTransferE
 impl<L> ReceiverInner<L>
 where
     L: endpoint::ReceiverLink<
-            FlowError = LinkStateError,
+            FlowError = LinkError,
             TransferError = ReceiverTransferError,
-            DispositionError = LinkStateError,
+            DispositionError = LinkError,
             AttachError = ReceiverAttachError,
             DetachError = DetachError,
         > + LinkExt<FlowState = ReceiverFlowState, Unsettled = ArcReceiverUnsettledMap>
@@ -1071,7 +1150,7 @@ where
         for<'de> T: FromBody<'de> + Send,
     {
         // When the session or the connection stops, the channel closes and this
-        // returns `RecvError::LinkStateError(SessionStopped(reason))` with the
+        // returns `RecvError::SessionStopped(reason)` with the
         // stop reason observed by the link.
         let frame = match self.incoming.recv().await {
             // cancel safe
@@ -1102,7 +1181,7 @@ where
                 // The session forwards a peer Attach for this link; receiving
                 // one here means the peer violated the link state machine.
                 self.close_on_peer_violation(illegal_state_error()).await;
-                Err(LinkStateError::IllegalState.into())
+                Err(LinkError::IllegalState.into())
             }
             LinkFrame::Flow(_) | LinkFrame::Disposition(_) => {
                 // Flow and Disposition are handled by LinkRelay which runs
@@ -1116,7 +1195,7 @@ where
                     "Unexpected Flow or Disposition frame in the receiver stream",
                 ))
                 .await;
-                Err(LinkStateError::InternalError.into())
+                Err(LinkError::InternalError.into())
             }
             #[cfg(feature = "transaction")]
             LinkFrame::Acquisition(_) => {
@@ -1312,7 +1391,7 @@ where
         self.incomplete_transfer.take();
 
         let error = definitions::Error::new(
-            LinkError::MessageSizeExceeded,
+            definitions::LinkError::MessageSizeExceeded,
             Some(format!(
                 "received message larger than max size of {max_size}"
             )),
@@ -1459,7 +1538,7 @@ where
     ///
     /// This is cancel safe as internanlly it only `.await` on sending over `tokio::mpsc::Sender`
     #[inline]
-    pub async fn set_credit(&mut self, credit: SequenceNo) -> Result<(), LinkStateError> {
+    pub async fn set_credit(&mut self, credit: SequenceNo) -> Result<(), LinkError> {
         self.processed.store(0, Ordering::Release);
         if let CreditMode::Auto(_) = self.credit_mode {
             self.credit_mode = CreditMode::Auto(credit)
@@ -2385,7 +2464,7 @@ mod tests {
 
     /// A peer Attach relayed to an attached receiver violates the link state
     /// machine: the link is terminated with `amqp:illegal-state` and
-    /// `RecvError::LinkStateError(IllegalState)` is reported.
+    /// `RecvError::IllegalState` is reported.
     #[tokio::test]
     async fn unexpected_attach_terminates_link_with_illegal_state() {
         let (mut inner, _session_rx, mut outgoing_rx, incoming_tx) =
@@ -2404,10 +2483,7 @@ mod tests {
         )
         .await;
 
-        assert!(matches!(
-            error,
-            RecvError::LinkStateError(LinkStateError::IllegalState)
-        ));
+        assert!(matches!(error, RecvError::IllegalState));
     }
 
     /// A peer-driven `IllegalState` attach rejection terminates the link with
@@ -2450,7 +2526,7 @@ mod tests {
     /// Flow and Disposition frames are handled by the session loop; one that
     /// reaches the receiver stream is an internal invariant violation: the
     /// link is terminated with `amqp:internal-error` and
-    /// `RecvError::LinkStateError(InvariantViolation)` is reported.
+    /// `RecvError::InternalError` is reported.
     #[tokio::test]
     async fn unexpected_flow_terminates_link_with_internal_error() {
         let (mut inner, _session_rx, mut outgoing_rx, incoming_tx) =
@@ -2476,10 +2552,7 @@ mod tests {
         )
         .await;
 
-        assert!(matches!(
-            error,
-            RecvError::LinkStateError(LinkStateError::InternalError)
-        ));
+        assert!(matches!(error, RecvError::InternalError));
     }
 
     /// Sending a flow on a link without a local handle is an internal
@@ -2564,9 +2637,9 @@ mod tests {
             .expect_err("the transfer must fail");
         assert!(matches!(
             error,
-            RecvError::LinkStateError(LinkStateError::SessionStopped(SessionStopped::Outcome(
+            RecvError::SessionStopped(SessionStopped::Outcome(
                 crate::session::SessionOutcome::Ended
-            )))
+            ))
         ));
     }
 
@@ -2763,7 +2836,7 @@ mod tests {
             &mut inner,
             &mut outgoing_rx,
             &incoming_tx,
-            definitions::ErrorCondition::from(LinkError::MessageSizeExceeded),
+            definitions::ErrorCondition::from(definitions::LinkError::MessageSizeExceeded),
         )
         .await;
         assert_message_size_exceeded(error, 120, 100);
@@ -2808,7 +2881,7 @@ mod tests {
             &mut inner,
             &mut outgoing_rx,
             &incoming_tx,
-            definitions::ErrorCondition::from(LinkError::MessageSizeExceeded),
+            definitions::ErrorCondition::from(definitions::LinkError::MessageSizeExceeded),
         )
         .await;
         assert_message_size_exceeded(error, 101, 100);

@@ -13,9 +13,7 @@ use fe2o3_amqp::{
         ListenerSessionHandle, SessionAcceptor,
     },
     connection::{Connection, ConnectionHandle, ConnectionOutcome},
-    link::{
-        LinkStateError, RecvError, SendError, SenderAttachError, SessionOutcome, SessionStopped,
-    },
+    link::{RecvError, SendError, SenderAttachError, SessionOutcome, SessionStopped},
     session::{Session, SessionHandle},
     types::{
         definitions::{self, AmqpError},
@@ -142,7 +140,7 @@ async fn expect_send_stop_reason(sender: &mut Sender, expected: SessionStopped) 
                     "timed out waiting for the stop reason to propagate"
                 );
             }
-            Err(SendError::LinkStateError(LinkStateError::SessionStopped(reason))) => {
+            Err(SendError::SessionStopped(reason)) => {
                 assert_eq!(reason, expected, "unexpected stop reason");
                 return;
             }
@@ -202,8 +200,8 @@ async fn link_recv_surfaces_connection_closed() {
         .expect("recv timed out");
 
     match result {
-        Err(RecvError::LinkStateError(LinkStateError::SessionStopped(
-            SessionStopped::ConnectionStopped(ConnectionOutcome::RemoteClosed),
+        Err(RecvError::SessionStopped(SessionStopped::ConnectionStopped(
+            ConnectionOutcome::RemoteClosed,
         ))) => {}
         other => panic!("expected SessionStopped(ConnectionClosed), got {:?}", other),
     }
@@ -226,9 +224,7 @@ async fn link_recv_surfaces_session_ended() {
         .expect("recv timed out");
 
     match result {
-        Err(RecvError::LinkStateError(LinkStateError::SessionStopped(
-            SessionStopped::Outcome(SessionOutcome::RemoteEnded),
-        ))) => {}
+        Err(RecvError::SessionStopped(SessionStopped::Outcome(SessionOutcome::RemoteEnded))) => {}
         other => panic!("expected SessionStopped(RemoteEnded), got {:?}", other),
     }
 }
