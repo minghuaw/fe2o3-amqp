@@ -13,12 +13,12 @@ use tokio::sync::{mpsc, oneshot};
 use tokio::task::JoinHandle;
 
 use crate::{
-    connection::{AllocSessionError, ConnectionStopReason},
+    connection::{AllocSessionError, ConnectionOutcome},
     control::{ConnectionControl, SessionControl},
     endpoint::{
         self, IncomingChannel, InputHandle, LinkFlow, OutgoingChannel, OutputHandle, Session,
     },
-    link::{LinkFrame, LinkRelay, SessionStopReason},
+    link::{LinkFrame, LinkRelay, SessionOutcome, SessionStopped},
     session::{
         self,
         engine::SessionEngine,
@@ -70,7 +70,7 @@ pub(crate) async fn allocate_incoming_link(
     link_name: String,
     link_relay: LinkRelay<()>,
     input_handle: InputHandle,
-    session_stop_reason: &Arc<OnceLock<SessionStopReason>>,
+    session_stop_reason: &Arc<OnceLock<SessionStopped>>,
 ) -> Result<OutputHandle, AllocLinkError> {
     let (responder, resp_rx) = oneshot::channel();
 
@@ -87,7 +87,7 @@ pub(crate) async fn allocate_incoming_link(
             log::warn!(
                 "allocate_incoming_link: session stop reason not recorded; reporting SessionStopped(Ended)"
             );
-            SessionStopReason::Ended
+            SessionStopped::Outcome(SessionOutcome::Ended)
         }
     };
 
@@ -176,7 +176,7 @@ impl SessionAcceptor {
             session_control_rx: mpsc::Receiver<SessionControl>,
             incoming: mpsc::Receiver<SessionFrame>,
             outgoing_link_frames: mpsc::Receiver<LinkFrame>,
-        ) -> Result<(JoinHandle<()>, oneshot::Receiver<Result<(), Error>>), BeginError> {
+        ) -> Result<(JoinHandle<()>, oneshot::Receiver<Result<SessionOutcome, Error>>), BeginError> {
             let engine = SessionEngine::begin_listener_session(
                 connection.control.clone(),
                 listener_session,
@@ -201,7 +201,7 @@ impl SessionAcceptor {
             session_control_rx: mpsc::Receiver<SessionControl>,
             incoming: mpsc::Receiver<SessionFrame>,
             outgoing_link_frames: mpsc::Receiver<LinkFrame>,
-        ) -> Result<(JoinHandle<()>, oneshot::Receiver<Result<(), Error>>), BeginError> {
+        ) -> Result<(JoinHandle<()>, oneshot::Receiver<Result<SessionOutcome, Error>>), BeginError> {
             match self.0.control_link_acceptor.clone() {
                 Some(control_link_acceptor) => {
                     let txn_manager =
@@ -326,6 +326,7 @@ impl SessionAcceptor {
         let handle = SessionHandle {
             is_ended: false,
             terminal_outcome: None,
+            terminated_with_error: false,
             control: session_control_tx,
             engine_handle,
             outcome,
@@ -411,15 +412,15 @@ impl endpoint::Session for ListenerSession {
         self.session.local_state()
     }
 
-    fn set_session_stop_reason(&mut self, reason: SessionStopReason) {
+    fn set_session_stop_reason(&mut self, reason: SessionStopped) {
         self.session.set_session_stop_reason(reason)
     }
 
-    fn session_stop_reason(&self) -> &Arc<OnceLock<SessionStopReason>> {
+    fn session_stop_reason(&self) -> &Arc<OnceLock<SessionStopped>> {
         self.session.session_stop_reason()
     }
 
-    fn connection_stop_reason(&self) -> &Arc<OnceLock<ConnectionStopReason>> {
+    fn connection_stop_reason(&self) -> &Arc<OnceLock<ConnectionOutcome>> {
         self.session.connection_stop_reason()
     }
 

@@ -36,10 +36,10 @@ use super::{
         recv_remote_detach, LinkEndpointInner, LinkEndpointInnerDetach, LinkEndpointInnerReattach,
     },
     state::LinkState,
-    ArcSenderUnsettledMap, AttachMode, DeliveryFailure, DetachStatus, DetachThenResumeSenderError,
-    LinkFrame, LinkRelay, LinkStateError, MessageSizeExceeded, SendError, SenderAttachError,
+    ArcSenderUnsettledMap, AttachMode, DeliveryFailure, DetachThenResumeSenderError, LinkFrame,
+    LinkOutcome, LinkRelay, LinkStateError, MessageSizeExceeded, SendError, SenderAttachError,
     SenderAttachExchange, SenderFlowState, SenderLink, SenderResumeError, SenderResumeErrorKind,
-    SessionStopReason, TransferError,
+    SessionStopped, TransferError,
 };
 
 use super::link_error_from_closed_channel;
@@ -214,14 +214,14 @@ impl Sender {
     /// The Sender will send a detach frame with closed field set to false,
     /// and wait for a detach with closed field set to false from the remote peer.
     ///
-    /// On success the returned [`DetachStatus`] reports how the link was
+    /// On success the returned [`LinkOutcome`] reports how the link was
     /// detached (suspended or closed) and carries the error the peer attached to its
     /// detach, if any. If the remote peer answers with a closing detach, the
     /// Sender re-attaches and completes the closing handshake (AMQP 1.0
     /// §2.6.6), and the status is `Closed`.
     pub async fn detach(
         mut self,
-    ) -> Result<(DetachedSender, DetachStatus), (DetachedSender, DetachError)> {
+    ) -> Result<(DetachedSender, LinkOutcome), (DetachedSender, DetachError)> {
         match self.inner.detach_with_error(None).await {
             Ok(status) => Ok((DetachedSender::new(self.inner), status)),
             Err(err) => Err((DetachedSender::new(self.inner), err)),
@@ -232,7 +232,7 @@ impl Sender {
     pub async fn detach_with_error(
         mut self,
         error: impl Into<definitions::Error>,
-    ) -> Result<(DetachedSender, DetachStatus), (DetachedSender, DetachError)> {
+    ) -> Result<(DetachedSender, LinkOutcome), (DetachedSender, DetachError)> {
         match self.inner.detach_with_error(Some(error.into())).await {
             Ok(status) => Ok((DetachedSender::new(self.inner), status)),
             Err(err) => Err((DetachedSender::new(self.inner), err)),
@@ -247,7 +247,7 @@ impl Sender {
             self,
             duration: Duration,
         ) -> Result<
-            Result<(DetachedSender, DetachStatus), (DetachedSender, DetachError)>,
+            Result<(DetachedSender, LinkOutcome), (DetachedSender, DetachError)>,
             Elapsed,
         > {
             timeout(duration, self.detach()).await
@@ -295,9 +295,9 @@ impl Sender {
     /// Close the link.
     ///
     /// This will set the `closed` field in the Detach performative to true.
-    /// The returned [`DetachStatus`] carries the error the peer attached to
+    /// The returned [`LinkOutcome`] carries the error the peer attached to
     /// its closing detach, if any.
-    pub async fn close(mut self) -> Result<DetachStatus, DetachError> {
+    pub async fn close(mut self) -> Result<LinkOutcome, DetachError> {
         self.inner.close_with_error(None).await
     }
 
@@ -305,7 +305,7 @@ impl Sender {
     pub async fn close_with_error(
         mut self,
         error: impl Into<definitions::Error>,
-    ) -> Result<DetachStatus, DetachError> {
+    ) -> Result<LinkOutcome, DetachError> {
         self.inner.close_with_error(Some(error.into())).await
     }
 
@@ -521,17 +521,17 @@ impl Sender {
     /// [`LinkStateError::InvariantViolation`] if the link is unattached, or
     /// [`LinkStateError::SessionStopped`] if the session (or its connection)
     /// stopped first.
-    pub async fn on_detach(&mut self) -> Result<DetachStatus, LinkStateError> {
+    pub async fn on_detach(&mut self) -> Result<LinkOutcome, LinkStateError> {
         // A terminal link already produced the outcome this method waits for;
         // report it instead of waiting for a frame that will not come.
         match &self.inner.link.local_state {
             LinkState::Detached(remote_error) => {
-                return Ok(DetachStatus::Detached {
+                return Ok(LinkOutcome::Detached {
                     remote_error: remote_error.clone(),
                 });
             }
             LinkState::Closed(remote_error) => {
-                return Ok(DetachStatus::Closed {
+                return Ok(LinkOutcome::Closed {
                     remote_error: remote_error.clone(),
                 });
             }
@@ -544,10 +544,10 @@ impl Sender {
             Ok(status) => Ok(status),
             // The link terminalized concurrently; report the stored outcome.
             Err(ApplyRemoteDetachError::AlreadyDetached(remote_error)) => {
-                Ok(DetachStatus::Detached { remote_error })
+                Ok(LinkOutcome::Detached { remote_error })
             }
             Err(ApplyRemoteDetachError::AlreadyClosed(remote_error)) => {
-                Ok(DetachStatus::Closed { remote_error })
+                Ok(LinkOutcome::Closed { remote_error })
             }
             Err(ApplyRemoteDetachError::NotAttached) => Err(LinkStateError::InvariantViolation),
         }
@@ -591,7 +591,7 @@ where
         // the closing detach this drop would otherwise send would be a
         // duplicate.
         let mut remote_detach_received = false;
-        let mut detach_status: Option<DetachStatus> = None;
+        let mut detach_status: Option<LinkOutcome> = None;
         while let Ok(frame) = self.incoming.try_recv() {
             if let LinkFrame::Detach(detach) = frame {
                 remote_detach_received = true;
@@ -607,11 +607,11 @@ where
                     log::debug!("failed to apply remote detach outcome on sender drop");
                 }
                 detach_status = Some(if closed {
-                    DetachStatus::Closed {
+                    LinkOutcome::Closed {
                         remote_error: error,
                     }
                 } else {
-                    DetachStatus::Detached {
+                    LinkOutcome::Detached {
                         remote_error: error,
                     }
                 });
@@ -685,8 +685,7 @@ where
             // The link is still open, but this sender can no longer re-send the
             // buffered deliveries; fail them with a close outcome rather than
             // letting their futures hang.
-            let failure =
-                DeliveryFailure::LinkDetached(DetachStatus::Closed { remote_error: None });
+            let failure = DeliveryFailure::LinkDetached(LinkOutcome::Closed { remote_error: None });
             for unsettled_message in self.pending_redeliveries.drain(..) {
                 let _ = unsettled_message.fail(failure.clone());
             }
@@ -739,7 +738,7 @@ where
         &self.session
     }
 
-    fn session_stop_reason(&self) -> &Arc<OnceLock<SessionStopReason>> {
+    fn session_stop_reason(&self) -> &Arc<OnceLock<SessionStopped>> {
         self.link().session_stop_reason()
     }
 
@@ -796,7 +795,7 @@ where
             | SenderAttachExchange::Resume(resuming_deliveries) => {
                 fail_resuming_deliveries(
                     resuming_deliveries,
-                    DeliveryFailure::LinkDetached(DetachStatus::Closed { remote_error: None }),
+                    DeliveryFailure::LinkDetached(LinkOutcome::Closed { remote_error: None }),
                 );
             }
         }
@@ -1608,11 +1607,13 @@ mod tests {
     fn make_session_handle(max_frame_size: usize) -> SessionHandle<()> {
         let (control, _control_rx) = mpsc::channel::<SessionControl>(16);
         let (outgoing_tx, _outgoing_rx) = mpsc::channel::<LinkFrame>(16);
-        let (outcome_tx, outcome) = oneshot::channel::<Result<(), crate::session::error::Error>>();
+        let (outcome_tx, outcome) =
+            oneshot::channel::<Result<crate::link::SessionOutcome, crate::session::error::Error>>();
         drop(outcome_tx);
         SessionHandle {
             is_ended: false,
             terminal_outcome: None,
+            terminated_with_error: false,
             control,
             engine_handle: tokio::spawn(async {}),
             outcome,
@@ -1722,7 +1723,7 @@ mod tests {
     /// triggers the AMQP 1.0 §2.6.6 simultaneous-detach handshake. The spec
     /// assigns the reattach to this side (the non-closing/suspending side),
     /// which reattaches and then sends a closing detach; the link ends
-    /// `Closed`, reported as a `DetachStatus::Closed` outcome.
+    /// `Closed`, reported as a `LinkOutcome::Closed` outcome.
     ///
     /// The peer's frames are scripted, so this is deterministic.
     #[tokio::test]
@@ -1747,7 +1748,7 @@ mod tests {
         );
         assert!(matches!(
             result,
-            Ok(DetachStatus::Closed { remote_error: None })
+            Ok(LinkOutcome::Closed { remote_error: None })
         ));
         assert!(matches!(&inner.link.local_state, LinkState::Closed(_)));
     }
@@ -1876,7 +1877,7 @@ mod tests {
         assert!(matches!(
             result,
             Err(TransferError::LinkState(LinkStateError::LinkDetached(
-                DetachStatus::Detached { remote_error: None }
+                LinkOutcome::Detached { remote_error: None }
             )))
         ));
     }
@@ -1894,7 +1895,7 @@ mod tests {
 
         assert!(matches!(
             result,
-            Err(LinkStateError::LinkDetached(DetachStatus::Detached {
+            Err(LinkStateError::LinkDetached(LinkOutcome::Detached {
                 remote_error: None
             }))
         ));
@@ -1921,7 +1922,7 @@ mod tests {
 
         assert!(matches!(
             error,
-            LinkStateError::LinkDetached(DetachStatus::Detached { remote_error: None })
+            LinkStateError::LinkDetached(LinkOutcome::Detached { remote_error: None })
         ));
     }
 
@@ -1962,7 +1963,7 @@ mod tests {
             .unwrap_err();
         assert!(matches!(
             error,
-            LinkStateError::LinkDetached(DetachStatus::Closed {
+            LinkStateError::LinkDetached(LinkOutcome::Closed {
                 remote_error: Some(ref error)
             }) if error == &peer_error
         ));
@@ -2051,7 +2052,7 @@ mod tests {
 
         assert!(matches!(
             status,
-            DetachStatus::Closed { remote_error: Some(ref error) } if error == &peer_error
+            LinkOutcome::Closed { remote_error: Some(ref error) } if error == &peer_error
         ));
     }
 
@@ -2068,7 +2069,7 @@ mod tests {
 
         assert!(matches!(
             status,
-            DetachStatus::Detached { remote_error: None }
+            LinkOutcome::Detached { remote_error: None }
         ));
     }
 
@@ -2657,7 +2658,7 @@ mod tests {
 
     /// A crossed close on a link with a pending delivery (the peer answers our
     /// non-closing detach with a closing one) completes as
-    /// `DetachStatus::Closed`, failing the delivery with the close outcome
+    /// `LinkOutcome::Closed`, failing the delivery with the close outcome
     /// instead of returning `IllegalState`.
     #[tokio::test]
     async fn crossed_close_fails_pending_delivery_with_closed_status() {
@@ -2690,11 +2691,11 @@ mod tests {
         );
         assert!(matches!(
             result,
-            Ok(DetachStatus::Closed { remote_error: None })
+            Ok(LinkOutcome::Closed { remote_error: None })
         ));
         assert!(matches!(
             outcome.try_recv(),
-            Ok(Err(DeliveryFailure::LinkDetached(DetachStatus::Closed {
+            Ok(Err(DeliveryFailure::LinkDetached(LinkOutcome::Closed {
                 remote_error: None
             })))
         ));
@@ -2807,7 +2808,7 @@ mod tests {
 
         assert!(matches!(
             outcome.try_recv(),
-            Ok(Err(DeliveryFailure::LinkDetached(DetachStatus::Closed {
+            Ok(Err(DeliveryFailure::LinkDetached(LinkOutcome::Closed {
                 remote_error: None
             })))
         ));
