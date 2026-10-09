@@ -6,20 +6,40 @@ use tokio::sync::oneshot;
 
 use crate::Payload;
 
-use super::{delivery::UnsettledMessage, error::LinkStateError, receiver_link::is_section_header};
+use super::{delivery::UnsettledMessage, receiver_link::is_section_header, DeliveryFailure};
 
+/// How a locally unsettled delivery is reconciled against the peer's
+/// unsettled map during resumption.
+///
+/// [`Resume`](Self::Resume), [`RestateOutcome`](Self::RestateOutcome) and
+/// [`Abort`](Self::Abort) reassociate the original delivery: the transfer
+/// keeps the delivery tag and sets `resume = true`.
+///
+/// [`Resend`](Self::Resend) is different. The peer's attach map had no entry
+/// for the tag (source-only), so the delivery is re-sent later as a **new**
+/// delivery: a fresh delivery-id and delivery-tag with `resume = false`. It is
+/// a redelivery, not an AMQP resume.
 pub(crate) enum ResumingDelivery {
+    /// The delivery cannot be resumed; send a resumed transfer with
+    /// `aborted = true` (implicitly settled).
     Abort {
         message_format: MessageFormat,
-        sender: Option<oneshot::Sender<Result<Option<DeliveryState>, LinkStateError>>>,
+        sender: Option<oneshot::Sender<Result<Option<DeliveryState>, DeliveryFailure>>>,
     },
+    /// The peer does not consider the delivery unsettled. Buffer the payload
+    /// and re-send it as a new, non-resumed delivery once the attach exchange
+    /// completes with complete maps.
     Resend(UnsettledMessage),
+    /// Both sides consider the delivery unsettled; send a resumed transfer
+    /// with the remaining payload and state.
     Resume(UnsettledMessage),
+    /// All message data already reached the peer; send a resumed transfer
+    /// carrying only this side's terminal delivery state.
     RestateOutcome {
         payload: Payload,
         local_state: DeliveryState,
         message_format: MessageFormat,
-        sender: oneshot::Sender<Result<Option<DeliveryState>, LinkStateError>>,
+        sender: oneshot::Sender<Result<Option<DeliveryState>, DeliveryFailure>>,
     },
 }
 
@@ -240,7 +260,7 @@ mod tests {
         state: Option<DeliveryState>,
     ) -> (
         UnsettledMessage,
-        oneshot::Receiver<Result<Option<DeliveryState>, LinkStateError>>,
+        oneshot::Receiver<Result<Option<DeliveryState>, DeliveryFailure>>,
     ) {
         let (sender, receiver) = oneshot::channel();
         (

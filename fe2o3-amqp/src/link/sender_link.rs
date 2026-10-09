@@ -1,6 +1,6 @@
 use std::sync::{Arc, OnceLock};
 
-use fe2o3_amqp_types::{definitions::Fields, messaging::MESSAGE_FORMAT};
+use fe2o3_amqp_types::definitions::Fields;
 use futures_util::Future;
 use serde_amqp::serialized_size;
 
@@ -48,20 +48,43 @@ where
         transfer: Transfer,
         payload: Payload,
         delivery_tag: DeliveryTag,
-        unsettled: UnsettledMessage,
-    ) -> Result<(), LinkStateError> {
+        unsettled: &mut Option<UnsettledMessage>,
+    ) -> Result<(), TransferError> {
         self.unsettled
             .write()
             .get_or_insert(OrderedMap::new())
-            .insert(delivery_tag.clone(), unsettled);
+            .insert(
+                delivery_tag.clone(),
+                unsettled
+                    .take()
+                    .expect("the caller supplies the unsettled message"),
+            );
         let registration = UnsettledRegistration {
             unsettled: &self.unsettled,
             delivery_tag: Some(&delivery_tag),
         };
-        self.send_transfer_without_modifying_unsettled_map(writer, transfer, payload)
-            .await?;
-        registration.keep();
-        Ok(())
+        match self
+            .send_transfer_without_modifying_unsettled_map(writer, transfer, payload)
+            .await
+        {
+            Ok(_) => {
+                registration.keep();
+                Ok(())
+            }
+            Err(error) => {
+                // Recover the message so the caller can retry it instead of
+                // losing its settlement channel. The relay may have removed
+                // and failed the entry in the meantime, in which case there is
+                // nothing left to recover.
+                *unsettled = self
+                    .unsettled
+                    .write()
+                    .as_mut()
+                    .and_then(|map| map.swap_remove(&delivery_tag));
+                registration.keep();
+                Err(error)
+            }
+        }
     }
 
     /// # Cancel safety
@@ -72,12 +95,12 @@ where
         writer: &mpsc::Sender<LinkFrame>,
         mut transfer: Transfer,
         mut payload: Payload,
-    ) -> Result<bool, LinkStateError> {
+    ) -> Result<bool, TransferError> {
         let settled = self.is_settled_on_send(&transfer);
         let input_handle = self
             .input_handle
             .clone()
-            .ok_or(LinkStateError::IllegalState)?;
+            .ok_or(TransferError::NotAttached)?;
 
         // The connection engine publishes the negotiated encoder max frame
         // length before the connection handle is created; links are only
@@ -105,9 +128,20 @@ where
         let orig_delivery_id = transfer.delivery_id; // None on all send paths
         transfer.delivery_id = Some(u32::MAX);
         let performative_size =
-            serialized_size(&transfer).map_err(|_| LinkStateError::IllegalState)?; // This should not happen
+            serialized_size(&transfer).map_err(|source| MessageEncodeError { source })?;
         transfer.delivery_id = orig_delivery_id;
-        let max_payload = self.max_frame_size - 4 - performative_size;
+        // Saturate so a pathologically small max-frame-size (one that cannot
+        // even fit the serialized performative) reports an error instead of
+        // underflowing into a huge payload bound.
+        let max_payload = self
+            .max_frame_size
+            .saturating_sub(4)
+            .saturating_sub(performative_size);
+        if max_payload == 0 {
+            // The serialized performative alone does not fit into a single
+            // frame, so the delivery cannot be split at all.
+            return Err(TransferError::FrameSizeTooSmall);
+        }
 
         // Split the payload so that every transfer frame fits within the
         // negotiated max frame size, keeping the session's transfer-id and
@@ -180,10 +214,20 @@ where
         Ok(settled)
     }
 
-    pub(crate) async fn get_delivery_tag_or_detached<Fut>(
+    /// Wait for the next delivery tag, consuming one unit of link credit, or
+    /// fail if the link is detaching or stopping at the same time.
+    ///
+    /// The incoming frame is polled before the credit so a remote detach that
+    /// has already arrived is observed before credit is consumed; otherwise a
+    /// send could race the remote closing the link, consuming credit and
+    /// writing a transfer the relay can no longer forward. The failure is the
+    /// peer's detach/close outcome, an unsupported remote-initiated
+    /// acquisition, the session stop reason, or a defensive unexpected-frame
+    /// error.
+    pub(crate) async fn next_delivery_tag<Fut>(
         &mut self,
         detached: Fut,
-    ) -> Result<[u8; 4], LinkStateError>
+    ) -> Result<[u8; 4], TransferError>
     where
         Fut: Future<Output = Option<LinkFrame>> + Send,
     {
@@ -203,15 +247,18 @@ where
                     // when the session is stopping: a stop without a detach
                     // shows up as the channel closing (`None` below).
                     Some(LinkFrame::Detach(detach)) => {
-                        let closed = detach.closed;
-                        let result = self.apply_remote_detach_outcome(detach);
-
-                        match (result, closed) {
-                            (Ok(_), true) => Err(LinkStateError::RemoteClosed),
-                            (Ok(_), false) => Err(LinkStateError::RemoteDetached),
-                            (Err(err), _) => Err(LinkStateError::from(err)),
+                        match self.apply_remote_detach_outcome(detach) {
+                            Ok(status) => Err(TransferError::LinkDetached(status)),
+                            Err(err) => Err(TransferError::LinkState(err.into())),
                         }
                     },
+                    // A remote-initiated transactional acquisition is not
+                    // supported yet; the caller terminates the link with
+                    // `amqp:not-implemented` (AMQP 1.0 §4.4.3).
+                    #[cfg(feature = "transaction")]
+                    Some(LinkFrame::Acquisition(_)) => {
+                        Err(TransferError::AcquisitionNotImplemented)
+                    }
                     Some(_frame) => {
                         // Other frames should not forwarded to the sender by the session
                         #[cfg(feature = "tracing")]
@@ -219,14 +266,18 @@ where
                         #[cfg(feature = "log")]
                         log::error!("Unexpected frame: {:?}", _frame);
 
-                        Err(LinkStateError::ExpectImmediateDetach)
+                        Err(TransferError::ExpectImmediateDetach)
                     }
                     None => {
                         // The channel closed without a frame: the session (or its
                         // connection) stopped and the engine dropped the relay.
                         match self.session_stop_reason.get() {
-                            Some(reason) => Err(LinkStateError::SessionStopped(reason.clone())),
-                            None => Err(LinkStateError::ExpectImmediateDetach), // defensive: no stop reason recorded; failure is link-local
+                            Some(reason) => {
+                                Err(TransferError::LinkState(
+                                    LinkStateError::SessionStopped(reason.clone()),
+                                ))
+                            }
+                            None => Err(TransferError::ExpectImmediateDetach), // defensive: no stop reason recorded; failure is link-local
                         }
                     }
                 }
@@ -250,11 +301,11 @@ where
         settled: Option<bool>,
         state: Option<DeliveryState>,
         batchable: bool,
-    ) -> Result<Transfer, LinkStateError> {
+    ) -> Result<Transfer, TransferError> {
         let handle = self
             .output_handle
             .clone()
-            .ok_or(LinkStateError::IllegalState)?
+            .ok_or(TransferError::NotAttached)?
             .into();
 
         let settled = match self.snd_settle_mode {
@@ -299,7 +350,7 @@ where
         + Sync,
 {
     type FlowError = FlowError;
-    type TransferError = LinkStateError;
+    type TransferError = TransferError;
     type DispositionError = DispositionError;
 
     async fn send_payload<Fut>(
@@ -315,7 +366,7 @@ where
     where
         Fut: Future<Output = Option<LinkFrame>> + Send,
     {
-        let tag = self.get_delivery_tag_or_detached(detached).await?;
+        let tag = self.next_delivery_tag(detached).await?;
         // Delivery count is incremented when consuming credit
         let delivery_tag = DeliveryTag::from(tag);
 
@@ -355,9 +406,20 @@ where
         }
 
         let (tx, rx) = oneshot::channel();
-        let unsettled = UnsettledMessage::new(payload_copy, None, message_format, tx);
-        self.send_unsettled_transfer(writer, transfer, payload, delivery_tag.clone(), unsettled)
-            .await?;
+        let mut unsettled = Some(UnsettledMessage::new(
+            payload_copy,
+            None,
+            message_format,
+            tx,
+        ));
+        self.send_unsettled_transfer(
+            writer,
+            transfer,
+            payload,
+            delivery_tag.clone(),
+            &mut unsettled,
+        )
+        .await?;
 
         Ok(Settlement::Unsettled {
             delivery_tag,
@@ -523,7 +585,7 @@ async fn send_disposition(
     state: Option<DeliveryState>,
     batchable: bool,
     session_stop_reason: &OnceLock<SessionStopReason>,
-) -> Result<(), IllegalLinkStateError> {
+) -> Result<(), LinkStateError> {
     let disposition = Disposition {
         role: Role::Sender,
         first,
@@ -537,14 +599,14 @@ async fn send_disposition(
         .send(frame)
         .await
         .map_err(|_| match session_stop_reason.get() {
-            Some(reason) => IllegalLinkStateError::SessionStopped(reason.clone()),
-            None => IllegalLinkStateError::IllegalState, // defensive: no stop reason recorded; failure is link-local
+            Some(reason) => LinkStateError::SessionStopped(reason.clone()),
+            None => LinkStateError::IllegalState, // defensive: no stop reason recorded; failure is link-local
         })
 }
 
 impl<T> SenderLink<T> {
     #[allow(clippy::needless_collect)]
-    fn handle_unsettled_in_attach(
+    pub(crate) fn handle_unsettled_in_attach(
         &mut self,
         remote_unsettled: Option<OrderedMap<DeliveryTag, Option<DeliveryState>>>,
     ) -> Result<SenderAttachExchange, SenderAttachError> {
@@ -556,19 +618,12 @@ impl<T> SenderLink<T> {
                     return Ok(SenderAttachExchange::Complete);
                 }
 
-                remote_map
-                    .into_keys()
-                    // Local is None, assume the message format is 0
-                    .map(|delivery_tag| {
-                        (
-                            delivery_tag,
-                            ResumingDelivery::Abort {
-                                message_format: MESSAGE_FORMAT,
-                                sender: None,
-                            },
-                        )
-                    })
-                    .collect()
+                // The peer considers these deliveries unsettled while this side
+                // has no record of them (target-only). AMQP 1.0 §2.6.13: the
+                // sender MUST ignore them, and §2.7.5 forbids sending resumed
+                // transfers for deliveries not in the local unsettled map. The
+                // receiver settles them by comparing the attach maps.
+                Vec::new()
             }
             (Some(local_map), None) => {
                 if local_map.is_empty() {
@@ -587,26 +642,17 @@ impl<T> SenderLink<T> {
                     return Ok(SenderAttachExchange::Complete);
                 }
 
-                let local: Vec<(DeliveryTag, ResumingDelivery)> = local_map
+                // `remote_map` retains only target-only deliveries after the
+                // local tags are removed. The sender MUST ignore them
+                // (AMQP 1.0 §2.6.13) and MUST NOT send resumed transfers for
+                // deliveries not in its local unsettled map (§2.7.5).
+                local_map
                     .into_iter()
                     .filter_map(|(tag, local)| {
                         let remote = remote_map.swap_remove(&tag);
                         resume_delivery(local, remote).map(|resume| (tag, resume))
                     })
-                    .collect();
-                let remote = remote_map
-                    .into_keys()
-                    // These are unsettled messages not found in the local map, assume the message format is 0
-                    .map(|tag| {
-                        (
-                            tag,
-                            ResumingDelivery::Abort {
-                                message_format: MESSAGE_FORMAT,
-                                sender: None,
-                            },
-                        )
-                    });
-                local.into_iter().chain(remote).collect()
+                    .collect()
             }
         };
 
@@ -745,9 +791,9 @@ where
     async fn send_attach(
         &mut self,
         writer: &mpsc::Sender<LinkFrame>,
-        is_reattaching: bool,
+        mode: AttachMode,
     ) -> Result<(), Self::AttachError> {
-        self.send_attach_inner(writer, is_reattaching).await?;
+        self.send_attach_inner(writer, mode).await?;
         Ok(())
     }
 }
@@ -830,10 +876,10 @@ where
         &mut self,
         writer: &mpsc::Sender<LinkFrame>,
         reader: &mut mpsc::Receiver<LinkFrame>,
-        is_reattaching: bool,
+        mode: AttachMode,
     ) -> Result<Self::AttachExchange, SenderAttachError> {
         // Send out local attach
-        self.send_attach(writer, is_reattaching).await?;
+        self.send_attach(writer, mode).await?;
 
         // Wait for remote attach
         let remote_attach =
@@ -864,7 +910,6 @@ where
             | SenderAttachError::SessionNotMapped
             | SenderAttachError::IllegalState
             | SenderAttachError::NonAttachFrameReceived
-            | SenderAttachError::ExpectImmediateDetach
             | SenderAttachError::RemoteClosedWithError(_) => attach_error,
 
             SenderAttachError::DuplicatedLinkName => {
@@ -930,8 +975,15 @@ where
             match link.send_detach(writer, true, Some(err)).await {
                 Ok(_) => match reader.recv().await {
                     Some(LinkFrame::Detach(remote_detach)) => {
-                        let _ = link.on_detach_reply(remote_detach); // FIXME: hadnle detach errors?
-                        attach_error
+                        match link.on_detach_reply(remote_detach) {
+                            Ok(status) => match status.remote_error() {
+                                Some(error) => {
+                                    SenderAttachError::RemoteClosedWithError(error.clone())
+                                }
+                                None => attach_error,
+                            },
+                            Err(detach_error) => SenderAttachError::from(detach_error),
+                        }
                     }
                     Some(_) => SenderAttachError::NonAttachFrameReceived,
                     None => match link.session_stop_reason().get() {
@@ -964,8 +1016,11 @@ where
 {
     match reader.recv().await {
         Some(LinkFrame::Detach(remote_detach)) => match link.on_detach_reply(remote_detach) {
-            Ok(_) => err,
-            Err(detach_error) => detach_error.try_into().unwrap_or(err),
+            Ok(status) => match status.remote_error() {
+                Some(error) => SenderAttachError::RemoteClosedWithError(error.clone()),
+                None => err,
+            },
+            Err(detach_error) => SenderAttachError::from(detach_error),
         },
         Some(_) => SenderAttachError::NonAttachFrameReceived,
         None => match link.session_stop_reason.get() {

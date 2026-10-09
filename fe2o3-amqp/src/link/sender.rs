@@ -35,10 +35,14 @@ use super::{
     shared_inner::{
         recv_remote_detach, LinkEndpointInner, LinkEndpointInnerDetach, LinkEndpointInnerReattach,
     },
-    ArcSenderUnsettledMap, DetachThenResumeSenderError, LinkFrame, LinkRelay, LinkStateError,
-    MessageSizeExceeded, SendError, SenderAttachError, SenderAttachExchange, SenderFlowState,
-    SenderLink, SenderResumeError, SenderResumeErrorKind, SessionStopReason,
+    ArcSenderUnsettledMap, AttachMode, DeliveryFailure, DetachStatus, DetachThenResumeSenderError,
+    LinkFrame, LinkRelay, LinkStateError, MessageSizeExceeded, SendError, SenderAttachError,
+    SenderAttachExchange, SenderFlowState, SenderLink, SenderResumeError, SenderResumeErrorKind,
+    SessionStopReason, TransferError,
 };
+
+#[cfg(feature = "transaction")]
+use super::shared_inner::TxnAcquisitionCloseExt;
 
 #[cfg(docsrs)]
 use fe2o3_amqp_types::messaging::{
@@ -207,13 +211,16 @@ impl Sender {
     /// The Sender will send a detach frame with closed field set to false,
     /// and wait for a detach with closed field set to false from the remote peer.
     ///
-    /// # Error
-    ///
-    /// If the remote peer sends a detach frame with closed field set to true,
-    /// the Sender will re-attach and send a closing detach
-    pub async fn detach(mut self) -> Result<DetachedSender, (DetachedSender, DetachError)> {
+    /// On success the returned [`DetachStatus`] reports how the link was
+    /// detached (suspended or closed) and carries the error the peer attached to its
+    /// detach, if any. If the remote peer answers with a closing detach, the
+    /// Sender re-attaches and completes the closing handshake (AMQP 1.0
+    /// §2.6.6), and the status is `Closed`.
+    pub async fn detach(
+        mut self,
+    ) -> Result<(DetachedSender, DetachStatus), (DetachedSender, DetachError)> {
         match self.inner.detach_with_error(None).await {
-            Ok(_) => Ok(DetachedSender::new(self.inner)),
+            Ok(status) => Ok((DetachedSender::new(self.inner), status)),
             Err(err) => Err((DetachedSender::new(self.inner), err)),
         }
     }
@@ -222,9 +229,9 @@ impl Sender {
     pub async fn detach_with_error(
         mut self,
         error: impl Into<definitions::Error>,
-    ) -> Result<DetachedSender, (DetachedSender, DetachError)> {
+    ) -> Result<(DetachedSender, DetachStatus), (DetachedSender, DetachError)> {
         match self.inner.detach_with_error(Some(error.into())).await {
-            Ok(_) => Ok(DetachedSender::new(self.inner)),
+            Ok(status) => Ok((DetachedSender::new(self.inner), status)),
             Err(err) => Err((DetachedSender::new(self.inner), err)),
         }
     }
@@ -236,7 +243,10 @@ impl Sender {
         pub async fn detach_with_timeout(
             self,
             duration: Duration,
-        ) -> Result<Result<DetachedSender, (DetachedSender, DetachError)>, Elapsed> {
+        ) -> Result<
+            Result<(DetachedSender, DetachStatus), (DetachedSender, DetachError)>,
+            Elapsed,
+        > {
             timeout(duration, self.detach()).await
         }
     }
@@ -247,6 +257,10 @@ impl Sender {
     /// `DetachThenResumeSenderError::Resume` will be returned if the detach succeeds but re-attach
     /// fails. `DetachThenResumeSenderError::Detach` will be returned if both the detach and
     /// re-attach fails.
+    ///
+    /// Unsettled deliveries are carried over to the resumed link and re-sent;
+    /// the futures returned by [`send_batchable`](#method.send_batchable) for
+    /// those deliveries resolve once the peer's disposition arrives.
     pub async fn detach_then_resume_on_session<R>(
         &mut self,
         new_session: &SessionHandle<R>,
@@ -254,32 +268,41 @@ impl Sender {
         // Detach the link
         let detach_result = self.inner.detach_with_error(None).await;
 
+        // If the peer closed the link instead of suspending it, the link can
+        // no longer be resumed. The status is carried by the resume error.
+        if let Ok(status) = &detach_result {
+            if status.is_closed() {
+                return Err(DetachThenResumeSenderError::Resume(
+                    SenderResumeErrorKind::LinkDetached(status.clone()),
+                ));
+            }
+        }
+
         // Re-attach the link
-        let is_reattaching = self.inner.switch_session(new_session);
-        let attach_result = self
-            .inner
-            .resume_incoming_attach(None, is_reattaching)
-            .await;
+        self.inner.switch_session(new_session);
+        let attach_result = self.inner.resume_incoming_attach(None).await;
 
         match (detach_result, attach_result) {
             (_, Ok(())) => Ok(()),
-            (Ok(()), Err(e)) => Err(DetachThenResumeSenderError::Resume(e)),
+            (Ok(_), Err(e)) => Err(DetachThenResumeSenderError::Resume(e)),
             (Err(e), Err(_)) => Err(DetachThenResumeSenderError::Detach(e)),
         }
     }
 
     /// Close the link.
     ///
-    /// This will set the `closed` field in the Detach performative to true
-    pub async fn close(mut self) -> Result<(), DetachError> {
+    /// This will set the `closed` field in the Detach performative to true.
+    /// The returned [`DetachStatus`] carries the error the peer attached to
+    /// its closing detach, if any.
+    pub async fn close(mut self) -> Result<DetachStatus, DetachError> {
         self.inner.close_with_error(None).await
     }
 
-    /// Detach the link with an error
+    /// Close the link with an error
     pub async fn close_with_error(
         mut self,
         error: impl Into<definitions::Error>,
-    ) -> Result<(), DetachError> {
+    ) -> Result<DetachStatus, DetachError> {
         self.inner.close_with_error(Some(error.into())).await
     }
 
@@ -383,6 +406,15 @@ impl Sender {
     ///
     /// This function is cancel-safe. See [#22](https://github.com/minghuaw/fe2o3-amqp/issues/22)
     /// for more details.
+    ///
+    /// # Delivery settlement and resumption
+    ///
+    /// The outcome resolves once the peer's disposition arrives, which may be
+    /// after the link is resumed on another session or connection: an unsettled
+    /// delivery stays in the link's unsettled map and is re-sent on resumption.
+    /// Because this method borrows the sender while it waits, use
+    /// [`send_batchable`](#method.send_batchable) if the link may need to be
+    /// resumed (its future does not borrow the sender).
     pub async fn send<T: SerializableBody>(
         &mut self,
         sendable: impl Into<Sendable<T>>,
@@ -433,6 +465,12 @@ impl Sender {
     /// This will set the batchable field of the `Transfer` performative to true. Please see
     /// [`send()`](#method.send) for information on how to use custom type as argument.
     ///
+    /// The returned future resolves with the peer's disposition, possibly only
+    /// after the link is resumed on another session or connection: the unsettled
+    /// delivery is re-sent on resumption. Unlike [`send()`](#method.send), it
+    /// does not borrow the sender, so the link can be detached and resumed while
+    /// the future is pending.
+    ///
     /// # Example
     ///
     /// ```rust,ignore
@@ -467,29 +505,23 @@ impl Sender {
             })
     }
 
-    /// Returns when the remote peer detach/close the link
+    /// Returns when the remote peer detaches or closes the link
     ///
     /// The peer's detach has already been answered when this returns, so the
-    /// link is left `Closed` or `Detached` (its output handle is released),
+    /// link is left `Detached` or `Closed` (its output handle is released),
     /// and a later `close()` finishes without sending another detach.
-    #[allow(deprecated)]
-    pub async fn on_detach(&mut self) -> DetachError {
-        match recv_remote_detach(&mut self.inner).await {
-            Ok(detach) => {
-                let closed = detach.closed;
-                match self.inner.link.apply_remote_detach_outcome(detach) {
-                    Ok(_) => {
-                        if closed {
-                            DetachError::ClosedByRemote
-                        } else {
-                            DetachError::DetachedByRemote
-                        }
-                    }
-                    Err(err) => err.into(),
-                }
-            }
-            Err(err) => err,
-        }
+    ///
+    /// # Errors
+    ///
+    /// [`LinkStateError::IllegalState`] if the link has already been detached,
+    /// or [`LinkStateError::SessionStopped`] if the session (or its
+    /// connection) stopped first.
+    pub async fn on_detach(&mut self) -> Result<DetachStatus, LinkStateError> {
+        let detach = recv_remote_detach(&mut self.inner).await?;
+        self.inner
+            .link
+            .apply_remote_detach_outcome(detach)
+            .map_err(|_| LinkStateError::IllegalState)
     }
 }
 
@@ -510,6 +542,13 @@ where
     // Outgoing mpsc channel to send the Link frames
     pub(crate) outgoing: mpsc::Sender<LinkFrame>,
     pub(crate) incoming: mpsc::Receiver<LinkFrame>,
+
+    /// Source-only deliveries (the peer's attach map lacked their tags) that
+    /// were removed from the advertised unsettled map during resumption and
+    /// have to be re-sent as new, non-resumed deliveries once the exchange
+    /// completes. Kept on the endpoint so a failed or cancelled resume can
+    /// retry them.
+    pub(crate) pending_redeliveries: Vec<UnsettledMessage>,
 }
 
 impl<L> Drop for SenderInner<L>
@@ -519,11 +558,11 @@ where
     fn drop(&mut self) {
         // A detach the relay already answered may be waiting in the engine's
         // channel. Apply it so the link state matches the detach; and once
-        // any detach was drained, the peer has already ended the link, so
+        // any detach was drained, the peer has already detached the link, so
         // the closing detach this drop would otherwise send would be a
         // duplicate.
         let mut remote_detach_received = false;
-        let mut detach_error: Option<LinkStateError> = None;
+        let mut detach_status: Option<DetachStatus> = None;
         while let Ok(frame) = self.incoming.try_recv() {
             if let LinkFrame::Detach(detach) = frame {
                 remote_detach_received = true;
@@ -538,11 +577,14 @@ where
                     #[cfg(feature = "log")]
                     log::debug!("failed to apply remote detach outcome on sender drop");
                 }
-                detach_error = Some(match (closed, error) {
-                    (true, Some(error)) => LinkStateError::RemoteClosedWithError(error),
-                    (true, None) => LinkStateError::RemoteClosed,
-                    (false, Some(error)) => LinkStateError::RemoteDetachedWithError(error),
-                    (false, None) => LinkStateError::RemoteDetached,
+                detach_status = Some(if closed {
+                    DetachStatus::Closed {
+                        remote_error: error,
+                    }
+                } else {
+                    DetachStatus::Detached {
+                        remote_error: error,
+                    }
                 });
             }
             // Any other frame (e.g. an attach response left behind by an
@@ -587,21 +629,39 @@ where
         // failed it), or the session stopped so the closing detach could not
         // be sent. Deliveries on a still-open link stay pending: the relay
         // settles them as the peer's dispositions arrive.
-        let error = detach_error.or_else(|| {
-            if detach_sent {
-                None
-            } else {
-                match self.link.session_stop_reason().get() {
-                    Some(reason) => Some(LinkStateError::SessionStopped(reason.clone())),
-                    None => Some(LinkStateError::IllegalState), // defensive: no stop reason recorded; failure is link-local
+        let failure = detach_status
+            .map(DeliveryFailure::LinkDetached)
+            .or_else(|| {
+                if detach_sent {
+                    None
+                } else {
+                    match self.link.session_stop_reason().get() {
+                        Some(reason) => Some(DeliveryFailure::LinkState(
+                            LinkStateError::SessionStopped(reason.clone()),
+                        )),
+                        None => Some(DeliveryFailure::LinkState(LinkStateError::IllegalState)), // defensive: no stop reason recorded; failure is link-local
+                    }
                 }
-            }
-        });
-        if let Some(error) = error {
+            });
+        if let Some(failure) = failure {
             if let Some(entries) = self.link.unsettled().write().take() {
                 for (_, entry) in entries {
-                    let _ = entry.fail(error.clone());
+                    let _ = entry.fail(failure.clone());
                 }
+            }
+            // The buffered redeliveries were removed from the unsettled map on
+            // resume; since this sender is gone they can no longer be re-sent.
+            for unsettled_message in self.pending_redeliveries.drain(..) {
+                let _ = unsettled_message.fail(failure.clone());
+            }
+        } else {
+            // The link is still open, but this sender can no longer re-send the
+            // buffered deliveries; fail them with a close outcome rather than
+            // letting their futures hang.
+            let failure =
+                DeliveryFailure::LinkDetached(DetachStatus::Closed { remote_error: None });
+            for unsettled_message in self.pending_redeliveries.drain(..) {
+                let _ = unsettled_message.fail(failure.clone());
             }
         }
     }
@@ -654,10 +714,10 @@ where
 
     async fn exchange_attach(
         &mut self,
-        is_reattaching: bool,
+        mode: AttachMode,
     ) -> Result<SenderAttachExchange, <Self::Link as LinkAttach>::AttachError> {
         self.link
-            .exchange_attach(&self.outgoing, &mut self.incoming, is_reattaching)
+            .exchange_attach(&self.outgoing, &mut self.incoming, mode)
             .await
     }
 
@@ -684,6 +744,31 @@ where
     }
 }
 
+/// Fail the deliveries carried by a map-carrying attach exchange without
+/// resuming them: the reattach is completing a close (AMQP 1.0 §2.6.6), not
+/// resuming the link, so the outstanding deliveries are failed with the close
+/// outcome instead of being resumed.
+fn fail_resuming_deliveries(
+    resuming_deliveries: Vec<(DeliveryTag, ResumingDelivery)>,
+    failure: DeliveryFailure,
+) {
+    for (_, resuming) in resuming_deliveries {
+        match resuming {
+            ResumingDelivery::Abort { sender, .. } => {
+                if let Some(sender) = sender {
+                    let _ = sender.send(Err(failure.clone()));
+                }
+            }
+            ResumingDelivery::Resend(message) | ResumingDelivery::Resume(message) => {
+                let _ = message.fail(failure.clone());
+            }
+            ResumingDelivery::RestateOutcome { sender, .. } => {
+                let _ = sender.send(Err(failure.clone()));
+            }
+        }
+    }
+}
+
 impl<L> LinkEndpointInnerReattach for SenderInner<L>
 where
     L: endpoint::SenderLink<AttachError = SenderAttachError, DetachError = DetachError>
@@ -697,22 +782,39 @@ where
         outcome: SenderAttachExchange,
     ) -> Result<&mut Self, L::AttachError> {
         match outcome {
-            SenderAttachExchange::Complete => Ok(self),
-            //  Re-attach should have None valued unsettled, so this should be invalid
-            SenderAttachExchange::IncompleteUnsettled(_) | SenderAttachExchange::Resume(_) => {
-                Err(SenderAttachError::IllegalState)
+            SenderAttachExchange::Complete => {}
+            // The reachable map-carrying exchanges are the peer's reply during
+            // the crossed close: fail the deliveries it still considers
+            // unsettled and let `reattach_then_close` send the closing detach.
+            SenderAttachExchange::IncompleteUnsettled(resuming_deliveries)
+            | SenderAttachExchange::Resume(resuming_deliveries) => {
+                fail_resuming_deliveries(
+                    resuming_deliveries,
+                    DeliveryFailure::LinkDetached(DetachStatus::Closed { remote_error: None }),
+                );
             }
         }
+        Ok(self)
     }
 }
+
+/// Maximum number of incomplete-unsettled suspend/re-attempt rounds before
+/// resuming a sender link is aborted.
+///
+/// AMQP 1.0 §2.6.13 requires the two endpoints to reduce the unsettled state
+/// and then suspend and re-attempt the resume. Each round should make
+/// progress; this bounds the loop when it does not (e.g. the peer keeps
+/// advertising the same unsettled map and the application never settles).
+const MAX_INCOMPLETE_UNSETTLED_ROUNDS: usize = 32;
 
 impl<L> SenderInner<L>
 where
     L: endpoint::SenderLink<
-            TransferError = LinkStateError,
+            TransferError = TransferError,
             AttachError = SenderAttachError,
             DetachError = DetachError,
         > + LinkExt<FlowState = SenderFlowState, Unsettled = ArcSenderUnsettledMap>
+        + LinkAttach<AttachExchange = SenderAttachExchange>
         + Send
         + Sync,
 {
@@ -800,7 +902,7 @@ where
 
         // send a transfer, checking state will be implemented in SenderLink
         let detached_fut = self.incoming.recv(); // cancel safe
-        let settlement = self
+        let settlement = match self
             .link
             .send_payload(
                 &self.outgoing,
@@ -811,25 +913,30 @@ where
                 state,
                 batchable,
             )
-            .await?;
+            .await
+        {
+            Ok(settlement) => settlement,
+            #[cfg(feature = "transaction")]
+            Err(TransferError::AcquisitionNotImplemented) => {
+                self.close_on_acquisition_not_implemented().await;
+                return Err(E::from(TransferError::AcquisitionNotImplemented));
+            }
+            Err(error) => return Err(error.into()),
+        };
         Ok(settlement)
     }
 }
 
 impl SenderInner<SenderLink<Target>> {
-    /// Switch the link to a new session, returning whether the link is being
-    /// reattached (i.e. the new session is a different session from the
-    /// current one).
+    /// Switch the link to a new session.
     ///
     /// The new session may belong to a different connection whose negotiated
     /// max frame size differs, so the link's `max_frame_size` is refreshed
     /// from the new session before any attach/transfer frame is sent.
-    pub(crate) fn switch_session<R>(&mut self, new_session: &SessionHandle<R>) -> bool {
-        let is_reattaching = !self.session.same_channel(&new_session.control);
+    pub(crate) fn switch_session<R>(&mut self, new_session: &SessionHandle<R>) {
         self.session = new_session.control.clone();
         self.outgoing = new_session.outgoing.clone();
         self.link.max_frame_size = new_session.max_frame_size();
-        is_reattaching
     }
 
     /// Resumes a delivery with the given state and payload.
@@ -839,7 +946,6 @@ impl SenderInner<SenderLink<Target>> {
         &mut self,
         delivery_tag: DeliveryTag,
         resuming: ResumingDelivery,
-        resend_buf: &mut Vec<UnsettledMessage>,
     ) -> Result<(), SendError> {
         #[cfg(feature = "tracing")]
         tracing::debug!("Resuming delivery: delivery_tag: {:?}", delivery_tag);
@@ -850,7 +956,9 @@ impl SenderInner<SenderLink<Target>> {
                 message_format,
                 sender,
             } => self.abort(delivery_tag, message_format, sender).await?,
-            ResumingDelivery::Resend(unsettled_message) => resend_buf.push(unsettled_message),
+            ResumingDelivery::Resend(unsettled_message) => {
+                self.pending_redeliveries.push(unsettled_message)
+            }
             ResumingDelivery::Resume(unsettled_message) => {
                 self.resume(delivery_tag, unsettled_message).await?
             }
@@ -872,13 +980,13 @@ impl SenderInner<SenderLink<Target>> {
         &mut self,
         delivery_tag: DeliveryTag,
         message_format: MessageFormat,
-        sender: Option<oneshot::Sender<Result<Option<DeliveryState>, LinkStateError>>>,
+        sender: Option<oneshot::Sender<Result<Option<DeliveryState>, DeliveryFailure>>>,
     ) -> Result<(), SendError> {
         let handle = self
             .link
             .output_handle
             .clone()
-            .ok_or(LinkStateError::IllegalState)?
+            .ok_or(SendError::NotAttached)?
             .into();
         let transfer = Transfer {
             handle,
@@ -916,7 +1024,7 @@ impl SenderInner<SenderLink<Target>> {
             .link
             .output_handle
             .clone()
-            .ok_or(LinkStateError::IllegalState)?
+            .ok_or(SendError::NotAttached)?
             .into();
         let settled = match self.link.snd_settle_mode {
             SenderSettleMode::Settled => true,
@@ -947,13 +1055,13 @@ impl SenderInner<SenderLink<Target>> {
         message_format: MessageFormat,
         state: DeliveryState,
         payload: Payload,
-        sender: oneshot::Sender<Result<Option<DeliveryState>, LinkStateError>>,
+        sender: oneshot::Sender<Result<Option<DeliveryState>, DeliveryFailure>>,
     ) -> Result<(), SendError> {
         let handle = self
             .link
             .output_handle
             .clone()
-            .ok_or(LinkStateError::IllegalState)?
+            .ok_or(SendError::NotAttached)?
             .into();
         let transfer = Transfer {
             handle,
@@ -974,20 +1082,82 @@ impl SenderInner<SenderLink<Target>> {
             .await
     }
 
+    /// Re-send a source-only delivery as a new, non-resumed delivery.
+    ///
+    /// Unlike the other resumption outcomes, this consumes a fresh link-credit
+    /// and assigns a new delivery-id/tag, so it only runs once the attach
+    /// exchange has completed with complete maps.
+    ///
+    /// On failure the message is pushed back onto [`Self::pending_redeliveries`]
+    /// so a later resume can retry it instead of losing its settlement channel.
     async fn resend(&mut self, unsettled_message: UnsettledMessage) -> Result<(), SendError> {
         let detached_fut = self.incoming.recv();
-        let tag = self.link.get_delivery_tag_or_detached(detached_fut).await?;
+        let tag = match self.link.next_delivery_tag(detached_fut).await {
+            Ok(tag) => tag,
+            #[cfg(feature = "transaction")]
+            Err(TransferError::AcquisitionNotImplemented) => {
+                self.pending_redeliveries.push(unsettled_message);
+                self.close_on_acquisition_not_implemented().await;
+                return Err(SendError::AcquisitionNotImplemented);
+            }
+            Err(error) => {
+                self.pending_redeliveries.push(unsettled_message);
+                return Err(error.into());
+            }
+        };
         let new_delivery_tag = DeliveryTag::from(tag);
-        let transfer = self.link.generate_non_resuming_transfer_performative(
+        let transfer = match self.link.generate_non_resuming_transfer_performative(
             new_delivery_tag.clone(),
             unsettled_message.message_format,
             None,
             None,
             false,
-        )?;
+        ) {
+            Ok(transfer) => transfer,
+            Err(error) => {
+                self.pending_redeliveries.push(unsettled_message);
+                return Err(error.into());
+            }
+        };
 
-        self.send_transfer_with_outcome(transfer, new_delivery_tag, unsettled_message)
-            .await
+        let payload = unsettled_message.payload.clone();
+        if self.link.is_settled_on_send(&transfer) {
+            match self
+                .link
+                .send_transfer_without_modifying_unsettled_map(&self.outgoing, transfer, payload)
+                .await
+            {
+                Ok(_) => {
+                    let _ = unsettled_message.settle();
+                    Ok(())
+                }
+                Err(error) => {
+                    self.pending_redeliveries.push(unsettled_message);
+                    Err(error.into())
+                }
+            }
+        } else {
+            let mut unsettled = Some(unsettled_message);
+            match self
+                .link
+                .send_unsettled_transfer(
+                    &self.outgoing,
+                    transfer,
+                    payload,
+                    new_delivery_tag,
+                    &mut unsettled,
+                )
+                .await
+            {
+                Ok(()) => Ok(()),
+                Err(error) => {
+                    if let Some(unsettled) = unsettled {
+                        self.pending_redeliveries.push(unsettled);
+                    }
+                    Err(error.into())
+                }
+            }
+        }
     }
 
     /// Sends a transfer and resolves `unsettled` with its outcome: at once when the transfer goes
@@ -1005,8 +1175,15 @@ impl SenderInner<SenderLink<Target>> {
                 .await?;
             let _ = unsettled.settle();
         } else {
+            let mut unsettled = Some(unsettled);
             self.link
-                .send_unsettled_transfer(&self.outgoing, transfer, payload, delivery_tag, unsettled)
+                .send_unsettled_transfer(
+                    &self.outgoing,
+                    transfer,
+                    payload,
+                    delivery_tag,
+                    &mut unsettled,
+                )
                 .await?;
         }
         Ok(())
@@ -1014,52 +1191,112 @@ impl SenderInner<SenderLink<Target>> {
 
     async fn resume_incoming_attach(
         &mut self,
-        mut initial_remote_attach: Option<Attach>,
-        is_reattaching: bool,
+        initial_remote_attach: Option<Attach>,
     ) -> Result<(), SenderResumeErrorKind> {
         self.reallocate_output_handle().await?;
-        let mut resend_buf = Vec::new();
+        let mut incomplete_rounds = 0usize;
+
+        // The peer-initiated attach, when present, was already received by the
+        // caller: only the first exchange consumes it. After a §2.6.13 suspend
+        // both sides exchange fresh attaches.
+        let mut exchange = match initial_remote_attach {
+            Some(remote_attach) => {
+                self.link
+                    .send_attach(&self.outgoing, AttachMode::Resume)
+                    .await?;
+                self.link.on_incoming_attach(remote_attach)?
+            }
+            None => self.exchange_attach(AttachMode::Resume).await?,
+        };
 
         loop {
-            let attach_exchange = match initial_remote_attach.take() {
-                Some(remote_attach) => {
-                    self.link
-                        .send_attach(&self.outgoing, is_reattaching)
-                        .await?;
-                    self.link.on_incoming_attach(remote_attach)?
-                }
-                None => self.exchange_attach(is_reattaching).await?,
-            };
-
-            match attach_exchange {
+            match exchange {
                 SenderAttachExchange::Complete => break,
                 SenderAttachExchange::IncompleteUnsettled(resuming_deliveries) => {
                     for (delivery_tag, resuming) in resuming_deliveries {
-                        self.handle_resuming_delivery(delivery_tag, resuming, &mut resend_buf)
+                        self.handle_resuming_delivery(delivery_tag, resuming)
                             .await?;
                     }
+
+                    // The unsettled map was incomplete. AMQP 1.0 §2.6.13: after
+                    // the reduction of state, the two parties suspend and
+                    // re-attempt to resume the link.
+                    let status = self.detach_with_error(None).await?;
+                    if status.is_closed() {
+                        // The peer closed the link while we were suspending it,
+                        // so there is nothing left to resume.
+                        self.fail_pending_redeliveries(DeliveryFailure::LinkDetached(
+                            status.clone(),
+                        ));
+                        return Err(SenderResumeErrorKind::LinkDetached(status));
+                    }
+
+                    incomplete_rounds += 1;
+                    #[cfg(any(feature = "tracing", feature = "log"))]
+                    let unsettled_len = self.link.unsettled.read().as_ref().map(|m| m.len());
+                    #[cfg(feature = "tracing")]
+                    tracing::debug!(
+                        incomplete_rounds,
+                        ?unsettled_len,
+                        buffered = self.pending_redeliveries.len(),
+                        "unsettled map incomplete; suspending and re-attempting"
+                    );
+                    #[cfg(feature = "log")]
+                    log::debug!(
+                        "unsettled map incomplete (round {}, local {:?}, buffered {}); suspending and re-attempting",
+                        incomplete_rounds,
+                        unsettled_len,
+                        self.pending_redeliveries.len()
+                    );
+
+                    if incomplete_rounds > MAX_INCOMPLETE_UNSETTLED_ROUNDS {
+                        #[cfg(feature = "tracing")]
+                        tracing::warn!(
+                            incomplete_rounds,
+                            "the unsettled map did not become complete; aborting resumption"
+                        );
+                        #[cfg(feature = "log")]
+                        log::warn!(
+                            "the unsettled map did not become complete after {} rounds; aborting resumption",
+                            incomplete_rounds
+                        );
+                        return Err(SenderResumeErrorKind::IncompleteUnsettled);
+                    }
+
+                    // `detach_with_error` released the output handle and the
+                    // session released the link relay, so re-register the link
+                    // before re-attempting the attach exchange.
+                    self.reallocate_output_handle().await?;
+                    exchange = self.exchange_attach(AttachMode::Resume).await?;
                 }
                 SenderAttachExchange::Resume(resuming_deliveries) => {
                     for (delivery_tag, resuming) in resuming_deliveries {
-                        self.handle_resuming_delivery(delivery_tag, resuming, &mut resend_buf)
+                        self.handle_resuming_delivery(delivery_tag, resuming)
                             .await?;
                     }
 
-                    // Resend buffered payloads
-                    for unsettled_message in resend_buf.drain(..) {
-                        self.resend(unsettled_message).await?;
-                    }
-
-                    // Upon completion of this reduction of state, the two parties MUST suspend and
-                    // re-attempt to resume the link. The detach consumes the output handle,
-                    // so reallocate it for the retry.
-                    self.detach_with_error(None).await?;
-                    self.reallocate_output_handle().await?;
+                    break;
                 }
             }
         }
 
+        // Re-send the buffered source-only deliveries as new (non-resumed)
+        // transfers. This also runs when the exchange completed with
+        // `Complete` (both maps empty), so those deliveries are re-delivered
+        // instead of being silently dropped. `resend()` re-queues the message
+        // on failure, so the rest of the queue survives a failed drain.
+        while let Some(unsettled_message) = self.pending_redeliveries.pop() {
+            self.resend(unsettled_message).await?;
+        }
+
         Ok(())
+    }
+
+    /// Fail every buffered source-only delivery with `failure`.
+    fn fail_pending_redeliveries(&mut self, failure: DeliveryFailure) {
+        for unsettled_message in self.pending_redeliveries.drain(..) {
+            let _ = unsettled_message.fail(failure.clone());
+        }
     }
 }
 
@@ -1120,20 +1357,19 @@ impl DetachedSender {
         &mut self.inner.link.target
     }
 
-    async fn resume_inner(mut self, is_reattaching: bool) -> Result<Sender, SenderResumeError> {
-        try_as_sender!(
-            self,
-            self.inner
-                .resume_incoming_attach(None, is_reattaching)
-                .await
-        );
+    async fn resume_inner(mut self) -> Result<Sender, SenderResumeError> {
+        try_as_sender!(self, self.inner.resume_incoming_attach(None).await);
         Ok(Sender { inner: *self.inner })
     }
 
     /// Resume the sender link on the original session
+    ///
+    /// Unsettled deliveries are re-sent on the resumed link; the futures
+    /// returned by [`Sender::send_batchable`] for those deliveries resolve once
+    /// the peer's disposition arrives.
     #[cfg_attr(feature = "tracing", tracing::instrument(skip(self)))]
     pub async fn resume(self) -> Result<Sender, SenderResumeError> {
-        self.resume_inner(false).await
+        self.resume_inner().await
     }
 
     /// Resume the sender link on the original session with an Attach sent by the remote peer
@@ -1143,9 +1379,7 @@ impl DetachedSender {
     ) -> Result<Sender, SenderResumeError> {
         try_as_sender!(
             self,
-            self.inner
-                .resume_incoming_attach(Some(remote_attach), false)
-                .await
+            self.inner.resume_incoming_attach(Some(remote_attach)).await
         );
         Ok(Sender { inner: *self.inner })
     }
@@ -1154,9 +1388,8 @@ impl DetachedSender {
         async fn resume_with_timeout_inner(
             mut self,
             duration: Duration,
-            is_reattaching: bool,
         ) -> Result<Sender, SenderResumeError> {
-            let fut = self.inner.resume_incoming_attach(None, is_reattaching);
+            let fut = self.inner.resume_incoming_attach(None);
 
             match tokio::time::timeout(duration, fut).await {
                 Ok(Ok(_)) => Ok(Sender { inner: *self.inner }),
@@ -1180,16 +1413,15 @@ impl DetachedSender {
             self,
             duration: Duration,
         ) -> Result<Sender, SenderResumeError> {
-            self.resume_with_timeout_inner(duration, false).await
+            self.resume_with_timeout_inner(duration).await
         }
 
         async fn resume_incoming_attach_with_timeout_inner(
             mut self,
             remote_attach: Attach,
             duration: Duration,
-            is_reattaching: bool,
         ) -> Result<Sender, SenderResumeError> {
-            let fut = self.inner.resume_incoming_attach(Some(remote_attach), is_reattaching);
+            let fut = self.inner.resume_incoming_attach(Some(remote_attach));
 
             match tokio::time::timeout(duration, fut).await {
                 Ok(Ok(_)) => Ok(Sender { inner: *self.inner }),
@@ -1213,7 +1445,8 @@ impl DetachedSender {
             remote_attach: Attach,
             duration: Duration,
         ) -> Result<Sender, SenderResumeError> {
-            self.resume_incoming_attach_with_timeout_inner(remote_attach, duration, false).await
+            self.resume_incoming_attach_with_timeout_inner(remote_attach, duration)
+                .await
         }
     }
 
@@ -1222,8 +1455,8 @@ impl DetachedSender {
         mut self,
         session: &SessionHandle<R>,
     ) -> Result<Sender, SenderResumeError> {
-        let is_reattaching = self.inner.switch_session(session);
-        self.resume_inner(is_reattaching).await
+        self.inner.switch_session(session);
+        self.resume_inner().await
     }
 
     /// Resume the sender on a specific session
@@ -1232,13 +1465,11 @@ impl DetachedSender {
         remote_attach: Attach,
         session: &SessionHandle<R>,
     ) -> Result<Sender, SenderResumeError> {
-        let is_reattaching = self.inner.switch_session(session);
+        self.inner.switch_session(session);
 
         try_as_sender!(
             self,
-            self.inner
-                .resume_incoming_attach(Some(remote_attach), is_reattaching)
-                .await
+            self.inner.resume_incoming_attach(Some(remote_attach)).await
         );
         Ok(Sender { inner: *self.inner })
     }
@@ -1250,8 +1481,8 @@ impl DetachedSender {
             session: &SessionHandle<R>,
             duration: Duration,
         ) -> Result<Sender, SenderResumeError> {
-            let is_reattaching = self.inner.switch_session(session);
-            self.resume_with_timeout_inner(duration, is_reattaching).await
+            self.inner.switch_session(session);
+            self.resume_with_timeout_inner(duration).await
         }
 
         /// Resume the sender on a specific session with timeout
@@ -1261,8 +1492,8 @@ impl DetachedSender {
             session: &SessionHandle<R>,
             duration: Duration,
         ) -> Result<Sender, SenderResumeError> {
-            let is_reattaching = self.inner.switch_session(session);
-            self.resume_incoming_attach_with_timeout_inner(remote_attach, duration, is_reattaching)
+            self.inner.switch_session(session);
+            self.resume_incoming_attach_with_timeout_inner(remote_attach, duration)
                 .await
         }
     }
@@ -1273,7 +1504,7 @@ mod tests {
     use std::marker::PhantomData;
 
     use fe2o3_amqp_types::{
-        definitions::ReceiverSettleMode,
+        definitions::{DeliveryTag, ReceiverSettleMode},
         messaging::{Accepted, Received},
         primitives::OrderedMap,
     };
@@ -1336,6 +1567,7 @@ mod tests {
             session: session_tx,
             outgoing: outgoing_tx,
             incoming: incoming_rx,
+            pending_redeliveries: Vec::new(),
         };
         (inner, session_rx, outgoing_rx, incoming_tx)
     }
@@ -1389,16 +1621,51 @@ mod tests {
         let mut inner = make_sender_inner(4092);
         let session_b = make_session_handle(1020);
 
-        // Switching to a different session marks the link as reattaching and
-        // refreshes the link's max frame size from the new session
-        let is_reattaching = inner.switch_session(&session_b);
-        assert!(is_reattaching);
+        // Switching to a different session refreshes the link's max frame
+        // size from the new session
+        inner.switch_session(&session_b);
         assert_eq!(inner.link.max_frame_size, 1020);
 
-        // Switching to the same session does not mark the link as reattaching
-        let is_reattaching = inner.switch_session(&session_b);
-        assert!(!is_reattaching);
+        // Switching to the same session is idempotent
+        inner.switch_session(&session_b);
         assert_eq!(inner.link.max_frame_size, 1020);
+    }
+
+    /// A resuming attach carries a non-null (possibly empty) unsettled map so
+    /// it cannot be mistaken for a pipelined re-attach (AMQP 1.0 §2.6.5),
+    /// while a fresh attach leaves the field unset.
+    #[test]
+    fn resuming_attach_advertises_empty_unsettled_map() {
+        let inner = make_sender_inner(4092);
+        let handle = endpoint::OutputHandle(0);
+
+        let fresh = inner.link.as_complete_attach(handle.clone(), false);
+        assert!(fresh.unsettled.is_none());
+        assert!(!fresh.incomplete_unsettled);
+
+        let resuming = inner.link.as_complete_attach(handle, true);
+        assert!(resuming
+            .unsettled
+            .as_ref()
+            .is_some_and(|map| map.is_empty()));
+        assert!(!resuming.incomplete_unsettled);
+    }
+
+    /// Target-only deliveries (the peer considers them unsettled, this side
+    /// has no record) must not be answered with a resumed transfer: AMQP 1.0
+    /// §2.6.13 requires the sender to ignore them and §2.7.5 forbids resumed
+    /// transfers for deliveries outside the local unsettled map.
+    #[test]
+    fn target_only_deliveries_are_not_resumed() {
+        let mut inner = make_sender_inner(4092);
+
+        let mut remote = OrderedMap::new();
+        remote.insert(DeliveryTag::from(vec![0u8]), None);
+        let exchange = inner
+            .link
+            .handle_unsettled_in_attach(Some(remote))
+            .expect("attach handling failed");
+        assert!(matches!(exchange, SenderAttachExchange::Resume(v) if v.is_empty()));
     }
 
     /// A peer that suspends (non-closing detach) while this side is closing
@@ -1448,7 +1715,7 @@ mod tests {
     /// triggers the AMQP 1.0 §2.6.6 simultaneous-detach handshake. The spec
     /// assigns the reattach to this side (the non-closing/suspending side),
     /// which reattaches and then sends a closing detach; the link ends
-    /// `Closed`, so the local detach fails with `ClosedByRemote`.
+    /// `Closed`, reported as a `DetachStatus::Closed` outcome.
     ///
     /// The peer's frames are scripted, so this is deterministic.
     #[tokio::test]
@@ -1471,7 +1738,10 @@ mod tests {
             detaches, 2,
             "expected a detach before and after the reattach"
         );
-        assert!(matches!(result, Err(DetachError::ClosedByRemote)));
+        assert!(matches!(
+            result,
+            Ok(DetachStatus::Closed { remote_error: None })
+        ));
         assert!(matches!(&inner.link.local_state, LinkState::Closed));
     }
 
@@ -1487,6 +1757,155 @@ mod tests {
             .read()
             .as_ref()
             .is_some_and(|map| map.contains_key(tag))
+    }
+
+    fn plain_transfer() -> Transfer {
+        Transfer {
+            handle: definitions::Handle(0),
+            delivery_id: None,
+            delivery_tag: None,
+            message_format: None,
+            settled: None,
+            more: false,
+            rcv_settle_mode: None,
+            state: None,
+            resume: false,
+            aborted: false,
+            batchable: false,
+        }
+    }
+
+    /// A link without a local handle is not attached, so a transfer reports
+    /// `NotAttached` instead of the catch-all `IllegalState`.
+    #[tokio::test]
+    async fn send_without_input_handle_returns_not_attached() {
+        let inner = make_sender_inner(4096); // input_handle is None
+        let (outgoing_tx, mut outgoing_rx) = mpsc::channel::<LinkFrame>(16);
+
+        let result = inner
+            .link
+            .send_transfer_without_modifying_unsettled_map(
+                &outgoing_tx,
+                plain_transfer(),
+                Bytes::from_static(b"payload"),
+            )
+            .await;
+
+        assert!(matches!(result, Err(TransferError::NotAttached)));
+        assert!(outgoing_rx.try_recv().is_err());
+    }
+
+    /// Generating a transfer without a local handle is not attached.
+    #[test]
+    fn generate_transfer_without_output_handle_returns_not_attached() {
+        let mut inner = make_sender_inner(4096);
+        inner.link.output_handle = None;
+
+        let result = inner.link.generate_non_resuming_transfer_performative(
+            DeliveryTag::from(b"tag0".to_vec()),
+            0,
+            None,
+            None,
+            false,
+        );
+
+        assert!(matches!(result, Err(TransferError::NotAttached)));
+    }
+
+    /// A max-frame-size that cannot even fit the serialized transfer
+    /// performative leaves no room for any payload, so the split must report
+    /// `FrameSizeTooSmall` instead of underflowing the payload bound (which
+    /// would panic in debug builds or, in release builds, wrap into a huge
+    /// bound that emits a single oversized frame).
+    #[tokio::test]
+    async fn split_returns_frame_size_too_small_when_performative_exceeds_max_frame_size() {
+        let mut inner = make_sender_inner(8);
+        inner.link.input_handle = Some(endpoint::InputHandle(0));
+        let (outgoing_tx, mut outgoing_rx) = mpsc::channel::<LinkFrame>(16);
+
+        let result = inner
+            .link
+            .send_transfer_without_modifying_unsettled_map(
+                &outgoing_tx,
+                plain_transfer(),
+                Bytes::from_static(b"payload"),
+            )
+            .await;
+
+        assert!(matches!(result, Err(TransferError::FrameSizeTooSmall)));
+        // Nothing may be written to the session's outgoing channel
+        assert!(outgoing_rx.try_recv().is_err());
+    }
+
+    /// The link-level wait reports an unsupported remote acquisition as such;
+    /// terminating the link is the caller's job.
+    #[cfg(feature = "transaction")]
+    #[tokio::test]
+    async fn next_delivery_tag_reports_acquisition_not_implemented() {
+        let (mut inner, _session_rx, mut outgoing_rx, incoming_tx) =
+            make_sender_inner_with_channels(4096);
+        inner.link.input_handle = Some(endpoint::InputHandle(0));
+
+        incoming_tx
+            .send(LinkFrame::Acquisition(DeliveryTag::from(vec![0x01])))
+            .await
+            .expect("the incoming end is open");
+
+        let result = inner.link.next_delivery_tag(inner.incoming.recv()).await;
+
+        assert!(matches!(
+            result,
+            Err(TransferError::AcquisitionNotImplemented)
+        ));
+        assert!(outgoing_rx.try_recv().is_err());
+    }
+
+    /// A remote-initiated transactional acquisition is not supported yet: the
+    /// sender terminates the link with a closing not-implemented detach
+    /// (AMQP 1.0 §4.4.3) and reports `SendError::AcquisitionNotImplemented`.
+    #[cfg(feature = "transaction")]
+    #[tokio::test]
+    async fn acquisition_terminates_link_with_not_implemented() {
+        let (mut inner, _session_rx, mut outgoing_rx, incoming_tx) =
+            make_sender_inner_with_channels(4096);
+        inner.link.input_handle = Some(endpoint::InputHandle(0));
+
+        incoming_tx
+            .send(LinkFrame::Acquisition(DeliveryTag::from(vec![0x01])))
+            .await
+            .expect("the incoming end is open");
+
+        let (result, ()) = tokio::join!(
+            inner.send_payload::<SendError>(Payload::from_static(b"m"), 0, None, None, false,),
+            async {
+                match outgoing_rx.recv().await.expect("expected a closing detach") {
+                    LinkFrame::Detach(detach) => {
+                        assert!(detach.closed, "the link must be terminated");
+                        let error = detach
+                            .error
+                            .as_ref()
+                            .expect("the detach must carry the error");
+                        assert_eq!(
+                            error.condition,
+                            fe2o3_amqp_types::definitions::AmqpError::NotImplemented.into()
+                        );
+                    }
+                    other => panic!("expected Detach, got {other:?}"),
+                }
+
+                // Answer the closing detach to complete the close handshake.
+                incoming_tx
+                    .send(LinkFrame::Detach(Detach {
+                        handle: fe2o3_amqp_types::definitions::Handle(0),
+                        closed: true,
+                        error: None,
+                    }))
+                    .await
+                    .expect("the incoming end is open");
+            }
+        );
+
+        assert!(matches!(result, Err(SendError::AcquisitionNotImplemented)));
     }
 
     /// A channel to the session with no room left, so a hand-over stays pending until the
@@ -1641,8 +2060,9 @@ mod tests {
 
     /// Full resume→abort flow with a scripted peer: the local delivery is
     /// terminal (`Accepted`) while the peer's attach reports it as partially
-    /// received, so the sender aborts it, settles the application future, and
-    /// completes the mandatory detach/re-attach cycle.
+    /// received, so the sender aborts it and settles the application future.
+    /// The peer's unsettled map was complete (`Resume`), so the resumption
+    /// completes on the same attach exchange without a detach.
     #[tokio::test]
     async fn resuming_a_terminal_delivery_against_remote_received_aborts() {
         let (mut inner, mut session_rx, mut outgoing_rx, _incoming_tx) =
@@ -1684,80 +2104,420 @@ mod tests {
         remote_attach.unsettled = Some(remote_unsettled);
 
         let driver = async move {
-            let mut incoming_tx: Option<mpsc::Sender<LinkFrame>> = None;
             let mut attaches = 0usize;
-            let mut detaches = 0usize;
             let mut saw_abort = false;
 
             loop {
                 tokio::select! {
                     ctrl = session_rx.recv() => match ctrl {
-                        Some(SessionControl::AllocateLink {
-                            link_relay,
-                            responder,
-                            ..
-                        }) => {
-                            incoming_tx = Some(match link_relay {
-                                LinkRelay::Sender { tx, .. } => tx,
-                                LinkRelay::Receiver { tx, .. } => tx,
-                            });
+                        Some(SessionControl::AllocateLink { responder, .. }) => {
                             let _ = responder.send(Ok(OutputHandle(1)));
                         }
                         Some(_) => {}
                         None => break,
                     },
                     frame = outgoing_rx.recv() => match frame {
-                        Some(LinkFrame::Attach(_)) => {
-                            attaches += 1;
-                            // The first attach is answered by
-                            // `initial_remote_attach`; the second is the
-                            // re-attach after the Resume exchange.
-                            if attaches == 2 {
-                                let tx =
-                                    incoming_tx.as_ref().expect("allocate was answered");
-                                let _ = tx
-                                    .send(LinkFrame::Attach(peer_receiver_attach()))
-                                    .await;
-                            }
-                        }
+                        Some(LinkFrame::Attach(_)) => attaches += 1,
                         Some(LinkFrame::Transfer { performative, .. }) => {
                             assert!(performative.aborted);
                             assert!(performative.resume);
                             saw_abort = true;
                         }
-                        Some(LinkFrame::Detach(detach)) => {
-                            assert!(!detach.closed);
-                            detaches += 1;
-                            let tx = incoming_tx.as_ref().expect("allocate was answered");
-                            let _ = tx
-                                .send(LinkFrame::Detach(Detach {
-                                    handle: fe2o3_amqp_types::definitions::Handle(0),
-                                    closed: false,
-                                    error: None,
-                                }))
-                                .await;
+                        Some(LinkFrame::Detach(_)) => {
+                            panic!("a complete Resume exchange must not detach the link")
                         }
                         Some(_) => {}
                         None => break,
                     },
                 }
 
-                if saw_abort && detaches >= 1 && attaches >= 2 {
+                if saw_abort {
                     break;
                 }
             }
+
+            assert_eq!(attaches, 1);
         };
 
         let (result, ()) = tokio::time::timeout(std::time::Duration::from_secs(10), async {
-            tokio::join!(
-                inner.resume_incoming_attach(Some(remote_attach), false),
-                driver
-            )
+            tokio::join!(inner.resume_incoming_attach(Some(remote_attach)), driver)
         })
         .await
         .expect("the resume flow timed out");
         result.unwrap();
 
         assert!(matches!(settled.try_recv(), Ok(Ok(None))));
+    }
+
+    fn seed_unsettled_entries(
+        link: &SenderLink<Target>,
+        n: u32,
+        state: Option<DeliveryState>,
+    ) -> Vec<oneshot::Receiver<Result<Option<DeliveryState>, DeliveryFailure>>> {
+        let mut map = OrderedMap::new();
+        let mut receivers = Vec::with_capacity(n as usize);
+        for i in 0..n {
+            let (tx, rx) = oneshot::channel();
+            receivers.push(rx);
+            map.insert(
+                DeliveryTag::from(i.to_be_bytes().to_vec()),
+                UnsettledMessage::new(Bytes::new(), state.clone(), 0, tx),
+            );
+        }
+        *link.unsettled.write() = Some(map);
+        receivers
+    }
+
+    fn peer_attach_with_unsettled(
+        remote: OrderedMap<DeliveryTag, Option<DeliveryState>>,
+    ) -> Attach {
+        let mut attach = peer_receiver_attach();
+        attach.unsettled = Some(remote);
+        attach.incomplete_unsettled = false;
+        attach
+    }
+
+    /// A scripted peer for the incomplete-unsettled resume loop: it answers
+    /// every `AllocateLink`, replies to each `Attach` with `peer_attach`, and
+    /// answers each `Detach` with a non-closing detach.
+    async fn drive_resume_peer(
+        mut session_rx: mpsc::Receiver<SessionControl>,
+        mut outgoing_rx: mpsc::Receiver<LinkFrame>,
+        initial_incoming_tx: mpsc::Sender<LinkFrame>,
+        peer_attach: Attach,
+    ) {
+        let mut incoming_tx = initial_incoming_tx;
+        loop {
+            tokio::select! {
+                ctrl = session_rx.recv() => match ctrl {
+                    Some(SessionControl::AllocateLink { link_relay, responder, .. }) => {
+                        incoming_tx = match link_relay {
+                            LinkRelay::Sender { tx, .. } => tx,
+                            LinkRelay::Receiver { tx, .. } => tx,
+                        };
+                        let _ = responder.send(Ok(endpoint::OutputHandle(1)));
+                    }
+                    Some(_) => {}
+                    None => break,
+                },
+                frame = outgoing_rx.recv() => match frame {
+                    Some(LinkFrame::Attach(_)) => {
+                        let _ = incoming_tx.send(LinkFrame::Attach(peer_attach.clone())).await;
+                    }
+                    Some(LinkFrame::Detach(_)) => {
+                        let _ = incoming_tx
+                            .send(LinkFrame::Detach(Detach {
+                                handle: fe2o3_amqp_types::definitions::Handle(0),
+                                closed: false,
+                                error: None,
+                            }))
+                            .await;
+                    }
+                    Some(_) => {}
+                    None => break,
+                },
+            }
+        }
+    }
+
+    /// `send_detach` is valid from the in-progress attach states used by the
+    /// AMQP 1.0 §2.6.13 reduce/suspend/re-attempt cycle, not only `Attached`.
+    #[tokio::test]
+    async fn send_detach_is_allowed_from_incomplete_attach_states() {
+        let cases = [
+            (
+                LinkState::IncompleteAttachExchanged,
+                false,
+                LinkState::DetachSent,
+            ),
+            (
+                LinkState::IncompleteAttachSent,
+                false,
+                LinkState::DetachSent,
+            ),
+            (
+                LinkState::IncompleteAttachReceived,
+                false,
+                LinkState::DetachSent,
+            ),
+            (
+                LinkState::IncompleteAttachExchanged,
+                true,
+                LinkState::CloseSent,
+            ),
+        ];
+
+        for (state, closed, expected) in cases {
+            let (mut inner, ..) = make_sender_inner_with_channels(4096);
+            let (tx, _rx) = mpsc::channel::<LinkFrame>(16);
+            inner.link.local_state = state;
+            inner
+                .link
+                .send_detach(&tx, closed, None)
+                .await
+                .expect("send_detach must succeed from an in-progress attach state");
+            assert_eq!(
+                std::mem::discriminant(&inner.link.local_state),
+                std::mem::discriminant(&expected),
+                "unexpected state after send_detach"
+            );
+        }
+    }
+
+    /// A map that cannot fit one attach frame is truncated and flagged
+    /// `incomplete_unsettled` (AMQP 1.0 §2.7.3).
+    #[test]
+    fn oversized_unsettled_map_is_truncated() {
+        let (inner, ..) = make_sender_inner_with_channels(512);
+        let _rx = seed_unsettled_entries(&inner.link, 200, None);
+
+        let attach = inner
+            .link
+            .as_maybe_incomplete_attach(512, endpoint::OutputHandle(0), true)
+            .expect("attach build failed");
+
+        assert!(attach.incomplete_unsettled);
+        let len = attach.unsettled.as_ref().map(|m| m.len()).unwrap_or(0);
+        assert!(len < 200, "expected a truncated map, got {len} entries");
+    }
+
+    /// A link whose unsettled map does not fit one attach frame resumes via the
+    /// AMQP 1.0 §2.6.13 reduction: the first attach is truncated and incomplete,
+    /// the reduction settles the deliveries the peer reports as terminal, the
+    /// link suspends and re-registers, and the second exchange completes.
+    #[tokio::test]
+    async fn incomplete_unsettled_resume_suspends_and_completes() {
+        let (mut inner, session_rx, outgoing_rx, incoming_tx) =
+            make_sender_inner_with_channels(512);
+        inner.link.local_state = LinkState::Detached;
+
+        let local_state = Some(DeliveryState::Received(Received {
+            section_number: 0,
+            section_offset: 0,
+        }));
+        let _rx = seed_unsettled_entries(&inner.link, 200, local_state);
+
+        // The peer reports every delivery as terminal (`Accepted`), so the
+        // reduction settles them and the map fits on the second attach.
+        let mut remote = OrderedMap::new();
+        for i in 0..200u32 {
+            remote.insert(
+                DeliveryTag::from(i.to_be_bytes().to_vec()),
+                Some(DeliveryState::Accepted(Accepted {})),
+            );
+        }
+        let peer_attach = peer_attach_with_unsettled(remote);
+
+        let peer = tokio::spawn(drive_resume_peer(
+            session_rx,
+            outgoing_rx,
+            incoming_tx,
+            peer_attach,
+        ));
+
+        let result = inner.resume_incoming_attach(None).await;
+        peer.abort();
+
+        result.expect("resume must complete");
+        assert!(matches!(inner.link.local_state, LinkState::Attached));
+        assert!(inner
+            .link
+            .unsettled
+            .read()
+            .as_ref()
+            .is_none_or(|m| m.is_empty()));
+    }
+
+    /// If the peer keeps advertising the same unsettled map and the reduction
+    /// never shrinks it, resumption aborts after a bounded number of rounds
+    /// instead of looping forever.
+    #[tokio::test]
+    async fn incomplete_unsettled_resume_aborts_without_progress() {
+        let (mut inner, session_rx, outgoing_rx, incoming_tx) =
+            make_sender_inner_with_channels(512);
+        inner.link.local_state = LinkState::Detached;
+
+        let _rx = seed_unsettled_entries(&inner.link, 200, None);
+
+        // Every tag is still unsettled at the peer with a null state, so the
+        // reduction re-sends and re-inserts them; the map never shrinks.
+        let mut remote = OrderedMap::new();
+        for i in 0..200u32 {
+            remote.insert(DeliveryTag::from(i.to_be_bytes().to_vec()), None);
+        }
+        let peer_attach = peer_attach_with_unsettled(remote);
+
+        let peer = tokio::spawn(drive_resume_peer(
+            session_rx,
+            outgoing_rx,
+            incoming_tx,
+            peer_attach,
+        ));
+
+        let result = inner.resume_incoming_attach(None).await;
+        peer.abort();
+
+        assert!(matches!(
+            result,
+            Err(SenderResumeErrorKind::IncompleteUnsettled)
+        ));
+    }
+
+    /// A crossed close on a link with a pending delivery (the peer answers our
+    /// non-closing detach with a closing one) completes as
+    /// `DetachStatus::Closed`, failing the delivery with the close outcome
+    /// instead of returning `IllegalState`.
+    #[tokio::test]
+    async fn crossed_close_fails_pending_delivery_with_closed_status() {
+        let (mut inner, session_rx, outgoing_rx, incoming_tx) =
+            make_sender_inner_with_channels(4096);
+
+        let tag = DeliveryTag::from(vec![0x01]);
+        let (tx, mut outcome) = oneshot::channel();
+        inner
+            .link
+            .unsettled
+            .write()
+            .get_or_insert(OrderedMap::new())
+            .insert(tag, UnsettledMessage::new(Bytes::new(), None, 0, tx));
+
+        let (result, (saw_attach, detaches)) = tokio::join!(
+            inner.detach_with_error(None),
+            crate::link::test_util::drive_simultaneous_detach_race(
+                session_rx,
+                outgoing_rx,
+                incoming_tx,
+                peer_receiver_attach(),
+            ),
+        );
+
+        assert!(saw_attach, "the suspending side must reattach");
+        assert_eq!(
+            detaches, 2,
+            "expected a detach before and after the reattach"
+        );
+        assert!(matches!(
+            result,
+            Ok(DetachStatus::Closed { remote_error: None })
+        ));
+        assert!(matches!(
+            outcome.try_recv(),
+            Ok(Err(DeliveryFailure::LinkDetached(DetachStatus::Closed {
+                remote_error: None
+            })))
+        ));
+        assert!(matches!(&inner.link.local_state, LinkState::Closed));
+    }
+
+    /// When the incomplete-unsettled loop hits its round cap, the deliveries
+    /// already buffered for redelivery are kept so a later resume retries
+    /// them.
+    #[tokio::test]
+    async fn redelivery_queue_survives_incomplete_cap() {
+        let (mut inner, session_rx, outgoing_rx, incoming_tx) =
+            make_sender_inner_with_channels(512);
+        inner.link.local_state = LinkState::Detached;
+
+        let _rx = seed_unsettled_entries(&inner.link, 400, None);
+
+        // Half the tags are absent from the peer's map: they are buffered for
+        // redelivery. The other half keep the local map truncated, so the
+        // exchange stays incomplete and eventually hits the round cap.
+        let mut remote = OrderedMap::new();
+        for i in 0..200u32 {
+            remote.insert(DeliveryTag::from(i.to_be_bytes().to_vec()), None);
+        }
+        let peer_attach = peer_attach_with_unsettled(remote);
+        let peer = tokio::spawn(drive_resume_peer(
+            session_rx,
+            outgoing_rx,
+            incoming_tx,
+            peer_attach,
+        ));
+
+        let result = inner.resume_incoming_attach(None).await;
+        peer.abort();
+
+        assert!(matches!(
+            result,
+            Err(SenderResumeErrorKind::IncompleteUnsettled)
+        ));
+        assert_eq!(inner.pending_redeliveries.len(), 200);
+    }
+
+    /// Once the exchange completes, buffered source-only deliveries are
+    /// re-sent as new deliveries and the queue is emptied.
+    #[tokio::test]
+    async fn redelivery_queue_drains_as_new_deliveries_on_success() {
+        let (mut inner, session_rx, outgoing_rx, incoming_tx) =
+            make_sender_inner_with_channels(4096);
+        inner.link.local_state = LinkState::Detached;
+
+        let n = 50u32;
+        let _rx = seed_unsettled_entries(&inner.link, n, None);
+
+        // The peer's complete map is empty: every local delivery is source-only
+        // and gets buffered for redelivery.
+        let peer_attach = peer_attach_with_unsettled(OrderedMap::new());
+        let peer = tokio::spawn(drive_resume_peer(
+            session_rx,
+            outgoing_rx,
+            incoming_tx,
+            peer_attach,
+        ));
+
+        // `resend()` consumes one link credit per new delivery.
+        inner.link.flow_state().state().lock.write().link_credit = 1000;
+
+        let result = inner.resume_incoming_attach(None).await;
+        peer.abort();
+
+        result.expect("resume must complete");
+        assert!(inner.pending_redeliveries.is_empty());
+        assert_eq!(
+            inner.link.unsettled.read().as_ref().map(|m| m.len()),
+            Some(n as usize)
+        );
+    }
+
+    /// A failed redelivery is put back on the queue instead of losing its
+    /// settlement channel.
+    #[tokio::test]
+    async fn failed_redelivery_is_requeued() {
+        let (mut inner, _session_rx, _outgoing_rx, incoming_tx) =
+            make_sender_inner_with_channels(4096);
+        inner.link.flow_state().state().lock.write().link_credit = 1000;
+        // Closing the incoming channel makes `resend()` fail while it waits for
+        // the next frame or the next credit.
+        drop(incoming_tx);
+
+        let (tx, _rx) = oneshot::channel();
+        let message = UnsettledMessage::new(Bytes::new(), None, 0, tx);
+        let result = inner.resend(message).await;
+
+        assert!(result.is_err());
+        assert_eq!(inner.pending_redeliveries.len(), 1);
+    }
+
+    /// Dropping the sender fails the buffered redeliveries instead of letting
+    /// their futures hang.
+    #[tokio::test]
+    async fn sender_drop_fails_pending_redeliveries() {
+        let (mut inner, _session_rx, _outgoing_rx, _incoming_tx) =
+            make_sender_inner_with_channels(4096);
+
+        let (tx, mut outcome) = oneshot::channel();
+        inner
+            .pending_redeliveries
+            .push(UnsettledMessage::new(Bytes::new(), None, 0, tx));
+
+        drop(inner);
+
+        assert!(matches!(
+            outcome.try_recv(),
+            Ok(Err(DeliveryFailure::LinkDetached(DetachStatus::Closed {
+                remote_error: None
+            })))
+        ));
     }
 }

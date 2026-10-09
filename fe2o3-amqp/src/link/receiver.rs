@@ -34,16 +34,15 @@ use super::{
     receiver_link::count_number_of_sections_and_offset,
     role,
     shared_inner::{LinkEndpointInner, LinkEndpointInnerDetach, LinkEndpointInnerReattach},
-    ArcReceiverUnsettledMap, DetachThenResumeReceiverError, DispositionError, FlowError,
-    IllegalLinkStateError, LinkFrame, LinkRelay, LinkStateError, MessageSizeExceeded,
+    ArcReceiverUnsettledMap, AttachMode, DetachStatus, DetachThenResumeReceiverError,
+    DispositionError, FlowError, LinkFrame, LinkRelay, LinkStateError, MessageSizeExceeded,
     ReceiverAttachError, ReceiverAttachExchange, ReceiverFlowState, ReceiverLink,
     ReceiverResumeError, ReceiverResumeErrorKind, ReceiverTransferError, RecvError,
     SessionStopReason, DEFAULT_CREDIT,
 };
 
-cfg_transaction! {
-    use fe2o3_amqp_types::definitions::AmqpError;
-}
+#[cfg(feature = "transaction")]
+use super::shared_inner::TxnAcquisitionCloseExt;
 
 #[cfg(docsrs)]
 use fe2o3_amqp_types::{
@@ -347,7 +346,7 @@ impl Receiver {
     }
 
     /// Set the link credit. This will stop draining if the link is in a draining cycle
-    pub async fn set_credit(&mut self, credit: SequenceNo) -> Result<(), IllegalLinkStateError> {
+    pub async fn set_credit(&mut self, credit: SequenceNo) -> Result<(), LinkStateError> {
         self.inner.set_credit(credit).await
     }
 
@@ -355,7 +354,7 @@ impl Receiver {
     ///
     /// This will send a `Flow` performative with the `drain` field set to true.
     /// Setting the credit will set the `drain` field to false and stop draining
-    pub async fn drain(&mut self) -> Result<(), IllegalLinkStateError> {
+    pub async fn drain(&mut self) -> Result<(), LinkStateError> {
         self.inner.drain().await
     }
 
@@ -369,11 +368,16 @@ impl Receiver {
     /// This will send a `Detach` performative with the `closed` field set to false. If the remote
     /// peer responds with a Detach performative whose `closed` field is set to true, the link will
     /// re-attach and then close by exchanging closing Detach performatives.
-    pub async fn detach(mut self) -> Result<DetachedReceiver, (DetachedReceiver, DetachError)> {
+    pub async fn detach(
+        mut self,
+    ) -> Result<(DetachedReceiver, DetachStatus), (DetachedReceiver, DetachError)> {
         match self.inner.detach_with_error(None).await {
-            Ok(_) => Ok(DetachedReceiver {
-                inner: Box::new(self.inner),
-            }),
+            Ok(status) => Ok((
+                DetachedReceiver {
+                    inner: Box::new(self.inner),
+                },
+                status,
+            )),
             Err(err) => Err((
                 DetachedReceiver {
                     inner: Box::new(self.inner),
@@ -391,11 +395,14 @@ impl Receiver {
     pub async fn detach_with_error(
         mut self,
         error: impl Into<definitions::Error>,
-    ) -> Result<DetachedReceiver, (DetachedReceiver, DetachError)> {
+    ) -> Result<(DetachedReceiver, DetachStatus), (DetachedReceiver, DetachError)> {
         match self.inner.detach_with_error(Some(error.into())).await {
-            Ok(_) => Ok(DetachedReceiver {
-                inner: Box::new(self.inner),
-            }),
+            Ok(status) => Ok((
+                DetachedReceiver {
+                    inner: Box::new(self.inner),
+                },
+                status,
+            )),
             Err(err) => Err((
                 DetachedReceiver {
                     inner: Box::new(self.inner),
@@ -412,7 +419,10 @@ impl Receiver {
         pub async fn detach_with_timeout(
             self,
             duration: Duration,
-        ) -> Result<Result<DetachedReceiver, (DetachedReceiver, DetachError)>, Elapsed> {
+        ) -> Result<
+            Result<(DetachedReceiver, DetachStatus), (DetachedReceiver, DetachError)>,
+            Elapsed,
+        > {
             timeout(duration, self.detach()).await
         }
     }
@@ -428,31 +438,35 @@ impl Receiver {
         new_session: &SessionHandle<R>,
     ) -> Result<ReceiverAttachExchange, DetachThenResumeReceiverError> {
         // detach the link
-        let detach_result = self
-            .inner
-            .detach_with_error(None)
-            .await
-            .map_err(DetachThenResumeReceiverError::from);
+        let detach_result = self.inner.detach_with_error(None).await;
+
+        // If the peer closed the link instead of suspending it, the link can
+        // no longer be resumed. The status is carried by the resume error.
+        if let Ok(status) = &detach_result {
+            if status.is_closed() {
+                return Err(DetachThenResumeReceiverError::Resume(
+                    ReceiverResumeErrorKind::LinkDetached(status.clone()),
+                ));
+            }
+        }
 
         // re-attach the link
-        let is_reattaching = self.inner.switch_session(new_session);
-        let exchange_result = self
-            .inner
-            .resume_incoming_attach(None, is_reattaching)
-            .await
-            .map_err(DetachThenResumeReceiverError::from);
+        self.inner.switch_session(new_session);
+        let exchange_result = self.inner.resume_incoming_attach(None).await;
 
         match (detach_result, exchange_result) {
             (_, Ok(exchange)) => Ok(exchange),
-            (Ok(_), Err(err)) => Err(err),
-            (Err(err), Err(_)) => Err(err),
+            (Ok(_), Err(err)) => Err(DetachThenResumeReceiverError::Resume(err)),
+            (Err(err), Err(_)) => Err(DetachThenResumeReceiverError::Detach(err)),
         }
     }
 
     /// Close the link.
     ///
     /// This will send a Detach performative with the `closed` field set to true.
-    pub async fn close(mut self) -> Result<(), DetachError> {
+    /// The returned [`DetachStatus`] carries the error the peer attached to
+    /// its closing detach, if any.
+    pub async fn close(mut self) -> Result<DetachStatus, DetachError> {
         self.inner.close_with_error(None).await
     }
 
@@ -462,7 +476,7 @@ impl Receiver {
     pub async fn close_with_error(
         mut self,
         error: impl Into<definitions::Error>,
-    ) -> Result<(), DetachError> {
+    ) -> Result<DetachStatus, DetachError> {
         // Stop link transfer before closing
         self.set_credit(0).await?;
         self.inner.close_with_error(Some(error.into())).await
@@ -849,7 +863,7 @@ impl<L: endpoint::ReceiverLink> Drop for ReceiverInner<L> {
     fn drop(&mut self) {
         // A detach the relay already answered may be waiting in the engine's
         // channel. Apply it so the link state matches the detach; and once
-        // any detach was drained, the peer has already ended the link, so
+        // any detach was drained, the peer has already detached the link, so
         // the closing detach this drop would otherwise send would be a
         // duplicate.
         let mut remote_detach_received = false;
@@ -948,10 +962,10 @@ where
 
     async fn exchange_attach(
         &mut self,
-        is_reattaching: bool,
+        mode: AttachMode,
     ) -> Result<ReceiverAttachExchange, <Self::Link as LinkAttach>::AttachError> {
         self.link
-            .exchange_attach(&self.outgoing, &mut self.incoming, is_reattaching)
+            .exchange_attach(&self.outgoing, &mut self.incoming, mode)
             .await
     }
 
@@ -992,12 +1006,14 @@ where
         outcome: ReceiverAttachExchange,
     ) -> Result<&mut Self, L::AttachError> {
         match outcome {
-            ReceiverAttachExchange::Complete => Ok(self),
-            //  Re-attach should have None valued unsettled, so this should be invalid
-            ReceiverAttachExchange::IncompleteUnsettled | ReceiverAttachExchange::Resume => {
-                Err(ReceiverAttachError::IllegalState)
-            }
+            ReceiverAttachExchange::Complete => {}
+            // The reachable map-carrying exchanges are the peer's reply during
+            // the crossed close. The receiver's outstanding deliveries are
+            // tracked by the application, so there is nothing to resume here:
+            // the link is closed next by `reattach_then_close`.
+            ReceiverAttachExchange::IncompleteUnsettled | ReceiverAttachExchange::Resume => {}
         }
+        Ok(self)
     }
 }
 
@@ -1018,9 +1034,9 @@ fn ensure_delivery_identity(transfer: &Transfer) -> Result<(), ReceiverTransferE
 impl<L> ReceiverInner<L>
 where
     L: endpoint::ReceiverLink<
-            FlowError = IllegalLinkStateError,
+            FlowError = LinkStateError,
             TransferError = ReceiverTransferError,
-            DispositionError = IllegalLinkStateError,
+            DispositionError = LinkStateError,
             AttachError = ReceiverAttachError,
             DetachError = DetachError,
         > + LinkExt<FlowState = ReceiverFlowState, Unsettled = ArcReceiverUnsettledMap>
@@ -1071,16 +1087,10 @@ where
             // records the outcome here. Reported as-is even when the session
             // is stopping: a stop without a detach shows up as the channel
             // closing (`None` above).
-            LinkFrame::Detach(detach) => {
-                let closed = detach.closed;
-                self.link
-                    .apply_remote_detach_outcome(detach)
-                    .map_err(Into::into)
-                    .and_then(|_| match closed {
-                        true => Err(LinkStateError::RemoteClosed.into()),
-                        false => Err(LinkStateError::RemoteDetached.into()),
-                    })
-            }
+            LinkFrame::Detach(detach) => match self.link.apply_remote_detach_outcome(detach) {
+                Ok(status) => Err(RecvError::LinkDetached(status)),
+                Err(err) => Err(RecvError::LinkStateError(err.into())),
+            },
             LinkFrame::Transfer {
                 input_handle: _,
                 performative,
@@ -1094,13 +1104,11 @@ where
             }
             #[cfg(feature = "transaction")]
             LinkFrame::Acquisition(_) => {
-                let error = definitions::Error::new(
-                    AmqpError::NotImplemented,
-                    "Transactional acquisition is not implemented".to_string(),
-                    None,
-                );
-                self.close_with_error(Some(error)).await?; // FIXME: cancel safe? if oneshot chanenl is cancel safe
-                Err(RecvError::TransactionalAcquisitionIsNotImeplemented)
+                // A receiver is never expected to receive an acquisition, but
+                // if one arrives the link is terminated with
+                // `amqp:not-implemented` (AMQP 1.0 §4.4.3).
+                self.close_on_acquisition_not_implemented().await;
+                Err(RecvError::AcquisitionNotImplemented)
             }
         }
     }
@@ -1295,7 +1303,7 @@ where
             None,
         );
         match self.close_with_error(Some(error)).await {
-            Ok(()) => RecvError::MessageSizeExceeded(MessageSizeExceeded {
+            Ok(_) => RecvError::MessageSizeExceeded(MessageSizeExceeded {
                 size: total_size,
                 max_size,
             }),
@@ -1435,7 +1443,7 @@ where
     ///
     /// This is cancel safe as internanlly it only `.await` on sending over `tokio::mpsc::Sender`
     #[inline]
-    pub async fn set_credit(&mut self, credit: SequenceNo) -> Result<(), IllegalLinkStateError> {
+    pub async fn set_credit(&mut self, credit: SequenceNo) -> Result<(), LinkStateError> {
         self.processed.store(0, Ordering::Release);
         if let CreditMode::Auto(_) = self.credit_mode {
             self.credit_mode = CreditMode::Auto(credit)
@@ -1533,29 +1541,26 @@ impl ReceiverInner<ReceiverLink<Target>> {
     /// The new session may belong to a different connection whose negotiated
     /// max frame size differs, so the link's `max_frame_size` is refreshed
     /// from the new session before any attach/transfer frame is sent.
-    pub(crate) fn switch_session<R>(&mut self, new_session: &SessionHandle<R>) -> bool {
-        let is_reattaching = !self.session.same_channel(&new_session.control);
+    pub(crate) fn switch_session<R>(&mut self, new_session: &SessionHandle<R>) {
         self.session = new_session.control.clone();
         self.outgoing = new_session.outgoing.clone();
         self.link.max_frame_size = new_session.max_frame_size();
-        is_reattaching
     }
 
     pub(crate) async fn resume_incoming_attach(
         &mut self,
         mut initial_remote_attach: Option<Attach>,
-        is_reattaching: bool,
     ) -> Result<ReceiverAttachExchange, ReceiverResumeErrorKind> {
         self.reallocate_output_handle().await?;
 
         let exchange = match initial_remote_attach.take() {
             Some(remote_attach) => {
                 self.link
-                    .send_attach(&self.outgoing, is_reattaching)
+                    .send_attach(&self.outgoing, AttachMode::Resume)
                     .await?;
                 self.link.on_incoming_attach(remote_attach)?
             }
-            None => self.exchange_attach(is_reattaching).await?,
+            None => self.exchange_attach(AttachMode::Resume).await?,
         };
         #[cfg(feature = "tracing")]
         tracing::debug!(?exchange);
@@ -1706,16 +1711,8 @@ impl DetachedReceiver {
         &mut self.inner.link.target
     }
 
-    async fn resume_inner(
-        mut self,
-        is_reattaching: bool,
-    ) -> Result<ResumingReceiver, ReceiverResumeError> {
-        let exchange = try_as_recver!(
-            self,
-            self.inner
-                .resume_incoming_attach(None, is_reattaching)
-                .await
-        );
+    async fn resume_inner(mut self) -> Result<ResumingReceiver, ReceiverResumeError> {
+        let exchange = try_as_recver!(self, self.inner.resume_incoming_attach(None).await);
         let receiver = Receiver { inner: *self.inner };
         let resuming_receiver = match exchange {
             ReceiverAttachExchange::Complete => ResumingReceiver::Complete(receiver),
@@ -1733,16 +1730,15 @@ impl DetachedReceiver {
     /// times if there are unsettled deliveries.
     #[cfg_attr(feature = "tracing", tracing::instrument(skip(self)))]
     pub async fn resume(self) -> Result<ResumingReceiver, ReceiverResumeError> {
-        self.resume_inner(false).await
+        self.resume_inner().await
     }
 
     cfg_not_wasm32! {
         async fn resume_with_timeout_inner(
             mut self,
             duration: Duration,
-            is_reattaching: bool,
         ) -> Result<ResumingReceiver, ReceiverResumeError> {
-            let fut = self.inner.resume_incoming_attach(None, is_reattaching);
+            let fut = self.inner.resume_incoming_attach(None);
 
             match tokio::time::timeout(duration, fut).await {
                 Ok(Ok(exchange)) => {
@@ -1781,7 +1777,7 @@ impl DetachedReceiver {
             self,
             duration: Duration,
         ) -> Result<ResumingReceiver, ReceiverResumeError> {
-            self.resume_with_timeout_inner(duration, false).await
+            self.resume_with_timeout_inner(duration).await
         }
     }
 
@@ -1793,9 +1789,9 @@ impl DetachedReceiver {
         mut self,
         session: &SessionHandle<R>,
     ) -> Result<ResumingReceiver, ReceiverResumeError> {
-        let is_reattaching = self.inner.switch_session(session);
+        self.inner.switch_session(session);
 
-        self.resume_inner(is_reattaching).await
+        self.resume_inner().await
     }
 
     /// Resume the receiver link on the original session with an Attach sent by the remote peer
@@ -1808,9 +1804,7 @@ impl DetachedReceiver {
     ) -> Result<ResumingReceiver, ReceiverResumeError> {
         let exchange = try_as_recver!(
             self,
-            self.inner
-                .resume_incoming_attach(Some(remote_attach), false)
-                .await
+            self.inner.resume_incoming_attach(Some(remote_attach)).await
         );
         let receiver = Receiver { inner: *self.inner };
         let resuming_receiver = match exchange {
@@ -1832,13 +1826,11 @@ impl DetachedReceiver {
         remote_attach: Attach,
         session: &SessionHandle<R>,
     ) -> Result<ResumingReceiver, ReceiverResumeError> {
-        let is_reattaching = self.inner.switch_session(session);
+        self.inner.switch_session(session);
 
         let exchange = try_as_recver!(
             self,
-            self.inner
-                .resume_incoming_attach(Some(remote_attach), is_reattaching)
-                .await
+            self.inner.resume_incoming_attach(Some(remote_attach)).await
         );
         let receiver = Receiver { inner: *self.inner };
         let resuming_receiver = match exchange {
@@ -1861,8 +1853,8 @@ impl DetachedReceiver {
             session: &SessionHandle<R>,
             duration: Duration,
         ) -> Result<ResumingReceiver, ReceiverResumeError> {
-            let is_reattaching = self.inner.switch_session(session);
-            self.resume_with_timeout_inner(duration, is_reattaching).await
+            self.inner.switch_session(session);
+            self.resume_with_timeout_inner(duration).await
         }
 
         /// Resume the receiver link on the original session with an Attach sent by the remote peer
@@ -1874,7 +1866,7 @@ impl DetachedReceiver {
             remote_attach: Attach,
             duration: Duration,
         ) -> Result<ResumingReceiver, ReceiverResumeError> {
-            let fut = self.inner.resume_incoming_attach(Some(remote_attach), false);
+            let fut = self.inner.resume_incoming_attach(Some(remote_attach));
 
             match tokio::time::timeout(duration, fut).await {
                 Ok(Ok(exchange)) => {
@@ -1912,9 +1904,9 @@ impl DetachedReceiver {
             session: &SessionHandle<R>,
             duration: Duration,
         ) -> Result<ResumingReceiver, ReceiverResumeError> {
-            let is_reattaching = self.inner.switch_session(session);
+            self.inner.switch_session(session);
 
-            let fut = self.inner.resume_incoming_attach(Some(remote_attach), is_reattaching);
+            let fut = self.inner.resume_incoming_attach(Some(remote_attach));
 
             match tokio::time::timeout(duration, fut).await {
                 Ok(Ok(exchange)) => {
@@ -1950,7 +1942,9 @@ mod tests {
     use crate::endpoint::OutputHandle;
     use crate::link::state::{LinkFlowState, LinkFlowStateInner, LinkState};
     use crate::util::Sealed;
-    use fe2o3_amqp_types::{definitions::SenderSettleMode, messaging::Received};
+    use fe2o3_amqp_types::{
+        definitions::SenderSettleMode, messaging::Received, primitives::OrderedMap,
+    };
     use tokio::sync::oneshot;
 
     fn make_flow_state(link_credit: u32) -> ReceiverFlowState {
@@ -2347,6 +2341,32 @@ mod tests {
         result.expect_err("a malformed delivery must fail")
     }
 
+    /// A remote-initiated transactional acquisition is never expected on a
+    /// receiver, but if one arrives the link is terminated with
+    /// `amqp:not-implemented` (AMQP 1.0 §4.4.3) and
+    /// `RecvError::AcquisitionNotImplemented` is reported.
+    #[cfg(feature = "transaction")]
+    #[tokio::test]
+    async fn acquisition_terminates_link_with_not_implemented() {
+        let (mut inner, _session_rx, mut outgoing_rx, incoming_tx) =
+            make_receiver_inner_with_channels(4096);
+
+        incoming_tx
+            .send(LinkFrame::Acquisition(DeliveryTag::from(vec![0x01])))
+            .await
+            .expect("the incoming end is open");
+
+        let error = recv_expecting_fatal_close(
+            &mut inner,
+            &mut outgoing_rx,
+            &incoming_tx,
+            definitions::AmqpError::NotImplemented.into(),
+        )
+        .await;
+
+        assert!(matches!(error, RecvError::AcquisitionNotImplemented));
+    }
+
     /// The minimal `Attach` a sender peer sends for this receiver link: it
     /// must carry a source and an initial delivery count so
     /// `on_incoming_attach` accepts it.
@@ -2391,15 +2411,13 @@ mod tests {
         let mut inner = make_receiver_inner(4092);
         let session_b = make_session_handle(1020);
 
-        // Switching to a different session marks the link as reattaching and
-        // refreshes the link's max frame size from the new session
-        let is_reattaching = inner.switch_session(&session_b);
-        assert!(is_reattaching);
+        // Switching to a different session refreshes the link's max frame
+        // size from the new session
+        inner.switch_session(&session_b);
         assert_eq!(inner.link.max_frame_size, 1020);
 
-        // Switching to the same session does not mark the link as reattaching
-        let is_reattaching = inner.switch_session(&session_b);
-        assert!(!is_reattaching);
+        // Switching to the same session is idempotent
+        inner.switch_session(&session_b);
         assert_eq!(inner.link.max_frame_size, 1020);
     }
 
@@ -3000,6 +3018,58 @@ mod tests {
         ));
     }
 
+    /// AMQP 1.0 §2.6.13: target-only deliveries (local unsettled entries
+    /// absent from a complete remote map) MUST be considered settled.
+    #[test]
+    fn receiver_reconciles_target_only_deliveries() {
+        let (mut inner, _session_rx, _outgoing_rx, _incoming_tx) =
+            make_receiver_inner_with_channels(4096);
+        seed_unsettled(&inner.link.unsettled, &[vec![1], vec![2]]);
+
+        // Remote map has only tag 1 (complete): tag 2 is target-only.
+        let mut remote = OrderedMap::new();
+        remote.insert(DeliveryTag::from(vec![1u8]), None);
+        let _ = inner.link.handle_unsettled_in_attach(Some(remote), false);
+
+        let lock = inner.link.unsettled.read();
+        let map = lock.as_ref().unwrap();
+        assert!(map.contains_key(&DeliveryTag::from(vec![1u8])));
+        assert!(!map.contains_key(&DeliveryTag::from(vec![2u8])));
+    }
+
+    /// An incomplete remote map is not evidence of settlement, so local
+    /// entries are left untouched.
+    #[test]
+    fn receiver_keeps_deliveries_on_incomplete_remote_map() {
+        let (mut inner, _session_rx, _outgoing_rx, _incoming_tx) =
+            make_receiver_inner_with_channels(4096);
+        seed_unsettled(&inner.link.unsettled, &[vec![1]]);
+
+        let _ = inner
+            .link
+            .handle_unsettled_in_attach(Some(OrderedMap::new()), true);
+
+        let lock = inner.link.unsettled.read();
+        assert!(lock
+            .as_ref()
+            .unwrap()
+            .contains_key(&DeliveryTag::from(vec![1u8])));
+    }
+
+    /// A `None` remote map (peer reattached without unsettled state) settles
+    /// every target-only delivery.
+    #[test]
+    fn receiver_clears_deliveries_on_missing_remote_map() {
+        let (mut inner, _session_rx, _outgoing_rx, _incoming_tx) =
+            make_receiver_inner_with_channels(4096);
+        seed_unsettled(&inner.link.unsettled, &[vec![1], vec![2]]);
+
+        let _ = inner.link.handle_unsettled_in_attach(None, false);
+
+        let lock = inner.link.unsettled.read();
+        assert!(lock.as_ref().unwrap().is_empty());
+    }
+
     /// A peer that suspends (non-closing detach) while this side is closing
     /// triggers the AMQP 1.0 §2.6.6 simultaneous-detach handshake.
     ///
@@ -3047,7 +3117,7 @@ mod tests {
     /// triggers the AMQP 1.0 §2.6.6 simultaneous-detach handshake. The spec
     /// assigns the reattach to this side (the non-closing/suspending side),
     /// which reattaches and then sends a closing detach; the link ends
-    /// `Closed`, so the local detach fails with `ClosedByRemote`.
+    /// `Closed`, reported as a `DetachStatus::Closed` outcome.
     ///
     /// The peer's frames are scripted, so this is deterministic.
     #[tokio::test]
@@ -3070,7 +3140,10 @@ mod tests {
             detaches, 2,
             "expected a detach before and after the reattach"
         );
-        assert!(matches!(result, Err(DetachError::ClosedByRemote)));
+        assert!(matches!(
+            result,
+            Ok(DetachStatus::Closed { remote_error: None })
+        ));
         assert!(matches!(&inner.link.local_state, LinkState::Closed));
     }
 }
