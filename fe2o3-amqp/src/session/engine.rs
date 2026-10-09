@@ -442,8 +442,9 @@ where
 
             #[cfg(feature = "transaction")]
             LinkFrame::Acquisition(_) => {
-                // This is purely used to notify sender about TxnAcquisition, which is not implemented
-                unreachable!("LinkFrame::Acquisition should not appear in outgoing link frames")
+                // This is purely used to notify the sender about a txn
+                // acquisition and never belongs to the outgoing direction.
+                return Err(SessionInnerError::IllegalState);
             }
         };
 
@@ -734,9 +735,12 @@ where
                 .await;
         // The session ends with the connection; sanitize the connection stop
         // so the handle observes a clean end. Connection-level errors are
-        // reported through the `ConnectionHandle`.
+        // reported through the `ConnectionHandle`. A clean remote end is an
+        // outcome, not an error, for the handle as well.
         let result = match outcome {
-            Err(SessionInnerError::ConnectionStopped(_)) => Ok(()),
+            Err(SessionInnerError::ConnectionStopped(_)) | Err(SessionInnerError::RemoteEnded) => {
+                Ok(())
+            }
             other => other.map_err(Into::into),
         };
         let _ = tx.send(result);

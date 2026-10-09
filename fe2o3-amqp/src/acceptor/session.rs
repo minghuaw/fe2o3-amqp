@@ -38,7 +38,9 @@ use super::{builder::Builder, IncomingSession, ListenerConnectionHandle};
 cfg_transaction! {
     use fe2o3_amqp_types::{messaging::Accepted, transaction::TransactionError};
     
-    use crate::transaction::{manager::TransactionManager, session::TxnSession, AllocTxnIdError};
+    use crate::transaction::{
+        manager::TransactionManager, session::TxnSession, CoordinatorAllocTxnIdError,
+    };
 }
 
 
@@ -323,6 +325,7 @@ impl SessionAcceptor {
 
         let handle = SessionHandle {
             is_ended: false,
+            terminal_outcome: None,
             control: session_control_tx,
             engine_handle,
             outcome,
@@ -665,8 +668,8 @@ cfg_transaction! {
         // This should be unreachable, but an error is probably a better way
         fn allocate_transaction_id(
             &mut self,
-        ) -> Result<fe2o3_amqp_types::transaction::TransactionId, AllocTxnIdError> {
-            Err(AllocTxnIdError::NotImplemented)
+        ) -> Result<fe2o3_amqp_types::transaction::TransactionId, CoordinatorAllocTxnIdError> {
+            Err(CoordinatorAllocTxnIdError::NotImplemented)
         }
     }
     

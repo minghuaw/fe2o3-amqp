@@ -9,9 +9,9 @@
 use std::time::Duration;
 
 use fe2o3_amqp::{
-    acceptor::{ConnectionAcceptor, SessionAcceptor},
-    connection::{Connection, ConnectionHandle},
-    session::{Session, SessionHandle},
+    acceptor::{ConnectionAcceptor, ListenerSessionHandle, SessionAcceptor},
+    connection::{self, Connection, ConnectionHandle},
+    session::{self, Session, SessionHandle},
     types::definitions::{self, AmqpError},
 };
 
@@ -52,14 +52,14 @@ async fn establish_connection_pair() -> (
 async fn establish_session_pair(
     server_connection: &mut fe2o3_amqp::acceptor::ListenerConnectionHandle,
     client_connection: &mut ConnectionHandle<()>,
-) -> SessionHandle<()> {
+) -> (SessionHandle<()>, ListenerSessionHandle) {
     let session_acceptor = SessionAcceptor::new();
     let begin_fut = common::expect_ok!(Session::begin(client_connection));
     let (session_result, begin_result) =
         tokio::join!(session_acceptor.accept(server_connection), begin_fut);
     let client_session = begin_result;
-    session_result.expect("session accept failed");
-    client_session
+    let server_session = session_result.expect("session accept failed");
+    (client_session, server_session)
 }
 
 /// A locally initiated session end must not surface as an error on the
@@ -67,7 +67,7 @@ async fn establish_session_pair(
 #[tokio::test]
 async fn local_session_end_returns_ok() {
     let (mut server_connection, mut client_connection) = establish_connection_pair().await;
-    let mut client_session =
+    let (mut client_session, _server_session) =
         establish_session_pair(&mut server_connection, &mut client_connection).await;
 
     let result = tokio::time::timeout(Duration::from_secs(10), client_session.end())
@@ -82,7 +82,7 @@ async fn local_session_end_returns_ok() {
 #[tokio::test]
 async fn local_session_end_with_error_returns_ok() {
     let (mut server_connection, mut client_connection) = establish_connection_pair().await;
-    let mut client_session =
+    let (mut client_session, _server_session) =
         establish_session_pair(&mut server_connection, &mut client_connection).await;
 
     let result = tokio::time::timeout(
@@ -134,4 +134,122 @@ async fn local_connection_close_with_error_returns_ok() {
         "local close with error must not error, got {:?}",
         result
     );
+}
+
+/// A remote clean session end must not surface as an error on the session
+/// handle.
+#[tokio::test]
+async fn remote_session_end_returns_ok() {
+    let (mut server_connection, mut client_connection) = establish_connection_pair().await;
+    let (mut client_session, mut server_session) =
+        establish_session_pair(&mut server_connection, &mut client_connection).await;
+
+    let (server_result, client_result) = tokio::time::timeout(Duration::from_secs(10), async {
+        tokio::join!(server_session.end(), client_session.on_end())
+    })
+    .await
+    .expect("remote end timed out");
+
+    server_result.expect("server end failed");
+    assert!(
+        client_result.is_ok(),
+        "remote clean end must not error, got {:?}",
+        client_result
+    );
+}
+
+/// A remote session end with an error is reported on the session handle, and
+/// a later call reports the same error.
+#[tokio::test]
+async fn remote_session_end_with_error_is_reported_and_cached() {
+    let (mut server_connection, mut client_connection) = establish_connection_pair().await;
+    let (mut client_session, mut server_session) =
+        establish_session_pair(&mut server_connection, &mut client_connection).await;
+
+    let (server_result, client_result) = tokio::time::timeout(Duration::from_secs(10), async {
+        tokio::join!(
+            server_session.end_with_error(test_error()),
+            client_session.on_end()
+        )
+    })
+    .await
+    .expect("remote end timed out");
+
+    server_result.expect("server end failed");
+    let error = client_result.expect_err("remote end with error must be reported");
+    assert!(matches!(error, session::Error::RemoteEndedWithError(_)));
+
+    let again = client_session
+        .on_end()
+        .await
+        .expect_err("the terminal error must be cached");
+    assert!(matches!(again, session::Error::RemoteEndedWithError(_)));
+}
+
+/// Repeated local session ends report the same clean outcome.
+#[tokio::test]
+async fn repeated_session_end_reports_the_same_clean_outcome() {
+    let (mut server_connection, mut client_connection) = establish_connection_pair().await;
+    let (mut client_session, _server_session) =
+        establish_session_pair(&mut server_connection, &mut client_connection).await;
+
+    client_session.end().await.expect("local end failed");
+    assert!(client_session.on_end().await.is_ok());
+    assert!(client_session.try_end().is_ok());
+}
+
+/// A remote clean connection close must not surface as an error on the
+/// connection handle.
+#[tokio::test]
+async fn remote_connection_close_returns_ok() {
+    let (mut server_connection, mut client_connection) = establish_connection_pair().await;
+
+    let (server_result, client_result) = tokio::time::timeout(Duration::from_secs(10), async {
+        tokio::join!(server_connection.close(), client_connection.on_close())
+    })
+    .await
+    .expect("remote close timed out");
+
+    server_result.expect("server close failed");
+    assert!(
+        client_result.is_ok(),
+        "remote clean close must not error, got {:?}",
+        client_result
+    );
+}
+
+/// A remote connection close with an error is reported on the connection
+/// handle, and a later call reports the same error.
+#[tokio::test]
+async fn remote_connection_close_with_error_is_reported_and_cached() {
+    let (mut server_connection, mut client_connection) = establish_connection_pair().await;
+
+    let (server_result, client_result) = tokio::time::timeout(Duration::from_secs(10), async {
+        tokio::join!(
+            server_connection.close_with_error(test_error()),
+            client_connection.on_close()
+        )
+    })
+    .await
+    .expect("remote close timed out");
+
+    server_result.expect("server close failed");
+    let error = client_result.expect_err("remote close with error must be reported");
+    assert!(matches!(error, connection::Error::RemoteClosedWithError(_)));
+
+    let again = client_connection
+        .on_close()
+        .await
+        .expect_err("the terminal error must be cached");
+    assert!(matches!(again, connection::Error::RemoteClosedWithError(_)));
+}
+
+/// Repeated local connection closes report the same clean outcome.
+#[tokio::test]
+async fn repeated_connection_close_reports_the_same_clean_outcome() {
+    let (_server_connection, mut client_connection) = establish_connection_pair().await;
+
+    client_connection.close().await.expect("local close failed");
+    assert!(client_connection.on_close().await.is_ok());
+    assert!(client_connection.try_close().is_ok());
 }
