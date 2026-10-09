@@ -123,10 +123,12 @@
 20. **Breaking**: the session and connection handles deliver the end/close outcome once,
     like joining the engine task: `Session::end`/`close`/`end_with_error`/`on_end` and
     `Connection::close`/`close_with_error`/`on_close` return the outcome a single time
-    and later calls report `Error::AlreadyEnded`/`Error::AlreadyClosed`; `try_end`/
-    `try_close` report `TryEndError::AlreadyEnded`/`TryCloseError::AlreadyClosed`
-    (reintroduced) after the outcome was observed. Use `is_ended`/`is_closed` to query
-    the state; neither an outcome nor an error is replayed.
+    and later calls report `Error::AlreadyEnded`/`Error::AlreadyClosed`. `try_end`/
+    `try_close` are the non-blocking counterparts: they initiate the end/close at most
+    once and report `Ok(None)` while the exchange is in progress, `Ok(Some(outcome))`
+    once it completes, and `Err(Error::AlreadyEnded/AlreadyClosed)` after the outcome
+    was observed (`TryEndError`/`TryCloseError` are removed). Use `on_end`/`on_close`
+    to await an initiated exchange; neither an outcome nor an error is replayed.
 
 21. **Breaking**: the close/detach outcome types are renamed to a consistent family:
     `DetachStatus` -> `LinkOutcome`, `SessionStopReason` -> `SessionOutcome`, and
@@ -141,8 +143,8 @@
     `RemoteEndedWithError`/`RemoteClosedWithError`; `Err` is reserved for local failures:
     the connection stopping first (`Error::ConnectionStopped(reason)`), invariant
     violations, and transport errors. `end_with_error`/`close_with_error` report
-    `EndedWithError`/`ClosedWithError`; `TryEndError::Ended`/`TryCloseError::Closed` are
-    renamed to `Stopped` and only carry local errors.
+    `EndedWithError`/`ClosedWithError`; `try_end`/`try_close` wrap the outcome in an
+    `Option` where `None` means the exchange is still in progress.
 
 23. **Breaking**: a session-dependent operation that failed because the session stopped now
     reports the separate `SessionStopped` type: `SessionStopped::Outcome(SessionOutcome)`
@@ -188,6 +190,20 @@
     previously left the id on the link so a later `acquire` reported a local error.
     The defensive `acquire` check reports `FlowError::InvariantViolation` instead of
     the peer-only `IllegalState`, as do the internal transaction disposition sends.
+
+27. **Bugfix**: a close/end that was initiated (by `try_close`/`try_end`) and then
+    followed by a blocking `close`/`end` or a dropped handle no longer sends a
+    duplicate `Close`/`End` frame or reports a spurious internal error; the exchange
+    is initiated at most once and the later call awaits the same outcome.
+
+28. **Breaking**: the new `InternalError` separates internal failures that can
+    occur in principle (an engine task ended without reporting its outcome, a
+    session stop reason was not recorded, a delivery settlement channel died, a
+    `Flow`/`Disposition` frame leaked into the receiver stream) from the
+    defensive `InvariantViolation`, which marks paths that are impossible by
+    construction. Both answer `amqp:internal-error`. `LinkStateError`,
+    `SenderAttachError`/`ReceiverAttachError`, `session::Error` and
+    `connection::Error` gain `InternalError`.
 
 ## 0.18.2
 

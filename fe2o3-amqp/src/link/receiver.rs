@@ -1116,7 +1116,7 @@ where
                     "Unexpected Flow or Disposition frame in the receiver stream",
                 ))
                 .await;
-                Err(LinkStateError::InvariantViolation.into())
+                Err(LinkStateError::InternalError.into())
             }
             #[cfg(feature = "transaction")]
             LinkFrame::Acquisition(_) => {
@@ -2478,7 +2478,7 @@ mod tests {
 
         assert!(matches!(
             error,
-            RecvError::LinkStateError(LinkStateError::InvariantViolation)
+            RecvError::LinkStateError(LinkStateError::InternalError)
         ));
     }
 
@@ -2684,6 +2684,7 @@ mod tests {
         drop(outcome_tx);
         SessionHandle {
             is_ended: false,
+            end_sent: false,
             control,
             engine_handle: tokio::spawn(async {}),
             outcome,

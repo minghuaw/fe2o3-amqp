@@ -92,34 +92,34 @@ fn warn_unrecorded_stop_reason() {
 }
 
 /// The [`LinkStateError`] for an operation that failed because the session (or
-/// its connection) stopped; [`LinkStateError::InvariantViolation`] when no stop
-/// reason was recorded (defensive).
+/// its connection) stopped; [`LinkStateError::InternalError`] when no stop
+/// reason was recorded.
 pub(crate) fn link_state_error_from_stop_reason(cell: &OnceLock<SessionStopped>) -> LinkStateError {
     match cell.get() {
         Some(reason) => LinkStateError::SessionStopped(reason.clone()),
         None => {
             warn_unrecorded_stop_reason();
-            LinkStateError::InvariantViolation
+            LinkStateError::InternalError
         }
     }
 }
 
 /// The [`DetachError`] for an operation that failed because the session (or
-/// its connection) stopped; [`DetachError::InvariantViolation`] when no stop
-/// reason was recorded (defensive).
+/// its connection) stopped; [`DetachError::InternalError`] when no stop reason
+/// was recorded.
 pub(crate) fn detach_error_from_stop_reason(cell: &OnceLock<SessionStopped>) -> DetachError {
     match cell.get() {
         Some(reason) => DetachError::SessionStopped(reason.clone()),
         None => {
             warn_unrecorded_stop_reason();
-            DetachError::InvariantViolation
+            DetachError::InternalError
         }
     }
 }
 
 /// The [`SenderAttachError`] for an attach that failed because the session (or
-/// its connection) stopped; [`SenderAttachError::InvariantViolation`] when no
-/// stop reason was recorded (defensive).
+/// its connection) stopped; [`SenderAttachError::InternalError`] when no stop
+/// reason was recorded.
 pub(crate) fn sender_attach_error_from_stop_reason(
     cell: &OnceLock<SessionStopped>,
 ) -> SenderAttachError {
@@ -127,14 +127,14 @@ pub(crate) fn sender_attach_error_from_stop_reason(
         Some(reason) => SenderAttachError::SessionStopped(reason.clone()),
         None => {
             warn_unrecorded_stop_reason();
-            SenderAttachError::InvariantViolation
+            SenderAttachError::InternalError
         }
     }
 }
 
 /// The [`ReceiverAttachError`] for an attach that failed because the session
-/// (or its connection) stopped; [`ReceiverAttachError::InvariantViolation`]
-/// when no stop reason was recorded (defensive).
+/// (or its connection) stopped; [`ReceiverAttachError::InternalError`] when no
+/// stop reason was recorded.
 pub(crate) fn receiver_attach_error_from_stop_reason(
     cell: &OnceLock<SessionStopped>,
 ) -> ReceiverAttachError {
@@ -142,7 +142,7 @@ pub(crate) fn receiver_attach_error_from_stop_reason(
         Some(reason) => ReceiverAttachError::SessionStopped(reason.clone()),
         None => {
             warn_unrecorded_stop_reason();
-            ReceiverAttachError::InvariantViolation
+            ReceiverAttachError::InternalError
         }
     }
 }
@@ -155,8 +155,8 @@ pub(crate) fn receiver_attach_error_from_stop_reason(
 /// session stayed alive. The link's local state then carries the outcome:
 /// `Detached`/`Closed` report a [`LinkStateError::LinkDetached`] with the
 /// peer's error from the detach that terminalized the link. Any other state
-/// means the relay disappeared without a recorded detach, which is an internal
-/// invariant violation (defensive).
+/// means the relay disappeared without a recorded detach, which is an
+/// [`LinkStateError::InternalError`].
 pub(crate) fn link_error_from_closed_channel(
     cell: &OnceLock<SessionStopped>,
     local_state: &LinkState,
@@ -174,7 +174,7 @@ pub(crate) fn link_error_from_closed_channel(
         }),
         _ => {
             warn_unrecorded_stop_reason();
-            LinkStateError::InvariantViolation
+            LinkStateError::InternalError
         }
     }
 }
@@ -204,7 +204,7 @@ pub enum ErrorRecovery {
     ReconnectConnection,
 
     /// The link was closed or destroyed, or the error left its state
-    /// indeterminate (the defensive `IllegalState`/`InvariantViolation`/
+    /// indeterminate (the defensive `InvariantViolation`/`InternalError` and
     /// `UnexpectedFrame` variants): create a new link.
     NewLink,
 }
@@ -398,9 +398,20 @@ pub enum SenderAttachError {
     #[error("Illegal link state")]
     IllegalState,
 
-    /// An internal invariant was violated; this indicates a bug in the library
+    /// An internal invariant was violated (defensive)
+    ///
+    /// This is a safeguard for a path that is impossible by construction; it
+    /// cannot occur unless the library breaks its own invariants.
     #[error("An internal invariant was violated")]
     InvariantViolation,
+
+    /// An internal failure that can occur in principle
+    ///
+    /// Reported when the attach failed because an internal operation failed
+    /// without a more specific classification (e.g. the session stop reason
+    /// was not recorded).
+    #[error("An internal error occurred")]
+    InternalError,
 
     /// The local terminus is expecting an Attach from the remote peer
     #[error("Expecting an Attach frame but received a non-Attach frame")]
@@ -616,9 +627,20 @@ pub enum ReceiverAttachError {
     #[error("Illegal link state")]
     IllegalState,
 
-    /// An internal invariant was violated; this indicates a bug in the library
+    /// An internal invariant was violated (defensive)
+    ///
+    /// This is a safeguard for a path that is impossible by construction; it
+    /// cannot occur unless the library breaks its own invariants.
     #[error("An internal invariant was violated")]
     InvariantViolation,
+
+    /// An internal failure that can occur in principle
+    ///
+    /// Reported when the attach failed because an internal operation failed
+    /// without a more specific classification (e.g. the session stop reason
+    /// was not recorded).
+    #[error("An internal error occurred")]
+    InternalError,
 
     /// The local terminus is expecting an Attach from the remote peer
     #[error("Expecting an Attach frame but received a non-Attach frame")]
@@ -759,9 +781,24 @@ pub enum LinkStateError {
     #[error("The peer sent a frame that is not permitted in the current state")]
     IllegalState,
 
-    /// An internal invariant was violated; this indicates a bug in the library
+    /// An internal invariant was violated (defensive)
+    ///
+    /// This is a safeguard for a path that is impossible by construction
+    /// (a missing local handle, a state-machine guard, an internal call-order
+    /// contract). It cannot occur unless the library breaks its own
+    /// invariants; a report of this error is a bug in the library.
     #[error("An internal invariant was violated")]
     InvariantViolation,
+
+    /// An internal failure that can occur in principle
+    ///
+    /// Reported when an internal operation failed without a more specific
+    /// classification: an engine task ended without reporting its outcome, a
+    /// stop reason was not recorded, a settlement channel died, or a frame
+    /// leaked into the wrong stream. Both this and
+    /// [`Self::InvariantViolation`] answer `amqp:internal-error`.
+    #[error("An internal error occurred")]
+    InternalError,
 
     /// The link already reached a terminal outcome (`Detached`/`Closed`)
     #[error("The link is already detached or closed: {:?}", .0)]
@@ -918,9 +955,10 @@ impl LinkStateError {
     /// Classifies what the caller can do with the link after this error.
     pub fn recovery(&self) -> ErrorRecovery {
         match self {
-            Self::IllegalState | Self::InvariantViolation | Self::LinkDetached(_) => {
-                ErrorRecovery::NewLink
-            }
+            Self::IllegalState
+            | Self::InvariantViolation
+            | Self::InternalError
+            | Self::LinkDetached(_) => ErrorRecovery::NewLink,
             Self::SessionStopped(reason) => session_stop_recovery(reason),
         }
     }
@@ -990,6 +1028,7 @@ impl From<LinkStateError> for ReceiverAttachError {
         match value {
             LinkStateError::IllegalState => ReceiverAttachError::IllegalState,
             LinkStateError::InvariantViolation => ReceiverAttachError::InvariantViolation,
+            LinkStateError::InternalError => ReceiverAttachError::InternalError,
             // Attach paths never propagate a terminal link outcome; the
             // primary attach error is preserved by the caller instead.
             LinkStateError::LinkDetached(_) => ReceiverAttachError::IllegalState,
@@ -1003,6 +1042,7 @@ impl From<LinkStateError> for SenderAttachError {
         match value {
             LinkStateError::IllegalState => SenderAttachError::IllegalState,
             LinkStateError::InvariantViolation => SenderAttachError::InvariantViolation,
+            LinkStateError::InternalError => SenderAttachError::InternalError,
             // Attach paths never propagate a terminal link outcome; the
             // primary attach error is preserved by the caller instead.
             LinkStateError::LinkDetached(_) => SenderAttachError::IllegalState,

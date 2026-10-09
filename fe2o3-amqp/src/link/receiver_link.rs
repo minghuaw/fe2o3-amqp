@@ -948,7 +948,9 @@ fn receiver_detach_failure(
             Some(error) => ReceiverAttachError::RemoteClosedWithError(error.clone()),
             None => attach_error,
         },
-        DetachError::IllegalState | DetachError::InvariantViolation => attach_error,
+        DetachError::IllegalState
+        | DetachError::InvariantViolation
+        | DetachError::InternalError => attach_error,
     }
 }
 
