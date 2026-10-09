@@ -86,15 +86,10 @@ pub enum ConnectionOutcome {
 /// - `R`: The type of the session listener. This will be `()` on the client side.
 #[allow(dead_code)]
 pub struct ConnectionHandle<R> {
-    /// Only change this value in `on_close` method
+    /// Whether the terminal close outcome was already observed; set in
+    /// `on_close`/`try_close`. Later terminal calls report
+    /// [`Error::AlreadyClosed`]/[`TryCloseError::AlreadyClosed`].
     pub(crate) is_closed: bool,
-    /// The terminal outcome, cached once observed so later `on_close`/`try_close`
-    /// calls report the same result
-    pub(crate) terminal_outcome: Option<ConnectionOutcome>,
-    /// Whether the terminal outcome was a local error instead of an outcome;
-    /// the concrete error cannot be cloned, so later calls report
-    /// `Error::IllegalState`
-    pub(crate) terminated_with_error: bool,
     pub(crate) control: Sender<ConnectionControl>,
     pub(crate) handle: JoinHandle<()>,
     pub(crate) outcome: oneshot::Receiver<Result<ConnectionOutcome, Error>>,
@@ -117,6 +112,9 @@ impl<R> std::fmt::Debug for ConnectionHandle<R> {
 
 impl<R> Drop for ConnectionHandle<R> {
     fn drop(&mut self) {
+        if self.is_closed {
+            return;
+        }
         if let Err(_error) = self.control.try_send(ConnectionControl::Close(None)) {
             #[cfg(any(feature = "log", feature = "tracing"))]
             {
@@ -152,38 +150,34 @@ impl<R> ConnectionHandle<R> {
 
     /// Tries to close the connection
     ///
-    /// A connection that already closed reports the outcome it reached,
-    /// including a remote close error, if any.
+    /// The close outcome is delivered once; a connection whose outcome was
+    /// already observed reports [`TryCloseError::AlreadyClosed`]. Use
+    /// [`is_closed`](#method.is_closed) to query the state instead.
     ///
     /// # Returns
     ///
     /// - `Ok(outcome)` if the connection reached a terminal outcome
     /// - `Err(TryCloseError::Stopped(error))` if the connection stopped with a local error
     /// - `Err(TryCloseError::RemoteCloseNotReceived)` if the remote close is not received
+    /// - `Err(TryCloseError::AlreadyClosed)` if the outcome was already observed
     pub fn try_close(&mut self) -> Result<ConnectionOutcome, TryCloseError> {
-        if let Some(outcome) = &self.terminal_outcome {
-            return Ok(outcome.clone());
-        }
-        if self.terminated_with_error {
-            return Err(TryCloseError::Stopped(Box::new(Error::IllegalState)));
+        if self.is_closed {
+            return Err(TryCloseError::AlreadyClosed);
         }
 
         let _ = self.control.try_send(ConnectionControl::Close(None));
         match self.outcome.try_recv() {
             Ok(Ok(outcome)) => {
                 self.is_closed = true;
-                self.terminal_outcome = Some(outcome.clone());
                 Ok(outcome)
             }
             Ok(Err(error)) => {
                 self.is_closed = true;
-                self.terminated_with_error = true;
                 Err(TryCloseError::Stopped(Box::new(error)))
             }
             Err(TryRecvError::Empty) => Err(TryCloseError::RemoteCloseNotReceived),
             Err(TryRecvError::Closed) => {
                 self.is_closed = true;
-                self.terminated_with_error = true;
                 // The engine somehow has already stopped running
                 Err(TryCloseError::Stopped(Box::new(Error::IllegalState)))
             }
@@ -196,15 +190,19 @@ impl<R> ConnectionHandle<R> {
         /// Closing the connection implicitly ends its sessions (the AMQP model); there is
         /// no need to end the sessions first.
         ///
-        /// On success the returned [`ConnectionOutcome`] reports how the connection
-        /// closed (locally, by the remote, or with an error on either side); a remote
-        /// error is carried inside the outcome. A connection that already closed
-        /// reports the outcome it reached.
+        /// The close outcome is delivered once: the returned [`ConnectionOutcome`]
+        /// reports how the connection closed (locally, by the remote, or with an error on
+        /// either side) and a remote error is carried inside it. Calling this after the
+        /// outcome was already observed reports [`Error::AlreadyClosed`]; use
+        /// [`is_closed`](#method.is_closed) to query the state instead.
         ///
         /// # wasm32 support
         ///
         /// This method is not supported in wasm32 targets, please use `drop()` instead.
         pub async fn close(&mut self) -> Result<ConnectionOutcome, Error> {
+            if self.is_closed {
+                return Err(Error::AlreadyClosed);
+            }
             // If sending is unsuccessful, the `ConnectionEngine` event loop is
             // already dropped, this should be reflected by `JoinError` then.
             let _ = self.control.send(ConnectionControl::Close(None)).await;
@@ -214,8 +212,9 @@ impl<R> ConnectionHandle<R> {
         /// Close the connection with an error
         ///
         /// On success the returned [`ConnectionOutcome`] is
-        /// [`ClosedWithError`](ConnectionOutcome::ClosedWithError). A connection that
-        /// already closed reports the outcome it reached.
+        /// [`ClosedWithError`](ConnectionOutcome::ClosedWithError). The outcome is
+        /// delivered once; calling this after the outcome was already observed reports
+        /// [`Error::AlreadyClosed`].
         ///
         /// # wasm32 support
         ///
@@ -224,6 +223,9 @@ impl<R> ConnectionHandle<R> {
             &mut self,
             error: impl Into<definitions::Error>,
         ) -> Result<ConnectionOutcome, Error> {
+            if self.is_closed {
+                return Err(Error::AlreadyClosed);
+            }
             // If sending is unsuccessful, the `ConnectionEngine` event loop is
             // already dropped, this should be reflected by `JoinError` then.
             let _ = self
@@ -236,29 +238,24 @@ impl<R> ConnectionHandle<R> {
 
     /// Returns when the underlying event loop has stopped
     ///
-    /// A connection that already closed reports the outcome it reached,
-    /// including a remote close error, if any.
+    /// The close outcome is delivered once; a connection whose outcome was
+    /// already observed reports [`Error::AlreadyClosed`]. Use
+    /// [`is_closed`](#method.is_closed) to query the state instead.
     pub async fn on_close(&mut self) -> Result<ConnectionOutcome, Error> {
-        if let Some(outcome) = &self.terminal_outcome {
-            return Ok(outcome.clone());
-        }
-        if self.terminated_with_error {
-            return Err(Error::IllegalState);
+        if self.is_closed {
+            return Err(Error::AlreadyClosed);
         }
         match (&mut self.outcome).await {
             Ok(Ok(outcome)) => {
                 self.is_closed = true;
-                self.terminal_outcome = Some(outcome.clone());
                 Ok(outcome)
             }
             Ok(Err(error)) => {
                 self.is_closed = true;
-                self.terminated_with_error = true;
                 Err(error)
             }
             Err(_) => {
                 self.is_closed = true;
-                self.terminated_with_error = true;
                 Err(Error::IllegalState)
             }
         }
@@ -948,10 +945,10 @@ mod tests {
     }
 
     /// A connection that stopped with a local (non-outcome) error reports that
-    /// error once; later calls report `IllegalState` because the concrete
-    /// error cannot be cloned.
+    /// error once; later calls report `AlreadyClosed` because the outcome was
+    /// already observed.
     #[tokio::test]
-    async fn terminal_local_error_is_replayed_as_illegal_state() {
+    async fn terminal_local_error_then_already_closed() {
         use std::sync::{Arc, OnceLock};
         use tokio::sync::oneshot;
 
@@ -963,8 +960,6 @@ mod tests {
             .expect("the receiver is held");
         let mut handle = super::ConnectionHandle {
             is_closed: false,
-            terminal_outcome: None,
-            terminated_with_error: false,
             control,
             handle: tokio::spawn(async {}),
             outcome,
@@ -977,9 +972,15 @@ mod tests {
         let error = handle.on_close().await.expect_err("a local error");
         assert!(matches!(error, super::Error::IllegalState));
 
-        let error = handle.on_close().await.expect_err("the replayed error");
-        assert!(matches!(error, super::Error::IllegalState));
+        let error = handle
+            .on_close()
+            .await
+            .expect_err("the outcome was already observed");
+        assert!(matches!(error, super::Error::AlreadyClosed));
 
-        assert!(handle.try_close().is_err());
+        assert!(matches!(
+            handle.try_close(),
+            Err(super::TryCloseError::AlreadyClosed)
+        ));
     }
 }

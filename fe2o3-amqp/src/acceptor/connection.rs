@@ -213,8 +213,6 @@ impl<Tls, Sasl> ConnectionAcceptor<Tls, Sasl> {
 
         let connection_handle = ConnectionHandle {
             is_closed: false,
-            terminal_outcome: None,
-            terminated_with_error: false,
             control: control_tx,
             handle,
             outcome,

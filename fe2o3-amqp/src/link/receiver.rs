@@ -1005,11 +1005,12 @@ where
     fn handle_reattach_outcome(
         &mut self,
         outcome: ReceiverAttachExchange,
+        _detach_outcome: LinkOutcome,
     ) -> Result<&mut Self, L::AttachError> {
         match outcome {
             ReceiverAttachExchange::Complete => {}
             // The reachable map-carrying exchanges are the peer's reply during
-            // the crossed close. The receiver's outstanding deliveries are
+            // the simultaneous detach. The receiver's outstanding deliveries are
             // tracked by the application, so there is nothing to resume here:
             // the link is closed next by `reattach_then_close`.
             ReceiverAttachExchange::IncompleteUnsettled | ReceiverAttachExchange::Resume => {}
@@ -2484,8 +2485,6 @@ mod tests {
         drop(outcome_tx);
         SessionHandle {
             is_ended: false,
-            terminal_outcome: None,
-            terminated_with_error: false,
             control,
             engine_handle: tokio::spawn(async {}),
             outcome,
@@ -3170,11 +3169,11 @@ mod tests {
     /// - sending our closing detach releases the link from the session
     ///   (`Session::on_outgoing_detach`), so the link must be reattached
     ///   (`reattach_then_close` -> `reallocate_output_handle` ->
-    ///   `allocate_link`) to re-register it; otherwise the peer's crossed
+    ///   `allocate_link`) to re-register it; otherwise the peer's simultaneous
     ///   `Attach`/`Detach` could not be routed to the link and would end the
     ///   session;
     /// - with both sides reattaching, each side's attach exchange accepts the
-    ///   peer's `Attach` as its answer, so the crossed detaches converge
+    ///   peer's `Attach` as its answer, so the simultaneous detaches converge
     ///   symmetrically without depending on whether the peer drives its
     ///   reattach.
     ///
@@ -3191,6 +3190,7 @@ mod tests {
                 outgoing_rx,
                 incoming_tx,
                 peer_sender_attach(),
+                None,
             ),
         );
 
@@ -3222,6 +3222,7 @@ mod tests {
                 outgoing_rx,
                 incoming_tx,
                 peer_sender_attach(),
+                None,
             ),
         );
 

@@ -219,6 +219,10 @@ pub enum Error {
     #[error("Not allowd {:?}", .0)]
     NotAllowed(Option<String>),
 
+    /// The connection is already closed and its outcome was already observed
+    #[error("The connection is already closed")]
+    AlreadyClosed,
+
     /// Remote peer closed connection
     #[error("Remote peer closed")]
     RemoteClosed,
@@ -282,6 +286,10 @@ pub enum TryCloseError {
     /// but the connection has not received a close frame from the remote peer
     #[error("The connection has not received a close frame from the remote peer")]
     RemoteCloseNotReceived,
+
+    /// The connection is already closed and its outcome was already observed
+    #[error("The connection is already closed")]
+    AlreadyClosed,
 
     /// The connection stopped with a local error
     #[error("The connection closed with an error: {0}")]
