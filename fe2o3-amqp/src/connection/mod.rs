@@ -66,7 +66,7 @@ type SessionRelay = Arc<Sender<SessionIncomingItem>>;
 /// The unprefixed variants describe the local side's action; the `Remote*`
 /// variants describe a remote-initiated close.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum ConnectionStopReason {
+pub enum ConnectionOutcome {
     /// The connection closed cleanly (locally)
     Closed,
     /// We closed the connection with this error
@@ -95,7 +95,7 @@ pub struct ConnectionHandle<R> {
     // outgoing channel for session
     pub(crate) outgoing: Sender<SessionFrame>,
     /// Why the connection stopped, shared with the sessions
-    pub(crate) connection_stop_reason: Arc<OnceLock<ConnectionStopReason>>,
+    pub(crate) connection_stop_reason: Arc<OnceLock<ConnectionOutcome>>,
     /// The negotiated max frame size (encoder max frame length), shared with
     /// the sessions and the links
     pub(crate) max_frame_size: usize,
@@ -466,7 +466,7 @@ pub struct Connection {
     pub(crate) agreed_channel_max: u16,
 
     /// Why this connection stopped, shared with the sessions and the handle
-    pub(crate) connection_stop_reason: Arc<OnceLock<ConnectionStopReason>>,
+    pub(crate) connection_stop_reason: Arc<OnceLock<ConnectionOutcome>>,
 }
 
 /* ------------------------------- Public API ------------------------------- */
@@ -592,11 +592,11 @@ impl endpoint::Connection for Connection {
         &self.local_open
     }
 
-    fn connection_stop_reason(&self) -> &Arc<OnceLock<ConnectionStopReason>> {
+    fn connection_stop_reason(&self) -> &Arc<OnceLock<ConnectionOutcome>> {
         &self.connection_stop_reason
     }
 
-    fn set_connection_stop_reason(&mut self, reason: ConnectionStopReason) {
+    fn set_connection_stop_reason(&mut self, reason: ConnectionOutcome) {
         let _ = self.connection_stop_reason.set(reason);
     }
 
@@ -879,7 +879,7 @@ mod tests {
     use tokio::sync::mpsc;
 
     use super::{
-        AllocSessionError, Connection, ConnectionState, ConnectionStopReason, SessionIncomingItem,
+        AllocSessionError, Connection, ConnectionOutcome, ConnectionState, SessionIncomingItem,
     };
     use crate::endpoint::Connection as _;
 
@@ -917,7 +917,7 @@ mod tests {
         assert!(matches!(
             connection.allocate_session(tx),
             Err(AllocSessionError::ConnectionStopped(
-                ConnectionStopReason::Closed
+                ConnectionOutcome::Closed
             ))
         ));
     }

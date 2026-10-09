@@ -5,8 +5,8 @@ use std::sync::OnceLock;
 use fe2o3_amqp_types::definitions::{self};
 
 use crate::{
-    connection::{AllocSessionError, ConnectionStopReason},
-    link::{LinkRelayError, SessionStopReason},
+    connection::{AllocSessionError, ConnectionOutcome},
+    link::{LinkRelayError, SessionOutcome},
 };
 
 /// Error with ending a session
@@ -18,7 +18,7 @@ pub(crate) enum SessionStateError {
 
     /// The connection stopped before the operation completed
     #[error("The connection stopped: {:?}", .0)]
-    ConnectionStopped(ConnectionStopReason),
+    ConnectionStopped(ConnectionOutcome),
 
     /// Remote session ended
     #[error("Remote session ended")]
@@ -38,7 +38,7 @@ pub enum BeginError {
 
     /// The connection stopped before the operation completed
     #[error("The connection stopped: {:?}", .0)]
-    ConnectionStopped(ConnectionStopReason),
+    ConnectionStopped(ConnectionOutcome),
 
     /// The connection has not been opened yet
     #[error("The connection has not been opened")]
@@ -98,7 +98,7 @@ pub(crate) enum SessionInnerError {
 
     /// The connection stopped before the operation completed
     #[error("The connection stopped: {:?}", .0)]
-    ConnectionStopped(ConnectionStopReason),
+    ConnectionStopped(ConnectionOutcome),
 
     /// Found a Transfer frame sent to a Sender
     #[error("Found Transfer frame being sent to a Sender")]
@@ -161,7 +161,7 @@ pub enum Error {
 
     /// The connection stopped before the operation completed
     #[error("The connection stopped: {:?}", .0)]
-    ConnectionStopped(ConnectionStopReason),
+    ConnectionStopped(ConnectionOutcome),
 
     /// Found a Transfer frame sent to a Sender
     #[error("Found Transfer frame being sent to a Sender")]
@@ -227,8 +227,8 @@ impl From<SessionStateError> for Error {
 /// The connection's stop reason, or `Closed` when the cell has not been
 /// recorded yet (defensive fallback).
 pub(crate) fn connection_stop_reason_or_closed(
-    cell: &OnceLock<ConnectionStopReason>,
-) -> ConnectionStopReason {
+    cell: &OnceLock<ConnectionOutcome>,
+) -> ConnectionOutcome {
     match cell.get() {
         Some(reason) => reason.clone(),
         None => {
@@ -238,14 +238,14 @@ pub(crate) fn connection_stop_reason_or_closed(
             );
             #[cfg(feature = "log")]
             log::warn!("connection stop reason not recorded; reporting ConnectionStopped(Closed)");
-            ConnectionStopReason::Closed
+            ConnectionOutcome::Closed
         }
     }
 }
 
 /// The session stop reason corresponding to a connection stop
-impl From<ConnectionStopReason> for SessionStopReason {
-    fn from(reason: ConnectionStopReason) -> Self {
+impl From<ConnectionOutcome> for SessionOutcome {
+    fn from(reason: ConnectionOutcome) -> Self {
         Self::ConnectionStopped(reason)
     }
 }
@@ -257,7 +257,7 @@ pub(crate) enum AllocLinkError {
     SessionNotMapped,
 
     #[error("The session stopped before the link was attached: {:?}", .0)]
-    SessionStopped(crate::link::SessionStopReason),
+    SessionStopped(crate::link::SessionOutcome),
 
     #[error("Link name must be unique")]
     DuplicatedLinkName,

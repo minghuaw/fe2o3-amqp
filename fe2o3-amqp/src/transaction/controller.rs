@@ -153,12 +153,12 @@ impl Controller {
     pub async fn close_with_error(
         mut self,
         error: definitions::Error,
-    ) -> Result<link::DetachStatus, link::DetachError> {
+    ) -> Result<link::LinkOutcome, link::DetachError> {
         self.inner.get_mut().close_with_error(Some(error)).await
     }
 
     /// Close the link
-    pub async fn close(mut self) -> Result<link::DetachStatus, link::DetachError> {
+    pub async fn close(mut self) -> Result<link::LinkOutcome, link::DetachError> {
         self.inner.get_mut().close_with_error(None).await
     }
 

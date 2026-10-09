@@ -10,10 +10,10 @@ use tokio::{
 };
 
 use crate::{
-    connection::{self, ConnectionStopReason},
+    connection::{self, ConnectionOutcome},
     control::{ConnectionControl, SessionControl},
     endpoint::{self, IncomingChannel, Session},
-    link::{LinkFrame, SessionStopReason},
+    link::{LinkFrame, SessionOutcome},
     util::Running,
     SendBound,
 };
@@ -29,7 +29,7 @@ use super::{
 async fn send_outgoing_item(
     outgoing: &mpsc::Sender<SessionFrame>,
     outgoing_item: SessionOutgoingItem,
-    conn_stop: &Arc<OnceLock<ConnectionStopReason>>,
+    conn_stop: &Arc<OnceLock<ConnectionOutcome>>,
 ) -> Result<(), SessionInnerError> {
     match outgoing_item {
         SessionOutgoingItem::SingleFrame(frame) => {
@@ -265,10 +265,10 @@ where
                     // `EndReceived` state only results from a remote-initiated
                     // end, so the error (if any) is the remote's.
                     self.session.set_session_stop_reason(match end_error {
-                        Some(error) => SessionStopReason::RemoteEndedWithError(error),
+                        Some(error) => SessionOutcome::RemoteEndedWithError(error),
                         None => match self.session.connection_stop_reason().get() {
-                            Some(reason) => SessionStopReason::from(reason.clone()),
-                            None => SessionStopReason::RemoteEnded,
+                            Some(reason) => SessionOutcome::from(reason.clone()),
+                            None => SessionOutcome::RemoteEnded,
                         },
                     });
                     // if control is closing, finish sending all buffered messages before closing
@@ -291,10 +291,10 @@ where
 
     /// The session stop reason derived from the connection's recorded stop;
     /// `Ended` when the connection has not stopped.
-    fn session_stop_reason_from_connection(&self) -> SessionStopReason {
+    fn session_stop_reason_from_connection(&self) -> SessionOutcome {
         match self.session.connection_stop_reason().get() {
-            Some(reason) => SessionStopReason::from(reason.clone()),
-            None => SessionStopReason::Ended,
+            Some(reason) => SessionOutcome::from(reason.clone()),
+            None => SessionOutcome::Ended,
         }
     }
 
@@ -310,7 +310,7 @@ where
                 // Record the stop reason before the link channel is closed, so
                 // links that fail on the closure observe the reason.
                 self.session.set_session_stop_reason(match &error {
-                    Some(error) => SessionStopReason::EndedWithError(error.clone()),
+                    Some(error) => SessionOutcome::EndedWithError(error.clone()),
                     None => self.session_stop_reason_from_connection(),
                 });
                 // if control is closing, finish sending all buffered messages before closing
@@ -720,13 +720,13 @@ where
         // so every link that wakes on the channel closures sees it.
         let session_stop_reason = match &outcome {
             Err(SessionInnerError::ConnectionStopped(reason)) => {
-                SessionStopReason::from(reason.clone())
+                SessionOutcome::from(reason.clone())
             }
             Err(SessionInnerError::RemoteEndedWithError(error)) => {
-                SessionStopReason::RemoteEndedWithError(error.clone())
+                SessionOutcome::RemoteEndedWithError(error.clone())
             }
-            Err(SessionInnerError::RemoteEnded) => SessionStopReason::RemoteEnded,
-            _ => SessionStopReason::Ended,
+            Err(SessionInnerError::RemoteEnded) => SessionOutcome::RemoteEnded,
+            _ => SessionOutcome::Ended,
         };
         self.session.set_session_stop_reason(session_stop_reason);
         let _ =

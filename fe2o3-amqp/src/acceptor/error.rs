@@ -1,13 +1,13 @@
 //! Implements errors for the acceptors
 
-use crate::link::{ReceiverAttachError, SenderAttachError, SessionStopReason};
+use crate::link::{ReceiverAttachError, SenderAttachError, SessionOutcome};
 
 /// Error accepting incoming attach
 #[derive(Debug, thiserror::Error)]
 pub enum AcceptorAttachError {
     /// The session (or its connection) stopped
     #[error("The session stopped before the link was attached: {:?}", .0)]
-    SessionStopped(SessionStopReason),
+    SessionStopped(SessionOutcome),
 
     /// Local sender is unable to accept incoming attach from remote receiver
     #[error("Local sender is unable to accept incoming attach from remote receiver")]
