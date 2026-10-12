@@ -97,10 +97,7 @@ where
         mut payload: Payload,
     ) -> Result<bool, TransferError> {
         let settled = self.is_settled_on_send(&transfer);
-        let input_handle = self
-            .input_handle
-            .clone()
-            .ok_or(LinkError::InvariantViolation)?;
+        let input_handle = self.remote_handle()?.clone();
 
         // The connection engine publishes the negotiated encoder max frame
         // length before the connection handle is created; links are only
@@ -299,11 +296,7 @@ where
         state: Option<DeliveryState>,
         batchable: bool,
     ) -> Result<Transfer, TransferError> {
-        let handle = self
-            .output_handle
-            .clone()
-            .ok_or(LinkError::InvariantViolation)?
-            .into();
+        let handle = self.local_handle()?.clone().into();
 
         let settled = match self.snd_settle_mode {
             SenderSettleMode::Settled => true,
@@ -695,7 +688,7 @@ where
             _ => return Err(SenderAttachError::IllegalState),
         };
 
-        self.input_handle = Some(InputHandle::from(remote_attach.handle));
+        self.set_remote_handle(InputHandle::from(remote_attach.handle));
 
         // In this case, the sender is considered to hold the authoritative version of the
         // version of the source properties
@@ -820,8 +813,12 @@ where
         &self.name
     }
 
-    fn output_handle_mut(&mut self) -> &mut Option<OutputHandle> {
-        &mut self.output_handle
+    fn register(&mut self, handles: LinkHandles) {
+        self.handles = Some(handles);
+    }
+
+    fn release(&mut self) -> Option<LinkHandles> {
+        self.handles.take()
     }
 
     fn session_stop_reason(&self) -> &Arc<OnceLock<SessionStopped>> {

@@ -18,7 +18,7 @@ use crate::{
     endpoint::{InputHandle, LinkAttach, LinkExt},
     link::{
         receiver::{CreditMode, ReceiverInner},
-        state::{LinkFlowState, LinkFlowStateInner, LinkState},
+        state::{LinkFlowState, LinkFlowStateInner, LinkHandles, LinkState},
         target_archetype::TargetArchetypeExt,
         AttachMode, LinkFrame, LinkIncomingItem, LinkRelay, ReceiverAttachError, ReceiverLink,
         SessionStopped,
@@ -211,8 +211,10 @@ where
             role: PhantomData,
             local_state: LinkState::Unattached, // State change will be taken care of in `on_incoming_attach`
             name: remote_attach.name.clone(),
-            output_handle: Some(output_handle),
-            input_handle: None, // will be set in `on_incoming_attach`
+            handles: Some(LinkHandles {
+                local: output_handle,
+                remote: None, // will be set in `on_incoming_attach`
+            }),
             snd_settle_mode,
             rcv_settle_mode,
             source: None,         // Will take value from incoming attach

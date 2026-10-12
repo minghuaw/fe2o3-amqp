@@ -45,7 +45,7 @@ use crate::{
 
 use bytes::{BufMut, BytesMut};
 use fe2o3_amqp_types::{
-    definitions::{self, AmqpError, DeliveryTag, Fields, SequenceNo},
+    definitions::{self, DeliveryTag, Fields, SequenceNo},
     messaging::{
         message::__private::Serializable, Accepted, DeliveryState, Message, Modified, Outcome,
         Rejected, Released, SerializableBody, MESSAGE_FORMAT,
@@ -662,8 +662,7 @@ pub(crate) fn rollback_on_drop(
 
     match inner.link.flow_state.try_consume(1) {
         Ok(_) => {
-            let input_handle = match inner.link.input_handle.clone().ok_or(AmqpError::IllegalState)
-            {
+            let input_handle = match inner.link.remote_handle().cloned() {
                 Ok(handle) => handle,
                 Err(_error) => {
                     #[cfg(feature = "tracing")]
@@ -673,9 +672,9 @@ pub(crate) fn rollback_on_drop(
                     return;
                 }
             };
-            let handle = match inner.link.output_handle.clone() {
-                Some(handle) => handle.into(),
-                None => return,
+            let handle = match inner.link.local_handle().cloned() {
+                Ok(handle) => handle.into(),
+                Err(_) => return,
             };
             let tag = match inner.link.flow_state.state().lock.try_read() {
                 Some(inner) => inner.delivery_count.to_be_bytes(),
