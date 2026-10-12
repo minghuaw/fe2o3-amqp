@@ -260,11 +260,23 @@ where
     ///
     /// # Errors
     ///
-    /// [`LinkError::InvariantViolation`] if the link is not registered. The
-    /// operations that need a handle are only reachable while registered, so
-    /// seeing this indicates a broken library invariant.
+    /// When the link is not registered, the failure is derived from the
+    /// recorded link state (see [`link_error_from_closed_channel`]): a
+    /// recorded session/connection stop or a terminal detach outcome, or
+    /// [`LinkError::InternalError`] when neither is recorded. The operations
+    /// that need a handle are only reachable while registered, so this path is
+    /// defensive.
     pub(crate) fn handles(&self) -> Result<&LinkHandles, LinkError> {
-        self.handles.as_ref().ok_or(LinkError::InvariantViolation)
+        match self.handles.as_ref() {
+            Some(handles) => Ok(handles),
+            None => {
+                warn_missing_link_handle();
+                Err(link_error_from_closed_channel(
+                    &self.session_stop_reason,
+                    &self.local_state,
+                ))
+            }
+        }
     }
 
     /// The local (output) handle, present exactly while the link is registered.
@@ -276,13 +288,19 @@ where
     ///
     /// # Errors
     ///
-    /// [`LinkError::InvariantViolation`] if the peer handle is not known yet;
-    /// the operations that need it are only reachable after the remote attach.
+    /// The failure is derived from the recorded link state (see
+    /// [`link_error_from_closed_channel`]) when the peer handle is not known.
     pub(crate) fn remote_handle(&self) -> Result<&InputHandle, LinkError> {
-        self.handles()?
-            .remote
-            .as_ref()
-            .ok_or(LinkError::InvariantViolation)
+        match self.handles()?.remote.as_ref() {
+            Some(handle) => Ok(handle),
+            None => {
+                warn_missing_link_handle();
+                Err(link_error_from_closed_channel(
+                    &self.session_stop_reason,
+                    &self.local_state,
+                ))
+            }
+        }
     }
 
     /// Record the peer's handle learned from an incoming attach.
@@ -560,7 +578,13 @@ where
         // a fresh handle before re-attaching.
         let handle = match self.handles.take() {
             Some(handles) => handles.local,
-            None => return Err(DetachError::InvariantViolation),
+            None => {
+                warn_missing_link_handle();
+                return Err(link_error_from_closed_channel(
+                    &self.session_stop_reason,
+                    &self.local_state,
+                ));
+            }
         };
         let detach = Detach {
             handle: handle.into(),

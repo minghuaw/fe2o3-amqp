@@ -43,7 +43,9 @@ use super::{
     DEFAULT_CREDIT,
 };
 
-use super::{link_error_from_closed_channel, link_state_error_from_stop_reason};
+use super::{
+    link_error_from_closed_channel, link_state_error_from_stop_reason, warn_missing_link_handle,
+};
 
 #[cfg(feature = "transaction")]
 use super::shared_inner::TxnAcquisitionCloseExt;
@@ -735,6 +737,7 @@ impl Receiver {
                 .handles
                 .as_ref()
                 .map(|handles| handles.local.clone()),
+            local_state: self.inner.link.local_state.clone(),
             processed: Arc::clone(&self.inner.processed),
             credit_mode: self.inner.credit_mode.clone(),
             session_stop_reason: self.inner.link.session_stop_reason.clone(),
@@ -756,6 +759,9 @@ pub struct ReceiverDisposer {
     rcv_settle_mode: ReceiverSettleMode,
     flow_state: ReceiverFlowState,
     output_handle: Option<OutputHandle>,
+    /// The link's local state at the time the disposer was created, used to
+    /// derive a meaningful failure when the handle was already released.
+    local_state: LinkState,
     processed: Arc<AtomicU32>,
     credit_mode: CreditMode,
     session_stop_reason: Arc<OnceLock<SessionStopped>>,
@@ -829,11 +835,16 @@ impl ReceiverDisposer {
         if let CreditMode::Auto(max_credit) = self.credit_mode {
             if processed >= max_credit / 2 {
                 self.processed.store(0, Ordering::Release);
-                let handle: Handle = self
-                    .output_handle
-                    .clone()
-                    .ok_or(DispositionError::InvariantViolation)?
-                    .into();
+                let handle: Handle = match self.output_handle.clone() {
+                    Some(handle) => handle.into(),
+                    None => {
+                        warn_missing_link_handle();
+                        return Err(link_error_from_closed_channel(
+                            &self.session_stop_reason,
+                            &self.local_state,
+                        ));
+                    }
+                };
                 let delivery_count = {
                     let mut guard = self.flow_state.lock.write();
                     guard.link_credit = max_credit;
@@ -2067,6 +2078,7 @@ mod tests {
             rcv_settle_mode: ReceiverSettleMode::First,
             flow_state: make_flow_state(200),
             output_handle: Some(OutputHandle(1)),
+            local_state: LinkState::Attached,
             processed: Arc::new(AtomicU32::new(0)),
             credit_mode,
             session_stop_reason: Arc::new(OnceLock::new()),
@@ -2570,10 +2582,11 @@ mod tests {
         assert!(matches!(error, RecvError::InternalError));
     }
 
-    /// Sending a flow on a link without a local handle is an internal
-    /// invariant violation: the endpoint cannot be observed in that state.
+    /// Sending a flow on a link without a local handle derives its failure from
+    /// the recorded link state (no stop reason and a non-terminal state here, so
+    /// `InternalError`).
     #[tokio::test]
-    async fn send_flow_without_handle_is_invariant_violation() {
+    async fn send_flow_without_handle_reports_internal_error() {
         let (mut inner, _session_rx, _outgoing_rx, _incoming_tx) =
             make_receiver_inner_with_channels(4096);
         inner.link.handles = None;
@@ -2588,7 +2601,7 @@ mod tests {
         )
         .await;
 
-        assert!(matches!(result, Err(FlowError::InvariantViolation)));
+        assert!(matches!(result, Err(FlowError::InternalError)));
     }
 
     /// A transfer that arrives after the link detached reports the terminal
