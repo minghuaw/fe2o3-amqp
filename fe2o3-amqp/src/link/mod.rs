@@ -31,7 +31,7 @@ use crate::{
 use self::{
     delivery::Delivery,
     resumption::ResumingDelivery,
-    state::{LinkFlowState, LinkState},
+    state::{LinkFlowState, LinkHandles, LinkState},
     target_archetype::VerifyTargetArchetype,
 };
 
@@ -213,8 +213,9 @@ pub(crate) struct Link<R, T, F, M> {
     // pub(crate) state_code: Arc<AtomicU8>,
     pub(crate) name: String,
 
-    pub(crate) output_handle: Option<OutputHandle>, // local handle
-    pub(crate) input_handle: Option<InputHandle>,   // remote handle
+    /// The session-assigned handles, present exactly while the link is
+    /// registered with the session (i.e. not released by a detach or close).
+    pub(crate) handles: Option<LinkHandles>,
 
     /// The `Sender` will manage whether to wait for incoming disposition
     pub(crate) snd_settle_mode: SenderSettleMode,
@@ -254,6 +255,43 @@ where
     F: AsRef<LinkFlowState<R>> + Send + Sync,
     M: AsDeliveryState + Send + Sync,
 {
+    /// The session-assigned handle, present exactly while the link is
+    /// registered with the session.
+    ///
+    /// # Errors
+    ///
+    /// [`LinkError::InvariantViolation`] if the link is not registered. The
+    /// operations that need a handle are only reachable while registered, so
+    /// seeing this indicates a broken library invariant.
+    pub(crate) fn handles(&self) -> Result<&LinkHandles, LinkError> {
+        self.handles.as_ref().ok_or(LinkError::InvariantViolation)
+    }
+
+    /// The local (output) handle, present exactly while the link is registered.
+    pub(crate) fn local_handle(&self) -> Result<&OutputHandle, LinkError> {
+        Ok(&self.handles()?.local)
+    }
+
+    /// The peer's (input) handle, present once the remote attach was received.
+    ///
+    /// # Errors
+    ///
+    /// [`LinkError::InvariantViolation`] if the peer handle is not known yet;
+    /// the operations that need it are only reachable after the remote attach.
+    pub(crate) fn remote_handle(&self) -> Result<&InputHandle, LinkError> {
+        self.handles()?
+            .remote
+            .as_ref()
+            .ok_or(LinkError::InvariantViolation)
+    }
+
+    /// Record the peer's handle learned from an incoming attach.
+    pub(crate) fn set_remote_handle(&mut self, handle: InputHandle) {
+        if let Some(handles) = self.handles.as_mut() {
+            handles.remote = Some(handle);
+        }
+    }
+
     fn get_unsettled_map(
         &self,
         partial_unsettled: usize,
@@ -367,10 +405,7 @@ where
         mode: AttachMode,
     ) -> Result<(), SendAttachErrorKind> {
         // Create Attach frame
-        let handle = match &self.output_handle {
-            Some(h) => h.clone(),
-            None => return Err(SendAttachErrorKind::InvariantViolation),
-        };
+        let handle = self.local_handle()?.clone();
 
         // A resuming attach carries a non-null unsettled map, including an
         // empty-but-present map when nothing is unsettled. A reattach, such as
@@ -520,30 +555,29 @@ where
             _ => return Err(DetachError::InvariantViolation),
         };
 
-        match self.output_handle.clone() {
-            Some(handle) => {
-                let detach = Detach {
-                    handle: handle.into(),
-                    closed,
-                    error,
-                };
+        // Sending a detach releases the session-assigned handle; the link stays
+        // registered only until this point. A later resume re-registers it with
+        // a fresh handle before re-attaching.
+        let handle = match self.handles.take() {
+            Some(handles) => handles.local,
+            None => return Err(DetachError::InvariantViolation),
+        };
+        let detach = Detach {
+            handle: handle.into(),
+            closed,
+            error,
+        };
 
-                #[cfg(feature = "tracing")]
-                tracing::debug!("Sending detach: {:?}", detach);
-                #[cfg(feature = "log")]
-                log::debug!("Sending detach: {:?}", detach);
+        #[cfg(feature = "tracing")]
+        tracing::debug!("Sending detach: {:?}", detach);
+        #[cfg(feature = "log")]
+        log::debug!("Sending detach: {:?}", detach);
 
-                // An error here means the session is already closed, so we can't send a detach
-                let result = writer
-                    .send(LinkFrame::Detach(detach))
-                    .await // cancel safe
-                    .map_err(|_| detach_error_from_stop_reason(&self.session_stop_reason));
-
-                self.output_handle.take();
-                result
-            }
-            None => Err(DetachError::InvariantViolation),
-        }
+        // An error here means the session is already closed, so we can't send a detach
+        writer
+            .send(LinkFrame::Detach(detach))
+            .await // cancel safe
+            .map_err(|_| detach_error_from_stop_reason(&self.session_stop_reason))
     }
 
     /// See [`endpoint::LinkDetach::apply_remote_detach_outcome`] for the
@@ -575,7 +609,7 @@ where
                 } else {
                     LinkState::Detached(detach.error)
                 };
-                let _ = self.output_handle.take();
+                let _ = self.handles.take();
                 Ok(status)
             }
             LinkState::Unattached => Err(ApplyRemoteDetachError::InvariantViolation),
@@ -1011,7 +1045,7 @@ pub(crate) mod test_util {
 
     use super::{
         receiver::ReceiverInner,
-        state::{LinkFlowState, LinkFlowStateInner, LinkState},
+        state::{LinkFlowState, LinkFlowStateInner, LinkHandles, LinkState},
         ArcReceiverUnsettledMap, CreditMode, ReceiverFlowState, ReceiverLink,
     };
     use crate::{
@@ -1127,8 +1161,10 @@ pub(crate) mod test_util {
             role: PhantomData,
             local_state: LinkState::Attached,
             name: String::from("test-receiver"),
-            output_handle: Some(OutputHandle(0)),
-            input_handle: None,
+            handles: Some(LinkHandles {
+                local: OutputHandle(0),
+                remote: None,
+            }),
             snd_settle_mode: SenderSettleMode::Mixed,
             rcv_settle_mode: ReceiverSettleMode::First,
             source: None,

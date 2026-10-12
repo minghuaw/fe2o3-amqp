@@ -729,7 +729,12 @@ impl Receiver {
             unsettled: self.inner.link.unsettled.clone(),
             rcv_settle_mode: self.inner.link.rcv_settle_mode.clone(),
             flow_state: self.inner.link.flow_state.clone(),
-            output_handle: self.inner.link.output_handle.clone(),
+            output_handle: self
+                .inner
+                .link
+                .handles
+                .as_ref()
+                .map(|handles| handles.local.clone()),
             processed: Arc::clone(&self.inner.processed),
             credit_mode: self.inner.credit_mode.clone(),
             session_stop_reason: self.inner.link.session_stop_reason.clone(),
@@ -964,9 +969,9 @@ impl<L: endpoint::ReceiverLink> Drop for ReceiverInner<L> {
         }
 
         if !remote_detach_received {
-            if let Some(handle) = self.link.output_handle_mut().take() {
+            if let Some(handles) = self.link.release() {
                 let detach = Detach {
-                    handle: handle.into(),
+                    handle: handles.local.into(),
                     closed: true,
                     error: None,
                 };
@@ -2571,7 +2576,7 @@ mod tests {
     async fn send_flow_without_handle_is_invariant_violation() {
         let (mut inner, _session_rx, _outgoing_rx, _incoming_tx) =
             make_receiver_inner_with_channels(4096);
-        inner.link.output_handle = None;
+        inner.link.handles = None;
 
         let result = endpoint::ReceiverLink::send_flow(
             &inner.link,

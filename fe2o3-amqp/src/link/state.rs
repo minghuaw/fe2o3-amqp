@@ -6,7 +6,7 @@ use fe2o3_amqp_types::definitions::{self, Fields, SequenceNo};
 use parking_lot::RwLock;
 
 use crate::{
-    endpoint::{LinkFlow, OutputHandle},
+    endpoint::{InputHandle, LinkFlow, OutputHandle},
     util::{Consume, ProducerState},
 };
 
@@ -49,6 +49,21 @@ pub enum LinkState {
 
     /// The peer closed the link; carries the peer's error from the detach
     Closed(Option<definitions::Error>),
+}
+
+/// The session-assigned handles of a registered link.
+///
+/// A link stores these in a single `Option` on the endpoint so that "is the
+/// link registered with the session?" has exactly one representation. The
+/// `local` (output) handle is assigned when the link is allocated and released
+/// when the link is detached or closed; `remote` (input) handle is learned from
+/// the peer's attach and is only present once that attach has been received.
+#[derive(Debug, Clone)]
+pub(crate) struct LinkHandles {
+    /// The local (output) handle assigned by the session.
+    pub(crate) local: OutputHandle,
+    /// The peer's (input) handle, present once the remote attach was received.
+    pub(crate) remote: Option<InputHandle>,
 }
 
 #[derive(Debug)]
