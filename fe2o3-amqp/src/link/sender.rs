@@ -1846,10 +1846,11 @@ mod tests {
         }
     }
 
-    /// A linked endpoint without its remote handle is an internal invariant
-    /// violation: the endpoint cannot be observed in that state.
+    /// A linked endpoint without its remote handle derives its failure from the
+    /// recorded link state (no stop reason and a non-terminal state here, so
+    /// `InternalError`).
     #[tokio::test]
-    async fn send_without_input_handle_is_invariant_violation() {
+    async fn send_without_input_handle_reports_internal_error() {
         let inner = make_sender_inner(4096); // input_handle is None
         let (outgoing_tx, mut outgoing_rx) = mpsc::channel::<LinkFrame>(16);
 
@@ -1864,15 +1865,16 @@ mod tests {
 
         assert!(matches!(
             result,
-            Err(TransferError::LinkState(LinkError::InvariantViolation))
+            Err(TransferError::LinkState(LinkError::InternalError))
         ));
         assert!(outgoing_rx.try_recv().is_err());
     }
 
-    /// Generating a transfer without a local handle is an internal invariant
-    /// violation: the endpoint cannot be observed in that state.
+    /// Generating a transfer without a local handle derives its failure from the
+    /// recorded link state (no stop reason and a non-terminal state here, so
+    /// `InternalError`).
     #[test]
-    fn generate_transfer_without_output_handle_is_invariant_violation() {
+    fn generate_transfer_without_output_handle_reports_internal_error() {
         let mut inner = make_sender_inner(4096);
         inner.link.handles = None;
 
@@ -1886,7 +1888,7 @@ mod tests {
 
         assert!(matches!(
             result,
-            Err(TransferError::LinkState(LinkError::InvariantViolation))
+            Err(TransferError::LinkState(LinkError::InternalError))
         ));
     }
 
