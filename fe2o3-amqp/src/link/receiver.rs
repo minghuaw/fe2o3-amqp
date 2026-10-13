@@ -2122,6 +2122,64 @@ mod tests {
         assert_eq!(disposer.processed.load(Ordering::Acquire), 0);
     }
 
+    /// Flow properties are only transmitted when `include_properties` is set;
+    /// transactional acquisition relies on the flow carrying the `txn-id`
+    /// (AMQP 1.0 §4.4.3).
+    #[tokio::test]
+    async fn send_flow_includes_properties_only_when_requested() {
+        use fe2o3_amqp_types::{
+            definitions::Fields,
+            primitives::{Binary, Symbol, Value},
+        };
+
+        let (inner, _session_rx, mut outgoing_rx, _incoming_tx) =
+            make_receiver_inner_with_channels(4096);
+
+        {
+            let mut guard = inner.link.flow_state.lock.write();
+            let mut fields = Fields::new();
+            fields.insert(
+                Symbol::from("txn-id"),
+                Value::Binary(Binary::from(vec![1u8, 2, 3])),
+            );
+            guard.properties = Some(fields);
+        }
+
+        // Without `include_properties` the properties are dropped.
+        endpoint::ReceiverLink::send_flow(
+            &inner.link,
+            &inner.outgoing,
+            Some(1),
+            None,
+            false,
+            false,
+        )
+        .await
+        .expect("sending the credit flow");
+        match outgoing_rx.recv().await {
+            Some(LinkFrame::Flow(flow)) => assert!(
+                flow.properties.is_none(),
+                "flow properties must be omitted when include_properties is false"
+            ),
+            other => panic!("unexpected frame: {other:?}"),
+        }
+
+        // With `include_properties` the txn-id is transmitted.
+        endpoint::ReceiverLink::send_flow(&inner.link, &inner.outgoing, Some(1), None, false, true)
+            .await
+            .expect("sending the credit flow");
+        match outgoing_rx.recv().await {
+            Some(LinkFrame::Flow(flow)) => {
+                let props = flow.properties.expect("the flow must carry properties");
+                assert!(
+                    props.contains_key(&Symbol::from("txn-id")),
+                    "the acquiring flow must carry the txn-id"
+                );
+            }
+            other => panic!("unexpected frame: {other:?}"),
+        }
+    }
+
     #[tokio::test]
     async fn no_disposition_for_unknown_delivery_tag() {
         let (tx, mut rx) = mpsc::channel::<LinkFrame>(16);

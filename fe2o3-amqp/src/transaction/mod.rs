@@ -396,25 +396,22 @@ pub trait TransactionAcquisition:
             let value = Value::Binary(self.txn_id().clone());
             {
                 let mut writer = recver.inner.link.flow_state.lock.write();
-                match &mut writer.properties {
-                    Some(fields) => {
-                        if fields.contains_key(TXN_ID_KEY) {
-                            return Err(FlowError::IllegalState);
-                        }
-
-                        fields.insert(Symbol::from(TXN_ID_KEY), value);
-                    }
-                    None => {
-                        let mut fields = Fields::new();
-                        fields.insert(Symbol::from(TXN_ID_KEY), value);
-                    }
+                let fields = writer.properties.get_or_insert_with(Fields::new);
+                if fields.contains_key(TXN_ID_KEY) {
+                    return Err(FlowError::IllegalState);
                 }
+
+                fields.insert(Symbol::from(TXN_ID_KEY), value);
             }
 
             match recver
                 .inner
                 .link
-                .send_flow(&recver.inner.outgoing, Some(credit), None, false, false)
+                // The acquiring flow MUST carry the `txn-id` in its `properties`
+                // so the resource associates the transaction with the link
+                // (AMQP 1.0 §4.4.3), so the flow properties are explicitly
+                // included.
+                .send_flow(&recver.inner.outgoing, Some(credit), None, false, true)
                 .await
             {
                 Ok(_) => Ok(TxnAcquisition { txn: self, recver }),

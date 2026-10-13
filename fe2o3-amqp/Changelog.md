@@ -1,5 +1,9 @@
 # Change Log
 
+## Unreleased
+
+1. **Bugfix**: transactional acquisition now includes the link flow `properties` in the acquiring flow (and in the `cleanup`/drop drain flows), so the `txn-id` actually reaches the resource; the `txn-id` is also recorded when the link had no flow properties yet. Previously the `txn-id` was silently dropped (regression since 0.12.0).
+
 ## 0.18.3
 
 1. **Bugfix**: receive-side `max-message-size` enforcement now counts the buffered payload
