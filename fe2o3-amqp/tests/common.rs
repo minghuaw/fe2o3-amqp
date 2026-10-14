@@ -14,12 +14,12 @@ pub async fn setup_activemq_artemis(
                 .with_env_var("ARTEMIS_USERNAME", username)
                 .with_env_var("ARTEMIS_PASSWORD", password)
                 .with_exposed_port(5672)
-                .with_wait_for(WaitFor::seconds(5))
+                .with_wait_for(WaitFor::message_on_stdout("AMQ221007: Server is now"))
         }
         _ => GenericImage::new("docker.io/vromero/activemq-artemis", "latest")
             .with_env_var("DISABLE_SECURITY", "true")
             .with_exposed_port(5672)
-            .with_wait_for(WaitFor::seconds(5)),
+            .with_wait_for(WaitFor::message_on_stdout("AMQ221007: Server is now")),
     };
     let node = docker.run(image);
 

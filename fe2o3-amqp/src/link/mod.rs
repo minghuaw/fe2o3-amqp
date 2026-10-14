@@ -1,5 +1,9 @@
 //! Implements AMQP1.0 Link
 
+// The 0.14 public resume errors own the link so callers can recover it. Boxing
+// these published error types would break API compatibility in a patch release.
+#![allow(clippy::result_large_err)]
+
 use std::{marker::PhantomData, sync::Arc};
 
 use bytes::{BufMut, BytesMut};

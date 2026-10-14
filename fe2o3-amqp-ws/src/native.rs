@@ -65,7 +65,11 @@ where
         let this = self.project();
         this.stream
             .poll_next(cx)
-            .map(|item| item.map(|item| item.map(WsMessage)))
+            .map(|item| match item {
+                Some(Ok(message)) => Some(Ok(WsMessage(message))),
+                Some(Err(error)) => Some(Err(error)),
+                None => None,
+            })
     }
 }
 
@@ -286,7 +290,7 @@ impl WebSocketStream<TokioWebSocketStream<MaybeTlsStream<TcpStream>>> {
     }
 }
 
-fn map_amqp_websocket_request(req: impl IntoClientRequest) -> Result<Request, tungstenite::Error> {
+fn map_amqp_websocket_request(req: impl IntoClientRequest) -> Result<Request, Error> {
     let mut request = req.into_client_request()?;
 
     // Sec-WebSocket-Protocol HTTP header

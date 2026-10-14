@@ -4,6 +4,9 @@ use crate::Payload;
 
 pub(crate) type SessionIncomingItem = SessionFrame;
 
+// Keep single frames inline on the hot path, as on main; boxing each frame
+// would add an allocation merely to equalize the variant sizes.
+#[allow(clippy::large_enum_variant)]
 pub(crate) enum SessionOutgoingItem {
     SingleFrame(SessionFrame),
     MultipleFrames(Vec<SessionFrame>),

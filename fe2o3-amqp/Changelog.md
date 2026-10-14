@@ -5,6 +5,9 @@
 **Bugfix**: disambiguate transport sink calls to compile with `tokio-util 0.7.20`
 (backport of #420).
 
+**Bugfix**: use UUID's JavaScript RNG backend on WebAssembly so newer UUID
+releases do not require an unconfigured second version of `getrandom`.
+
 ## 0.14.0
 
 1. Bumped version to "0.14.0" to match other `fe2o3-amqp` crates

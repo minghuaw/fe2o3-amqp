@@ -3,13 +3,13 @@
 use serde::ser::{self, SerializeMap};
 
 use crate::{
-    Error,
     __constants::{
         ARRAY, DECIMAL128, DECIMAL32, DECIMAL64, DESCRIBED_BASIC, DESCRIBED_LIST, DESCRIBED_MAP,
         DESCRIPTOR, LAZY_VALUE, SYMBOL, SYMBOL_REF, TIMESTAMP, TRANSPARENT_VEC, UUID,
     },
     ser::{U32_MAX_MINUS_4, U8_MAX, U8_MAX_MINUS_1},
     util::{FieldRole, IsArrayElement, NonNativeType, SequenceType, StructEncoding},
+    Error,
 };
 
 /// Obtain the serialized size without allocating `Vec<u8>`

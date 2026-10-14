@@ -308,7 +308,7 @@ where
         batchable: bool,
     ) -> Result<(), Self::DispositionError> {
         // sorting before filtering may be more cache/branch-prediction friendly?
-        delivery_infos.sort_by(|left, right| left.delivery_id.cmp(&right.delivery_id));
+        delivery_infos.sort_by_key(|left| left.delivery_id);
         {
             let reader = self.unsettled.read();
             delivery_infos.retain(|info| {
@@ -925,7 +925,7 @@ where
 mod tests {
     use fe2o3_amqp_types::{
         messaging::{
-            message::{Body, __private::Serializable},
+            message::{__private::Serializable, Body},
             AmqpValue, DeliveryAnnotations, Header, Message, MessageAnnotations,
         },
         primitives::{OrderedMap, Value},
