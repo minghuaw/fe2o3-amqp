@@ -1,5 +1,10 @@
 # Change Log
 
+## 0.14.1
+
+**Bugfix**: disambiguate transport sink calls to compile with `tokio-util 0.7.20`
+(backport of #420).
+
 ## 0.14.0
 
 1. Bumped version to "0.14.0" to match other `fe2o3-amqp` crates
