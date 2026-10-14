@@ -261,6 +261,6 @@ fn map_tungstenite_error(error: tungstenite::Error) -> io::Error {
         }
         tungstenite::Error::Io(err) => err,
         tungstenite::Error::Capacity(err) => io::Error::new(io::ErrorKind::InvalidData, err),
-        _ => io::Error::new(io::ErrorKind::Other, error),
+        _ => io::Error::other(error),
     }
 }

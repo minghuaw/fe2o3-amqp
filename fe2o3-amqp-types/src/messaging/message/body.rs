@@ -7,8 +7,8 @@ use serde::{
 use serde_amqp::{primitives::Binary, Value};
 
 use crate::messaging::{
-    AmqpSequence, AmqpValue, Batch, Data, DeserializableBody, FromBody, FromEmptyBody, IntoBody,
-    SerializableBody, TransposeOption, __private::BodySection,
+    __private::BodySection, AmqpSequence, AmqpValue, Batch, Data, DeserializableBody, FromBody,
+    FromEmptyBody, IntoBody, SerializableBody, TransposeOption,
 };
 
 /// The body consists of one of the following three choices: one or more data sections, one or more
