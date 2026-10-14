@@ -1,6 +1,6 @@
 # Change Log
 
-## Unreleased
+## 0.18.3
 
 1. **Bugfix**: receive-side `max-message-size` enforcement now counts the buffered payload
    of tagless continuation frames, and an oversized delivery detaches the link with
@@ -12,6 +12,7 @@
    the sender now completes the resumption `Resume` exchange.
 4. Added `ErrorRecovery` and `recovery()` on `SendError`/`RecvError` to tell whether a failed
    link operation requires a reattach, a new session or connection, or a new link.
+5. **Bugfix**: disambiguate transport sink calls to compile with `tokio-util 0.7.20`.
 
 ## 0.18.2
 
