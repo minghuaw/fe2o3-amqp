@@ -105,6 +105,7 @@ where
             available: 0,
             drain: false,
             properties: shared.properties.clone(),
+            txn_id: None,
         };
         let flow_state = Arc::new(LinkFlowState::sender(flow_state_inner));
         let notifier = Arc::new(Notify::new());

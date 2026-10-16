@@ -2224,23 +2224,14 @@ mod tests {
     /// (AMQP 1.0 §4.4.3).
     #[tokio::test]
     async fn send_flow_includes_properties_only_when_requested() {
-        use fe2o3_amqp_types::{
-            definitions::Fields,
-            primitives::{Binary, Symbol, Value},
-        };
+        use fe2o3_amqp_types::primitives::{Binary, Symbol};
 
         let (inner, _session_rx, mut outgoing_rx, _incoming_tx) =
             make_receiver_inner_with_channels(4096);
 
-        {
-            let mut guard = inner.link.flow_state.lock.write();
-            let mut fields = Fields::new();
-            fields.insert(
-                Symbol::from("txn-id"),
-                Value::Binary(Binary::from(vec![1u8, 2, 3])),
-            );
-            guard.properties = Some(fields);
-        }
+        // The transactional id is stored typed and rendered into the flow
+        // properties only when they are included.
+        inner.link.flow_state.lock.write().txn_id = Some(Binary::from(vec![1u8, 2, 3]));
 
         // Without `include_properties` the properties are dropped.
         endpoint::ReceiverLink::send_flow(
