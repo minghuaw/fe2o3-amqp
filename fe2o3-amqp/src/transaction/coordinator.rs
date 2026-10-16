@@ -197,7 +197,8 @@ impl TxnCoordinator {
                     // Session must have already stopped
                     Running::Stop
                 }
-                crate::link::LinkStateError::InvariantViolation => {
+                crate::link::LinkStateError::InvariantViolation
+                | crate::link::LinkStateError::InternalError => {
                     #[cfg(feature = "tracing")]
                     tracing::error!(?error);
                     #[cfg(feature = "log")]
@@ -312,7 +313,7 @@ impl TxnCoordinator {
                     // Session must have already dropped
                     Running::Stop
                 }
-                LinkStateError::InvariantViolation => {
+                LinkStateError::InvariantViolation | LinkStateError::InternalError => {
                     #[cfg(feature = "tracing")]
                     tracing::error!(?disposition_error);
                     #[cfg(feature = "log")]

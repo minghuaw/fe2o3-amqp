@@ -50,7 +50,7 @@ pub use crate::link::{SessionOutcome, SessionStopped};
 use error::{
     connection_stop_reason_or_closed, AllocLinkError, SessionInnerError, SessionStateError,
 };
-pub use error::{BeginError, Error, TryEndError};
+pub use error::{BeginError, Error};
 
 mod builder;
 pub use builder::*;
@@ -71,8 +71,13 @@ pub const DEFAULT_WINDOW: Uint = 5000;
 pub struct SessionHandle<R> {
     /// Whether the terminal end outcome was already observed; set in
     /// `on_end`/`try_end`. Later terminal calls report
-    /// [`Error::AlreadyEnded`]/[`TryEndError::AlreadyEnded`].
+    /// [`Error::AlreadyEnded`].
     pub(crate) is_ended: bool,
+    /// Whether an `End` control was already enqueued for the engine. Set by
+    /// `try_end`/`end`/`end_with_error` and checked by [`Drop`], so an end is
+    /// initiated at most once even when a non-blocking probe is followed by a
+    /// blocking end.
+    pub(crate) end_sent: bool,
     pub(crate) control: mpsc::Sender<SessionControl>,
     pub(crate) engine_handle: JoinHandle<()>,
     pub(crate) outcome: oneshot::Receiver<Result<SessionOutcome, Error>>,
@@ -95,7 +100,10 @@ impl<R> std::fmt::Debug for SessionHandle<R> {
 
 impl<R> Drop for SessionHandle<R> {
     fn drop(&mut self) {
-        if self.is_ended {
+        // The end was already observed or initiated; do not send a second End
+        // frame (a duplicate `try_end` followed by a drop would otherwise
+        // send one after the session's End).
+        if self.is_ended || self.end_sent {
             return;
         }
         if let Err(_error) = self.control.try_send(SessionControl::End(None)) {
@@ -112,6 +120,8 @@ impl<R> Drop for SessionHandle<R> {
                 #[cfg(feature = "log")]
                 log::warn!("Failed to enqueue End frame on session drop: {reason}");
             }
+        } else {
+            self.end_sent = true;
         }
     }
 }
@@ -137,38 +147,47 @@ impl<R> SessionHandle<R> {
         }
     }
 
-    /// Tries to end the session
+    /// Tries to end the session without blocking.
+    ///
+    /// The `End` exchange is initiated at most once: a later `try_end` or
+    /// `end` does not send a second `End` frame. This reports the outcome if
+    /// it has arrived and [`None`] while the exchange is still in progress;
+    /// use [`on_end`](#method.on_end) to await the outcome.
     ///
     /// The end outcome is delivered once; a session whose outcome was already
-    /// observed reports [`TryEndError::AlreadyEnded`]. Use
+    /// observed reports [`Error::AlreadyEnded`]. Use
     /// [`is_ended`](#method.is_ended) to query the state instead.
     ///
     /// # Returns
     ///
-    /// - `Ok(outcome)` if the session ended by itself
-    /// - `Err(TryEndError::Stopped(error))` if the session stopped with a local
-    ///   error (including its connection stopping first)
-    /// - `Err(TryEndError::RemoteEndNotReceived)` if the remote end has not been received yet
-    /// - `Err(TryEndError::AlreadyEnded)` if the outcome was already observed
-    pub fn try_end(&mut self) -> Result<SessionOutcome, TryEndError> {
+    /// - `Ok(Some(outcome))` if the session ended by itself
+    /// - `Ok(None)` if the end exchange is still in progress
+    /// - `Err(error)` if the session stopped with a local error (including its
+    ///   connection stopping first)
+    /// - `Err(Error::AlreadyEnded)` if the outcome was already observed
+    pub fn try_end(&mut self) -> Result<Option<SessionOutcome>, Error> {
         if self.is_ended {
-            return Err(TryEndError::AlreadyEnded);
+            return Err(Error::AlreadyEnded);
         }
 
-        let _ = self.control.try_send(SessionControl::End(None));
+        if !self.end_sent && self.control.try_send(SessionControl::End(None)).is_ok() {
+            self.end_sent = true;
+        }
+
         match self.outcome.try_recv() {
             Ok(Ok(outcome)) => {
                 self.is_ended = true;
-                Ok(outcome)
+                Ok(Some(outcome))
             }
             Ok(Err(error)) => {
                 self.is_ended = true;
-                Err(TryEndError::Stopped(Box::new(error)))
+                Err(error)
             }
-            Err(TryRecvError::Empty) => Err(TryEndError::RemoteEndNotReceived),
+            Err(TryRecvError::Empty) => Ok(None),
             Err(TryRecvError::Closed) => {
                 self.is_ended = true;
-                Err(TryEndError::Stopped(Box::new(Error::InvariantViolation)))
+                // The engine stopped without reporting its outcome.
+                Err(Error::InternalError)
             }
         }
     }
@@ -193,9 +212,12 @@ impl<R> SessionHandle<R> {
             if self.is_ended {
                 return Err(Error::AlreadyEnded);
             }
-            // If sending is unsuccessful, the `SessionEngine` event loop is
-            // already dropped, this should be reflected by `JoinError` then.
-            let _ = self.control.send(SessionControl::End(None)).await;
+            if !self.end_sent {
+                // If sending is unsuccessful, the `SessionEngine` event loop
+                // is already dropped; the outcome channel reports it.
+                let _ = self.control.send(SessionControl::End(None)).await;
+                self.end_sent = true;
+            }
             self.on_end().await
         }
 
@@ -215,6 +237,10 @@ impl<R> SessionHandle<R> {
         /// once; calling this after the outcome was already observed reports
         /// [`Error::AlreadyEnded`].
         ///
+        /// If an end exchange was already initiated (by `try_end` or `end`),
+        /// no second `End` frame is sent and this error is not attached; the
+        /// initiated exchange is awaited instead.
+        ///
         /// # wasm32 support
         ///
         /// This method is not supported on wasm32 targets, please use `drop()` instead.
@@ -225,12 +251,15 @@ impl<R> SessionHandle<R> {
             if self.is_ended {
                 return Err(Error::AlreadyEnded);
             }
-            // If sending is unsuccessful, the `SessionEngine` event loop is
-            // already dropped, this should be reflected by `JoinError` then.
-            let _ = self
-                .control
-                .send(SessionControl::End(Some(error.into())))
-                .await;
+            if !self.end_sent {
+                // If sending is unsuccessful, the `SessionEngine` event loop
+                // is already dropped; the outcome channel reports it.
+                let _ = self
+                    .control
+                    .send(SessionControl::End(Some(error.into())))
+                    .await;
+                self.end_sent = true;
+            }
             self.on_end().await
         }
     }
@@ -256,7 +285,8 @@ impl<R> SessionHandle<R> {
             }
             Err(_) => {
                 self.is_ended = true;
-                Err(Error::InvariantViolation)
+                // The engine stopped without reporting its outcome.
+                Err(Error::InternalError)
             }
         }
     }
@@ -1420,6 +1450,7 @@ mod tests {
             .expect("the receiver is held");
         let mut handle = super::SessionHandle {
             is_ended: false,
+            end_sent: false,
             control,
             engine_handle: tokio::spawn(async {}),
             outcome,
@@ -1438,10 +1469,7 @@ mod tests {
             .expect_err("the outcome was already observed");
         assert!(matches!(error, super::Error::AlreadyEnded));
 
-        assert!(matches!(
-            handle.try_end(),
-            Err(super::TryEndError::AlreadyEnded)
-        ));
+        assert!(matches!(handle.try_end(), Err(super::Error::AlreadyEnded)));
     }
 
     /// A session that stopped with its connection reports the connection stop
@@ -1462,6 +1490,7 @@ mod tests {
             .expect("the receiver is held");
         let mut handle = super::SessionHandle {
             is_ended: false,
+            end_sent: false,
             control,
             engine_handle: tokio::spawn(async {}),
             outcome,
@@ -1483,16 +1512,13 @@ mod tests {
             .expect_err("the outcome was already observed");
         assert!(matches!(error, super::Error::AlreadyEnded));
 
-        assert!(matches!(
-            handle.try_end(),
-            Err(super::TryEndError::AlreadyEnded)
-        ));
+        assert!(matches!(handle.try_end(), Err(super::Error::AlreadyEnded)));
     }
 
     /// An outcome channel dropped without a result (the engine stopped without
-    /// reporting) is an internal invariant violation.
+    /// reporting) is an internal error.
     #[tokio::test]
-    async fn dropped_outcome_reports_invariant_violation() {
+    async fn dropped_outcome_reports_internal_error() {
         use tokio::sync::{mpsc, oneshot};
 
         let (control, _control_rx) = mpsc::channel(8);
@@ -1502,6 +1528,7 @@ mod tests {
         drop(outcome_tx);
         let mut handle = super::SessionHandle {
             is_ended: false,
+            end_sent: false,
             control,
             engine_handle: tokio::spawn(async {}),
             outcome,
@@ -1512,13 +1539,13 @@ mod tests {
         };
 
         let error = handle.on_end().await.expect_err("an internal error");
-        assert!(matches!(error, super::Error::InvariantViolation));
+        assert!(matches!(error, super::Error::InternalError));
     }
 
     /// `try_end` on an engine that stopped without reporting an outcome
-    /// reports an internal invariant violation.
+    /// reports an internal error.
     #[tokio::test]
-    async fn try_end_with_dropped_outcome_reports_invariant_violation() {
+    async fn try_end_with_dropped_outcome_reports_internal_error() {
         use tokio::sync::{mpsc, oneshot};
 
         let (control, _control_rx) = mpsc::channel(8);
@@ -1528,6 +1555,7 @@ mod tests {
         drop(outcome_tx);
         let mut handle = super::SessionHandle {
             is_ended: false,
+            end_sent: false,
             control,
             engine_handle: tokio::spawn(async {}),
             outcome,
@@ -1538,10 +1566,71 @@ mod tests {
         };
 
         let error = handle.try_end().expect_err("an internal error");
+        assert!(matches!(error, super::Error::InternalError));
+    }
+
+    /// `try_end` enqueues the `End` control at most once, even when followed
+    /// by another `try_end` or a drop.
+    #[tokio::test]
+    async fn try_end_sends_the_end_once() {
+        use tokio::sync::{mpsc, oneshot};
+
+        let (control, mut control_rx) = mpsc::channel(8);
+        let (outgoing, _outgoing_rx) = mpsc::channel(8);
+        let (_outcome_tx, outcome) =
+            oneshot::channel::<Result<super::SessionOutcome, super::Error>>();
+        let mut handle = super::SessionHandle {
+            is_ended: false,
+            end_sent: false,
+            control,
+            engine_handle: tokio::spawn(async {}),
+            outcome,
+            outgoing,
+            session_stop_reason: Arc::new(OnceLock::new()),
+            max_frame_size: 0,
+            link_listener: (),
+        };
+
+        assert!(matches!(handle.try_end(), Ok(None)));
         assert!(matches!(
-            error,
-            super::TryEndError::Stopped(error)
-                if matches!(*error, super::Error::InvariantViolation)
+            control_rx.try_recv(),
+            Ok(super::SessionControl::End(None))
         ));
+
+        // A second probe and the drop do not enqueue another End.
+        assert!(matches!(handle.try_end(), Ok(None)));
+        drop(handle);
+        assert!(control_rx.try_recv().is_err());
+    }
+
+    /// `try_end` reports the outcome once and then `AlreadyEnded`.
+    #[tokio::test]
+    async fn try_end_reports_the_outcome_once() {
+        use tokio::sync::{mpsc, oneshot};
+
+        let (control, _control_rx) = mpsc::channel(8);
+        let (outgoing, _outgoing_rx) = mpsc::channel(8);
+        let (outcome_tx, outcome) =
+            oneshot::channel::<Result<super::SessionOutcome, super::Error>>();
+        outcome_tx
+            .send(Ok(super::SessionOutcome::Ended))
+            .expect("the receiver is held");
+        let mut handle = super::SessionHandle {
+            is_ended: false,
+            end_sent: false,
+            control,
+            engine_handle: tokio::spawn(async {}),
+            outcome,
+            outgoing,
+            session_stop_reason: Arc::new(OnceLock::new()),
+            max_frame_size: 0,
+            link_listener: (),
+        };
+
+        assert!(matches!(
+            handle.try_end(),
+            Ok(Some(super::SessionOutcome::Ended))
+        ));
+        assert!(matches!(handle.try_end(), Err(super::Error::AlreadyEnded)));
     }
 }

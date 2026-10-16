@@ -16,7 +16,10 @@ pub(crate) enum SessionStateError {
     #[error("Illegal session state")]
     IllegalState,
 
-    /// An internal invariant was violated; this indicates a bug in the library
+    /// An internal invariant was violated (defensive)
+    ///
+    /// This is a safeguard for a path that is impossible by construction; it
+    /// cannot occur unless the library breaks its own invariants.
     #[error("An internal invariant was violated")]
     InvariantViolation,
 
@@ -40,7 +43,10 @@ pub enum BeginError {
     #[error("Illegal session state")]
     IllegalState,
 
-    /// An internal invariant was violated; this indicates a bug in the library
+    /// An internal invariant was violated (defensive)
+    ///
+    /// This is a safeguard for a path that is impossible by construction; it
+    /// cannot occur unless the library breaks its own invariants.
     #[error("An internal invariant was violated")]
     InvariantViolation,
 
@@ -105,7 +111,10 @@ pub(crate) enum SessionInnerError {
     #[error("Illegal session state")]
     IllegalState,
 
-    /// An internal invariant was violated; this indicates a bug in the library
+    /// An internal invariant was violated (defensive)
+    ///
+    /// This is a safeguard for a path that is impossible by construction; it
+    /// cannot occur unless the library breaks its own invariants.
     #[error("An internal invariant was violated")]
     InvariantViolation,
 
@@ -173,9 +182,21 @@ pub enum Error {
     #[error("Illegal session state")]
     IllegalState,
 
-    /// An internal invariant was violated; this indicates a bug in the library
+    /// An internal invariant was violated (defensive)
+    ///
+    /// This is a safeguard for a path that is impossible by construction; it
+    /// cannot occur unless the library breaks its own invariants.
     #[error("An internal invariant was violated")]
     InvariantViolation,
+
+    /// An internal failure that can occur in principle
+    ///
+    /// Reported when the session ended because an internal operation failed
+    /// without a more specific classification, e.g. the engine task stopped
+    /// without reporting its outcome. Both this and
+    /// [`Self::InvariantViolation`] answer `amqp:internal-error`.
+    #[error("An internal error occurred")]
+    InternalError,
 
     /// The connection stopped before the operation completed
     #[error("The connection stopped: {:?}", .0)]
@@ -276,20 +297,4 @@ pub(crate) enum AllocLinkError {
 
     #[error("Link name must be unique")]
     DuplicatedLinkName,
-}
-
-/// Error with attempting to end a session
-#[derive(Debug, thiserror::Error)]
-pub enum TryEndError {
-    /// The exchange of end frame is not completed because it has not received a remote end frame
-    #[error("The session has not received a remote end frame")]
-    RemoteEndNotReceived,
-
-    /// The session is already ended and its outcome was already observed
-    #[error("The session is already ended")]
-    AlreadyEnded,
-
-    /// The session stopped with a local error
-    #[error("The session stopped with an error: {0}")]
-    Stopped(Box<Error>),
 }
