@@ -36,14 +36,14 @@ pub(crate) trait LinkDetach {
     /// - `DetachSent` + non-closing → `Detached`
     /// - `CloseSent` + closing → `Closed`
     ///
-    /// A crossing detach is `IllegalState`. In both accepted transitions the
+    /// A simultaneous detach is `IllegalState`. In both accepted transitions the
     /// output handle is released and the peer's `error` field, if any, is
     /// reported in the returned [`LinkOutcome`], so the close/detach
     /// procedure can propagate it to its caller.
     ///
     /// A detach the peer sends on its own is answered by the relay already,
     /// so the engine records it with [`Self::apply_remote_detach_outcome`]
-    /// instead; that method accepts crossing detaches and any attached state.
+    /// instead; that method accepts simultaneous detaches and any attached state.
     fn on_detach_reply(&mut self, detach: Detach) -> Result<LinkOutcome, Self::DetachError>;
 
     async fn send_detach(
@@ -60,7 +60,7 @@ pub(crate) trait LinkDetach {
     ///
     /// Unlike [`Self::on_detach_reply`], which only accepts the reply that
     /// matches the detach/close this link sent, this accepts any attached
-    /// state — including a crossing detach — and moves the link to `Closed`
+    /// state — including a simultaneous detach — and moves the link to `Closed`
     /// (closing) or `Detached` (non-closing), releasing the output handle.
     ///
     /// # Errors
