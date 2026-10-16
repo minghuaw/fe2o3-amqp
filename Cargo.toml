@@ -19,6 +19,7 @@ exclude = [
     "examples/dispose_multiple",
     "examples/dynamic_sender",
     "examples/dynamic_receiver",
+    "examples/error_handling",
     "examples/listener",
     "examples/native_tls_connection",
     "examples/owned_txn_posting",

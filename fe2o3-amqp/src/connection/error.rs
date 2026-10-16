@@ -4,10 +4,10 @@ use std::{convert::Infallible, io};
 
 use bytes::Bytes;
 use fe2o3_amqp_types::{definitions, primitives::Binary, sasl::SaslCode};
-use tokio::{sync::mpsc, task::JoinError};
+use tokio::sync::mpsc;
 
 use crate::{
-    connection::ConnectionStopReason,
+    connection::ConnectionOutcome,
     transport::{self, error::NegotiationError},
 };
 
@@ -61,12 +61,23 @@ pub enum OpenError {
     #[error(transparent)]
     ScramError(#[from] ScramErrorKind),
 
-    /// Illegal local connection state
-    #[error("Illegal local state")]
+    /// The peer sent a frame that is not permitted in the current connection state
+    #[error("The peer sent a frame that is not permitted in the current connection state")]
     IllegalState,
 
+    /// The transport closed before the connection was opened
+    #[error("The connection was lost")]
+    ConnectionLost,
+
+    /// An internal invariant was violated (defensive)
+    ///
+    /// This is a safeguard for a path that is impossible by construction; it
+    /// cannot occur unless the library breaks its own invariants.
+    #[error("An internal invariant was violated")]
+    InvariantViolation,
+
     /// Not implemented
-    #[error("Not implemented")]
+    #[error("Not implemented {:?}", .0)]
     NotImplemented(Option<String>),
 
     /// Decode error
@@ -101,7 +112,7 @@ impl From<NegotiationError> for OpenError {
             },
             NegotiationError::DecodeError(val) => Self::DecodeError(val),
             NegotiationError::NotImplemented(description) => Self::NotImplemented(description),
-            NegotiationError::IllegalState => Self::IllegalState,
+            NegotiationError::InvariantViolation => Self::InvariantViolation,
 
             #[cfg(feature = "scram")]
             NegotiationError::ScramError(e) => Self::ScramError(e),
@@ -111,16 +122,23 @@ impl From<NegotiationError> for OpenError {
 
 impl From<Infallible> for OpenError {
     fn from(_: Infallible) -> Self {
-        unreachable!()
+        unreachable!("Infallible cannot be constructed")
     }
 }
 
 /// Error the connection state
 #[derive(Debug, thiserror::Error)]
 pub(crate) enum ConnectionStateError {
-    /// Illegal local connection state
-    #[error("Illegal local state")]
+    /// The peer sent a frame that is not permitted in the current connection state
+    #[error("The peer sent a frame that is not permitted in the current connection state")]
     IllegalState,
+
+    /// An internal invariant was violated (defensive)
+    ///
+    /// This is a safeguard for a path that is impossible by construction; it
+    /// cannot occur unless the library breaks its own invariants.
+    #[error("An internal invariant was violated")]
+    InvariantViolation,
 
     /// Remote peer closed connection
     #[error("Remote peer closed")]
@@ -141,6 +159,7 @@ impl From<ConnectionStateError> for OpenError {
     fn from(error: ConnectionStateError) -> Self {
         match error {
             ConnectionStateError::IllegalState => Self::IllegalState,
+            ConnectionStateError::InvariantViolation => Self::InvariantViolation,
             ConnectionStateError::RemoteClosed => Self::RemoteClosed,
             ConnectionStateError::RemoteClosedWithError(val) => Self::RemoteClosedWithError(val),
             ConnectionStateError::TransportError(val) => Self::TransportError(val),
@@ -155,9 +174,20 @@ pub(crate) enum ConnectionInnerError {
     #[error(transparent)]
     TransportError(#[from] transport::Error),
 
-    /// Illegal local connection state
-    #[error("Illegal local state")]
+    /// The peer sent a frame that is not permitted in the current connection state
+    #[error("The peer sent a frame that is not permitted in the current connection state")]
     IllegalState,
+
+    /// The transport closed without the AMQP close exchange
+    #[error("The connection was lost")]
+    ConnectionLost,
+
+    /// An internal invariant was violated (defensive)
+    ///
+    /// This is a safeguard for a path that is impossible by construction; it
+    /// cannot occur unless the library breaks its own invariants.
+    #[error("An internal invariant was violated")]
+    InvariantViolation,
 
     /// Not implemented
     #[error("Not implemented {:?}", .0)]
@@ -189,6 +219,7 @@ impl From<ConnectionStateError> for ConnectionInnerError {
     fn from(error: ConnectionStateError) -> Self {
         match error {
             ConnectionStateError::IllegalState => Self::IllegalState,
+            ConnectionStateError::InvariantViolation => Self::InvariantViolation,
             ConnectionStateError::RemoteClosed => Self::RemoteClosed,
             ConnectionStateError::RemoteClosedWithError(val) => Self::RemoteClosedWithError(val),
             ConnectionStateError::TransportError(val) => Self::TransportError(val),
@@ -203,9 +234,29 @@ pub enum Error {
     #[error(transparent)]
     TransportError(#[from] transport::Error),
 
-    /// Illegal local connection state
-    #[error("Illegal local state")]
+    /// The peer sent a frame that is not permitted in the current connection state
+    #[error("The peer sent a frame that is not permitted in the current connection state")]
     IllegalState,
+
+    /// The transport closed without the AMQP close exchange
+    #[error("The connection was lost")]
+    ConnectionLost,
+
+    /// An internal invariant was violated (defensive)
+    ///
+    /// This is a safeguard for a path that is impossible by construction; it
+    /// cannot occur unless the library breaks its own invariants.
+    #[error("An internal invariant was violated")]
+    InvariantViolation,
+
+    /// An internal failure that can occur in principle
+    ///
+    /// Reported when the connection stopped because an internal operation
+    /// failed without a more specific classification, e.g. the engine task
+    /// stopped without reporting its outcome. Both this and
+    /// [`Self::InvariantViolation`] answer `amqp:internal-error`.
+    #[error("An internal error occurred")]
+    InternalError,
 
     /// Not implemented
     #[error("Not implemented {:?}", .0)]
@@ -215,21 +266,9 @@ pub enum Error {
     #[error("Not found {:?}", .0)]
     NotFound(Option<String>),
 
-    /// Not allowed
-    #[error("Not allowd {:?}", .0)]
-    NotAllowed(Option<String>),
-
-    /// Remote peer closed connection
-    #[error("Remote peer closed")]
-    RemoteClosed,
-
-    /// Remote peer closed connection with error
-    #[error("Remote peer closed connection with error {}", .0)]
-    RemoteClosedWithError(definitions::Error),
-
-    /// This could occur only when the user attempts to close the connection
-    #[error(transparent)]
-    JoinError(#[from] JoinError),
+    /// The connection is already closed and its outcome was already observed
+    #[error("The connection is already closed")]
+    AlreadyClosed,
 }
 
 impl From<ConnectionInnerError> for Error {
@@ -237,10 +276,15 @@ impl From<ConnectionInnerError> for Error {
         match error {
             ConnectionInnerError::TransportError(val) => Self::TransportError(val),
             ConnectionInnerError::IllegalState => Self::IllegalState,
+            ConnectionInnerError::ConnectionLost => Self::ConnectionLost,
+            ConnectionInnerError::InvariantViolation => Self::InvariantViolation,
             ConnectionInnerError::NotImplemented(val) => Self::NotImplemented(val),
             ConnectionInnerError::NotFound(val) => Self::NotFound(val),
-            ConnectionInnerError::RemoteClosed => Self::RemoteClosed,
-            ConnectionInnerError::RemoteClosedWithError(val) => Self::RemoteClosedWithError(val),
+            // A remote close is converted into the connection outcome by the
+            // engine before it reaches this conversion (see `event_loop`).
+            ConnectionInnerError::RemoteClosed | ConnectionInnerError::RemoteClosedWithError(_) => {
+                Self::InternalError
+            }
         }
     }
 }
@@ -249,8 +293,12 @@ impl From<ConnectionStateError> for Error {
     fn from(error: ConnectionStateError) -> Self {
         match error {
             ConnectionStateError::IllegalState => Self::IllegalState,
-            ConnectionStateError::RemoteClosed => Self::RemoteClosed,
-            ConnectionStateError::RemoteClosedWithError(val) => Self::RemoteClosedWithError(val),
+            ConnectionStateError::InvariantViolation => Self::InvariantViolation,
+            // A remote close is converted into the connection outcome by the
+            // engine before it reaches this conversion (see `event_loop`).
+            ConnectionStateError::RemoteClosed | ConnectionStateError::RemoteClosedWithError(_) => {
+                Self::InternalError
+            }
             ConnectionStateError::TransportError(val) => Self::TransportError(val),
         }
     }
@@ -265,25 +313,8 @@ pub(crate) enum AllocSessionError {
 
     /// The connection stopped before the session was allocated
     #[error("The connection stopped: {:?}", .0)]
-    ConnectionStopped(ConnectionStopReason),
+    ConnectionStopped(ConnectionOutcome),
 
     #[error("Reached connection channel max")]
     ChannelMaxReached,
-}
-
-pub(crate) enum DeallcoSessionError {
-    IllegalState,
-}
-
-/// Error associated with trying to close the connection
-#[derive(Debug, thiserror::Error)]
-pub enum TryCloseError {
-    /// Illegal local connection state
-    #[error("Illegal local state")]
-    AlreadyClosed,
-
-    /// An close frame has been sent to the remote peer,
-    /// but the connection has not received a close frame from the remote peer
-    #[error("The connection has not received a close frame from the remote peer")]
-    RemoteCloseNotReceived,
 }

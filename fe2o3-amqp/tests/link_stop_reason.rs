@@ -12,8 +12,8 @@ use fe2o3_amqp::{
         ConnectionAcceptor, LinkAcceptor, LinkEndpoint, ListenerConnectionHandle,
         ListenerSessionHandle, SessionAcceptor,
     },
-    connection::{Connection, ConnectionHandle, ConnectionStopReason},
-    link::{LinkStateError, RecvError, SendError, SenderAttachError, SessionStopReason},
+    connection::{Connection, ConnectionHandle, ConnectionOutcome},
+    link::{RecvError, SendError, SenderAttachError, SessionOutcome, SessionStopped},
     session::{Session, SessionHandle},
     types::{
         definitions::{self, AmqpError},
@@ -126,7 +126,7 @@ async fn attach_receiver(
 /// still-alive remote before the session/connection engine exits. Once the
 /// engine exits, every send fails with the stop reason, so retrying is
 /// deterministic.
-async fn expect_send_stop_reason(sender: &mut Sender, expected: SessionStopReason) {
+async fn expect_send_stop_reason(sender: &mut Sender, expected: SessionStopped) {
     let deadline = std::time::Instant::now() + Duration::from_secs(10);
     loop {
         let result = sender
@@ -140,7 +140,7 @@ async fn expect_send_stop_reason(sender: &mut Sender, expected: SessionStopReaso
                     "timed out waiting for the stop reason to propagate"
                 );
             }
-            Err(SendError::LinkStateError(LinkStateError::SessionStopped(reason))) => {
+            Err(SendError::SessionStopped(reason)) => {
                 assert_eq!(reason, expected, "unexpected stop reason");
                 return;
             }
@@ -163,7 +163,7 @@ async fn link_send_surfaces_connection_closed() {
 
     expect_send_stop_reason(
         &mut sender,
-        SessionStopReason::ConnectionStopped(ConnectionStopReason::Closed),
+        SessionStopped::ConnectionStopped(ConnectionOutcome::Closed),
     )
     .await;
 }
@@ -180,7 +180,7 @@ async fn link_send_surfaces_session_ended() {
 
     drop(client_session);
 
-    expect_send_stop_reason(&mut sender, SessionStopReason::Ended).await;
+    expect_send_stop_reason(&mut sender, SessionStopped::Outcome(SessionOutcome::Ended)).await;
 }
 
 /// When the connection stops, a receive on an attached receiver link must
@@ -200,8 +200,8 @@ async fn link_recv_surfaces_connection_closed() {
         .expect("recv timed out");
 
     match result {
-        Err(RecvError::LinkStateError(LinkStateError::SessionStopped(
-            SessionStopReason::ConnectionStopped(ConnectionStopReason::RemoteClosed),
+        Err(RecvError::SessionStopped(SessionStopped::ConnectionStopped(
+            ConnectionOutcome::RemoteClosed,
         ))) => {}
         other => panic!("expected SessionStopped(ConnectionClosed), got {:?}", other),
     }
@@ -224,9 +224,7 @@ async fn link_recv_surfaces_session_ended() {
         .expect("recv timed out");
 
     match result {
-        Err(RecvError::LinkStateError(LinkStateError::SessionStopped(
-            SessionStopReason::RemoteEnded,
-        ))) => {}
+        Err(RecvError::SessionStopped(SessionStopped::Outcome(SessionOutcome::RemoteEnded))) => {}
         other => panic!("expected SessionStopped(RemoteEnded), got {:?}", other),
     }
 }
@@ -253,8 +251,8 @@ async fn attach_after_stop_reports_stop_reason() {
     .expect("attach timed out");
 
     match result {
-        Err(SenderAttachError::SessionStopped(SessionStopReason::ConnectionStopped(
-            ConnectionStopReason::RemoteClosed,
+        Err(SenderAttachError::SessionStopped(SessionStopped::ConnectionStopped(
+            ConnectionOutcome::RemoteClosed,
         ))) => {}
         other => panic!("expected SessionStopped(ConnectionClosed), got {:?}", other),
     }
@@ -276,7 +274,11 @@ async fn link_send_surfaces_local_end_with_error() {
         .await
         .expect("end failed");
 
-    expect_send_stop_reason(&mut sender, SessionStopReason::EndedWithError(error)).await;
+    expect_send_stop_reason(
+        &mut sender,
+        SessionStopped::Outcome(SessionOutcome::EndedWithError(error)),
+    )
+    .await;
 }
 
 /// A remote-initiated session end with an error must surface as
@@ -295,7 +297,11 @@ async fn link_send_surfaces_remote_end_with_error() {
         .await
         .expect("end failed");
 
-    expect_send_stop_reason(&mut sender, SessionStopReason::RemoteEndedWithError(error)).await;
+    expect_send_stop_reason(
+        &mut sender,
+        SessionStopped::Outcome(SessionOutcome::RemoteEndedWithError(error)),
+    )
+    .await;
 }
 
 /// A remote-initiated clean session end must surface as `RemoteEnded`.
@@ -309,7 +315,11 @@ async fn link_send_surfaces_remote_end() {
 
     drop(listener_session);
 
-    expect_send_stop_reason(&mut sender, SessionStopReason::RemoteEnded).await;
+    expect_send_stop_reason(
+        &mut sender,
+        SessionStopped::Outcome(SessionOutcome::RemoteEnded),
+    )
+    .await;
 }
 
 /// A locally closed connection with an error must surface as
@@ -331,7 +341,7 @@ async fn link_send_surfaces_local_close_with_error() {
 
     expect_send_stop_reason(
         &mut sender,
-        SessionStopReason::ConnectionStopped(ConnectionStopReason::ClosedWithError(error)),
+        SessionStopped::ConnectionStopped(ConnectionOutcome::ClosedWithError(error)),
     )
     .await;
 }
@@ -354,7 +364,7 @@ async fn link_send_surfaces_remote_close_with_error() {
 
     expect_send_stop_reason(
         &mut sender,
-        SessionStopReason::ConnectionStopped(ConnectionStopReason::RemoteClosedWithError(error)),
+        SessionStopped::ConnectionStopped(ConnectionOutcome::RemoteClosedWithError(error)),
     )
     .await;
 }

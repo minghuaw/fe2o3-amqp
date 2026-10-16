@@ -1,7 +1,6 @@
 //! The engine handles incoming and outgoing frames and messages to reduce
 //! transferring frames/messages over channels
 
-use std::io;
 use std::sync::{Arc, OnceLock};
 use std::time::Duration;
 
@@ -21,7 +20,7 @@ use crate::transport::Transport;
 use crate::util::Running;
 use crate::{endpoint, transport, SendBound};
 
-use super::ConnectionStopReason;
+use super::ConnectionOutcome;
 use super::{heartbeat::HeartBeat, ConnectionState};
 use super::{AllocSessionError, ConnectionInnerError, ConnectionStateError, Error, OpenError};
 
@@ -41,7 +40,7 @@ where
 {
     /// The shared cell holding why the connection stopped, on the connection
     /// object and shared with the sessions and the handle
-    pub(crate) fn connection_stop_reason(&self) -> &Arc<OnceLock<ConnectionStopReason>> {
+    pub(crate) fn connection_stop_reason(&self) -> &Arc<OnceLock<ConnectionOutcome>> {
         self.connection.connection_stop_reason()
     }
 
@@ -77,7 +76,7 @@ cfg_not_wasm32! {
         ConnectionStateError: From<C::OpenError> + From<C::CloseError>,
         OpenError: From<C::OpenError>,
     {
-        pub fn spawn(self) -> (JoinHandle<()>, oneshot::Receiver<Result<(), Error>>) {
+        pub fn spawn(self) -> (JoinHandle<()>, oneshot::Receiver<Result<ConnectionOutcome, Error>>) {
             let (tx, rx) = oneshot::channel();
             let handle = tokio::spawn(self.event_loop(tx));
             (handle, rx)
@@ -99,7 +98,7 @@ cfg_wasm32! {
     {
         pub fn spawn_local(
             self
-        ) -> (JoinHandle<()>, oneshot::Receiver<Result<(), Error>>) {
+        ) -> (JoinHandle<()>, oneshot::Receiver<Result<ConnectionOutcome, Error>>) {
             let (tx, rx) = oneshot::channel();
             let handle = tokio::task::spawn_local(self.event_loop(tx));
             (handle, rx)
@@ -108,7 +107,7 @@ cfg_wasm32! {
         pub fn spawn_on_local_set(
             self,
             local_set: &tokio::task::LocalSet,
-        ) -> (JoinHandle<()>, oneshot::Receiver<Result<(), Error>>) {
+        ) -> (JoinHandle<()>, oneshot::Receiver<Result<ConnectionOutcome, Error>>) {
             let (tx, rx) = oneshot::channel();
             let handle = local_set.spawn_local(self.event_loop(tx));
             (handle, rx)
@@ -135,7 +134,11 @@ where
             ConnectionState::Start
             | ConnectionState::HeaderReceived
             | ConnectionState::HeaderSent
-            | ConnectionState::HeaderExchange => Err(ConnectionInnerError::IllegalState),
+            | ConnectionState::HeaderExchange => {
+                // The connection never reached the open exchange, so there is
+                // no close to exchange; just stop.
+                Ok(Running::Stop)
+            }
             ConnectionState::OpenPipe
             | ConnectionState::OpenClosePipe
             | ConnectionState::OpenReceived
@@ -173,12 +176,11 @@ where
         discard_other: bool,
     ) -> Result<(IncomingChannel, Close), ConnectionInnerError> {
         loop {
-            let frame = self.transport.next().await.ok_or_else(|| {
-                transport::Error::Io(io::Error::new(
-                    io::ErrorKind::UnexpectedEof,
-                    "Expecting remote close",
-                ))
-            })??;
+            let frame = self
+                .transport
+                .next()
+                .await
+                .ok_or(ConnectionInnerError::ConnectionLost)??;
 
             match frame.body {
                 FrameBody::Close(close) => return Ok((IncomingChannel(frame.channel), close)),
@@ -200,12 +202,7 @@ where
                 Ok(fr) => fr,
                 Err(error) => return Err(error.into()),
             },
-            None => {
-                return Err(OpenError::Io(io::Error::new(
-                    io::ErrorKind::UnexpectedEof,
-                    "Expecting an Open frame",
-                )))
-            }
+            None => return Err(OpenError::ConnectionLost),
         };
         let Frame { channel, body } = frame;
         let channel = endpoint::IncomingChannel(channel);
@@ -260,6 +257,10 @@ where
         match engine.open_inner().await {
             Ok(_) => Ok(engine),
             Err(error) => {
+                // The transport is already gone; there is no close to exchange.
+                if matches!(error, OpenError::ConnectionLost) {
+                    return Err(error);
+                }
                 match engine.close_connection(None).await {
                     Ok(_) => Err(error),
                     Err(error) => match error {
@@ -267,6 +268,10 @@ where
                             Err(OpenError::TransportError(e))
                         }
                         ConnectionInnerError::IllegalState => Err(OpenError::IllegalState),
+                        ConnectionInnerError::ConnectionLost => Err(OpenError::ConnectionLost),
+                        ConnectionInnerError::InvariantViolation => {
+                            Err(OpenError::InvariantViolation)
+                        }
                         ConnectionInnerError::NotImplemented(e) => {
                             Err(OpenError::NotImplemented(e))
                         }
@@ -295,7 +300,21 @@ where
     ) -> Result<(), ConnectionInnerError> {
         match &self.connection.local_state() {
             ConnectionState::Opened => {}
-            _ => return Err(ConnectionInnerError::IllegalState),
+            _state => {
+                // The connection is no longer opened, so the frame cannot be
+                // forwarded; discard it instead of failing the connection.
+                #[cfg(feature = "tracing")]
+                tracing::warn!(
+                    "dropping a session frame received while the connection is not opened: {:?}",
+                    _state
+                );
+                #[cfg(feature = "log")]
+                log::warn!(
+                    "dropping a session frame received while the connection is not opened: {:?}",
+                    _state
+                );
+                return Ok(());
+            }
         };
 
         match self.connection.session_tx_by_incoming_channel(channel) {
@@ -417,9 +436,10 @@ where
                 // channels close, so sessions and links observe the local
                 // error regardless of how the peer responds.
                 if let Some(error) = &error {
-                    self.connection.set_connection_stop_reason(
-                        ConnectionStopReason::ClosedWithError(error.clone()),
-                    );
+                    self.connection
+                        .set_connection_stop_reason(ConnectionOutcome::ClosedWithError(
+                            error.clone(),
+                        ));
                 }
                 self.outgoing_session_frames.close();
                 while let Some(frame) = self.outgoing_session_frames.recv().await {
@@ -432,9 +452,9 @@ where
             }
             ConnectionControl::AllocateSession { tx, responder } => {
                 let result = self.connection.allocate_session(tx).map_err(Into::into);
-                responder
-                    .send(result)
-                    .map_err(|_| ConnectionInnerError::IllegalState)?;
+                // The requester may have dropped while the result was in
+                // flight; the allocation itself is not failed by that.
+                let _ = responder.send(result);
             }
             ConnectionControl::DeallocateSession(session_id) => {
                 self.connection.deallocate_session(session_id)
@@ -458,7 +478,21 @@ where
             // `CloseReceived`; the buffered frames are flushed as part of
             // closing the connection.
             ConnectionState::Opened | ConnectionState::CloseReceived => {}
-            _ => return Err(ConnectionInnerError::IllegalState),
+            _state => {
+                // The connection is closing or closed, so the session's frame
+                // can no longer be forwarded; discard it.
+                #[cfg(feature = "tracing")]
+                tracing::warn!(
+                    "dropping an outgoing session frame sent while the connection is closing: {:?}",
+                    _state
+                );
+                #[cfg(feature = "log")]
+                log::warn!(
+                    "dropping an outgoing session frame sent while the connection is closing: {:?}",
+                    _state
+                );
+                return Ok(Running::Continue);
+            }
         }
 
         let SessionFrame { channel, body } = frame;
@@ -512,6 +546,12 @@ where
     ) -> Result<Running, ConnectionInnerError> {
         match error {
             ConnectionInnerError::TransportError(_) => Ok(Running::Stop),
+            ConnectionInnerError::ConnectionLost => Ok(Running::Stop),
+            ConnectionInnerError::InvariantViolation => {
+                let error = definitions::Error::new(AmqpError::InternalError, None, None);
+                self.close_connection(Some(error)).await?;
+                Ok(Running::Stop)
+            }
             ConnectionInnerError::IllegalState => {
                 let error = definitions::Error::new(AmqpError::IllegalState, None, None);
                 self.close_connection(Some(error)).await?;
@@ -535,7 +575,7 @@ where
     }
 
     #[cfg_attr(feature = "tracing", tracing::instrument(name = "Connection::event_loop", skip(self), fields(container_id = %self.connection.local_open().container_id)))]
-    async fn event_loop(mut self, tx: oneshot::Sender<Result<(), Error>>) {
+    async fn event_loop(mut self, tx: oneshot::Sender<Result<ConnectionOutcome, Error>>) {
         let mut outcome = Ok(());
         loop {
             let result = tokio::select! {
@@ -562,7 +602,11 @@ where
                                 | ConnectionState::OpenSent
                                 | ConnectionState::Opened
                                 | ConnectionState::CloseReceived
-                                | ConnectionState::CloseSent => Err(ConnectionInnerError::IllegalState),
+                                | ConnectionState::CloseSent => {
+                                    // The transport ended without the AMQP
+                                    // close exchange.
+                                    Err(ConnectionInnerError::ConnectionLost)
+                                }
                                 ConnectionState::ClosePipe
                                 | ConnectionState::Discarding
                                 | ConnectionState::End => Ok(Running::Stop),
@@ -668,17 +712,21 @@ where
         // in the channel. Instead, it is usually desirable to perform a “clean” shutdown.
         // To do this, the receiver first closes the channels, which will prevent any
         // further messages to be sent into them.
-        let close = self.transport.close().await.map_err(Into::into);
-        let result = outcome.and(close).map_err(Into::into);
+        let close = self
+            .transport
+            .close()
+            .await
+            .map_err(ConnectionInnerError::TransportError);
+        let result: Result<(), ConnectionInnerError> = outcome.and(close);
 
         // Publish the stop reason before the channels are closed, so every
         // session that wakes on the channel closure sees it.
         let connection_stop_reason = match &result {
-            Err(Error::RemoteClosedWithError(error)) => {
-                ConnectionStopReason::RemoteClosedWithError(error.clone())
+            Err(ConnectionInnerError::RemoteClosedWithError(error)) => {
+                ConnectionOutcome::RemoteClosedWithError(error.clone())
             }
-            Err(Error::RemoteClosed) => ConnectionStopReason::RemoteClosed,
-            _ => ConnectionStopReason::Closed,
+            Err(ConnectionInnerError::RemoteClosed) => ConnectionOutcome::RemoteClosed,
+            _ => ConnectionOutcome::Closed,
         };
         self.connection
             .set_connection_stop_reason(connection_stop_reason);
@@ -690,6 +738,21 @@ where
         tracing::debug!("Stopped");
         #[cfg(feature = "log")]
         log::debug!("Stopped");
+        // A remote close (with or without error) is an outcome, not a failure,
+        // for the handle; the first-recorded stop reason is the status.
+        // Transport and local errors stay errors.
+        let status = self
+            .connection
+            .connection_stop_reason()
+            .get()
+            .cloned()
+            .unwrap_or(ConnectionOutcome::Closed);
+        let result = match result {
+            Ok(())
+            | Err(ConnectionInnerError::RemoteClosed)
+            | Err(ConnectionInnerError::RemoteClosedWithError(_)) => Ok(status),
+            Err(other) => Err(other.into()),
+        };
         let _ = tx.send(result);
     }
 }

@@ -20,8 +20,8 @@ use crate::{
         receiver::{CreditMode, ReceiverInner},
         state::{LinkFlowState, LinkFlowStateInner, LinkState},
         target_archetype::TargetArchetypeExt,
-        LinkFrame, LinkIncomingItem, LinkRelay, ReceiverAttachError, ReceiverLink,
-        SessionStopReason,
+        AttachMode, LinkFrame, LinkIncomingItem, LinkRelay, ReceiverAttachError, ReceiverLink,
+        SessionStopped,
     },
     session::SessionHandle,
     Receiver,
@@ -113,7 +113,7 @@ where
         remote_attach: Attach,
         control: mpsc::Sender<SessionControl>,
         outgoing: mpsc::Sender<LinkFrame>,
-        session_stop_reason: Arc<OnceLock<SessionStopReason>>,
+        session_stop_reason: Arc<OnceLock<SessionStopped>>,
         max_frame_size: usize,
     ) -> Result<ReceiverInner<ReceiverLink<T>>, ReceiverAttachError>
     where
@@ -232,7 +232,7 @@ where
         match (err, link.on_incoming_attach(remote_attach)) {
             (Some(attach_error), _) | (_, Err(attach_error)) => {
                 // Complete attach anyway
-                link.send_attach(&outgoing, false).await?;
+                link.send_attach(&outgoing, AttachMode::Resume).await?;
                 return Err(link
                     .handle_attach_error(
                         attach_error,
@@ -242,7 +242,7 @@ where
                     )
                     .await)
             }
-            _ => link.send_attach(&outgoing, false).await?,
+            _ => link.send_attach(&outgoing, AttachMode::Resume).await?,
         }
 
         let mut inner = ReceiverInner {

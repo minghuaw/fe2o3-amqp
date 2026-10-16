@@ -10,10 +10,10 @@ use tokio::{
 };
 
 use crate::{
-    connection::{self, ConnectionStopReason},
+    connection::{self, ConnectionOutcome},
     control::{ConnectionControl, SessionControl},
     endpoint::{self, IncomingChannel, Session},
-    link::{LinkFrame, SessionStopReason},
+    link::{LinkFrame, SessionOutcome, SessionStopped},
     util::Running,
     SendBound,
 };
@@ -29,7 +29,7 @@ use super::{
 async fn send_outgoing_item(
     outgoing: &mpsc::Sender<SessionFrame>,
     outgoing_item: SessionOutgoingItem,
-    conn_stop: &Arc<OnceLock<ConnectionStopReason>>,
+    conn_stop: &Arc<OnceLock<ConnectionOutcome>>,
 ) -> Result<(), SessionInnerError> {
     match outgoing_item {
         SessionOutgoingItem::SingleFrame(frame) => {
@@ -128,7 +128,7 @@ cfg_not_wasm32! {
         AllocLinkError: From<S::AllocError>,
         SessionInnerError: From<S::Error> + From<S::BeginError> + From<S::EndError>,
     {
-        pub fn spawn(self) -> (JoinHandle<()>, oneshot::Receiver<Result<(), Error>>) {
+        pub fn spawn(self) -> (JoinHandle<()>, oneshot::Receiver<Result<SessionOutcome, Error>>) {
             let (tx, rx) = oneshot::channel();
             let handle = tokio::spawn(self.event_loop(tx));
             (handle, rx)
@@ -143,13 +143,13 @@ cfg_wasm32! {
         AllocLinkError: From<S::AllocError>,
         SessionInnerError: From<S::Error> + From<S::BeginError> + From<S::EndError>,
     {
-        pub fn spawn_local(self) -> (JoinHandle<()>, oneshot::Receiver<Result<(), Error>>) {
+        pub fn spawn_local(self) -> (JoinHandle<()>, oneshot::Receiver<Result<SessionOutcome, Error>>) {
             let (tx, rx) = oneshot::channel();
             let handle = tokio::task::spawn_local(self.event_loop(tx));
             (handle, rx)
         }
 
-        pub fn spawn_on_local_set(self, local_set: &tokio::task::LocalSet) -> (JoinHandle<()>, oneshot::Receiver<Result<(), Error>>) {
+        pub fn spawn_on_local_set(self, local_set: &tokio::task::LocalSet) -> (JoinHandle<()>, oneshot::Receiver<Result<SessionOutcome, Error>>) {
             let (tx, rx) = oneshot::channel();
             let handle = local_set.spawn_local(self.event_loop(tx));
             (handle, rx)
@@ -265,10 +265,12 @@ where
                     // `EndReceived` state only results from a remote-initiated
                     // end, so the error (if any) is the remote's.
                     self.session.set_session_stop_reason(match end_error {
-                        Some(error) => SessionStopReason::RemoteEndedWithError(error),
+                        Some(error) => {
+                            SessionStopped::Outcome(SessionOutcome::RemoteEndedWithError(error))
+                        }
                         None => match self.session.connection_stop_reason().get() {
-                            Some(reason) => SessionStopReason::from(reason.clone()),
-                            None => SessionStopReason::RemoteEnded,
+                            Some(reason) => SessionStopped::from(reason.clone()),
+                            None => SessionStopped::Outcome(SessionOutcome::RemoteEnded),
                         },
                     });
                     // if control is closing, finish sending all buffered messages before closing
@@ -291,10 +293,10 @@ where
 
     /// The session stop reason derived from the connection's recorded stop;
     /// `Ended` when the connection has not stopped.
-    fn session_stop_reason_from_connection(&self) -> SessionStopReason {
+    fn session_stop_reason_from_connection(&self) -> SessionStopped {
         match self.session.connection_stop_reason().get() {
-            Some(reason) => SessionStopReason::from(reason.clone()),
-            None => SessionStopReason::Ended,
+            Some(reason) => SessionStopped::from(reason.clone()),
+            None => SessionStopped::Outcome(SessionOutcome::Ended),
         }
     }
 
@@ -310,7 +312,9 @@ where
                 // Record the stop reason before the link channel is closed, so
                 // links that fail on the closure observe the reason.
                 self.session.set_session_stop_reason(match &error {
-                    Some(error) => SessionStopReason::EndedWithError(error.clone()),
+                    Some(error) => {
+                        SessionStopped::Outcome(SessionOutcome::EndedWithError(error.clone()))
+                    }
                     None => self.session_stop_reason_from_connection(),
                 });
                 // if control is closing, finish sending all buffered messages before closing
@@ -409,7 +413,21 @@ where
     ) -> Result<Running, SessionInnerError> {
         match self.session.local_state() {
             SessionState::Mapped => {}
-            _ => return Err(SessionInnerError::IllegalState), // End session with illegal state
+            _state => {
+                // The session is ending, so the frame can no longer be
+                // forwarded; discard it instead of failing the session.
+                #[cfg(feature = "tracing")]
+                tracing::warn!(
+                    "dropping a link frame sent while the session is not mapped: {:?}",
+                    _state
+                );
+                #[cfg(feature = "log")]
+                log::warn!(
+                    "dropping a link frame sent while the session is not mapped: {:?}",
+                    _state
+                );
+                return Ok(Running::Continue);
+            }
         }
 
         let outgoing_item = match frame {
@@ -442,8 +460,14 @@ where
 
             #[cfg(feature = "transaction")]
             LinkFrame::Acquisition(_) => {
-                // This is purely used to notify sender about TxnAcquisition, which is not implemented
-                unreachable!("LinkFrame::Acquisition should not appear in outgoing link frames")
+                // This is purely used to notify the sender about a txn
+                // acquisition and never belongs to the outgoing direction;
+                // discard the notification.
+                #[cfg(feature = "tracing")]
+                tracing::warn!("dropping a txn acquisition notification on the outgoing direction");
+                #[cfg(feature = "log")]
+                log::warn!("dropping a txn acquisition notification on the outgoing direction");
+                return Ok(Running::Continue);
             }
         };
 
@@ -489,6 +513,14 @@ where
             }
             SessionInnerError::IllegalState => {
                 let error = Error::new(AmqpError::IllegalState, None, None);
+                self.end_session(Some(error)).await
+            }
+            SessionInnerError::InvariantViolation => {
+                let error = Error::new(
+                    AmqpError::InternalError,
+                    Some(String::from("An internal invariant was violated")),
+                    None,
+                );
                 self.end_session(Some(error)).await
             }
             SessionInnerError::ConnectionStopped(reason) => {
@@ -601,7 +633,7 @@ where
     }
 
     #[cfg_attr(feature = "tracing", tracing::instrument(name = "Session::event_loop", skip(self), fields(outgoing_channel = %self.session.outgoing_channel().0)))]
-    async fn event_loop(mut self, tx: oneshot::Sender<Result<(), Error>>) {
+    async fn event_loop(mut self, tx: oneshot::Sender<Result<SessionOutcome, Error>>) {
         let mut outcome = Ok(());
         loop {
             let result = tokio::select! {
@@ -720,24 +752,41 @@ where
         // so every link that wakes on the channel closures sees it.
         let session_stop_reason = match &outcome {
             Err(SessionInnerError::ConnectionStopped(reason)) => {
-                SessionStopReason::from(reason.clone())
+                SessionStopped::from(reason.clone())
             }
             Err(SessionInnerError::RemoteEndedWithError(error)) => {
-                SessionStopReason::RemoteEndedWithError(error.clone())
+                SessionStopped::Outcome(SessionOutcome::RemoteEndedWithError(error.clone()))
             }
-            Err(SessionInnerError::RemoteEnded) => SessionStopReason::RemoteEnded,
-            _ => SessionStopReason::Ended,
+            Err(SessionInnerError::RemoteEnded) => {
+                SessionStopped::Outcome(SessionOutcome::RemoteEnded)
+            }
+            _ => SessionStopped::Outcome(SessionOutcome::Ended),
         };
         self.session.set_session_stop_reason(session_stop_reason);
-        let _ =
-            connection::deallocate_session(&mut self.conn_control, self.session.outgoing_channel())
-                .await;
-        // The session ends with the connection; sanitize the connection stop
-        // so the handle observes a clean end. Connection-level errors are
-        // reported through the `ConnectionHandle`.
+        connection::deallocate_session(&mut self.conn_control, self.session.outgoing_channel())
+            .await;
+        // A session that reached a terminal state reports the outcome it stopped
+        // with; the connection stopping first is a failure of the session's end
+        // operation (`Err(ConnectionStopped)`), consistent with link operations
+        // failing when their session stopped. Local protocol errors stay errors.
+        let stop = self
+            .session
+            .session_stop_reason()
+            .get()
+            .cloned()
+            .unwrap_or(SessionStopped::Outcome(SessionOutcome::Ended));
+        let stop_result = |stop: SessionStopped| match stop {
+            SessionStopped::Outcome(outcome) => Ok(outcome),
+            SessionStopped::ConnectionStopped(reason) => Err(Error::ConnectionStopped(reason)),
+        };
         let result = match outcome {
-            Err(SessionInnerError::ConnectionStopped(_)) => Ok(()),
-            other => other.map_err(Into::into),
+            Ok(()) => stop_result(stop),
+            Err(SessionInnerError::ConnectionStopped(reason)) => {
+                Err(Error::ConnectionStopped(reason))
+            }
+            Err(SessionInnerError::RemoteEnded)
+            | Err(SessionInnerError::RemoteEndedWithError(_)) => stop_result(stop),
+            Err(other) => Err(other.into()),
         };
         let _ = tx.send(result);
     }

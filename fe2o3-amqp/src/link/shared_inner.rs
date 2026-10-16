@@ -9,7 +9,10 @@ use crate::{
     session::{self, error::AllocLinkError},
 };
 
-use super::{state::LinkState, DetachError, LinkFrame, LinkRelay, SessionStopReason};
+use super::{
+    link_error_from_closed_channel, state::LinkState, AttachMode, DetachError, LinkError,
+    LinkFrame, LinkOutcome, LinkRelay, SessionStopped,
+};
 
 pub(crate) trait LinkEndpointInner
 where
@@ -24,6 +27,9 @@ where
 
     fn reader_mut(&mut self) -> &mut mpsc::Receiver<LinkFrame>;
 
+    /// The link endpoint's local state, used to derive state-aware failures
+    fn local_state(&self) -> &LinkState;
+
     fn buffer_size(&self) -> usize;
 
     fn as_new_link_relay(&self, tx: mpsc::Sender<LinkFrame>) -> LinkRelay<()>;
@@ -31,11 +37,11 @@ where
     fn session_control(&self) -> &mpsc::Sender<SessionControl>;
 
     /// The shared cell holding why the session (or its connection) stopped
-    fn session_stop_reason(&self) -> &Arc<OnceLock<SessionStopReason>>;
+    fn session_stop_reason(&self) -> &Arc<OnceLock<SessionStopped>>;
 
     async fn exchange_attach(
         &mut self,
-        is_reattaching: bool,
+        mode: AttachMode,
     ) -> Result<<Self::Link as LinkAttach>::AttachExchange, <Self::Link as LinkAttach>::AttachError>;
 
     async fn handle_attach_error(
@@ -80,6 +86,7 @@ where
     fn handle_reattach_outcome(
         &mut self,
         outcome: <Self::Link as LinkAttach>::AttachExchange,
+        detach_outcome: LinkOutcome,
     ) -> Result<&mut Self, <Self::Link as LinkAttach>::AttachError>;
 
     /// # Cancel safety
@@ -87,11 +94,12 @@ where
     /// This should be cancel safe if oneshot channel is cancel safe
     async fn reattach_inner(
         &mut self,
+        detach_outcome: LinkOutcome,
     ) -> Result<&mut Self, <Self::Link as LinkAttach>::AttachError> {
         self.reallocate_output_handle().await?; // FIXME: cancel safe? if oneshot channel is cancel safe
-        match self.exchange_attach(true).await // cancel safe: the attach exchange only awaits on mpsc operations
+        match self.exchange_attach(AttachMode::Reattach).await // cancel safe: the attach exchange only awaits on mpsc operations
         {
-            Ok(attach_exchange) => self.handle_reattach_outcome(attach_exchange),
+            Ok(attach_exchange) => self.handle_reattach_outcome(attach_exchange, detach_outcome),
             Err(attach_error) => Err(self.handle_attach_error(attach_error).await),
         }
     }
@@ -110,15 +118,76 @@ where
     async fn detach_with_error(
         &mut self,
         error: Option<definitions::Error>,
-    ) -> Result<(), <Self::Link as LinkDetach>::DetachError>;
+    ) -> Result<LinkOutcome, <Self::Link as LinkDetach>::DetachError>;
 
     /// Close the link.
     ///
-    /// This will send a Detach performative with the `closed` field set to true.
+    /// This will send a `Detach` performative with the `closed` field set to true.
     async fn close_with_error(
         &mut self,
         error: Option<definitions::Error>,
-    ) -> Result<(), <Self::Link as LinkDetach>::DetachError>;
+    ) -> Result<LinkOutcome, <Self::Link as LinkDetach>::DetachError>;
+}
+
+/// Link endpoints that must terminate the link when the peer sends a frame
+/// that is not permitted in the current state.
+pub(crate) trait PeerViolationCloseExt: LinkEndpointInnerDetach {
+    /// Best-effort close the link with the given error because the peer
+    /// violated the link state machine. The caller reports the frame error.
+    async fn close_on_peer_violation(&mut self, error: definitions::Error);
+}
+
+impl<T> PeerViolationCloseExt for T
+where
+    T: LinkEndpointInnerDetach,
+{
+    async fn close_on_peer_violation(&mut self, error: definitions::Error) {
+        let _ = self.close_with_error(Some(error)).await;
+    }
+}
+
+/// The `amqp:illegal-state` error for a frame the peer sent that is not
+/// permitted in the current state.
+pub(crate) fn illegal_state_error() -> definitions::Error {
+    definitions::Error::new(
+        definitions::AmqpError::IllegalState,
+        "The peer sent a frame that is not permitted in the current state".to_string(),
+        None,
+    )
+}
+
+/// The `amqp:internal-error` error for an internal invariant violation.
+pub(crate) fn internal_error(description: &str) -> definitions::Error {
+    definitions::Error::new(
+        definitions::AmqpError::InternalError,
+        description.to_string(),
+        None,
+    )
+}
+
+/// Link endpoints that must terminate the link when a remote-initiated
+/// transactional acquisition arrives, since it is not supported.
+#[cfg(feature = "transaction")]
+pub(crate) trait TxnAcquisitionCloseExt: PeerViolationCloseExt {
+    /// Best-effort terminate the link with `amqp:not-implemented` because a
+    /// remote-initiated transactional acquisition is not supported
+    /// (AMQP 1.0 §4.4.3). The caller reports the acquisition error.
+    async fn close_on_acquisition_not_implemented(&mut self);
+}
+
+#[cfg(feature = "transaction")]
+impl<T> TxnAcquisitionCloseExt for T
+where
+    T: PeerViolationCloseExt,
+{
+    async fn close_on_acquisition_not_implemented(&mut self) {
+        let error = definitions::Error::new(
+            definitions::AmqpError::NotImplemented,
+            "Transactional acquisition is not implemented".to_string(),
+            None,
+        );
+        self.close_on_peer_violation(error).await;
+    }
 }
 
 impl<T> LinkEndpointInnerDetach for T
@@ -130,7 +199,7 @@ where
     async fn detach_with_error(
         &mut self,
         error: Option<definitions::Error>,
-    ) -> Result<(), <Self::Link as LinkDetach>::DetachError> {
+    ) -> Result<LinkOutcome, <Self::Link as LinkDetach>::DetachError> {
         match self.link().local_state() {
             LinkState::Unattached
             | LinkState::AttachSent
@@ -146,23 +215,32 @@ where
                 if remote_detach.closed {
                     // AMQP 1.0 §2.6.6: the peer sent a closing detach while we
                     // were sending a non-closing detach, so we must reattach
-                    // and then send a closing detach.
-                    reattach_then_close(self).await?;
-                    Err(DetachError::ClosedByRemote)
+                    // and then send a closing detach. The link ends `Closed`;
+                    // the peer's error, if any, is reported in the status.
+                    let status = LinkOutcome::Closed {
+                        remote_error: remote_detach.error.clone(),
+                    };
+                    reattach_then_close(self, status.clone()).await?;
+                    Ok(status)
                 } else {
-                    self.link_mut().on_detach_reply(remote_detach)
+                    self.link_mut().on_matching_detach_reply(remote_detach)
                 }
             }
             LinkState::DetachSent => {
                 let remote_detach = recv_remote_detach(self).await?;
                 if remote_detach.closed {
-                    reattach_then_close(self).await?;
-                    Err(DetachError::ClosedByRemote)
+                    let status = LinkOutcome::Closed {
+                        remote_error: remote_detach.error.clone(),
+                    };
+                    reattach_then_close(self, status.clone()).await?;
+                    Ok(status)
                 } else {
-                    self.link_mut().on_detach_reply(remote_detach)
+                    self.link_mut().on_matching_detach_reply(remote_detach)
                 }
             }
-            LinkState::Detached => Ok(()),
+            LinkState::Detached(remote_error) => Ok(LinkOutcome::Detached {
+                remote_error: remote_error.clone(),
+            }),
             LinkState::CloseSent => {
                 // A live handle is not normally left in `CloseSent` (the
                 // public close paths consume it, and dropping the close
@@ -187,16 +265,21 @@ where
                 // closing handshake.
                 let remote_detach = recv_remote_detach(self).await?;
                 if remote_detach.closed {
-                    self.link_mut().on_detach_reply(remote_detach)?;
+                    self.link_mut().on_matching_detach_reply(remote_detach)
                 } else {
-                    // The peer suspended: reattach and close so the link ends
+                    // The peer suspended: reattach and close so the link is left
                     // `Closed` (AMQP 1.0 §2.6.6).
+                    let status = LinkOutcome::Closed {
+                        remote_error: remote_detach.error.clone(),
+                    };
                     let _ = self.link_mut().apply_remote_detach_outcome(remote_detach);
-                    reattach_then_close(self).await?;
+                    reattach_then_close(self, status.clone()).await?;
+                    Ok(status)
                 }
-                Err(DetachError::ClosedByRemote)
             }
-            LinkState::Closed => Err(DetachError::ClosedByRemote),
+            LinkState::Closed(remote_error) => Ok(LinkOutcome::Closed {
+                remote_error: remote_error.clone(),
+            }),
         }
     }
 
@@ -206,7 +289,7 @@ where
     async fn close_with_error(
         &mut self,
         error: Option<definitions::Error>,
-    ) -> Result<(), <Self::Link as LinkDetach>::DetachError> {
+    ) -> Result<LinkOutcome, <Self::Link as LinkDetach>::DetachError> {
         match self.link().local_state() {
             LinkState::Unattached
             | LinkState::AttachSent
@@ -217,23 +300,23 @@ where
             | LinkState::Attached => {
                 // Send detach with closed=true and wait for remote closing detach
                 // The sender will be dropped after close
-                self.send_detach(true, error)
-                    .await // cancel safe
-                    .map_err(|_| detach_error_from_stop_reason(self))?;
+                self.send_detach(true, error).await?; // cancel safe
 
                 // Wait for remote detach
                 let remote_detach = recv_remote_detach(self).await?; // cancel safe
                 if remote_detach.closed {
-                    // If the remote detach contains an error, the error will be propagated
-                    // back by `on_detach_reply`
-                    self.link_mut().on_detach_reply(remote_detach)
+                    // The peer's error, if any, is surfaced in the returned status
+                    self.link_mut().on_matching_detach_reply(remote_detach)
                 } else {
                     // Peer suspended while we were closing: record it, then
                     // reattach (re-registers the link) and close (§2.6.6).
                     // The close completes, so this is not an error.
+                    let status = LinkOutcome::Closed {
+                        remote_error: remote_detach.error.clone(),
+                    };
                     let _ = self.link_mut().apply_remote_detach_outcome(remote_detach);
-                    reattach_then_close(self).await?;
-                    Ok(())
+                    reattach_then_close(self, status.clone()).await?;
+                    Ok(status)
                 }
             }
             LinkState::DetachSent => {
@@ -242,30 +325,43 @@ where
                 let remote_detach = recv_remote_detach(self).await?; // cancel safe
                 if remote_detach.closed {
                     // §2.6.6: reattach and then send a closing detach.
-                    reattach_then_close(self).await?;
-                    Err(DetachError::ClosedByRemote)
+                    let status = LinkOutcome::Closed {
+                        remote_error: remote_detach.error.clone(),
+                    };
+                    reattach_then_close(self, status.clone()).await?;
+                    Ok(status)
                 } else {
-                    self.link_mut()
-                        .apply_remote_detach_outcome(remote_detach)
-                        .map_err(DetachError::from)
+                    let status = LinkOutcome::Closed {
+                        remote_error: remote_detach.error.clone(),
+                    };
+                    let _ = self.link_mut().apply_remote_detach_outcome(remote_detach);
+                    reattach_then_close(self, status.clone()).await?;
+                    Ok(status)
                 }
             }
-            LinkState::Detached => Ok(()),
+            LinkState::Detached(remote_error) => Ok(LinkOutcome::Detached {
+                remote_error: remote_error.clone(),
+            }),
             LinkState::CloseSent => {
                 // Wait for remote detach
                 let remote_detach = recv_remote_detach(self).await?; // cancel safe
                 if remote_detach.closed {
-                    self.link_mut().on_detach_reply(remote_detach)
+                    self.link_mut().on_matching_detach_reply(remote_detach)
                 } else {
                     // Peer suspended while we were closing: reattach
                     // (re-registers the link) and close (§2.6.6).
                     // The close completes, so this is not an error.
+                    let status = LinkOutcome::Closed {
+                        remote_error: remote_detach.error.clone(),
+                    };
                     let _ = self.link_mut().apply_remote_detach_outcome(remote_detach);
-                    reattach_then_close(self).await?;
-                    Ok(())
+                    reattach_then_close(self, status.clone()).await?;
+                    Ok(status)
                 }
             }
-            LinkState::Closed => Ok(()),
+            LinkState::Closed(remote_error) => Ok(LinkOutcome::Closed {
+                remote_error: remote_error.clone(),
+            }),
         }
     }
 }
@@ -275,61 +371,53 @@ where
 /// closed the link by reattaching and then sending a closing detach.
 ///
 /// Used on both sides of the race. The closing side reattaches too so the
-/// link is re-registered for the peer's crossed attach (it is released when
-/// the closing detach is sent); the crossed attach exchanges then converge
+/// link is re-registered for the peer's simultaneous attach (it is released when
+/// the closing detach is sent); the simultaneous attach exchanges then converge
 /// symmetrically.
 ///
 /// # Cancel safety
 ///
 /// This is cancel safe if oneshot channel is cancel safe
-async fn reattach_then_close<T>(link_inner: &mut T) -> Result<(), DetachError>
+async fn reattach_then_close<T>(
+    link_inner: &mut T,
+    detach_outcome: LinkOutcome,
+) -> Result<(), DetachError>
 where
     T: LinkEndpointInner + LinkEndpointInnerReattach + Send + Sync,
     T::Link: LinkDetach<DetachError = DetachError>,
     <T::Link as LinkAttach>::AttachError: From<AllocLinkError> + Sync,
 {
-    if let Err(_attach_error) = link_inner.reattach_inner().await {
+    if let Err(_attach_error) = link_inner.reattach_inner(detach_outcome).await {
         // The reattach that completes the AMQP 1.0 §2.6.6 handshake failed.
         // This helper is generic over the link type, so the concrete
-        // `AttachError` cannot be inspected here and `DetachError` cannot
-        // carry it. The cause is derived from the shared session stop reason;
-        // with none recorded the error is `IllegalState`.
+        // `AttachError` cannot be inspected here. The failure is derived from
+        // the session stop reason and the link's local state instead.
         //
-        // The faithful mappings are `SessionStopped` -> `SessionStopped`,
-        // `IllegalState` -> `IllegalState`, and `RemoteClosedWithError` ->
-        // `RemoteClosedWithError`; every other attach error (e.g.
-        // `NonAttachFrameReceived`, attach validation) has no counterpart and
-        // also lands on `IllegalState`. In particular `RemoteClosedWithError`
-        // is currently lost when the session is still alive, because the stop
-        // reason carries no peer error.
-        //
-        // TODO(error-refactor): preserve the attach error (or give the
-        // fallback its own variant) when `DetachError`/`LinkStateError` are
-        // consolidated, so these cases become distinguishable.
-        return Err(detach_error_from_stop_reason(link_inner));
+        // TODO(error-refactor): preserve the concrete attach error so these
+        // cases become fully distinguishable from a terminal link.
+        return Err(link_error_from_closed_channel(
+            link_inner.session_stop_reason(),
+            link_inner.local_state(),
+        ));
     }
     link_inner.send_detach(true, None).await?; // cancel safe
     let remote_detach = recv_remote_detach(link_inner).await?; // cancel safe
-    link_inner.link_mut().on_detach_reply(remote_detach)?;
-    Ok(())
-}
-
-/// The `DetachError` for a link operation that failed because the session (or its
-/// connection) stopped; `IllegalState` when no stop reason was recorded (defensive).
-fn detach_error_from_stop_reason<T>(inner: &T) -> DetachError
-where
-    T: LinkEndpointInner + ?Sized,
-{
-    match inner.session_stop_reason().get() {
-        Some(reason) => DetachError::SessionStopped(reason.clone()),
-        None => DetachError::IllegalState, // defensive: no stop reason recorded; failure is link-local
+    if !remote_detach.closed {
+        // §2.6.6: the simultaneous detach was already resolved by reattaching
+        // and re-sending a closing detach, so the peer must answer with a
+        // closing detach. A non-closing reply here is a peer violation.
+        return Err(DetachError::IllegalState);
     }
+    link_inner
+        .link_mut()
+        .on_matching_detach_reply(remote_detach)?;
+    Ok(())
 }
 
 /// # Cancel safety
 ///
 /// This is cancel safe because it only `.await` on `recv()` from a `tokio::mpsc::Receiver`
-pub(super) async fn recv_remote_detach<T>(link_inner: &mut T) -> Result<Detach, DetachError>
+pub(super) async fn recv_remote_detach<T>(link_inner: &mut T) -> Result<Detach, LinkError>
 where
     T: LinkEndpointInner + LinkEndpointInnerReattach + Send + Sync,
     T::Link: LinkDetach<DetachError = DetachError>,
@@ -340,8 +428,12 @@ where
             .reader_mut()
             .recv()
             .await // cancel safe
-            .ok_or_else(|| detach_error_from_stop_reason(link_inner))?
-        {
+            .ok_or_else(|| {
+                link_error_from_closed_channel(
+                    link_inner.session_stop_reason(),
+                    link_inner.local_state(),
+                )
+            })? {
             LinkFrame::Detach(detach) => return Ok(detach),
             _frame => {
                 // The only other frames should be Attach or Detach, (or Transfer if receiver).

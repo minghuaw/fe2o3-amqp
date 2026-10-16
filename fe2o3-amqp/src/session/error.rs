@@ -5,20 +5,27 @@ use std::sync::OnceLock;
 use fe2o3_amqp_types::definitions::{self};
 
 use crate::{
-    connection::{AllocSessionError, ConnectionStopReason},
-    link::{LinkRelayError, SessionStopReason},
+    connection::{AllocSessionError, ConnectionOutcome},
+    link::{LinkRelayError, SessionStopped},
 };
 
 /// Error with ending a session
 #[derive(Debug, thiserror::Error)]
 pub(crate) enum SessionStateError {
-    /// Illegal session state
-    #[error("Illegal session state")]
+    /// The peer sent a frame that is not permitted in the current session state
+    #[error("The peer sent a frame that is not permitted in the current session state")]
     IllegalState,
+
+    /// An internal invariant was violated (defensive)
+    ///
+    /// This is a safeguard for a path that is impossible by construction; it
+    /// cannot occur unless the library breaks its own invariants.
+    #[error("An internal invariant was violated")]
+    InvariantViolation,
 
     /// The connection stopped before the operation completed
     #[error("The connection stopped: {:?}", .0)]
-    ConnectionStopped(ConnectionStopReason),
+    ConnectionStopped(ConnectionOutcome),
 
     /// Remote session ended
     #[error("Remote session ended")]
@@ -32,13 +39,20 @@ pub(crate) enum SessionStateError {
 /// Error with beginning a session
 #[derive(Debug, thiserror::Error)]
 pub enum BeginError {
-    /// Illegal session state
-    #[error("Illegal session state")]
+    /// The peer sent a frame that is not permitted in the current session state
+    #[error("The peer sent a frame that is not permitted in the current session state")]
     IllegalState,
+
+    /// An internal invariant was violated (defensive)
+    ///
+    /// This is a safeguard for a path that is impossible by construction; it
+    /// cannot occur unless the library breaks its own invariants.
+    #[error("An internal invariant was violated")]
+    InvariantViolation,
 
     /// The connection stopped before the operation completed
     #[error("The connection stopped: {:?}", .0)]
-    ConnectionStopped(ConnectionStopReason),
+    ConnectionStopped(ConnectionOutcome),
 
     /// The connection has not been opened yet
     #[error("The connection has not been opened")]
@@ -71,6 +85,7 @@ impl From<SessionStateError> for BeginError {
     fn from(error: SessionStateError) -> Self {
         match error {
             SessionStateError::IllegalState => Self::IllegalState,
+            SessionStateError::InvariantViolation => Self::InvariantViolation,
             SessionStateError::ConnectionStopped(reason) => Self::ConnectionStopped(reason),
             SessionStateError::RemoteEnded => Self::RemoteEnded,
             SessionStateError::RemoteEndedWithError(err) => Self::RemoteEndedWithError(err),
@@ -92,13 +107,20 @@ pub(crate) enum SessionInnerError {
     #[error("An attach was received using a handle that is already in use for an attached link.")]
     HandleInUse,
 
-    /// Illegal sesesion state
-    #[error("Illegal session state")]
+    /// The peer sent a frame that is not permitted in the current session state
+    #[error("The peer sent a frame that is not permitted in the current session state")]
     IllegalState,
+
+    /// An internal invariant was violated (defensive)
+    ///
+    /// This is a safeguard for a path that is impossible by construction; it
+    /// cannot occur unless the library breaks its own invariants.
+    #[error("An internal invariant was violated")]
+    InvariantViolation,
 
     /// The connection stopped before the operation completed
     #[error("The connection stopped: {:?}", .0)]
-    ConnectionStopped(ConnectionStopReason),
+    ConnectionStopped(ConnectionOutcome),
 
     /// Found a Transfer frame sent to a Sender
     #[error("Found Transfer frame being sent to a Sender")]
@@ -123,6 +145,7 @@ impl From<SessionStateError> for SessionInnerError {
     fn from(error: SessionStateError) -> Self {
         match error {
             SessionStateError::IllegalState => Self::IllegalState,
+            SessionStateError::InvariantViolation => Self::InvariantViolation,
             SessionStateError::ConnectionStopped(reason) => Self::ConnectionStopped(reason),
             SessionStateError::RemoteEnded => Self::RemoteEnded,
             SessionStateError::RemoteEndedWithError(err) => Self::RemoteEndedWithError(err),
@@ -155,30 +178,42 @@ pub enum Error {
     #[error("An attach was received using a handle that is already in use for an attached link.")]
     HandleInUse,
 
-    /// Illegal sesesion state
-    #[error("Illegal session state")]
+    /// The peer sent a frame that is not permitted in the current session state
+    #[error("The peer sent a frame that is not permitted in the current session state")]
     IllegalState,
+
+    /// An internal invariant was violated (defensive)
+    ///
+    /// This is a safeguard for a path that is impossible by construction; it
+    /// cannot occur unless the library breaks its own invariants.
+    #[error("An internal invariant was violated")]
+    InvariantViolation,
+
+    /// An internal failure that can occur in principle
+    ///
+    /// Reported when the session ended because an internal operation failed
+    /// without a more specific classification, e.g. the engine task stopped
+    /// without reporting its outcome. Both this and
+    /// [`Self::InvariantViolation`] answer `amqp:internal-error`.
+    #[error("An internal error occurred")]
+    InternalError,
 
     /// The connection stopped before the operation completed
     #[error("The connection stopped: {:?}", .0)]
-    ConnectionStopped(ConnectionStopReason),
+    ConnectionStopped(ConnectionOutcome),
 
     /// Found a Transfer frame sent to a Sender
     #[error("Found Transfer frame being sent to a Sender")]
     TransferFrameToSender,
 
-    /// Remote session ended
-    #[error("Remote session ended")]
-    RemoteEnded,
-
-    /// Remote session ended with error
-    #[error("Remote ended with error")]
-    RemoteEndedWithError(definitions::Error),
-
     /// Unknown transaction ID
     #[cfg(all(feature = "transaction", feature = "acceptor"))]
     #[error("Unknown transaction ID")]
     UnknownTxnId,
+
+    /// The session already ended and its outcome was already observed
+    #[error("The session is already ended")]
+    AlreadyEnded,
 }
 
 impl From<SessionInnerError> for Error {
@@ -190,10 +225,14 @@ impl From<SessionInnerError> for Error {
             }
             SessionInnerError::HandleInUse => Self::HandleInUse,
             SessionInnerError::IllegalState => Self::IllegalState,
+            SessionInnerError::InvariantViolation => Self::InvariantViolation,
             SessionInnerError::ConnectionStopped(reason) => Self::ConnectionStopped(reason),
             SessionInnerError::TransferFrameToSender => Self::TransferFrameToSender,
-            SessionInnerError::RemoteEnded => Self::RemoteEnded,
-            SessionInnerError::RemoteEndedWithError(err) => Self::RemoteEndedWithError(err),
+            // A remote end is converted into the session outcome by the engine
+            // before it reaches this conversion (see `event_loop`).
+            SessionInnerError::RemoteEnded | SessionInnerError::RemoteEndedWithError(_) => {
+                Self::InternalError
+            }
 
             #[cfg(not(target_arch = "wasm32"))]
             #[cfg(all(feature = "transaction", feature = "acceptor"))]
@@ -206,9 +245,7 @@ impl From<LinkRelayError> for Error {
     fn from(error: LinkRelayError) -> Self {
         match error {
             LinkRelayError::UnattachedHandle => Self::UnattachedHandle,
-            LinkRelayError::TransferFrameToSender => {
-                unreachable!("A sender should not receive a transfer frame")
-            }
+            LinkRelayError::TransferFrameToSender => Self::TransferFrameToSender,
         }
     }
 }
@@ -217,9 +254,13 @@ impl From<SessionStateError> for Error {
     fn from(error: SessionStateError) -> Self {
         match error {
             SessionStateError::IllegalState => Self::IllegalState,
+            SessionStateError::InvariantViolation => Self::InvariantViolation,
             SessionStateError::ConnectionStopped(reason) => Self::ConnectionStopped(reason),
-            SessionStateError::RemoteEnded => Self::RemoteEnded,
-            SessionStateError::RemoteEndedWithError(err) => Self::RemoteEndedWithError(err),
+            // A remote end is converted into the session outcome by the engine
+            // before it reaches this conversion (see `event_loop`).
+            SessionStateError::RemoteEnded | SessionStateError::RemoteEndedWithError(_) => {
+                Self::InternalError
+            }
         }
     }
 }
@@ -227,8 +268,8 @@ impl From<SessionStateError> for Error {
 /// The connection's stop reason, or `Closed` when the cell has not been
 /// recorded yet (defensive fallback).
 pub(crate) fn connection_stop_reason_or_closed(
-    cell: &OnceLock<ConnectionStopReason>,
-) -> ConnectionStopReason {
+    cell: &OnceLock<ConnectionOutcome>,
+) -> ConnectionOutcome {
     match cell.get() {
         Some(reason) => reason.clone(),
         None => {
@@ -238,15 +279,8 @@ pub(crate) fn connection_stop_reason_or_closed(
             );
             #[cfg(feature = "log")]
             log::warn!("connection stop reason not recorded; reporting ConnectionStopped(Closed)");
-            ConnectionStopReason::Closed
+            ConnectionOutcome::Closed
         }
-    }
-}
-
-/// The session stop reason corresponding to a connection stop
-impl From<ConnectionStopReason> for SessionStopReason {
-    fn from(reason: ConnectionStopReason) -> Self {
-        Self::ConnectionStopped(reason)
     }
 }
 
@@ -257,20 +291,8 @@ pub(crate) enum AllocLinkError {
     SessionNotMapped,
 
     #[error("The session stopped before the link was attached: {:?}", .0)]
-    SessionStopped(crate::link::SessionStopReason),
+    SessionStopped(SessionStopped),
 
     #[error("Link name must be unique")]
     DuplicatedLinkName,
-}
-
-/// Error with attempting to end a session
-#[derive(Debug, thiserror::Error)]
-pub enum TryEndError {
-    /// The session is already ended
-    #[error("Session is already ended")]
-    AlreadyEnded,
-
-    /// The exchange of end frame is not completed because it has not received a remote end frame
-    #[error("The sesssion has not received a remote end frame")]
-    RemoteEndNotReceived,
 }
