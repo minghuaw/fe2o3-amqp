@@ -26,7 +26,7 @@ use super::{
     target_archetype::VerifyTargetArchetype,
     ArcUnsettledMap, DeliveryFailure, LinkStateError, Receiver, ReceiverAttachError,
     ReceiverFlowState, ReceiverLink, ReceiverRelayFlowState, Sender, SenderAttachError,
-    SenderFlowState, SenderLink, SenderRelayFlowState, SessionStopReason,
+    SenderFlowState, SenderLink, SenderRelayFlowState, SessionStopped,
 };
 
 cfg_transaction! {
@@ -419,7 +419,7 @@ impl<Role, T, NameState, SS, TS> Builder<Role, T, NameState, SS, TS> {
         unsettled: ArcUnsettledMap<M>,
         output_handle: OutputHandle,
         flow_state_consumer: C,
-        session_stop_reason: Arc<OnceLock<SessionStopReason>>,
+        session_stop_reason: Arc<OnceLock<SessionStopped>>,
         max_frame_size: usize,
         // state_code: Arc<AtomicU8>,
     ) -> Link<Role, T, C, M> {

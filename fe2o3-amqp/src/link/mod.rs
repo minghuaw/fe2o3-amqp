@@ -236,7 +236,7 @@ pub(crate) struct Link<R, T, F, M> {
     pub(crate) unsettled: ArcUnsettledMap<M>,
 
     /// Why the session (or its connection) stopped, shared from the session
-    pub(crate) session_stop_reason: Arc<OnceLock<SessionStopReason>>,
+    pub(crate) session_stop_reason: Arc<OnceLock<SessionStopped>>,
 
     /// The negotiated max frame size (encoder max frame length), shared from
     /// the session and the connection; used to split transfers and attach
@@ -444,7 +444,7 @@ where
     type DetachError = DetachError;
 
     #[cfg_attr(feature = "tracing", tracing::instrument(skip_all))]
-    fn on_detach_reply(&mut self, detach: Detach) -> Result<DetachStatus, Self::DetachError> {
+    fn on_detach_reply(&mut self, detach: Detach) -> Result<LinkOutcome, Self::DetachError> {
         #[cfg(feature = "tracing")]
         tracing::trace!(detach = ?detach);
         #[cfg(feature = "log")]
@@ -505,12 +505,12 @@ where
                 true,
             ) => self.local_state = LinkState::CloseSent,
             (LinkState::Detached(remote_error), _) => {
-                return Err(DetachError::LinkDetached(DetachStatus::Detached {
+                return Err(DetachError::LinkDetached(LinkOutcome::Detached {
                     remote_error: remote_error.clone(),
                 }));
             }
             (LinkState::Closed(remote_error), _) => {
-                return Err(DetachError::LinkDetached(DetachStatus::Closed {
+                return Err(DetachError::LinkDetached(LinkOutcome::Closed {
                     remote_error: remote_error.clone(),
                 }));
             }
@@ -548,7 +548,7 @@ where
     fn apply_remote_detach_outcome(
         &mut self,
         detach: Detach,
-    ) -> Result<DetachStatus, ApplyRemoteDetachError> {
+    ) -> Result<LinkOutcome, ApplyRemoteDetachError> {
         match self.local_state.clone() {
             LinkState::Attached
             | LinkState::AttachSent
@@ -559,11 +559,11 @@ where
             | LinkState::DetachSent
             | LinkState::CloseSent => {
                 let status = if detach.closed {
-                    DetachStatus::Closed {
+                    LinkOutcome::Closed {
                         remote_error: detach.error.clone(),
                     }
                 } else {
-                    DetachStatus::Detached {
+                    LinkOutcome::Detached {
                         remote_error: detach.error.clone(),
                     }
                 };
@@ -949,11 +949,11 @@ impl LinkRelay<OutputHandle> {
 fn fail_pending_unsettled(unsettled: &ArcSenderUnsettledMap, detach: &Detach) {
     if let Some(entries) = unsettled.write().take() {
         let status = if detach.closed {
-            DetachStatus::Closed {
+            LinkOutcome::Closed {
                 remote_error: detach.error.clone(),
             }
         } else {
-            DetachStatus::Detached {
+            LinkOutcome::Detached {
                 remote_error: detach.error.clone(),
             }
         };
