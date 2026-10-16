@@ -1948,21 +1948,12 @@ impl DetachedReceiver {
 mod tests {
     use super::*;
     use crate::endpoint::OutputHandle;
-    use crate::link::state::{LinkFlowState, LinkFlowStateInner, LinkState};
+    use crate::link::state::LinkState;
     use crate::util::Sealed;
     use fe2o3_amqp_types::{definitions::SenderSettleMode, messaging::Received};
     use tokio::sync::oneshot;
 
-    fn make_flow_state(link_credit: u32) -> ReceiverFlowState {
-        Arc::new(LinkFlowState::receiver(LinkFlowStateInner {
-            initial_delivery_count: 0,
-            delivery_count: 0,
-            link_credit,
-            available: 0,
-            drain: false,
-            properties: None,
-        }))
-    }
+    use crate::link::test_util::{make_flow_state, make_receiver_inner_with_channels};
 
     fn make_disposer(
         tx: mpsc::Sender<LinkFrame>,
@@ -2180,87 +2171,6 @@ mod tests {
         }
     }
 
-    /// `TransactionAcquisition::acquire` must record the `txn-id` on the link
-    /// and send the acquiring credit flow with the flow properties included,
-    /// so the resource associates the transaction with the link
-    /// (AMQP 1.0 §4.4.3). This guards the regression where the acquiring flow
-    /// was sent with `include_properties = false` and the `txn-id` was dropped.
-    #[cfg(feature = "transaction")]
-    #[tokio::test]
-    async fn acquire_flow_carries_the_txn_id() {
-        use crate::transaction::{
-            TransactionAcquisition, TransactionBase, TransactionDischarge, TransactionRetirement,
-        };
-        use fe2o3_amqp_types::primitives::{Binary, Symbol, Value};
-
-        // `acquire`'s default body only needs `txn_id`. `is_discharged()`
-        // returns `true` so `TxnAcquisition`'s `Drop` (which uses a blocking
-        // send) does not run inside the async runtime; the recorded properties
-        // are therefore left intact for inspection.
-        struct FakeTxn {
-            id: Binary,
-        }
-        impl TransactionBase for FakeTxn {
-            fn txn_id(&self) -> &Binary {
-                &self.id
-            }
-        }
-        impl TransactionDischarge for FakeTxn {
-            type Error = crate::link::FlowError;
-            fn is_discharged(&self) -> bool {
-                true
-            }
-            async fn discharge(&mut self, _fail: bool) -> Result<(), Self::Error> {
-                Ok(())
-            }
-        }
-        impl TransactionRetirement for FakeTxn {
-            type RetireError = crate::link::DispositionError;
-        }
-        impl TransactionAcquisition for FakeTxn {}
-
-        let (inner, _session_rx, mut outgoing_rx, _incoming_tx) =
-            make_receiver_inner_with_channels(4096);
-        let mut receiver = Receiver { inner };
-
-        let id = Binary::from(vec![1u8, 2, 3]);
-        let acq = FakeTxn { id: id.clone() }
-            .acquire(&mut receiver, 1)
-            .await
-            .expect("acquiring");
-
-        // The acquiring flow must carry the txn-id in its properties.
-        match outgoing_rx.recv().await {
-            Some(LinkFrame::Flow(flow)) => {
-                let props = flow
-                    .properties
-                    .expect("the acquiring flow must carry properties");
-                assert_eq!(
-                    props.get(&Symbol::from("txn-id")),
-                    Some(&Value::Binary(id.clone()))
-                );
-            }
-            other => panic!("unexpected frame: {other:?}"),
-        }
-
-        drop(acq); // no-op Drop (is_discharged() == true), releases the borrow
-
-        // ...and the txn-id was recorded on the link's flow state.
-        assert!(
-            receiver
-                .inner
-                .link
-                .flow_state
-                .lock
-                .read()
-                .properties
-                .as_ref()
-                .expect("properties must be recorded")
-                .contains_key(&Symbol::from("txn-id")),
-            "the link must record the txn-id"
-        );
-    }
-
     #[tokio::test]
     async fn no_disposition_for_unknown_delivery_tag() {
         let (tx, mut rx) = mpsc::channel::<LinkFrame>(16);
@@ -2331,52 +2241,6 @@ mod tests {
             count += 1;
         }
         assert_eq!(count, 100);
-    }
-
-    fn make_receiver_inner_with_channels(
-        max_frame_size: usize,
-    ) -> (
-        ReceiverInner<ReceiverLink<Target>>,
-        mpsc::Receiver<SessionControl>,
-        mpsc::Receiver<LinkFrame>,
-        mpsc::Sender<LinkFrame>,
-    ) {
-        let (session_tx, session_rx) = mpsc::channel::<SessionControl>(16);
-        let (outgoing_tx, outgoing_rx) = mpsc::channel::<LinkFrame>(16);
-        let (incoming_tx, incoming_rx) = mpsc::channel::<LinkFrame>(16);
-        let unsettled: ArcReceiverUnsettledMap = Arc::new(parking_lot::RwLock::new(None));
-        let link = ReceiverLink::<Target> {
-            role: std::marker::PhantomData,
-            local_state: LinkState::Attached,
-            name: String::from("test-receiver"),
-            output_handle: Some(OutputHandle(0)),
-            input_handle: None,
-            snd_settle_mode: SenderSettleMode::Mixed,
-            rcv_settle_mode: ReceiverSettleMode::First,
-            source: None,
-            target: None,
-            max_message_size: 0,
-            offered_capabilities: None,
-            desired_capabilities: None,
-            flow_state: make_flow_state(200),
-            unsettled,
-            session_stop_reason: Arc::new(OnceLock::new()),
-            max_frame_size,
-            verify_incoming_source: true,
-            verify_incoming_target: true,
-        };
-        let inner = ReceiverInner {
-            link,
-            buffer_size: 16,
-            credit_mode: CreditMode::Auto(200),
-            processed: Arc::new(AtomicU32::new(0)),
-            auto_accept: false,
-            session: session_tx,
-            outgoing: outgoing_tx,
-            incoming: incoming_rx,
-            incomplete_transfer: None,
-        };
-        (inner, session_rx, outgoing_rx, incoming_tx)
     }
 
     fn make_receiver_inner(max_frame_size: usize) -> ReceiverInner<ReceiverLink<Target>> {
