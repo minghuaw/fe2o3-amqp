@@ -206,9 +206,7 @@ impl From<LinkRelayError> for Error {
     fn from(error: LinkRelayError) -> Self {
         match error {
             LinkRelayError::UnattachedHandle => Self::UnattachedHandle,
-            LinkRelayError::TransferFrameToSender => {
-                unreachable!("A sender should not receive a transfer frame")
-            }
+            LinkRelayError::TransferFrameToSender => Self::TransferFrameToSender,
         }
     }
 }
@@ -266,11 +264,11 @@ pub(crate) enum AllocLinkError {
 /// Error with attempting to end a session
 #[derive(Debug, thiserror::Error)]
 pub enum TryEndError {
-    /// The session is already ended
-    #[error("Session is already ended")]
-    AlreadyEnded,
-
     /// The exchange of end frame is not completed because it has not received a remote end frame
-    #[error("The sesssion has not received a remote end frame")]
+    #[error("The session has not received a remote end frame")]
     RemoteEndNotReceived,
+
+    /// The session ended with an error
+    #[error("The session ended with an error: {0}")]
+    Ended(Box<Error>),
 }

@@ -36,7 +36,7 @@ cfg_transaction! {
 
     use crate::{
         endpoint::{HandleDeclare, HandleDischarge},
-        transaction::AllocTxnIdError,
+        transaction::CoordinatorAllocTxnIdError,
     };
 }
 
@@ -68,6 +68,9 @@ pub const DEFAULT_WINDOW: Uint = 5000;
 pub struct SessionHandle<R> {
     /// This value should only be changed in the `on_end` method
     pub(crate) is_ended: bool,
+    /// The terminal outcome, cached once observed so later `on_end`/`try_end`
+    /// calls report the same result
+    pub(crate) terminal_outcome: Option<TerminalOutcome>,
     pub(crate) control: mpsc::Sender<SessionControl>,
     pub(crate) engine_handle: JoinHandle<()>,
     pub(crate) outcome: oneshot::Receiver<Result<(), Error>>,
@@ -80,6 +83,35 @@ pub struct SessionHandle<R> {
     /// the connection and with the links
     pub(crate) max_frame_size: usize,
     pub(crate) link_listener: R,
+}
+
+/// The terminal outcome of the session event loop.
+///
+/// Cached on the handle once observed so repeated `on_end`/`try_end` calls
+/// report the same result: a clean end stays `Ok`, a remote end error is
+/// replayed, and any other terminal error degrades to `IllegalState` because
+/// the concrete error cannot be cloned.
+pub(crate) enum TerminalOutcome {
+    Ok,
+    RemoteError(definitions::Error),
+    Error,
+}
+impl TerminalOutcome {
+    fn from_result(result: &Result<(), Error>) -> Self {
+        match result {
+            Ok(()) => Self::Ok,
+            Err(Error::RemoteEndedWithError(error)) => Self::RemoteError(error.clone()),
+            Err(_) => Self::Error,
+        }
+    }
+
+    fn to_result(&self) -> Result<(), Error> {
+        match self {
+            Self::Ok => Ok(()),
+            Self::RemoteError(error) => Err(Error::RemoteEndedWithError(error.clone())),
+            Self::Error => Err(Error::IllegalState),
+        }
+    }
 }
 
 impl<R> std::fmt::Debug for SessionHandle<R> {
@@ -131,27 +163,33 @@ impl<R> SessionHandle<R> {
 
     /// Tries to end the session
     ///
+    /// A session that already ended reports the outcome it reached, including
+    /// a remote end error, if any.
+    ///
     /// # Returns
     ///
-    /// - `Ok(Ok(()))` if the session has ended successfully
-    /// - `Ok(Err(_))` if an error occurred during the session ending on either side
-    /// - `Err(TryEndError::AlreadyEnded)` if the session has already ended
+    /// - `Ok(())` if the session ended cleanly
+    /// - `Err(TryEndError::Ended(error))` if the session ended with an error
     /// - `Err(TryEndError::RemoteEndNotReceived)` if the remote end has not been received yet
-    pub fn try_end(&mut self) -> Result<Result<(), Error>, TryEndError> {
-        if self.is_ended {
-            return Err(TryEndError::AlreadyEnded);
+    pub fn try_end(&mut self) -> Result<(), TryEndError> {
+        if let Some(outcome) = &self.terminal_outcome {
+            return outcome
+                .to_result()
+                .map_err(|error| TryEndError::Ended(Box::new(error)));
         }
 
         let _ = self.control.try_send(SessionControl::End(None));
         match self.outcome.try_recv() {
             Ok(res) => {
                 self.is_ended = true;
-                Ok(res)
+                self.terminal_outcome = Some(TerminalOutcome::from_result(&res));
+                res.map_err(|error| TryEndError::Ended(Box::new(error)))
             }
             Err(TryRecvError::Empty) => Err(TryEndError::RemoteEndNotReceived),
             Err(TryRecvError::Closed) => {
                 self.is_ended = true;
-                Ok(Err(Error::IllegalState))
+                self.terminal_outcome = Some(TerminalOutcome::Error);
+                Err(TryEndError::Ended(Box::new(Error::IllegalState)))
             }
         }
     }
@@ -163,9 +201,8 @@ impl<R> SessionHandle<R> {
         /// this method returns `Ok`; connection-level errors are reported through the
         /// [`ConnectionHandle`](crate::connection::ConnectionHandle).
         ///
-        /// An `Error::IllegalState` will be returned if called after any of [`end`](#method.end),
-        /// [`end_with_error`](#method.end_with_error), [`on_end`](#on_end) has beend executed. This
-        /// will cause the JoinHandle to be polled after completion, which causes a panic.
+        /// A session that already ended reports the outcome it reached, including
+        /// a remote end error, if any.
         ///
         /// # wasm32 support
         ///
@@ -188,9 +225,8 @@ impl<R> SessionHandle<R> {
 
         /// End the session with an error
         ///
-        /// An `Error::IllegalState` will be returned if called after any of [`end`](#method.end),
-        /// [`end_with_error`](#method.end_with_error), [`on_end`](#on_end) has beend executed.
-        /// This will cause the JoinHandle to be polled after completion, which causes a panic.
+        /// A session that already ended reports the outcome it reached, including
+        /// a remote end error, if any.
         ///
         /// # wasm32 support
         ///
@@ -211,21 +247,22 @@ impl<R> SessionHandle<R> {
 
     /// Returns when the underlying event loop has stopped
     ///
-    /// An `Error::IllegalState` will be returned if called after any of [`end`](#method.end),
-    /// [`end_with_error`](#method.end_with_error), [`on_end`](#on_end) has beend executed. This
-    /// will cause the JoinHandle to be polled after completion, which causes a panic.
+    /// A session that already ended reports the outcome it reached, including
+    /// a remote end error, if any.
     pub async fn on_end(&mut self) -> Result<(), Error> {
-        if self.is_ended {
-            return Err(Error::IllegalState);
+        if let Some(outcome) = &self.terminal_outcome {
+            return outcome.to_result();
         }
 
         match (&mut self.outcome).await {
             Ok(res) => {
                 self.is_ended = true;
+                self.terminal_outcome = Some(TerminalOutcome::from_result(&res));
                 res
             }
             Err(_) => {
                 self.is_ended = true;
+                self.terminal_outcome = Some(TerminalOutcome::Error);
                 Err(Error::IllegalState)
             }
         }
@@ -1189,9 +1226,9 @@ cfg_transaction! {
         // This should be unreachable, but an error is probably a better way
         fn allocate_transaction_id(
             &mut self,
-        ) -> Result<fe2o3_amqp_types::transaction::TransactionId, AllocTxnIdError> {
+        ) -> Result<fe2o3_amqp_types::transaction::TransactionId, CoordinatorAllocTxnIdError> {
             // Err(Error::amqp_error(AmqpError::NotImplemented, "Resource side transaction is not enabled".to_string()))
-            Err(AllocTxnIdError::NotImplemented)
+            Err(CoordinatorAllocTxnIdError::NotImplemented)
         }
     }
 

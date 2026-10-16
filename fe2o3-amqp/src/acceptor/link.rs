@@ -15,13 +15,14 @@ use fe2o3_amqp_types::{
 
 use crate::{
     connection::DEFAULT_OUTGOING_BUFFER_SIZE,
-    link::SessionStopReason,
     session::SessionHandle,
     util::Initialized,
 };
 
 use super::{
-    builder::Builder, error::AcceptorAttachError, local_receiver_link::LocalReceiverLinkAcceptor,
+    builder::Builder,
+    error::{acceptor_attach_error_from_stop_reason, AcceptorAttachError},
+    local_receiver_link::LocalReceiverLinkAcceptor,
     local_sender_link::LocalSenderLinkAcceptor, session::ListenerSessionHandle,
     SupportedReceiverSettleModes, SupportedSenderSettleModes,
 };
@@ -223,23 +224,9 @@ where
         let remote_attach = match session.next_incoming_attach().await {
             Some(attach) => attach,
             None => {
-                return Err(match session.session_stop_reason.get() {
-                    Some(reason) => AcceptorAttachError::SessionStopped(reason.clone()),
-                    None => {
-                        // The session engine should always record a stop reason
-                        // before its channels close; an unset cell here is a
-                        // defensive fallback.
-                        #[cfg(feature = "tracing")]
-                        tracing::warn!(
-                            "accept: session stop reason not recorded; reporting SessionStopped(Ended)"
-                        );
-                        #[cfg(feature = "log")]
-                        log::warn!(
-                            "accept: session stop reason not recorded; reporting SessionStopped(Ended)"
-                        );
-                        AcceptorAttachError::SessionStopped(SessionStopReason::Ended)
-                    }
-                });
+                return Err(acceptor_attach_error_from_stop_reason(
+                    &session.session_stop_reason,
+                ));
             }
         };
         self.accept_incoming_attach(remote_attach, session).await
@@ -253,10 +240,10 @@ mod tests {
     use fe2o3_amqp_types::performatives::Attach;
     use tokio::sync::{mpsc, oneshot};
 
-    use super::{AcceptorAttachError, LinkAcceptor, ListenerSessionHandle, SessionHandle, SessionStopReason};
+    use super::{AcceptorAttachError, LinkAcceptor, ListenerSessionHandle, SessionHandle};
     use crate::{
         control::SessionControl,
-        link::LinkFrame,
+        link::{LinkFrame, SessionStopReason},
         session::error::Error,
     };
 
@@ -277,6 +264,7 @@ mod tests {
         }
         SessionHandle {
             is_ended: false,
+            terminal_outcome: None,
             control,
             engine_handle: tokio::spawn(async {}),
             outcome,

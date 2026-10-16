@@ -1,5 +1,7 @@
 //! Implements errors for the acceptors
 
+use std::sync::OnceLock;
+
 use crate::link::{ReceiverAttachError, SenderAttachError, SessionStopReason};
 
 /// Error accepting incoming attach
@@ -16,6 +18,26 @@ pub enum AcceptorAttachError {
     /// Local receiver is unable to accept incoming attach from remote sender
     #[error("Local receiver is unable to accept incoming attach from remote sender")]
     LocalReceiver(ReceiverAttachError),
+}
+
+/// The [`AcceptorAttachError`] for an accept that failed because the session
+/// (or its connection) stopped; `SessionStopped(Ended)` when no stop reason
+/// was recorded (defensive).
+pub(crate) fn acceptor_attach_error_from_stop_reason(
+    cell: &OnceLock<SessionStopReason>,
+) -> AcceptorAttachError {
+    match cell.get() {
+        Some(reason) => AcceptorAttachError::SessionStopped(reason.clone()),
+        None => {
+            #[cfg(feature = "tracing")]
+            tracing::warn!(
+                "accept: session stop reason not recorded; reporting SessionStopped(Ended)"
+            );
+            #[cfg(feature = "log")]
+            log::warn!("accept: session stop reason not recorded; reporting SessionStopped(Ended)");
+            AcceptorAttachError::SessionStopped(SessionStopReason::Ended)
+        }
+    }
 }
 
 impl From<SenderAttachError> for AcceptorAttachError {
