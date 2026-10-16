@@ -10,8 +10,8 @@ use crate::{
 };
 
 use super::{
-    link_error_from_closed_channel, state::LinkState, AttachMode, DetachError, LinkError,
-    LinkFrame, LinkOutcome, LinkRelay, SessionStopped,
+    link_error_from_closed_channel, state::LinkHandles, state::LinkState, AttachMode, DetachError,
+    LinkError, LinkFrame, LinkOutcome, LinkRelay, SessionStopped,
 };
 
 pub(crate) trait LinkEndpointInner
@@ -73,7 +73,10 @@ where
             self.session_stop_reason(),
         )
         .await?; // FIXME: cancel safe?
-        *self.link_mut().output_handle_mut() = Some(handle);
+        self.link_mut().register(LinkHandles {
+            local: handle,
+            remote: None,
+        });
         Ok(())
     }
 }

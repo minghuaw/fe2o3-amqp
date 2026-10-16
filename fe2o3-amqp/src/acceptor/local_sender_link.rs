@@ -15,7 +15,7 @@ use crate::{
     endpoint::{InputHandle, LinkAttach, LinkExt},
     link::{
         sender::SenderInner,
-        state::{LinkFlowState, LinkFlowStateInner, LinkState},
+        state::{LinkFlowState, LinkFlowStateInner, LinkHandles, LinkState},
         AttachMode, LinkRelay, SenderAttachError, SenderLink,
     },
     session::SessionHandle,
@@ -105,6 +105,7 @@ where
             available: 0,
             drain: false,
             properties: shared.properties.clone(),
+            txn_id: None,
         };
         let flow_state = Arc::new(LinkFlowState::sender(flow_state_inner));
         let notifier = Arc::new(Notify::new());
@@ -151,8 +152,10 @@ where
             local_state: LinkState::Unattached, // will be set in `on_incoming_attach`
 
             name: remote_attach.name.clone(),
-            output_handle: Some(output_handle),
-            input_handle: None, // this will be set in `on_incoming_attach`
+            handles: Some(LinkHandles {
+                local: output_handle,
+                remote: None, // this will be set in `on_incoming_attach`
+            }),
             snd_settle_mode,
             rcv_settle_mode,
             source: local_source,
