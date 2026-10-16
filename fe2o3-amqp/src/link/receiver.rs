@@ -2180,6 +2180,87 @@ mod tests {
         }
     }
 
+    /// `TransactionAcquisition::acquire` must record the `txn-id` on the link
+    /// and send the acquiring credit flow with the flow properties included,
+    /// so the resource associates the transaction with the link
+    /// (AMQP 1.0 §4.4.3). This guards the regression where the acquiring flow
+    /// was sent with `include_properties = false` and the `txn-id` was dropped.
+    #[cfg(feature = "transaction")]
+    #[tokio::test]
+    async fn acquire_flow_carries_the_txn_id() {
+        use crate::transaction::{
+            TransactionAcquisition, TransactionBase, TransactionDischarge, TransactionRetirement,
+        };
+        use fe2o3_amqp_types::primitives::{Binary, Symbol, Value};
+
+        // `acquire`'s default body only needs `txn_id`. `is_discharged()`
+        // returns `true` so `TxnAcquisition`'s `Drop` (which uses a blocking
+        // send) does not run inside the async runtime; the recorded properties
+        // are therefore left intact for inspection.
+        struct FakeTxn {
+            id: Binary,
+        }
+        impl TransactionBase for FakeTxn {
+            fn txn_id(&self) -> &Binary {
+                &self.id
+            }
+        }
+        impl TransactionDischarge for FakeTxn {
+            type Error = crate::link::FlowError;
+            fn is_discharged(&self) -> bool {
+                true
+            }
+            async fn discharge(&mut self, _fail: bool) -> Result<(), Self::Error> {
+                Ok(())
+            }
+        }
+        impl TransactionRetirement for FakeTxn {
+            type RetireError = crate::link::DispositionError;
+        }
+        impl TransactionAcquisition for FakeTxn {}
+
+        let (inner, _session_rx, mut outgoing_rx, _incoming_tx) =
+            make_receiver_inner_with_channels(4096);
+        let mut receiver = Receiver { inner };
+
+        let id = Binary::from(vec![1u8, 2, 3]);
+        let acq = FakeTxn { id: id.clone() }
+            .acquire(&mut receiver, 1)
+            .await
+            .expect("acquiring");
+
+        // The acquiring flow must carry the txn-id in its properties.
+        match outgoing_rx.recv().await {
+            Some(LinkFrame::Flow(flow)) => {
+                let props = flow
+                    .properties
+                    .expect("the acquiring flow must carry properties");
+                assert_eq!(
+                    props.get(&Symbol::from("txn-id")),
+                    Some(&Value::Binary(id.clone()))
+                );
+            }
+            other => panic!("unexpected frame: {other:?}"),
+        }
+
+        drop(acq); // no-op Drop (is_discharged() == true), releases the borrow
+
+        // ...and the txn-id was recorded on the link's flow state.
+        assert!(
+            receiver
+                .inner
+                .link
+                .flow_state
+                .lock
+                .read()
+                .properties
+                .as_ref()
+                .expect("properties must be recorded")
+                .contains_key(&Symbol::from("txn-id")),
+            "the link must record the txn-id"
+        );
+    }
+
     #[tokio::test]
     async fn no_disposition_for_unknown_delivery_tag() {
         let (tx, mut rx) = mpsc::channel::<LinkFrame>(16);
