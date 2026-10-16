@@ -15,7 +15,7 @@ use crate::{
     link::{
         delivery::{Delivery, DeliveryInfo},
         state::LinkState,
-        ApplyRemoteDetachError, LinkFrame, SessionStopReason,
+        ApplyRemoteDetachError, AttachMode, DetachStatus, LinkFrame, SessionStopReason,
     },
     util::{AsByteIterator, IntoReader},
     Payload,
@@ -38,13 +38,13 @@ pub(crate) trait LinkDetach {
     ///
     /// A crossing detach is `IllegalState`. In both accepted transitions the
     /// output handle is released and the peer's `error` field, if any, is
-    /// returned as `RemoteDetachedWithError` / `RemoteClosedWithError`, so the
-    /// close/detach procedure can propagate it to its caller.
+    /// reported in the returned [`DetachStatus`], so the close/detach
+    /// procedure can propagate it to its caller.
     ///
     /// A detach the peer sends on its own is answered by the relay already,
     /// so the engine records it with [`Self::apply_remote_detach_outcome`]
     /// instead; that method accepts crossing detaches and any attached state.
-    fn on_detach_reply(&mut self, detach: Detach) -> Result<(), Self::DetachError>;
+    fn on_detach_reply(&mut self, detach: Detach) -> Result<DetachStatus, Self::DetachError>;
 
     async fn send_detach(
         &mut self,
@@ -65,12 +65,12 @@ pub(crate) trait LinkDetach {
     ///
     /// # Errors
     ///
-    /// See [`ApplyRemoteDetachError`]: `RemoteDetachedWithError` /
-    /// `RemoteClosedWithError` are returned after the outcome was recorded
-    /// (the link is already `Detached`/`Closed`); `IllegalState` means the
-    /// outcome was not recorded and nothing changed.
-    fn apply_remote_detach_outcome(&mut self, detach: Detach)
-        -> Result<(), ApplyRemoteDetachError>;
+    /// `IllegalState` means the outcome was not recorded and nothing changed
+    /// (the link is `Unattached`, already `Detached`, or already `Closed`).
+    fn apply_remote_detach_outcome(
+        &mut self,
+        detach: Detach,
+    ) -> Result<DetachStatus, ApplyRemoteDetachError>;
 }
 
 pub(crate) trait LinkAttach {
@@ -85,7 +85,7 @@ pub(crate) trait LinkAttach {
     async fn send_attach(
         &mut self,
         writer: &mpsc::Sender<LinkFrame>,
-        is_reattaching: bool,
+        mode: AttachMode,
     ) -> Result<(), Self::AttachError>;
 }
 
@@ -125,7 +125,7 @@ pub(crate) trait LinkExt: Link {
         &mut self,
         writer: &mpsc::Sender<LinkFrame>,
         reader: &mut mpsc::Receiver<LinkFrame>,
-        is_reattaching: bool,
+        mode: AttachMode,
     ) -> Result<Self::AttachExchange, Self::AttachError>;
 
     async fn handle_attach_error(

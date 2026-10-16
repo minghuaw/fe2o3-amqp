@@ -13,7 +13,7 @@ use tokio::sync::{mpsc, Notify};
 use crate::{
     connection::DEFAULT_OUTGOING_BUFFER_SIZE,
     endpoint::{LinkExt, OutputHandle},
-    link::{Link, LinkIncomingItem, LinkRelay},
+    link::{AttachMode, Link, LinkIncomingItem, LinkRelay},
     session::{self, SessionHandle},
     util::{Consumer, Producer},
 };
@@ -556,7 +556,7 @@ where
         );
 
         match link
-            .exchange_attach(&session.outgoing, &mut incoming_rx, false)
+            .exchange_attach(&session.outgoing, &mut incoming_rx, AttachMode::Resume)
             .await
         {
             Ok(exchange) => {
@@ -590,6 +590,7 @@ where
             session: session.control.clone(),
             outgoing,
             incoming: incoming_rx,
+            pending_redeliveries: Vec::new(),
         };
         Ok(inner)
     }
@@ -679,7 +680,7 @@ where
         );
 
         match link
-            .exchange_attach(&session.outgoing, &mut incoming_rx, false)
+            .exchange_attach(&session.outgoing, &mut incoming_rx, AttachMode::Resume)
             .await
         {
             Ok(outcome) => outcome.complete_or(ReceiverAttachError::IllegalState)?,
