@@ -100,7 +100,7 @@ where
         let input_handle = self
             .input_handle
             .clone()
-            .ok_or(TransferError::NotAttached)?;
+            .ok_or(LinkStateError::InvariantViolation)?;
 
         // The connection engine publishes the negotiated encoder max frame
         // length before the connection handle is created; links are only
@@ -302,7 +302,7 @@ where
         let handle = self
             .output_handle
             .clone()
-            .ok_or(TransferError::NotAttached)?
+            .ok_or(LinkStateError::InvariantViolation)?
             .into();
 
         let settled = match self.snd_settle_mode {
@@ -395,7 +395,7 @@ where
         let delivery_tag = transfer
             .delivery_tag
             .clone()
-            .ok_or(LinkStateError::IllegalState)?;
+            .ok_or(LinkStateError::InvariantViolation)?;
         if self.is_settled_on_send(&transfer) {
             self.send_transfer_without_modifying_unsettled_map(writer, transfer, payload)
                 .await?;
@@ -896,7 +896,6 @@ where
         match attach_error {
             SenderAttachError::SessionStopped(_)
             | SenderAttachError::SessionNotMapped
-            | SenderAttachError::IllegalState
             | SenderAttachError::InvariantViolation
             | SenderAttachError::NonAttachFrameReceived
             | SenderAttachError::UnexpectedUnsettledMap
@@ -927,6 +926,7 @@ where
             }
 
             SenderAttachError::CoordinatorIsNotImplemented
+            | SenderAttachError::IllegalState
             | SenderAttachError::SourceAddressIsSomeWhenDynamicIsTrue
             | SenderAttachError::TargetAddressIsNoneWhenDynamicIsTrue
             | SenderAttachError::DynamicNodePropertiesIsSomeWhenDynamicIsFalse => {
@@ -996,13 +996,29 @@ where
         + Sync,
 {
     match reader.recv().await {
-        Some(LinkFrame::Detach(remote_detach)) => match link.on_detach_reply(remote_detach) {
-            Ok(status) => match status.remote_error() {
-                Some(error) => SenderAttachError::RemoteClosedWithError(error.clone()),
-                None => err,
-            },
-            Err(detach_error) => SenderAttachError::from(detach_error),
-        },
+        Some(LinkFrame::Detach(remote_detach)) => {
+            if !remote_detach.closed {
+                // §2.6.6: the peer's non-closing detach crossed our rejection
+                // closing detach, so the peer must reattach and then close.
+                // The attach already failed, so the primary attach error
+                // stands (the reattach dance is not completed on this path).
+                #[cfg(feature = "tracing")]
+                tracing::debug!(
+                    "peer detach crossed the rejection detach; keeping the attach error"
+                );
+                #[cfg(feature = "log")]
+                log::debug!("peer detach crossed the rejection detach; keeping the attach error");
+                return err;
+            }
+
+            match link.on_matching_detach_reply(remote_detach) {
+                Ok(status) => match status.remote_error() {
+                    Some(error) => SenderAttachError::RemoteClosedWithError(error.clone()),
+                    None => err,
+                },
+                Err(detach_error) => SenderAttachError::from(detach_error),
+            }
+        }
         Some(_) => SenderAttachError::NonAttachFrameReceived,
         None => sender_attach_error_from_stop_reason(&link.session_stop_reason),
     }

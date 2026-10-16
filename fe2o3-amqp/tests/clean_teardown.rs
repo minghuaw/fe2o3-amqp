@@ -11,7 +11,8 @@ use std::time::Duration;
 use fe2o3_amqp::{
     acceptor::{ConnectionAcceptor, ListenerSessionHandle, SessionAcceptor},
     connection::{
-        Connection, ConnectionHandle, ConnectionOutcome, Error as ConnectionError, TryCloseError,
+        Connection, ConnectionHandle, ConnectionOutcome, Error as ConnectionError, OpenError,
+        TryCloseError,
     },
     session::{Error as SessionError, Session, SessionHandle, SessionOutcome, TryEndError},
     types::definitions::{self, AmqpError},
@@ -19,12 +20,48 @@ use fe2o3_amqp::{
 
 mod common;
 
+use std::{
+    io,
+    pin::Pin,
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        Arc, Mutex,
+    },
+    task::{Context, Poll, Waker},
+};
+
+use tokio::io::{AsyncRead, ReadBuf};
+
 fn test_error() -> definitions::Error {
     definitions::Error::new(
         AmqpError::InternalError,
         Some("test error".to_string()),
         None,
     )
+}
+
+/// A read half that reports end-of-stream once the shared flag is set, so a
+/// test can make an established connection lose its transport.
+#[derive(Debug)]
+struct EofSwitch {
+    inner: tokio::io::ReadHalf<tokio::io::DuplexStream>,
+    eof: Arc<AtomicBool>,
+    waker: Arc<Mutex<Option<Waker>>>,
+}
+
+impl AsyncRead for EofSwitch {
+    fn poll_read(
+        self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        buf: &mut ReadBuf<'_>,
+    ) -> Poll<io::Result<()>> {
+        let this = self.get_mut();
+        if this.eof.load(Ordering::SeqCst) {
+            return Poll::Ready(Ok(()));
+        }
+        *this.waker.lock().unwrap() = Some(cx.waker().clone());
+        Pin::new(&mut this.inner).poll_read(cx, buf)
+    }
 }
 
 async fn establish_connection_pair() -> (
@@ -302,5 +339,101 @@ async fn session_end_reports_connection_stop_as_error() {
     assert!(
         matches!(error, fe2o3_amqp::session::Error::ConnectionStopped(_)),
         "expected ConnectionStopped, got {error:?}"
+    );
+}
+
+/// A transport that ends while the client waits for the server `Open`
+/// reports the new `OpenError::ConnectionLost`.
+#[tokio::test]
+async fn connection_lost_during_open_is_reported() {
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+
+    let (client_io, mut server_io) = tokio::io::duplex(4096);
+
+    let server = tokio::spawn(async move {
+        let mut header = [0u8; 8];
+        server_io
+            .read_exact(&mut header)
+            .await
+            .expect("the client protocol header");
+        server_io
+            .write_all(b"AMQP\x00\x01\x00\x00")
+            .await
+            .expect("the server protocol header");
+
+        // Consume the client's Open frame, then drop the stream: the client
+        // is left waiting for the server Open.
+        let mut size = [0u8; 4];
+        server_io
+            .read_exact(&mut size)
+            .await
+            .expect("the open frame size");
+        let size = u32::from_be_bytes(size) as usize;
+        let mut open = vec![0u8; size - 4];
+        server_io
+            .read_exact(&mut open)
+            .await
+            .expect("the open frame body");
+    });
+
+    let error = tokio::time::timeout(
+        Duration::from_secs(10),
+        Connection::builder()
+            .container_id("test-client")
+            .open_with_stream(client_io),
+    )
+    .await
+    .expect("open timed out")
+    .expect_err("the open must fail");
+
+    assert!(
+        matches!(error, OpenError::ConnectionLost),
+        "expected ConnectionLost, got {error:?}"
+    );
+
+    server.await.expect("the server task");
+}
+
+/// A transport that ends after the open exchange reports the new
+/// `ConnectionLost` error instead of `IllegalState`.
+#[tokio::test]
+async fn connection_lost_after_open_is_reported() {
+    let (client_io, server_io) = tokio::io::duplex(4096);
+
+    let acceptor = ConnectionAcceptor::builder()
+        .container_id("test-listener")
+        .build();
+    let connection_task = tokio::spawn(async move { acceptor.accept(server_io).await });
+
+    let (client_read, client_write) = tokio::io::split(client_io);
+    let eof = Arc::new(AtomicBool::new(false));
+    let waker: Arc<Mutex<Option<Waker>>> = Arc::new(Mutex::new(None));
+    let guarded = EofSwitch {
+        inner: client_read,
+        eof: eof.clone(),
+        waker: waker.clone(),
+    };
+
+    let mut client_connection = common::expect_ok!(Connection::builder()
+        .container_id("test-client")
+        .open_with_stream(tokio::io::join(guarded, client_write)))
+    .await;
+    let _server_connection = connection_task
+        .await
+        .expect("connection accept task panicked")
+        .expect("connection accept failed");
+
+    eof.store(true, Ordering::SeqCst);
+    if let Some(waker) = waker.lock().unwrap().take() {
+        waker.wake();
+    }
+
+    let result = tokio::time::timeout(Duration::from_secs(10), client_connection.on_close())
+        .await
+        .expect("on_close timed out");
+
+    assert!(
+        matches!(result, Err(ConnectionError::ConnectionLost)),
+        "expected ConnectionLost, got {result:?}"
     );
 }

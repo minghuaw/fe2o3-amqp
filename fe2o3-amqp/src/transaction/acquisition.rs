@@ -149,16 +149,20 @@ where
     T: TransactionBase + TransactionDischarge + TransactionRetirement,
 {
     fn drop(&mut self) {
-        if !self.txn.is_discharged() {
-            // clear txn-id from the link's properties
-            {
-                let mut writer = self.recver.inner.link.flow_state.lock.write();
-                writer
-                    .properties
-                    .as_mut()
-                    .map(|fields| fields.swap_remove(TXN_ID_KEY));
-            }
+        // Clear the txn-id from the link's properties if it is still present.
+        // `commit`/`rollback` clear it in `cleanup`; a direct discharge through
+        // `txn_mut()` bypasses `cleanup` and would otherwise leave the id
+        // behind, making a later `acquire` on the same link fail.
+        let cleared = {
+            let mut writer = self.recver.inner.link.flow_state.lock.write();
+            writer
+                .properties
+                .as_mut()
+                .and_then(|fields| fields.swap_remove(TXN_ID_KEY))
+                .is_some()
+        };
 
+        if cleared {
             // Set drain to true; the flow's properties (with the `txn-id`
             // removed) are included so the resource stops associating the
             // transaction with the link (AMQP 1.0 §4.4.3).

@@ -168,7 +168,7 @@ impl<R> SessionHandle<R> {
             Err(TryRecvError::Empty) => Err(TryEndError::RemoteEndNotReceived),
             Err(TryRecvError::Closed) => {
                 self.is_ended = true;
-                Err(TryEndError::Stopped(Box::new(Error::IllegalState)))
+                Err(TryEndError::Stopped(Box::new(Error::InvariantViolation)))
             }
         }
     }
@@ -256,7 +256,7 @@ impl<R> SessionHandle<R> {
             }
             Err(_) => {
                 self.is_ended = true;
-                Err(Error::IllegalState)
+                Err(Error::InvariantViolation)
             }
         }
     }
@@ -996,7 +996,16 @@ impl endpoint::Session for Session {
                 }
                 Ok(())
             }
-            _ => Err(SessionStateError::IllegalState), // End session with illegal state?
+            // A late or duplicate `End` arrives when the session has not
+            // begun or has already received its `End`; it is ignored because
+            // the session already reached its terminal state.
+            _ => {
+                #[cfg(feature = "tracing")]
+                tracing::trace!(?end, "ignoring a late or duplicate incoming End");
+                #[cfg(feature = "log")]
+                log::trace!("ignoring a late or duplicate incoming End: {:?}", end);
+                Ok(())
+            }
         }
     }
 
@@ -1039,7 +1048,7 @@ impl endpoint::Session for Session {
                 })?;
                 self.local_state = SessionState::Mapped;
             }
-            _ => return Err(SessionStateError::IllegalState),
+            _ => return Err(SessionStateError::InvariantViolation),
         }
 
         Ok(())
@@ -1056,7 +1065,7 @@ impl endpoint::Session for Session {
                 false => self.local_state = SessionState::EndSent,
             },
             SessionState::EndReceived => self.local_state = SessionState::Unmapped,
-            _ => return Err(SessionStateError::IllegalState),
+            _ => return Err(SessionStateError::InvariantViolation),
         }
 
         let frame = SessionFrame::new(self.outgoing_channel, SessionFrameBody::End(End { error }));
@@ -1348,6 +1357,53 @@ mod tests {
         assert!(session.maybe_outgoing_session_flow().is_none());
     }
 
+    /// Sending `begin` from a state that already sent one is an internal
+    /// invariant violation, not a peer violation.
+    #[tokio::test]
+    async fn send_begin_in_wrong_state_is_invariant_violation() {
+        let mut session = mapped_session();
+        session.local_state = SessionState::BeginSent;
+        let (writer, _rx) = tokio::sync::mpsc::channel(8);
+
+        let result = session.send_begin(&writer).await;
+
+        assert!(matches!(
+            result,
+            Err(crate::session::error::SessionStateError::InvariantViolation)
+        ));
+    }
+
+    /// Sending `end` from a state that already sent one is an internal
+    /// invariant violation, not a peer violation.
+    #[tokio::test]
+    async fn send_end_in_wrong_state_is_invariant_violation() {
+        let mut session = mapped_session();
+        session.local_state = SessionState::EndSent;
+        let (writer, _rx) = tokio::sync::mpsc::channel(8);
+
+        let result = session.send_end(&writer, None).await;
+
+        assert!(matches!(
+            result,
+            Err(crate::session::error::SessionStateError::InvariantViolation)
+        ));
+    }
+
+    /// A duplicate incoming `End` is ignored once the session already received
+    /// one.
+    #[test]
+    fn duplicate_incoming_end_is_ignored() {
+        use crate::endpoint::IncomingChannel;
+        use fe2o3_amqp_types::performatives::End;
+
+        let mut session = mapped_session();
+        session.local_state = SessionState::EndReceived;
+
+        let result = session.on_incoming_end(IncomingChannel(0), End { error: None });
+
+        assert!(result.is_ok());
+    }
+
     /// A session that stopped with a local (non-outcome) error reports that
     /// error once; later calls report `AlreadyEnded` because the outcome was
     /// already observed.
@@ -1430,6 +1486,62 @@ mod tests {
         assert!(matches!(
             handle.try_end(),
             Err(super::TryEndError::AlreadyEnded)
+        ));
+    }
+
+    /// An outcome channel dropped without a result (the engine stopped without
+    /// reporting) is an internal invariant violation.
+    #[tokio::test]
+    async fn dropped_outcome_reports_invariant_violation() {
+        use tokio::sync::{mpsc, oneshot};
+
+        let (control, _control_rx) = mpsc::channel(8);
+        let (outgoing, _outgoing_rx) = mpsc::channel(8);
+        let (outcome_tx, outcome) =
+            oneshot::channel::<Result<super::SessionOutcome, super::Error>>();
+        drop(outcome_tx);
+        let mut handle = super::SessionHandle {
+            is_ended: false,
+            control,
+            engine_handle: tokio::spawn(async {}),
+            outcome,
+            outgoing,
+            session_stop_reason: Arc::new(OnceLock::new()),
+            max_frame_size: 0,
+            link_listener: (),
+        };
+
+        let error = handle.on_end().await.expect_err("an internal error");
+        assert!(matches!(error, super::Error::InvariantViolation));
+    }
+
+    /// `try_end` on an engine that stopped without reporting an outcome
+    /// reports an internal invariant violation.
+    #[tokio::test]
+    async fn try_end_with_dropped_outcome_reports_invariant_violation() {
+        use tokio::sync::{mpsc, oneshot};
+
+        let (control, _control_rx) = mpsc::channel(8);
+        let (outgoing, _outgoing_rx) = mpsc::channel(8);
+        let (outcome_tx, outcome) =
+            oneshot::channel::<Result<super::SessionOutcome, super::Error>>();
+        drop(outcome_tx);
+        let mut handle = super::SessionHandle {
+            is_ended: false,
+            control,
+            engine_handle: tokio::spawn(async {}),
+            outcome,
+            outgoing,
+            session_stop_reason: Arc::new(OnceLock::new()),
+            max_frame_size: 0,
+            link_listener: (),
+        };
+
+        let error = handle.try_end().expect_err("an internal error");
+        assert!(matches!(
+            error,
+            super::TryEndError::Stopped(error)
+                if matches!(*error, super::Error::InvariantViolation)
         ));
     }
 }
