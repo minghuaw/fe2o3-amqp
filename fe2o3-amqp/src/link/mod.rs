@@ -909,12 +909,23 @@ pub(crate) mod test_util {
     //! reattach. It drives either side of the race (the closing side via
     //! `close_with_error` or the suspending side via `detach_with_error`).
 
+    use std::marker::PhantomData;
+    use std::sync::atomic::AtomicU32;
+    use std::sync::{Arc, OnceLock};
+
     use fe2o3_amqp_types::{
-        definitions::Handle,
+        definitions::{Handle, ReceiverSettleMode, SenderSettleMode},
+        messaging::Target,
         performatives::{Attach, Detach},
     };
+    use parking_lot::RwLock;
     use tokio::sync::mpsc;
 
+    use super::{
+        receiver::ReceiverInner,
+        state::{LinkFlowState, LinkFlowStateInner, LinkState},
+        ArcReceiverUnsettledMap, CreditMode, ReceiverFlowState, ReceiverLink,
+    };
     use crate::{
         control::SessionControl, endpoint::OutputHandle, link::LinkFrame, link::LinkRelay,
     };
@@ -987,6 +998,67 @@ pub(crate) mod test_util {
         }
 
         (saw_attach, detaches)
+    }
+
+    /// A receiver link flow state with the given initial link credit.
+    pub(crate) fn make_flow_state(link_credit: u32) -> ReceiverFlowState {
+        Arc::new(LinkFlowState::receiver(LinkFlowStateInner {
+            initial_delivery_count: 0,
+            delivery_count: 0,
+            link_credit,
+            available: 0,
+            drain: false,
+            properties: None,
+        }))
+    }
+
+    /// A receiver endpoint (attached, with a local handle) and its channels,
+    /// for link/receiver unit tests. Returns the endpoint plus the session,
+    /// outgoing, and incoming channel ends.
+    pub(crate) fn make_receiver_inner_with_channels(
+        max_frame_size: usize,
+    ) -> (
+        ReceiverInner<ReceiverLink<Target>>,
+        mpsc::Receiver<SessionControl>,
+        mpsc::Receiver<LinkFrame>,
+        mpsc::Sender<LinkFrame>,
+    ) {
+        let (session_tx, session_rx) = mpsc::channel::<SessionControl>(16);
+        let (outgoing_tx, outgoing_rx) = mpsc::channel::<LinkFrame>(16);
+        let (incoming_tx, incoming_rx) = mpsc::channel::<LinkFrame>(16);
+        let unsettled: ArcReceiverUnsettledMap = Arc::new(RwLock::new(None));
+        let link = ReceiverLink::<Target> {
+            role: PhantomData,
+            local_state: LinkState::Attached,
+            name: String::from("test-receiver"),
+            output_handle: Some(OutputHandle(0)),
+            input_handle: None,
+            snd_settle_mode: SenderSettleMode::Mixed,
+            rcv_settle_mode: ReceiverSettleMode::First,
+            source: None,
+            target: None,
+            max_message_size: 0,
+            offered_capabilities: None,
+            desired_capabilities: None,
+            flow_state: make_flow_state(200),
+            unsettled,
+            session_stop_reason: Arc::new(OnceLock::new()),
+            max_frame_size,
+            verify_incoming_source: true,
+            verify_incoming_target: true,
+        };
+        let inner = ReceiverInner {
+            link,
+            buffer_size: 16,
+            credit_mode: CreditMode::Auto(200),
+            processed: Arc::new(AtomicU32::new(0)),
+            auto_accept: false,
+            session: session_tx,
+            outgoing: outgoing_tx,
+            incoming: incoming_rx,
+            incomplete_transfer: None,
+        };
+        (inner, session_rx, outgoing_rx, incoming_tx)
     }
 }
 

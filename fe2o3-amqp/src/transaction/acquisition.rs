@@ -61,10 +61,14 @@ where
         }
 
         // set drain to true
+        //
+        // The drain flow carries the updated flow properties (with the `txn-id`
+        // removed) so the resource stops associating the transaction with the
+        // link (AMQP 1.0 §4.4.3).
         self.recver
             .inner
             .link
-            .send_flow(&self.recver.inner.outgoing, Some(0), Some(true), true, false)
+            .send_flow(&self.recver.inner.outgoing, Some(0), Some(true), true, true)
             .await?;
 
         // self.cleaned_up = true;
@@ -155,13 +159,15 @@ where
                     .map(|fields| fields.swap_remove(TXN_ID_KEY));
             }
 
-            // Set drain to true
+            // Set drain to true; the flow's properties (with the `txn-id`
+            // removed) are included so the resource stops associating the
+            // transaction with the link (AMQP 1.0 §4.4.3).
             if let Err(_err) = self.recver.inner.link.blocking_send_flow(
                 &self.recver.inner.outgoing,
                 Some(0),
                 Some(true),
                 true,
-                false
+                true
             ) {
                 #[cfg(feature = "tracing")]
                 tracing::error!("error {:?}", _err);
