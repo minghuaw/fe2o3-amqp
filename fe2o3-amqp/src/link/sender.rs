@@ -1605,6 +1605,7 @@ mod tests {
             available: 0,
             drain: false,
             properties: None,
+            txn_id: None,
         };
         let flow_state = Arc::new(LinkFlowState::sender(flow_state_inner));
         let consumer = Consumer::new(Arc::new(Notify::new()), flow_state);

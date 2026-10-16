@@ -365,7 +365,7 @@ where
             val => Some(val),
         };
         let initial_delivery_count = Some(self.flow_state.as_ref().initial_delivery_count());
-        let properties = self.flow_state.as_ref().properties();
+        let properties = self.flow_state.as_ref().rendered_properties(true);
         let incomplete_unsettled = !matches!(partial_unsettled, 0..=1);
 
         Attach {
@@ -1163,6 +1163,7 @@ pub(crate) mod test_util {
             available: 0,
             drain: false,
             properties: None,
+            txn_id: None,
         }))
     }
 
@@ -1239,6 +1240,7 @@ mod tests {
             available: 0,
             drain: false,
             properties: None,
+            txn_id: None,
         });
         let mut producer = Producer::new(notifier.clone(), Arc::new(state));
         let notified = notifier.notified();

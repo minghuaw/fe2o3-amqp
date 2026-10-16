@@ -541,11 +541,7 @@ impl<T> ReceiverLink<T> {
                 guard.link_credit = link_credit;
                 guard.drain = drain;
 
-                let properties = if include_properties {
-                    guard.properties.clone()
-                } else {
-                    None
-                };
+                let properties = guard.rendered_properties(include_properties);
 
                 LinkFlow {
                     handle,
@@ -566,11 +562,7 @@ impl<T> ReceiverLink<T> {
                 let mut guard = self.flow_state.lock.write();
                 guard.link_credit = link_credit;
 
-                let properties = if include_properties {
-                    guard.properties.clone()
-                } else {
-                    None
-                };
+                let properties = guard.rendered_properties(include_properties);
 
                 LinkFlow {
                     handle,
@@ -591,11 +583,7 @@ impl<T> ReceiverLink<T> {
                 let mut guard = self.flow_state.lock.write();
                 guard.drain = drain;
 
-                let properties = if include_properties {
-                    guard.properties.clone()
-                } else {
-                    None
-                };
+                let properties = guard.rendered_properties(include_properties);
 
                 LinkFlow {
                     handle,
@@ -615,11 +603,7 @@ impl<T> ReceiverLink<T> {
             (None, None) => {
                 let guard = self.flow_state.lock.read();
 
-                let properties = if include_properties {
-                    guard.properties.clone()
-                } else {
-                    None
-                };
+                let properties = guard.rendered_properties(include_properties);
 
                 LinkFlow {
                     handle,

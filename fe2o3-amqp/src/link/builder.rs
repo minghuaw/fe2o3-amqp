@@ -523,6 +523,7 @@ where
             available: 0,
             drain: false, // The drain flag is initialized to false.
             properties: self.properties.take(),
+            txn_id: None,
         };
         let flow_state = Arc::new(LinkFlowState::sender(flow_state_inner));
         let notifier = Arc::new(Notify::new());
@@ -643,6 +644,7 @@ where
             available: 0,
             drain: false, // The drain flag is initialized to false.
             properties: self.properties.take(),
+            txn_id: None,
         };
         let flow_state = Arc::new(LinkFlowState::receiver(flow_state_inner));
         (flow_state.clone(), flow_state)

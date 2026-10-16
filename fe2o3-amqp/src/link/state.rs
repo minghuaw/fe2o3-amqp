@@ -2,7 +2,10 @@
 
 use std::{marker::PhantomData, sync::Arc};
 
-use fe2o3_amqp_types::definitions::{self, Fields, SequenceNo};
+use fe2o3_amqp_types::{
+    definitions::{self, Fields, SequenceNo},
+    primitives::{Binary, Symbol, Value},
+};
 use parking_lot::RwLock;
 
 use crate::{
@@ -74,20 +77,38 @@ pub(crate) struct LinkFlowStateInner {
     pub available: u32,
     pub drain: bool,
     pub properties: Option<Fields>,
+    /// The transactional id the resource associates with this link's acquired
+    /// deliveries (AMQP 1.0 §4.4.3). `Some` while a transactional acquisition
+    /// is held, `None` otherwise. Rendered into the flow/attach `properties` as
+    /// a `txn-id` entry when properties are included.
+    pub txn_id: Option<Binary>,
 }
 
 impl LinkFlowStateInner {
+    /// The flow/attach `properties` with the transactional `txn-id` merged in.
+    ///
+    /// Returns `None` when `include_properties` is false.
+    pub(crate) fn rendered_properties(&self, include_properties: bool) -> Option<Fields> {
+        if !include_properties {
+            return None;
+        }
+
+        let mut properties = self.properties.clone();
+        if let Some(txn_id) = &self.txn_id {
+            properties
+                .get_or_insert_with(Fields::new)
+                .insert(Symbol::from("txn-id"), Value::Binary(txn_id.clone()));
+        }
+        properties
+    }
+
     pub fn as_link_flow(
         &self,
         output_handle: OutputHandle,
         echo: bool,
         include_properties: bool,
     ) -> LinkFlow {
-        let properties = if include_properties {
-            self.properties.clone()
-        } else {
-            None
-        };
+        let properties = self.rendered_properties(include_properties);
 
         LinkFlow {
             handle: output_handle.into(),
@@ -275,9 +296,9 @@ impl<R> LinkFlowState<R> {
         guard.delivery_count = new;
     }
 
-    /// This is async because it is protected behind an async RwLock
-    pub fn properties(&self) -> Option<Fields> {
-        self.lock.read().properties.clone()
+    /// The flow/attach `properties` with the transactional `txn-id` merged in.
+    pub(crate) fn rendered_properties(&self, include_properties: bool) -> Option<Fields> {
+        self.lock.read().rendered_properties(include_properties)
     }
 }
 
@@ -413,6 +434,7 @@ mod tests {
             available: 0,
             drain: false,
             properties: None,
+            txn_id: None,
         };
         let flow_state = Arc::new(LinkFlowState::sender(flow_state_inner));
         let notifier = Arc::new(Notify::new());

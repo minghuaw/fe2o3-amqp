@@ -154,6 +154,7 @@ where
             available: 0,
             drain: false, // The drain flag is initialized to false.
             properties: shared.properties.clone(), // Will be set in `on_incoming_attach`
+            txn_id: None,
         };
         let flow_state = Arc::new(LinkFlowState::receiver(flow_state_inner));
         let flow_state_producer = flow_state.clone();
