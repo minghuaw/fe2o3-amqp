@@ -1081,11 +1081,10 @@ where
                         false => Err(LinkStateError::RemoteDetached.into()),
                     })
             }
-            LinkFrame::Transfer {
-                input_handle: _,
-                performative,
-                payload,
-            } => self.on_incoming_transfer(performative, payload).await, // cancel safe
+            LinkFrame::FirstTransfer(frame) | LinkFrame::TransferContinuation(frame) => {
+                self.on_incoming_transfer(frame.performative, frame.payload)
+                    .await // cancel safe
+            }
             LinkFrame::Attach(_) => Err(LinkStateError::IllegalState.into()),
             LinkFrame::Flow(_) | LinkFrame::Disposition(_) => {
                 // Flow and Disposition are handled by LinkRelay which runs
@@ -1948,7 +1947,7 @@ impl DetachedReceiver {
 mod tests {
     use super::*;
     use crate::endpoint::OutputHandle;
-    use crate::link::state::LinkState;
+    use crate::link::{state::LinkState, TransferFrame};
     use crate::util::Sealed;
     use fe2o3_amqp_types::{definitions::SenderSettleMode, messaging::Received};
     use tokio::sync::oneshot;
@@ -2269,10 +2268,15 @@ mod tests {
     }
 
     fn make_link_frame(transfer: Transfer, payload: Payload) -> LinkFrame {
-        LinkFrame::Transfer {
+        let frame = TransferFrame {
             input_handle: crate::endpoint::InputHandle(0),
             performative: transfer,
             payload,
+        };
+        if frame.performative.delivery_tag.is_some() {
+            LinkFrame::FirstTransfer(frame)
+        } else {
+            LinkFrame::TransferContinuation(frame)
         }
     }
 

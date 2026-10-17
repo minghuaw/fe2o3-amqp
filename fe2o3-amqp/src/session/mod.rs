@@ -350,8 +350,14 @@ pub struct Session {
     // keeps the peer's send window sliding even when no link-level flow is generated.
     pub(crate) need_flow_count: u32,
     pub(crate) remote_incoming_window: SequenceNo,
-    // Outgoing transfers that are blocked by the remote-incoming-window
-    pub(crate) remote_incoming_window_exhausted_buffer: VecDeque<(InputHandle, Transfer, Payload)>,
+    /// Outgoing transfers that are blocked by the remote-incoming-window.
+    ///
+    /// The boolean records whether the queued frame is the first transfer of
+    /// its delivery, so the delivery-id is still assigned once at drain time
+    /// (and never at enqueue time, which would let an intervening `Flow` or
+    /// `Begin` advertise a transfer-id that has not gone out).
+    pub(crate) remote_incoming_window_exhausted_buffer:
+        VecDeque<(InputHandle, Transfer, Payload, bool)>,
 
     // The remote-outgoing-window reflects the maximum number of incoming transfers that MAY
     // arrive without exceeding the remote endpoint’s outgoing-window. This value MUST be
@@ -417,6 +423,7 @@ impl Session {
         input_handle: InputHandle,
         mut transfer: Transfer,
         payload: Payload,
+        is_first: bool,
     ) -> Result<SessionFrame, SessionInnerError> {
         // Upon sending a transfer, the sending endpoint will increment its next-outgoing-id, decre-
         // ment its remote-incoming-window, and MAY (depending on policy) decrement its outgoing-
@@ -436,8 +443,16 @@ impl Session {
         // delivery
         let settled = transfer.settled.unwrap_or(false);
 
-        // Only the first transfer is required to have delivery_tag and delivery_id
-        if let Some(delivery_tag) = &transfer.delivery_tag {
+        // Only the first transfer of a delivery carries the delivery-tag and is
+        // assigned a delivery-id. The link tells us explicitly which frame this
+        // is, so a continuation frame can never be mistaken for a new delivery
+        // even if it (incorrectly) still carries a delivery-tag.
+        if is_first {
+            let delivery_tag = transfer
+                .delivery_tag
+                .as_ref()
+                .ok_or(SessionInnerError::IllegalState)?;
+
             // The delivery-id is allocated once per delivery (on its first transfer
             // frame), independently of the per-frame transfer-id (next-outgoing-id).
             // Using the transfer-id here made the next delivery-id skip by k-1 after a
@@ -454,6 +469,8 @@ impl Session {
                     (input_handle, delivery_tag.clone()),
                 );
             }
+        } else {
+            debug_assert!(transfer.delivery_id.is_none());
         }
 
         self.next_outgoing_id = self.next_outgoing_id.wrapping_add(1);
@@ -554,10 +571,11 @@ impl Session {
     ) -> Result<Vec<SessionFrame>, SessionInnerError> {
         // Drain the buffered transfers as much as possible
         while self.remote_incoming_window > 0 {
-            if let Some((input_handle, transfer, payload)) =
+            if let Some((input_handle, transfer, payload, is_first)) =
                 self.remote_incoming_window_exhausted_buffer.pop_front()
             {
-                let frame = self.on_outgoing_transfer_inner(input_handle, transfer, payload)?;
+                let frame =
+                    self.on_outgoing_transfer_inner(input_handle, transfer, payload, is_first)?;
                 output_frame_buffer.push(frame);
             } else {
                 break;
@@ -573,6 +591,7 @@ impl Session {
         cur_input_handle: InputHandle,
         cur_transfer: Transfer,
         cur_payload: Payload,
+        cur_is_first: bool,
     ) -> Result<Vec<SessionFrame>, SessionInnerError> {
         // Drain the buffered transfers first
         let mut frames =
@@ -581,14 +600,19 @@ impl Session {
         // Then process the current transfer if there is still space in the
         // remote-incoming-window
         if self.remote_incoming_window > 0 {
-            let frame =
-                self.on_outgoing_transfer_inner(cur_input_handle, cur_transfer, cur_payload)?;
+            let frame = self.on_outgoing_transfer_inner(
+                cur_input_handle,
+                cur_transfer,
+                cur_payload,
+                cur_is_first,
+            )?;
             frames.push(frame);
         } else {
             self.remote_incoming_window_exhausted_buffer.push_back((
                 cur_input_handle,
                 cur_transfer,
                 cur_payload,
+                cur_is_first,
             ));
         }
         Ok(frames)
@@ -1105,6 +1129,7 @@ impl endpoint::Session for Session {
         input_handle: InputHandle,
         transfer: Transfer,
         payload: Payload,
+        is_first: bool,
     ) -> Result<Option<SessionOutgoingItem>, Self::Error> {
         // Check if remote-incoming-window is exhausted
         if self.remote_incoming_window == 0 {
@@ -1113,11 +1138,13 @@ impl endpoint::Session for Session {
                 input_handle,
                 transfer,
                 payload,
+                is_first,
             ));
             Ok(None)
         } else if self.remote_incoming_window_exhausted_buffer.is_empty() {
             // no buffered transfer
-            let frame = self.on_outgoing_transfer_inner(input_handle, transfer, payload)?;
+            let frame =
+                self.on_outgoing_transfer_inner(input_handle, transfer, payload, is_first)?;
             Ok(Some(SessionOutgoingItem::SingleFrame(frame)))
         } else {
             let output_frame_buffer = Vec::with_capacity(
@@ -1130,6 +1157,7 @@ impl endpoint::Session for Session {
                 input_handle,
                 transfer,
                 payload,
+                is_first,
             )
             .map(SessionOutgoingItem::MultipleFrames)
             .map(Some)
@@ -1243,8 +1271,9 @@ mod tests {
     use std::sync::{Arc, OnceLock};
 
     use super::{
-        num_messages_settled_by_disposition, Builder, Session, SessionFrame, SessionFrameBody,
-        SessionOutgoingItem, SessionState, DEFAULT_WINDOW,
+        num_messages_settled_by_disposition, Builder, DeliveryTag, Handle, InputHandle, Payload,
+        Role, Session, SessionFrame, SessionFrameBody, SessionInnerError, SessionOutgoingItem,
+        SessionState, Transfer, DEFAULT_WINDOW,
     };
     use crate::endpoint::{OutgoingChannel, Session as _};
 
@@ -1317,7 +1346,12 @@ mod tests {
         assert!(session.maybe_outgoing_session_flow().is_none());
     }
 
-    fn outgoing_delivery_id(session: &mut Session, tag: Option<&[u8]>, more: bool) -> Option<u32> {
+    fn outgoing_delivery_id(
+        session: &mut Session,
+        tag: Option<&[u8]>,
+        more: bool,
+        is_first: bool,
+    ) -> Option<u32> {
         use fe2o3_amqp_types::{
             definitions::{DeliveryTag, Handle},
             performatives::Transfer,
@@ -1340,6 +1374,7 @@ mod tests {
                 crate::endpoint::InputHandle(0),
                 transfer,
                 bytes::Bytes::new(),
+                is_first,
             )
             .expect("transfer frame");
         match frame.body {
@@ -1358,29 +1393,31 @@ mod tests {
 
         // Delivery 0 over three frames: only the first carries tag and id.
         assert_eq!(
-            outgoing_delivery_id(&mut session, Some(b"d0"), true),
+            outgoing_delivery_id(&mut session, Some(b"d0"), true, true),
             Some(0)
         );
-        assert_eq!(outgoing_delivery_id(&mut session, None, true), None);
-        assert_eq!(outgoing_delivery_id(&mut session, None, false), None);
+        assert_eq!(outgoing_delivery_id(&mut session, None, true, false), None);
+        assert_eq!(outgoing_delivery_id(&mut session, None, false, false), None);
         // Delivery 1 in one frame: the next delivery-id, not the next transfer-id.
         assert_eq!(
-            outgoing_delivery_id(&mut session, Some(b"d1"), false),
+            outgoing_delivery_id(&mut session, Some(b"d1"), false, true),
             Some(1)
         );
         // Delivery 2 in two frames, then delivery 3.
         assert_eq!(
-            outgoing_delivery_id(&mut session, Some(b"d2"), true),
+            outgoing_delivery_id(&mut session, Some(b"d2"), true, true),
             Some(2)
         );
-        assert_eq!(outgoing_delivery_id(&mut session, None, false), None);
+        assert_eq!(outgoing_delivery_id(&mut session, None, false, false), None);
         assert_eq!(
-            outgoing_delivery_id(&mut session, Some(b"d3"), false),
+            outgoing_delivery_id(&mut session, Some(b"d3"), false, true),
             Some(3)
         );
 
-        // The transfer-id still advanced once per frame (7 frames sent).
+        // The transfer-id still advanced once per frame (7 frames sent), while
+        // the delivery-id advanced once per delivery (4 deliveries).
         assert_eq!(session.next_outgoing_id, 7);
+        assert_eq!(session.next_outgoing_delivery_id, 4);
     }
 
     #[test]
@@ -1390,5 +1427,216 @@ mod tests {
         session.need_flow_count = u32::MAX;
 
         assert!(session.maybe_outgoing_session_flow().is_none());
+    }
+
+    fn transfer(delivery_tag: Option<DeliveryTag>, more: bool) -> Transfer {
+        Transfer {
+            handle: Handle(0),
+            delivery_id: None,
+            delivery_tag,
+            message_format: Some(0),
+            settled: Some(false),
+            more,
+            rcv_settle_mode: None,
+            state: None,
+            resume: false,
+            aborted: false,
+            batchable: false,
+        }
+    }
+
+    fn as_transfer(item: SessionOutgoingItem) -> Transfer {
+        match item {
+            SessionOutgoingItem::SingleFrame(SessionFrame {
+                body: SessionFrameBody::Transfer { performative, .. },
+                ..
+            }) => performative,
+            _ => panic!("expected a single transfer frame"),
+        }
+    }
+
+    fn as_transfers(frames: Vec<SessionFrame>) -> Vec<Transfer> {
+        frames
+            .into_iter()
+            .map(|frame| match frame.body {
+                SessionFrameBody::Transfer { performative, .. } => performative,
+                other => panic!("expected a transfer frame, got {other:?}"),
+            })
+            .collect()
+    }
+
+    /// A delivery split into multiple transfer frames must be assigned exactly
+    /// one delivery-id, on its first frame, and map its delivery-tag only once.
+    #[test]
+    fn split_delivery_gets_one_delivery_id() {
+        let mut session = mapped_session();
+        session.remote_incoming_window = 8;
+        let tag = DeliveryTag::from(vec![0, 0, 0, 1]);
+        let delivery_start = session.next_outgoing_delivery_id;
+        let transfer_start = session.next_outgoing_id;
+        let frame_count = 4u32;
+
+        let first = as_transfer(
+            session
+                .on_outgoing_transfer(
+                    InputHandle(0),
+                    transfer(Some(tag.clone()), true),
+                    Payload::from_static(b"first"),
+                    true,
+                )
+                .expect("first transfer")
+                .expect("not buffered"),
+        );
+        assert_eq!(first.delivery_id, Some(delivery_start));
+        assert_eq!(first.delivery_tag.as_ref(), Some(&tag));
+        assert_eq!(session.next_outgoing_delivery_id, delivery_start + 1);
+        assert_eq!(session.next_outgoing_id, transfer_start + 1);
+        assert_eq!(session.delivery_tag_by_id.len(), 1);
+        assert!(session
+            .delivery_tag_by_id
+            .contains_key(&(Role::Receiver, delivery_start)));
+
+        for i in 1..frame_count {
+            let more = i + 1 < frame_count;
+            let frame = as_transfer(
+                session
+                    .on_outgoing_transfer(
+                        InputHandle(0),
+                        transfer(None, more),
+                        Payload::from_static(b"continuation"),
+                        false,
+                    )
+                    .expect("continuation transfer")
+                    .expect("not buffered"),
+            );
+            assert_eq!(frame.delivery_id, None);
+            assert_eq!(frame.delivery_tag, None);
+        }
+
+        assert_eq!(session.next_outgoing_delivery_id, delivery_start + 1);
+        assert_eq!(session.next_outgoing_id, transfer_start + frame_count);
+        assert_eq!(session.delivery_tag_by_id.len(), 1);
+    }
+
+    /// The remote-incoming-window path buffers transfers and drains them later;
+    /// the first/continuation distinction must survive buffering so the
+    /// delivery-id is still assigned exactly once.
+    #[test]
+    fn buffered_split_delivery_gets_one_delivery_id() {
+        let mut session = mapped_session();
+        let tag = DeliveryTag::from(vec![0, 0, 0, 2]);
+        let second_tag = DeliveryTag::from(vec![0, 0, 0, 4]);
+        let delivery_start = session.next_outgoing_delivery_id;
+        let transfer_start = session.next_outgoing_id;
+        let frame_count = 3u32;
+        session.remote_incoming_window = 0;
+
+        // Delivery A: first + two continuations.
+        assert!(session
+            .on_outgoing_transfer(
+                InputHandle(0),
+                transfer(Some(tag), true),
+                Payload::from_static(b"first"),
+                true,
+            )
+            .expect("enqueue first")
+            .is_none());
+        for i in 1..frame_count {
+            let more = i + 1 < frame_count;
+            assert!(session
+                .on_outgoing_transfer(
+                    InputHandle(0),
+                    transfer(None, more),
+                    Payload::from_static(b"continuation"),
+                    false,
+                )
+                .expect("enqueue continuation")
+                .is_none());
+        }
+
+        // Delivery B: a single first frame.
+        assert!(session
+            .on_outgoing_transfer(
+                InputHandle(0),
+                transfer(Some(second_tag), false),
+                Payload::from_static(b"second"),
+                true,
+            )
+            .expect("enqueue second delivery")
+            .is_none());
+
+        assert_eq!(
+            session.remote_incoming_window_exhausted_buffer.len(),
+            frame_count as usize + 1
+        );
+
+        session.remote_incoming_window = 8;
+        let transfers = as_transfers(
+            session
+                .prepare_session_frames_from_buffered_transfers(Vec::new())
+                .expect("drain"),
+        );
+        assert_eq!(transfers.len(), frame_count as usize + 1);
+        assert_eq!(transfers[0].delivery_id, Some(delivery_start));
+        assert_eq!(transfers[1].delivery_id, None);
+        assert_eq!(transfers[2].delivery_id, None);
+        assert_eq!(transfers[3].delivery_id, Some(delivery_start + 1));
+
+        assert_eq!(session.next_outgoing_delivery_id, delivery_start + 2);
+        assert_eq!(session.next_outgoing_id, transfer_start + frame_count + 1);
+        assert_eq!(session.delivery_tag_by_id.len(), 2);
+        assert!(session.remote_incoming_window_exhausted_buffer.is_empty());
+    }
+
+    /// The first/continuation classification is explicit: a continuation that
+    /// (incorrectly) still carries a delivery-tag must not be allocated a new
+    /// delivery-id.
+    #[test]
+    fn continuation_with_stray_tag_gets_no_delivery_id() {
+        let mut session = mapped_session();
+        session.remote_incoming_window = 8;
+        let tag = DeliveryTag::from(vec![0, 0, 0, 3]);
+        let delivery_start = session.next_outgoing_delivery_id;
+        let transfer_start = session.next_outgoing_id;
+
+        let frame = as_transfer(
+            session
+                .on_outgoing_transfer(
+                    InputHandle(0),
+                    transfer(Some(tag), true),
+                    Payload::from_static(b"continuation"),
+                    false,
+                )
+                .expect("continuation transfer")
+                .expect("not buffered"),
+        );
+
+        assert_eq!(frame.delivery_id, None);
+        assert_eq!(session.next_outgoing_delivery_id, delivery_start);
+        assert_eq!(session.next_outgoing_id, transfer_start + 1);
+        assert!(session.delivery_tag_by_id.is_empty());
+    }
+
+    /// The first transfer of a delivery must carry a delivery-tag.
+    #[test]
+    fn first_transfer_without_tag_is_rejected() {
+        let mut session = mapped_session();
+        session.remote_incoming_window = 8;
+        let delivery_start = session.next_outgoing_delivery_id;
+        let transfer_start = session.next_outgoing_id;
+
+        let error = match session.on_outgoing_transfer(
+            InputHandle(0),
+            transfer(None, false),
+            Payload::from_static(b"first"),
+            true,
+        ) {
+            Ok(_) => panic!("first transfer without a delivery-tag must be rejected"),
+            Err(error) => error,
+        };
+
+        assert!(matches!(error, SessionInnerError::IllegalState));
+        assert_eq!(session.next_outgoing_delivery_id, delivery_start);
+        assert_eq!(session.next_outgoing_id, transfer_start);
     }
 }
