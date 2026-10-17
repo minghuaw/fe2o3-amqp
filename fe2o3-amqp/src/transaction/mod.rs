@@ -37,7 +37,7 @@ use crate::{
     link::{
         delivery::{DeliveryFut, DeliveryInfo, UnsettledMessage},
         sender::SenderInner,
-        DispositionError, FlowError, LinkFrame,
+        DispositionError, FlowError, LinkFrame, TransferFrame,
     },
     util::TryConsume,
     Receiver, Sendable, Sender,
@@ -704,11 +704,11 @@ pub(crate) fn rollback_on_drop(
             }
 
             // Send out Rollback
-            let frame = LinkFrame::Transfer {
+            let frame = LinkFrame::FirstTransfer(TransferFrame {
                 input_handle,
                 performative: transfer,
                 payload,
-            };
+            });
             if let Err(_error) = inner.outgoing.try_send(frame) {
                 // The channel to the session is already closed
                 #[cfg(feature = "tracing")]

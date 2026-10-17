@@ -8,7 +8,7 @@ use serde::{ser::Serialize, Deserialize};
 use serde_amqp::{de::Deserializer, read::IoReader};
 use tokio_util::codec::{Decoder, Encoder};
 
-use crate::Payload;
+use crate::{link::clear_continuation_fields, Payload};
 
 use super::{Error, FRAME_TYPE_AMQP};
 
@@ -123,11 +123,7 @@ impl FrameEncoder {
             dst.put(partial);
 
             // Send middle frames
-            transfer.delivery_id = None;
-            transfer.delivery_tag = None;
-            transfer.message_format = None;
-            transfer.settled = None;
-            transfer.rcv_settle_mode = None;
+            clear_continuation_fields(&mut transfer);
             buf.clear();
             let writer = (&mut buf).writer();
             let mut serializer = Serializer::from(writer);

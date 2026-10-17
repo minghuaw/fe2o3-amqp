@@ -643,9 +643,10 @@ impl endpoint::Session for ListenerSession {
         input_handle: InputHandle,
         transfer: Transfer,
         payload: Payload,
+        is_first: bool,
     ) -> Result<Option<SessionOutgoingItem>, Self::Error> {
         self.session
-            .on_outgoing_transfer(input_handle, transfer, payload)
+            .on_outgoing_transfer(input_handle, transfer, payload, is_first)
     }
 
     fn on_outgoing_disposition(

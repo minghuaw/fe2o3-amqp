@@ -423,13 +423,18 @@ where
                 .on_outgoing_flow(flow)
                 .map(SessionOutgoingItem::SingleFrame)
                 .map(Some)?,
-            LinkFrame::Transfer {
-                input_handle,
-                performative,
-                payload,
-            } => self
-                .session
-                .on_outgoing_transfer(input_handle, performative, payload)?,
+            LinkFrame::FirstTransfer(frame) => self.session.on_outgoing_transfer(
+                frame.input_handle,
+                frame.performative,
+                frame.payload,
+                true,
+            )?,
+            LinkFrame::TransferContinuation(frame) => self.session.on_outgoing_transfer(
+                frame.input_handle,
+                frame.performative,
+                frame.payload,
+                false,
+            )?,
             LinkFrame::Disposition(disposition) => self
                 .session
                 .on_outgoing_disposition(disposition)

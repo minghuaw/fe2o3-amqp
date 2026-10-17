@@ -138,6 +138,7 @@ pub(crate) trait Session {
         input_handle: InputHandle,
         transfer: Transfer,
         payload: Payload,
+        is_first: bool,
     ) -> Result<Option<SessionOutgoingItem>, Self::Error>;
 
     fn on_outgoing_disposition(

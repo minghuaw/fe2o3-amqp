@@ -766,10 +766,20 @@ impl LinkRelay<OutputHandle> {
                 let delivery_tag = transfer.delivery_tag.clone();
                 let transfer_more = transfer.more;
 
-                tx.send(LinkFrame::Transfer {
+                // Incoming direction: the peer marks the first transfer of a
+                // delivery with a delivery-tag. The receiver re-validates the
+                // wire fields (`ensure_delivery_identity`), so this label is
+                // informational only.
+                let is_first = delivery_tag.is_some();
+                let frame = TransferFrame {
                     input_handle: InputHandle::from(transfer.handle.clone()),
                     performative: transfer,
                     payload,
+                };
+                tx.send(if is_first {
+                    LinkFrame::FirstTransfer(frame)
+                } else {
+                    LinkFrame::TransferContinuation(frame)
                 })
                 .await
                 .map_err(|_| LinkRelayError::UnattachedHandle)?;
