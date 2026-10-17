@@ -3,6 +3,8 @@
 use serde::{de, ser};
 use std::fmt::Display;
 
+use crate::size_ser::SizeError;
+
 // pub type Result<T> = core::result::Result<T, Error>;
 
 /// Custom serialization/deserialization errors
@@ -48,6 +50,15 @@ impl Error {
     ) -> Self {
         let io_err = std::io::Error::new(std::io::ErrorKind::UnexpectedEof, error);
         Self::Io(io_err)
+    }
+}
+
+impl From<SizeError> for Error {
+    fn from(error: SizeError) -> Self {
+        match error {
+            SizeError::TooLong => Self::too_long(),
+            SizeError::Message(message) => Self::Message(message),
+        }
     }
 }
 

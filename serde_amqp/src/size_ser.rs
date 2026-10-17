@@ -9,11 +9,34 @@ use crate::{
     },
     ser::{U32_MAX_MINUS_4, U8_MAX, U8_MAX_MINUS_1},
     util::{FieldRole, IsArrayElement, NonNativeType, SequenceType, StructEncoding},
-    Error,
 };
 
+/// Error produced by [`SizeSerializer`] / [`serialized_size`].
+///
+/// A size computation can only fail because a value (or one of its
+/// string/byte/sequence/map components) is too long to encode with AMQP's
+/// 32-bit length fields.
+#[derive(Debug, thiserror::Error)]
+pub enum SizeError {
+    /// A value is too long to encode.
+    #[error("value is too long to encode")]
+    TooLong,
+    /// A custom error reported by a `Serialize` implementation.
+    #[error("{0}")]
+    Message(String),
+}
+
+impl ser::Error for SizeError {
+    fn custom<T>(msg: T) -> Self
+    where
+        T: std::fmt::Display,
+    {
+        Self::Message(msg.to_string())
+    }
+}
+
 /// Obtain the serialized size without allocating `Vec<u8>`
-pub fn serialized_size<T>(value: &T) -> Result<usize, Error>
+pub fn serialized_size<T>(value: &T) -> Result<usize, SizeError>
 where
     T: ser::Serialize + ?Sized,
 {
@@ -74,7 +97,7 @@ impl SizeSerializer {
 impl<'a> ser::Serializer for &'a mut SizeSerializer {
     type Ok = usize;
 
-    type Error = Error;
+    type Error = SizeError;
 
     type SerializeSeq = SeqSerializer<'a>;
 
@@ -218,12 +241,12 @@ impl<'a> ser::Serializer for &'a mut SizeSerializer {
                         self.non_native_type = None;
                         Ok(5 + v.len())
                     }
-                    _ => Err(Error::too_long()),
+                    _ => Err(SizeError::TooLong),
                 },
                 None => match v.len() {
                     0..=U8_MAX_MINUS_1 => Ok(2 + v.len()),
                     U8_MAX..=U32_MAX_MINUS_4 => Ok(5 + v.len()),
-                    _ => Err(Error::too_long()),
+                    _ => Err(SizeError::TooLong),
                 },
                 _ => unreachable!("serialize_str is only used for Symbol and String"),
             },
@@ -249,7 +272,7 @@ impl<'a> ser::Serializer for &'a mut SizeSerializer {
                 IsArrayElement::False => match l {
                     0..=U8_MAX_MINUS_1 => Ok(2 + l),
                     U8_MAX..=U32_MAX_MINUS_4 => Ok(5 + l),
-                    _ => Err(Error::too_long()),
+                    _ => Err(SizeError::TooLong),
                 },
                 IsArrayElement::FirstElement => Ok(5 + l),
                 IsArrayElement::OtherElement => Ok(4 + l),
@@ -453,9 +476,9 @@ impl<'a> SeqSerializer<'a> {
 
 impl ser::SerializeSeq for SeqSerializer<'_> {
     type Ok = usize;
-    type Error = Error;
+    type Error = SizeError;
 
-    fn serialize_element<T>(&mut self, value: &T) -> Result<(), Error>
+    fn serialize_element<T>(&mut self, value: &T) -> Result<(), SizeError>
     where
         T: ser::Serialize + ?Sized,
     {
@@ -482,17 +505,17 @@ impl ser::SerializeSeq for SeqSerializer<'_> {
         Ok(())
     }
 
-    fn end(self) -> Result<usize, Error> {
+    fn end(self) -> Result<usize, SizeError> {
         match self.se.seq_type {
             None | Some(SequenceType::List) => {
                 list_size(self.cumulated_size, &self.se.is_array_element)
-                    .map_err(|_| Error::too_long())
+                    .map_err(|_| SizeError::TooLong)
             }
             Some(SequenceType::Array) => array_size(self.cumulated_size, &self.se.is_array_element)
-                .map_err(|_| Error::too_long()),
+                .map_err(|_| SizeError::TooLong),
             Some(SequenceType::TransparentVec) => {
                 transparent_vec_size(self.cumulated_size, &self.se.is_array_element)
-                    .map_err(|_| Error::too_long())
+                    .map_err(|_| SizeError::TooLong)
             }
         }
     }
@@ -554,9 +577,9 @@ impl<'a> TupleSerializer<'a> {
 
 impl ser::SerializeTuple for TupleSerializer<'_> {
     type Ok = usize;
-    type Error = Error;
+    type Error = SizeError;
 
-    fn serialize_element<T>(&mut self, value: &T) -> Result<(), Error>
+    fn serialize_element<T>(&mut self, value: &T) -> Result<(), SizeError>
     where
         T: ser::Serialize + ?Sized,
     {
@@ -565,8 +588,8 @@ impl ser::SerializeTuple for TupleSerializer<'_> {
         Ok(())
     }
 
-    fn end(self) -> Result<usize, Error> {
-        list_size(self.cumulated_size, &self.se.is_array_element).map_err(|_| Error::too_long())
+    fn end(self) -> Result<usize, SizeError> {
+        list_size(self.cumulated_size, &self.se.is_array_element).map_err(|_| SizeError::TooLong)
     }
 }
 
@@ -588,7 +611,7 @@ impl<'a> MapSerializer<'a> {
 
 impl ser::SerializeMap for MapSerializer<'_> {
     type Ok = usize;
-    type Error = Error;
+    type Error = SizeError;
 
     fn serialize_entry<K, V>(&mut self, key: &K, value: &V) -> Result<(), Self::Error>
     where
@@ -602,7 +625,7 @@ impl ser::SerializeMap for MapSerializer<'_> {
         Ok(())
     }
 
-    fn serialize_key<T>(&mut self, key: &T) -> Result<(), Error>
+    fn serialize_key<T>(&mut self, key: &T) -> Result<(), SizeError>
     where
         T: ser::Serialize + ?Sized,
     {
@@ -611,7 +634,7 @@ impl ser::SerializeMap for MapSerializer<'_> {
         Ok(())
     }
 
-    fn serialize_value<T>(&mut self, value: &T) -> Result<(), Error>
+    fn serialize_value<T>(&mut self, value: &T) -> Result<(), SizeError>
     where
         T: ser::Serialize + ?Sized,
     {
@@ -620,8 +643,8 @@ impl ser::SerializeMap for MapSerializer<'_> {
         Ok(())
     }
 
-    fn end(self) -> Result<usize, Error> {
-        map_size(self.cumulated_size, &self.se.is_array_element).map_err(|_| Error::too_long())
+    fn end(self) -> Result<usize, SizeError> {
+        map_size(self.cumulated_size, &self.se.is_array_element).map_err(|_| SizeError::TooLong)
     }
 }
 
@@ -669,9 +692,9 @@ impl<'a> TupleStructSerializer<'a> {
 
 impl ser::SerializeTupleStruct for TupleStructSerializer<'_> {
     type Ok = usize;
-    type Error = Error;
+    type Error = SizeError;
 
-    fn serialize_field<T>(&mut self, value: &T) -> Result<(), Error>
+    fn serialize_field<T>(&mut self, value: &T) -> Result<(), SizeError>
     where
         T: ser::Serialize + ?Sized,
     {
@@ -707,14 +730,14 @@ impl ser::SerializeTupleStruct for TupleStructSerializer<'_> {
         }
     }
 
-    fn end(self) -> Result<usize, Error> {
+    fn end(self) -> Result<usize, SizeError> {
         match self.se.struct_encoding() {
             StructEncoding::None => list_size(self.cumulated_size, &self.se.is_array_element)
-                .map_err(|_| Error::too_long()),
+                .map_err(|_| SizeError::TooLong),
             StructEncoding::DescribedList => {
                 let _ = self.se.struct_encoding.pop();
                 list_size(self.cumulated_size, &self.se.is_array_element)
-                    .map_err(|_| Error::too_long())
+                    .map_err(|_| SizeError::TooLong)
             }
             StructEncoding::DescribedBasic => {
                 let _ = self.se.struct_encoding.pop();
@@ -745,9 +768,9 @@ impl<'a> StructSerializer<'a> {
 
 impl ser::SerializeStruct for StructSerializer<'_> {
     type Ok = usize;
-    type Error = Error;
+    type Error = SizeError;
 
-    fn serialize_field<T>(&mut self, key: &'static str, value: &T) -> Result<(), Error>
+    fn serialize_field<T>(&mut self, key: &'static str, value: &T) -> Result<(), SizeError>
     where
         T: ser::Serialize + ?Sized,
     {
@@ -784,19 +807,19 @@ impl ser::SerializeStruct for StructSerializer<'_> {
         }
     }
 
-    fn end(self) -> Result<usize, Error> {
+    fn end(self) -> Result<usize, SizeError> {
         match self.se.struct_encoding() {
             StructEncoding::None => list_size(self.cumulated_size, &self.se.is_array_element)
-                .map_err(|_| Error::too_long()),
+                .map_err(|_| SizeError::TooLong),
             StructEncoding::DescribedList => {
                 let _ = self.se.struct_encoding.pop();
                 list_size(self.cumulated_size, &self.se.is_array_element)
-                    .map_err(|_| Error::too_long())
+                    .map_err(|_| SizeError::TooLong)
             }
             StructEncoding::DescribedMap => {
                 let _ = self.se.struct_encoding.pop();
                 map_size(self.cumulated_size, &self.se.is_array_element)
-                    .map_err(|_| Error::too_long())
+                    .map_err(|_| SizeError::TooLong)
             }
             StructEncoding::DescribedBasic => {
                 let _ = self.se.struct_encoding.pop();
@@ -826,9 +849,9 @@ impl<'a> VariantSerializer<'a> {
 
 impl ser::SerializeTupleVariant for VariantSerializer<'_> {
     type Ok = usize;
-    type Error = Error;
+    type Error = SizeError;
 
-    fn serialize_field<T>(&mut self, value: &T) -> Result<(), Error>
+    fn serialize_field<T>(&mut self, value: &T) -> Result<(), SizeError>
     where
         T: ser::Serialize + ?Sized,
     {
@@ -837,28 +860,28 @@ impl ser::SerializeTupleVariant for VariantSerializer<'_> {
         Ok(())
     }
 
-    fn end(self) -> Result<usize, Error> {
+    fn end(self) -> Result<usize, SizeError> {
         let mut serializer = SizeSerializer::new();
         let key_len = ser::Serialize::serialize(&self.variant_index, &mut serializer)?;
         let value_len = list_size(self.cumulated_size, &self.se.is_array_element)
-            .map_err(|_| Error::too_long())?;
+            .map_err(|_| SizeError::TooLong)?;
 
-        map_size(key_len + value_len, &self.se.is_array_element).map_err(|_| Error::too_long())
+        map_size(key_len + value_len, &self.se.is_array_element).map_err(|_| SizeError::TooLong)
     }
 }
 
 impl ser::SerializeStructVariant for VariantSerializer<'_> {
     type Ok = usize;
-    type Error = Error;
+    type Error = SizeError;
 
-    fn serialize_field<T>(&mut self, _key: &'static str, value: &T) -> Result<(), Error>
+    fn serialize_field<T>(&mut self, _key: &'static str, value: &T) -> Result<(), SizeError>
     where
         T: ser::Serialize + ?Sized,
     {
         <Self as ser::SerializeTupleVariant>::serialize_field(self, value)
     }
 
-    fn end(self) -> Result<usize, Error> {
+    fn end(self) -> Result<usize, SizeError> {
         <Self as ser::SerializeTupleVariant>::end(self)
     }
 }
