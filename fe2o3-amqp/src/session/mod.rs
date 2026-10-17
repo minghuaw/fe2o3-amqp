@@ -331,6 +331,11 @@ pub struct Session {
     pub(crate) local_state: SessionState,
     pub(crate) initial_outgoing_id: Constant<TransferNumber>,
     pub(crate) next_outgoing_id: TransferNumber,
+    /// The delivery-id to assign to the next outgoing delivery. Delivery-ids are a
+    /// per-delivery sequence, distinct from the per-frame transfer-id
+    /// (`next_outgoing_id`): a delivery split over several transfer frames must
+    /// consume exactly one delivery-id.
+    pub(crate) next_outgoing_delivery_id: DeliveryNumber,
     pub(crate) incoming_window: TransferNumber,
     pub(crate) outgoing_window: TransferNumber,
     pub(crate) handle_max: Handle,
@@ -433,8 +438,13 @@ impl Session {
 
         // Only the first transfer is required to have delivery_tag and delivery_id
         if let Some(delivery_tag) = &transfer.delivery_tag {
-            // The next-outgoing-id is the transfer-id to assign to the next transfer frame.
-            let delivery_id = self.next_outgoing_id;
+            // The delivery-id is allocated once per delivery (on its first transfer
+            // frame), independently of the per-frame transfer-id (next-outgoing-id).
+            // Using the transfer-id here made the next delivery-id skip by k-1 after a
+            // delivery split over k frames, which peers reject (e.g. Artemis/proton-j:
+            // "Expected delivery-id N, got N+k-1").
+            let delivery_id = self.next_outgoing_delivery_id;
+            self.next_outgoing_delivery_id = self.next_outgoing_delivery_id.wrapping_add(1);
             transfer.delivery_id = Some(delivery_id);
 
             // Disposition doesn't carry delivery tag
@@ -1305,6 +1315,72 @@ mod tests {
         // due immediately after.
         assert_eq!(session.need_flow_count, 0);
         assert!(session.maybe_outgoing_session_flow().is_none());
+    }
+
+    fn outgoing_delivery_id(session: &mut Session, tag: Option<&[u8]>, more: bool) -> Option<u32> {
+        use fe2o3_amqp_types::{
+            definitions::{DeliveryTag, Handle},
+            performatives::Transfer,
+        };
+        let transfer = Transfer {
+            handle: Handle(0),
+            delivery_id: None,
+            delivery_tag: tag.map(|t| DeliveryTag::from(t.to_vec())),
+            message_format: tag.map(|_| 0),
+            settled: Some(false),
+            more,
+            rcv_settle_mode: None,
+            state: None,
+            resume: false,
+            aborted: false,
+            batchable: false,
+        };
+        let frame = session
+            .on_outgoing_transfer_inner(
+                crate::endpoint::InputHandle(0),
+                transfer,
+                bytes::Bytes::new(),
+            )
+            .expect("transfer frame");
+        match frame.body {
+            SessionFrameBody::Transfer { performative, .. } => performative.delivery_id,
+            _ => panic!("expected a transfer frame"),
+        }
+    }
+
+    /// A delivery split over several transfer frames consumes ONE delivery-id:
+    /// delivery-ids are per delivery, the transfer-id (next-outgoing-id) is per
+    /// frame. Regression: the delivery-id was taken from next-outgoing-id, so
+    /// the delivery after a 3-frame one got id 3 instead of 1.
+    #[test]
+    fn multi_frame_delivery_consumes_one_delivery_id() {
+        let mut session = mapped_session();
+
+        // Delivery 0 over three frames: only the first carries tag and id.
+        assert_eq!(
+            outgoing_delivery_id(&mut session, Some(b"d0"), true),
+            Some(0)
+        );
+        assert_eq!(outgoing_delivery_id(&mut session, None, true), None);
+        assert_eq!(outgoing_delivery_id(&mut session, None, false), None);
+        // Delivery 1 in one frame: the next delivery-id, not the next transfer-id.
+        assert_eq!(
+            outgoing_delivery_id(&mut session, Some(b"d1"), false),
+            Some(1)
+        );
+        // Delivery 2 in two frames, then delivery 3.
+        assert_eq!(
+            outgoing_delivery_id(&mut session, Some(b"d2"), true),
+            Some(2)
+        );
+        assert_eq!(outgoing_delivery_id(&mut session, None, false), None);
+        assert_eq!(
+            outgoing_delivery_id(&mut session, Some(b"d3"), false),
+            Some(3)
+        );
+
+        // The transfer-id still advanced once per frame (7 frames sent).
+        assert_eq!(session.next_outgoing_id, 7);
     }
 
     #[test]
