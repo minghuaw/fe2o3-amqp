@@ -128,7 +128,9 @@ where
         let orig_delivery_id = transfer.delivery_id; // None on all send paths
         transfer.delivery_id = Some(u32::MAX);
         let performative_size =
-            serialized_size(&transfer).map_err(|source| MessageEncodeError { source })?;
+            serialized_size(&transfer).map_err(|source| MessageEncodeError {
+                source: source.into(),
+            })?;
         transfer.delivery_id = orig_delivery_id;
         // Saturate so a pathologically small max-frame-size (one that cannot
         // even fit the serialized performative) reports an error instead of
