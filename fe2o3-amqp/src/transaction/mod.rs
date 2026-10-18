@@ -37,7 +37,7 @@ use crate::{
     link::{
         delivery::{DeliveryFut, DeliveryInfo, UnsettledMessage},
         sender::SenderInner,
-        DispositionError, FlowError, LinkFrame, TransferFrame,
+        DispositionError, FlowError, LinkFrame, LinkTransfer,
     },
     util::TryConsume,
     Receiver, Sendable, Sender,
@@ -704,7 +704,7 @@ pub(crate) fn rollback_on_drop(
             }
 
             // Send out Rollback
-            let frame = LinkFrame::FirstTransfer(TransferFrame {
+            let frame = LinkFrame::FirstTransfer(LinkTransfer {
                 input_handle,
                 performative: transfer,
                 payload,

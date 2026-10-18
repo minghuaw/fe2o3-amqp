@@ -1285,7 +1285,7 @@ mod tests {
     use crate::{
         link::{
             state::{LinkFlowState, LinkFlowStateInner, LinkState},
-            TransferFrame,
+            LinkTransfer,
         },
         util::Consumer,
     };
@@ -1601,7 +1601,7 @@ mod tests {
         inner.abort(tag.clone(), 0, Some(sender)).await.unwrap();
 
         match outgoing_rx.try_recv().expect("expected a transfer") {
-            LinkFrame::FirstTransfer(TransferFrame {
+            LinkFrame::FirstTransfer(LinkTransfer {
                 performative,
                 payload,
                 ..
@@ -1723,7 +1723,7 @@ mod tests {
                                     .await;
                             }
                         }
-                        Some(LinkFrame::FirstTransfer(TransferFrame {
+                        Some(LinkFrame::FirstTransfer(LinkTransfer {
                             performative,
                             ..
                         })) => {

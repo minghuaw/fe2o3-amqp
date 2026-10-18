@@ -770,7 +770,7 @@ impl LinkRelay<OutputHandle> {
                 // incomplete-transfer state. A remote peer may repeat the
                 // delivery-id/tag on continuation frames, so presence must not
                 // be used here.
-                let frame = TransferFrame {
+                let frame = LinkTransfer {
                     input_handle: InputHandle::from(transfer.handle.clone()),
                     performative: transfer,
                     payload,

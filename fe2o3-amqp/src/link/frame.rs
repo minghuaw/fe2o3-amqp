@@ -10,8 +10,9 @@ use fe2o3_amqp_types::transaction::TransactionId;
 
 pub(crate) type LinkIncomingItem = LinkFrame;
 
-/// The delivery-independent parts of a transfer frame.
-pub(crate) struct TransferFrame {
+/// The link-level content of a transfer: input handle, transfer
+/// performative, and payload.
+pub(crate) struct LinkTransfer {
     pub(crate) input_handle: InputHandle,
     pub(crate) performative: Transfer,
     pub(crate) payload: Payload,
@@ -31,16 +32,16 @@ pub(crate) enum LinkFrame {
     /// continuation from its own incomplete-transfer state. The remote peer
     /// may repeat the delivery-id/tag on continuation frames, so their
     /// presence must not be used for classification.
-    RemoteTransfer(TransferFrame),
+    RemoteTransfer(LinkTransfer),
     /// The first transfer of a locally sent delivery.
     ///
     /// The session assigns the delivery-id to this frame. Continuation frames
     /// of the same delivery use [`LinkFrame::TransferContinuation`], which the
     /// session never assigns a delivery-id to.
-    FirstTransfer(TransferFrame),
+    FirstTransfer(LinkTransfer),
     /// A continuation of a locally sent delivery whose first frame was
     /// [`LinkFrame::FirstTransfer`].
-    TransferContinuation(TransferFrame),
+    TransferContinuation(LinkTransfer),
     Disposition(Disposition),
     Detach(Detach),
 
@@ -83,7 +84,7 @@ impl std::fmt::Debug for LinkFrame {
 fn fmt_transfer(
     f: &mut std::fmt::Formatter<'_>,
     name: &'static str,
-    frame: &TransferFrame,
+    frame: &LinkTransfer,
 ) -> std::fmt::Result {
     f.debug_struct(name)
         .field("input_handle", &frame.input_handle)

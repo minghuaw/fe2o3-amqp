@@ -1951,7 +1951,7 @@ impl DetachedReceiver {
 mod tests {
     use super::*;
     use crate::endpoint::OutputHandle;
-    use crate::link::{state::LinkState, TransferFrame};
+    use crate::link::{state::LinkState, LinkTransfer};
     use crate::util::Sealed;
     use fe2o3_amqp_types::{definitions::SenderSettleMode, messaging::Received};
     use tokio::sync::oneshot;
@@ -2272,7 +2272,7 @@ mod tests {
     }
 
     fn make_link_frame(transfer: Transfer, payload: Payload) -> LinkFrame {
-        LinkFrame::RemoteTransfer(TransferFrame {
+        LinkFrame::RemoteTransfer(LinkTransfer {
             input_handle: crate::endpoint::InputHandle(0),
             performative: transfer,
             payload,

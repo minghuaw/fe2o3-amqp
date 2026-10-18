@@ -503,7 +503,7 @@ async fn send_transfer(
     is_first: bool,
     session_stop_reason: &OnceLock<SessionStopReason>,
 ) -> Result<(), LinkStateError> {
-    let frame = TransferFrame {
+    let frame = LinkTransfer {
         input_handle,
         performative: transfer,
         payload,
