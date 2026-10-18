@@ -24,13 +24,21 @@ pub(crate) struct TransferFrame {
 pub(crate) enum LinkFrame {
     Attach(Attach),
     Flow(LinkFlow),
-    /// The first transfer of a delivery.
+    /// A transfer received from the remote peer and forwarded to a receiver
+    /// link.
+    ///
+    /// The receiver derives whether this is the first frame of a delivery or a
+    /// continuation from its own incomplete-transfer state. The remote peer
+    /// may repeat the delivery-id/tag on continuation frames, so their
+    /// presence must not be used for classification.
+    RemoteTransfer(TransferFrame),
+    /// The first transfer of a locally sent delivery.
     ///
     /// The session assigns the delivery-id to this frame. Continuation frames
     /// of the same delivery use [`LinkFrame::TransferContinuation`], which the
     /// session never assigns a delivery-id to.
     FirstTransfer(TransferFrame),
-    /// A continuation transfer of a delivery whose first frame was
+    /// A continuation of a locally sent delivery whose first frame was
     /// [`LinkFrame::FirstTransfer`].
     TransferContinuation(TransferFrame),
     Disposition(Disposition),
@@ -61,6 +69,7 @@ impl std::fmt::Debug for LinkFrame {
         match self {
             Self::Attach(arg0) => f.debug_tuple("Attach").field(arg0).finish(),
             Self::Flow(arg0) => f.debug_tuple("Flow").field(arg0).finish(),
+            Self::RemoteTransfer(frame) => fmt_transfer(f, "RemoteTransfer", frame),
             Self::FirstTransfer(frame) => fmt_transfer(f, "FirstTransfer", frame),
             Self::TransferContinuation(frame) => fmt_transfer(f, "TransferContinuation", frame),
             Self::Disposition(arg0) => f.debug_tuple("Disposition").field(arg0).finish(),

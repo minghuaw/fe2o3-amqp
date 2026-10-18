@@ -1081,14 +1081,18 @@ where
                         false => Err(LinkStateError::RemoteDetached.into()),
                     })
             }
-            LinkFrame::FirstTransfer(frame) | LinkFrame::TransferContinuation(frame) => {
+            LinkFrame::RemoteTransfer(frame) => {
                 self.on_incoming_transfer(frame.performative, frame.payload)
                     .await // cancel safe
             }
             LinkFrame::Attach(_) => Err(LinkStateError::IllegalState.into()),
-            LinkFrame::Flow(_) | LinkFrame::Disposition(_) => {
-                // Flow and Disposition are handled by LinkRelay which runs
-                // in the session loop
+            LinkFrame::Flow(_)
+            | LinkFrame::Disposition(_)
+            | LinkFrame::FirstTransfer(_)
+            | LinkFrame::TransferContinuation(_) => {
+                // Flow, Disposition and locally sent transfers are handled by
+                // LinkRelay which runs in the session loop; they are never
+                // sent to a link.
                 unreachable!()
             }
             #[cfg(feature = "transaction")]
@@ -2268,16 +2272,11 @@ mod tests {
     }
 
     fn make_link_frame(transfer: Transfer, payload: Payload) -> LinkFrame {
-        let frame = TransferFrame {
+        LinkFrame::RemoteTransfer(TransferFrame {
             input_handle: crate::endpoint::InputHandle(0),
             performative: transfer,
             payload,
-        };
-        if frame.performative.delivery_tag.is_some() {
-            LinkFrame::FirstTransfer(frame)
-        } else {
-            LinkFrame::TransferContinuation(frame)
-        }
+        })
     }
 
     fn encoded_message_payload(body: &str) -> Payload {
@@ -2551,6 +2550,44 @@ mod tests {
             .recv::<String>()
             .await
             .expect("in-limit delivery must be accepted");
+        assert_eq!(delivery.body(), body);
+    }
+
+    /// A remote peer MAY repeat the delivery-id/tag/message-format on
+    /// continuation frames as long as they match the first transfer (AMQP 1.0
+    /// §2.7.5). The receiver must assemble the delivery rather than treating
+    /// the repeated fields as a new delivery.
+    #[tokio::test]
+    async fn continuation_with_repeated_delivery_fields_is_delivered() {
+        let (mut inner, _session_rx, _outgoing_rx, incoming_tx) =
+            make_receiver_inner_with_channels(4096);
+
+        let body = "repeated continuation fields";
+        let payload = encoded_message_payload(body);
+        let split = payload.len() / 2;
+        let first = payload.slice(..split);
+        let second = payload.slice(split..);
+
+        incoming_tx
+            .send(make_link_frame(
+                make_incoming_transfer(1, Some(vec![0x01]), true, false),
+                first,
+            ))
+            .await
+            .unwrap();
+        incoming_tx
+            .send(make_link_frame(
+                // Repeat the same delivery-id, delivery-tag and message-format.
+                make_incoming_transfer(1, Some(vec![0x01]), false, false),
+                second,
+            ))
+            .await
+            .unwrap();
+
+        let delivery = inner
+            .recv::<String>()
+            .await
+            .expect("repeated continuation fields must be accepted");
         assert_eq!(delivery.body(), body);
     }
 

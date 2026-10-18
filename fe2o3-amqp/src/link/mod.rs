@@ -766,23 +766,18 @@ impl LinkRelay<OutputHandle> {
                 let delivery_tag = transfer.delivery_tag.clone();
                 let transfer_more = transfer.more;
 
-                // Incoming direction: the peer marks the first transfer of a
-                // delivery with a delivery-tag. The receiver re-validates the
-                // wire fields (`ensure_delivery_identity`), so this label is
-                // informational only.
-                let is_first = delivery_tag.is_some();
+                // The receiver derives first/continuation from its own
+                // incomplete-transfer state. A remote peer may repeat the
+                // delivery-id/tag on continuation frames, so presence must not
+                // be used here.
                 let frame = TransferFrame {
                     input_handle: InputHandle::from(transfer.handle.clone()),
                     performative: transfer,
                     payload,
                 };
-                tx.send(if is_first {
-                    LinkFrame::FirstTransfer(frame)
-                } else {
-                    LinkFrame::TransferContinuation(frame)
-                })
-                .await
-                .map_err(|_| LinkRelayError::UnattachedHandle)?;
+                tx.send(LinkFrame::RemoteTransfer(frame))
+                    .await
+                    .map_err(|_| LinkRelayError::UnattachedHandle)?;
 
                 if !settled {
                     if let ReceiverSettleMode::Second = receiver_settle_mode {

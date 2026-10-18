@@ -435,6 +435,11 @@ where
                 frame.payload,
                 false,
             )?,
+            LinkFrame::RemoteTransfer(_) => {
+                // Remote transfers are forwarded from the session to a link;
+                // they are never read by the session engine.
+                unreachable!("LinkFrame::RemoteTransfer should not reach the session engine")
+            }
             LinkFrame::Disposition(disposition) => self
                 .session
                 .on_outgoing_disposition(disposition)
