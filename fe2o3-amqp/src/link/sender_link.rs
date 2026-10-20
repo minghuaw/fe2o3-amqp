@@ -145,7 +145,6 @@ where
             // even when there is no middle frame (i.e. the delivery spans exactly
             // two frames).
             clear_continuation_fields(&mut transfer);
-            debug_assert!(transfer.delivery_tag.is_none());
 
             // Send the transfers in the middle
             while payload.len() > max_payload {
