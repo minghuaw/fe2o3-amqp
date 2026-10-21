@@ -12,7 +12,7 @@ use crate::{
     Delivery, Receiver,
 };
 
-use super::{TransactionBase, TransactionDischarge, TransactionRetirement, TXN_ID_KEY};
+use super::{TransactionBase, TransactionDischarge, TransactionRetirement};
 
 /// 4.4.3 Transactional Acquisition
 ///
@@ -55,10 +55,7 @@ where
     /// Clear transaction-id from link and set link to drain
     pub async fn cleanup(&mut self) -> Result<(), FlowError> {
         // clear txn-id
-        {
-            let mut writer = self.recver.inner.link.flow_state.lock.write();
-            writer.properties.as_mut().map(|map| map.swap_remove(TXN_ID_KEY));
-        }
+        self.recver.inner.link.flow_state.lock.write().txn_id = None;
 
         // set drain to true
         //
@@ -155,11 +152,7 @@ where
         // behind, making a later `acquire` on the same link fail.
         let cleared = {
             let mut writer = self.recver.inner.link.flow_state.lock.write();
-            writer
-                .properties
-                .as_mut()
-                .and_then(|fields| fields.swap_remove(TXN_ID_KEY))
-                .is_some()
+            writer.txn_id.take().is_some()
         };
 
         if cleared {

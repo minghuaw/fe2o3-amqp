@@ -91,6 +91,21 @@ fn warn_unrecorded_stop_reason() {
     log::warn!("session stop reason not recorded; reporting a link-local failure");
 }
 
+/// Warn that an operation required the link's session-assigned handle, but the
+/// link was not registered. The failure is derived from the recorded link state
+/// (see [`link_error_from_closed_channel`]) rather than reported as an
+/// unconditional invariant violation.
+pub(crate) fn warn_missing_link_handle() {
+    #[cfg(feature = "tracing")]
+    tracing::warn!(
+        "link handle requested while the link is not registered; deriving the failure from the link state"
+    );
+    #[cfg(feature = "log")]
+    log::warn!(
+        "link handle requested while the link is not registered; deriving the failure from the link state"
+    );
+}
+
 /// The [`LinkError`] for an operation that failed because the session (or
 /// its connection) stopped; [`LinkError::InternalError`] when no stop
 /// reason was recorded.

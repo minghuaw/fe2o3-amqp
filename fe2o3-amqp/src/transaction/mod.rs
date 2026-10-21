@@ -45,13 +45,13 @@ use crate::{
 
 use bytes::{BufMut, BytesMut};
 use fe2o3_amqp_types::{
-    definitions::{self, AmqpError, DeliveryTag, Fields, SequenceNo},
+    definitions::{self, DeliveryTag, SequenceNo},
     messaging::{
         message::__private::Serializable, Accepted, DeliveryState, Message, Modified, Outcome,
         Rejected, Released, SerializableBody, MESSAGE_FORMAT,
     },
     performatives::Transfer,
-    primitives::{OrderedMap, Symbol},
+    primitives::OrderedMap,
     transaction::{Declared, Discharge, TransactionId, TransactionalState},
 };
 
@@ -67,7 +67,7 @@ pub use controller::*;
 mod error;
 pub use error::*;
 use serde::Serialize;
-use serde_amqp::{ser::Serializer, Value};
+use serde_amqp::ser::Serializer;
 
 mod acquisition;
 pub use acquisition::*;
@@ -390,24 +390,24 @@ pub trait TransactionAcquisition:
     ///
     /// The transaction id is retired by [`TxnAcquisition::commit`],
     /// [`TxnAcquisition::rollback`], [`TxnAcquisition::cleanup`] or its `Drop`
-    /// implementation. Acquiring a link that still carries a transaction id is
-    /// impossible by contract and reports [`FlowError::InvariantViolation`]
-    /// (defensive).
+    /// implementation. A live [`TxnAcquisition`] borrows the receiver mutably,
+    /// so a link cannot be acquired twice concurrently.
     fn acquire<'r>(
         self,
         recver: &'r mut Receiver,
         credit: SequenceNo,
     ) -> impl Future<Output = Result<TxnAcquisition<'r, Self>, FlowError>> + Send {
         async move {
-            let value = Value::Binary(self.txn_id().clone());
             {
                 let mut writer = recver.inner.link.flow_state.lock.write();
-                let fields = writer.properties.get_or_insert_with(Fields::new);
-                if fields.contains_key(TXN_ID_KEY) {
-                    return Err(FlowError::InvariantViolation);
-                }
-
-                fields.insert(Symbol::from(TXN_ID_KEY), value);
+                // A live `TxnAcquisition` borrows `recver` mutably, so a second
+                // acquisition cannot overlap; the assertion is defensive against
+                // an externally seeded `txn-id`.
+                debug_assert!(
+                    writer.txn_id.is_none(),
+                    "the link is already associated with a transaction"
+                );
+                writer.txn_id = Some(self.txn_id().clone());
             }
 
             match recver
@@ -422,10 +422,7 @@ pub trait TransactionAcquisition:
             {
                 Ok(_) => Ok(TxnAcquisition { txn: self, recver }),
                 Err(error) => {
-                    let mut writer = recver.inner.link.flow_state.lock.write();
-                    if let Some(fields) = &mut writer.properties {
-                        fields.swap_remove(TXN_ID_KEY);
-                    }
+                    recver.inner.link.flow_state.lock.write().txn_id = None;
                     Err(error)
                 }
             }
@@ -662,8 +659,7 @@ pub(crate) fn rollback_on_drop(
 
     match inner.link.flow_state.try_consume(1) {
         Ok(_) => {
-            let input_handle = match inner.link.input_handle.clone().ok_or(AmqpError::IllegalState)
-            {
+            let input_handle = match inner.link.remote_handle().cloned() {
                 Ok(handle) => handle,
                 Err(_error) => {
                     #[cfg(feature = "tracing")]
@@ -673,9 +669,9 @@ pub(crate) fn rollback_on_drop(
                     return;
                 }
             };
-            let handle = match inner.link.output_handle.clone() {
-                Some(handle) => handle.into(),
-                None => return,
+            let handle = match inner.link.local_handle().cloned() {
+                Ok(handle) => handle.into(),
+                Err(_) => return,
             };
             let tag = match inner.link.flow_state.state().lock.try_read() {
                 Some(inner) => inner.delivery_count.to_be_bytes(),
@@ -864,17 +860,9 @@ mod tests {
         std::mem::forget(acq); // skip Drop's blocking send; releases the borrow
 
         // ...and the txn-id was recorded on the link's flow state.
-        assert!(
-            receiver
-                .inner
-                .link
-                .flow_state
-                .lock
-                .read()
-                .properties
-                .as_ref()
-                .expect("properties must be recorded")
-                .contains_key(&Symbol::from("txn-id")),
+        assert_eq!(
+            receiver.inner.link.flow_state.lock.read().txn_id,
+            Some(id.clone()),
             "the link must record the txn-id"
         );
     }

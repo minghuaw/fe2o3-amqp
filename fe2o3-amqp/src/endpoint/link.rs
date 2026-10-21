@@ -14,14 +14,14 @@ use crate::{
     control::SessionControl,
     link::{
         delivery::{Delivery, DeliveryInfo},
-        state::LinkState,
+        state::{LinkHandles, LinkState},
         ApplyRemoteDetachError, AttachMode, LinkFrame, LinkOutcome, SessionStopped,
     },
     util::{AsByteIterator, IntoReader},
     Payload,
 };
 
-use super::{OutputHandle, Settlement};
+use super::Settlement;
 
 pub(crate) trait LinkDetach {
     type DetachError: Send;
@@ -110,7 +110,12 @@ pub(crate) trait LinkExt: Link {
 
     fn name(&self) -> &str;
 
-    fn output_handle_mut(&mut self) -> &mut Option<OutputHandle>;
+    /// Register the link with the session, recording its handles.
+    fn register(&mut self, handles: LinkHandles);
+
+    /// Release the session handles, marking the link unregistered. Returns the
+    /// released handles, or `None` if the link was already unregistered.
+    fn release(&mut self) -> Option<LinkHandles>;
 
     /// The shared cell holding why the session (or its connection) stopped
     fn session_stop_reason(&self) -> &Arc<OnceLock<SessionStopped>>;

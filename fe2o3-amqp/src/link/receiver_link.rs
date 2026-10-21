@@ -50,11 +50,7 @@ where
         echo: bool,
         include_properties: bool,
     ) -> Result<(), Self::FlowError> {
-        let handle = self
-            .output_handle
-            .clone()
-            .ok_or(Self::FlowError::InvariantViolation)?
-            .into();
+        let handle = self.local_handle()?.clone().into();
 
         let flow = self.get_link_flow(handle, link_credit, drain, echo, include_properties);
         writer
@@ -228,11 +224,7 @@ where
             }
         };
 
-        let link_output_handle = self
-            .output_handle
-            .clone()
-            .ok_or(LinkError::InvariantViolation)?
-            .into();
+        let link_output_handle = self.local_handle()?.clone().into();
 
         let delivery = Delivery {
             link_output_handle,
@@ -423,11 +415,7 @@ impl ReceiverLink<Target> {
             echo: bool,
             include_properties: bool,
         ) -> Result<(), FlowError> {
-            let handle = self
-                .output_handle
-                .clone()
-                .ok_or(FlowError::InvariantViolation)?
-                .into();
+            let handle = self.local_handle()?.clone().into();
 
             let flow = self.get_link_flow(handle, link_credit, drain, echo, include_properties);
             writer
@@ -553,11 +541,7 @@ impl<T> ReceiverLink<T> {
                 guard.link_credit = link_credit;
                 guard.drain = drain;
 
-                let properties = if include_properties {
-                    guard.properties.clone()
-                } else {
-                    None
-                };
+                let properties = guard.rendered_properties(include_properties);
 
                 LinkFlow {
                     handle,
@@ -578,11 +562,7 @@ impl<T> ReceiverLink<T> {
                 let mut guard = self.flow_state.lock.write();
                 guard.link_credit = link_credit;
 
-                let properties = if include_properties {
-                    guard.properties.clone()
-                } else {
-                    None
-                };
+                let properties = guard.rendered_properties(include_properties);
 
                 LinkFlow {
                     handle,
@@ -603,11 +583,7 @@ impl<T> ReceiverLink<T> {
                 let mut guard = self.flow_state.lock.write();
                 guard.drain = drain;
 
-                let properties = if include_properties {
-                    guard.properties.clone()
-                } else {
-                    None
-                };
+                let properties = guard.rendered_properties(include_properties);
 
                 LinkFlow {
                     handle,
@@ -627,11 +603,7 @@ impl<T> ReceiverLink<T> {
             (None, None) => {
                 let guard = self.flow_state.lock.read();
 
-                let properties = if include_properties {
-                    guard.properties.clone()
-                } else {
-                    None
-                };
+                let properties = guard.rendered_properties(include_properties);
 
                 LinkFlow {
                     handle,
@@ -689,7 +661,7 @@ where
             _ => return Err(ReceiverAttachError::IllegalState),
         };
 
-        self.input_handle = Some(InputHandle::from(remote_attach.handle));
+        self.set_remote_handle(InputHandle::from(remote_attach.handle));
 
         // In this case, the sender is considered to hold the authoritative version of the
         // version of the source properties
@@ -814,8 +786,12 @@ where
         &self.name
     }
 
-    fn output_handle_mut(&mut self) -> &mut Option<OutputHandle> {
-        &mut self.output_handle
+    fn register(&mut self, handles: LinkHandles) {
+        self.handles = Some(handles);
+    }
+
+    fn release(&mut self) -> Option<LinkHandles> {
+        self.handles.take()
     }
 
     fn session_stop_reason(&self) -> &Arc<OnceLock<SessionStopped>> {

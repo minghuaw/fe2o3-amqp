@@ -22,7 +22,7 @@ use super::{
     receiver::{CreditMode, ReceiverInner},
     role,
     sender::SenderInner,
-    state::{LinkFlowState, LinkFlowStateInner, LinkState},
+    state::{LinkFlowState, LinkFlowStateInner, LinkHandles, LinkState},
     target_archetype::VerifyTargetArchetype,
     ArcUnsettledMap, DeliveryFailure, LinkError, Receiver, ReceiverAttachError, ReceiverFlowState,
     ReceiverLink, ReceiverRelayFlowState, Sender, SenderAttachError, SenderFlowState, SenderLink,
@@ -433,8 +433,10 @@ impl<Role, T, NameState, SS, TS> Builder<Role, T, NameState, SS, TS> {
             local_state,
             // state_code,
             name: self.name,
-            output_handle: Some(output_handle),
-            input_handle: None,
+            handles: Some(LinkHandles {
+                local: output_handle,
+                remote: None,
+            }),
             snd_settle_mode: self.snd_settle_mode,
             rcv_settle_mode: self.rcv_settle_mode,
             source: self.source,
@@ -521,6 +523,7 @@ where
             available: 0,
             drain: false, // The drain flag is initialized to false.
             properties: self.properties.take(),
+            txn_id: None,
         };
         let flow_state = Arc::new(LinkFlowState::sender(flow_state_inner));
         let notifier = Arc::new(Notify::new());
@@ -641,6 +644,7 @@ where
             available: 0,
             drain: false, // The drain flag is initialized to false.
             properties: self.properties.take(),
+            txn_id: None,
         };
         let flow_state = Arc::new(LinkFlowState::receiver(flow_state_inner));
         (flow_state.clone(), flow_state)

@@ -681,9 +681,9 @@ where
         // Whether the peer can still be reached with a closing detach
         let mut detach_sent = false;
         if !remote_detach_received {
-            if let Some(handle) = self.link.output_handle_mut().take() {
+            if let Some(handles) = self.link.release() {
                 let detach = Detach {
-                    handle: handle.into(),
+                    handle: handles.local.into(),
                     closed: true,
                     error: None,
                 };
@@ -1054,12 +1054,7 @@ impl SenderInner<SenderLink<Target>> {
         message_format: MessageFormat,
         sender: Option<oneshot::Sender<Result<Option<DeliveryState>, DeliveryFailure>>>,
     ) -> Result<(), SendError> {
-        let handle = self
-            .link
-            .output_handle
-            .clone()
-            .ok_or(LinkError::InvariantViolation)?
-            .into();
+        let handle = self.link.local_handle()?.clone().into();
         let transfer = Transfer {
             handle,
             delivery_id: None,
@@ -1092,12 +1087,7 @@ impl SenderInner<SenderLink<Target>> {
         delivery_tag: DeliveryTag,
         unsettled_message: UnsettledMessage,
     ) -> Result<(), SendError> {
-        let handle = self
-            .link
-            .output_handle
-            .clone()
-            .ok_or(LinkError::InvariantViolation)?
-            .into();
+        let handle = self.link.local_handle()?.clone().into();
         let settled = match self.link.snd_settle_mode {
             SenderSettleMode::Settled => true,
             SenderSettleMode::Unsettled => false,
@@ -1129,12 +1119,7 @@ impl SenderInner<SenderLink<Target>> {
         payload: Payload,
         sender: oneshot::Sender<Result<Option<DeliveryState>, DeliveryFailure>>,
     ) -> Result<(), SendError> {
-        let handle = self
-            .link
-            .output_handle
-            .clone()
-            .ok_or(LinkError::InvariantViolation)?
-            .into();
+        let handle = self.link.local_handle()?.clone().into();
         let transfer = Transfer {
             handle,
             delivery_id: None,
@@ -1595,7 +1580,7 @@ mod tests {
     use crate::endpoint::{InputHandle, OutputHandle, SenderLink as _};
     use crate::{
         link::{
-            state::{LinkFlowState, LinkFlowStateInner, LinkState},
+            state::{LinkFlowState, LinkFlowStateInner, LinkHandles, LinkState},
             LinkTransfer,
         },
         util::Consumer,
@@ -1620,6 +1605,7 @@ mod tests {
             available: 0,
             drain: false,
             properties: None,
+            txn_id: None,
         };
         let flow_state = Arc::new(LinkFlowState::sender(flow_state_inner));
         let consumer = Consumer::new(Arc::new(Notify::new()), flow_state);
@@ -1628,8 +1614,10 @@ mod tests {
             role: PhantomData,
             local_state: LinkState::Attached,
             name: String::from("test-sender"),
-            output_handle: Some(endpoint::OutputHandle(0)),
-            input_handle: None,
+            handles: Some(LinkHandles {
+                local: endpoint::OutputHandle(0),
+                remote: None,
+            }),
             snd_settle_mode: SenderSettleMode::Mixed,
             rcv_settle_mode: ReceiverSettleMode::First,
             source: None,
@@ -1835,7 +1823,7 @@ mod tests {
     /// A sender ready to send: attached, with a peer handle.
     fn sendable_sender() -> SenderInner<SenderLink<Target>> {
         let mut inner = make_sender_inner(4096);
-        inner.link.input_handle = Some(endpoint::InputHandle(0));
+        inner.link.set_remote_handle(endpoint::InputHandle(0));
         inner
     }
 
@@ -1862,10 +1850,11 @@ mod tests {
         }
     }
 
-    /// A linked endpoint without its remote handle is an internal invariant
-    /// violation: the endpoint cannot be observed in that state.
+    /// A linked endpoint without its remote handle derives its failure from the
+    /// recorded link state (no stop reason and a non-terminal state here, so
+    /// `InternalError`).
     #[tokio::test]
-    async fn send_without_input_handle_is_invariant_violation() {
+    async fn send_without_input_handle_reports_internal_error() {
         let inner = make_sender_inner(4096); // input_handle is None
         let (outgoing_tx, mut outgoing_rx) = mpsc::channel::<LinkFrame>(16);
 
@@ -1880,17 +1869,18 @@ mod tests {
 
         assert!(matches!(
             result,
-            Err(TransferError::LinkState(LinkError::InvariantViolation))
+            Err(TransferError::LinkState(LinkError::InternalError))
         ));
         assert!(outgoing_rx.try_recv().is_err());
     }
 
-    /// Generating a transfer without a local handle is an internal invariant
-    /// violation: the endpoint cannot be observed in that state.
+    /// Generating a transfer without a local handle derives its failure from the
+    /// recorded link state (no stop reason and a non-terminal state here, so
+    /// `InternalError`).
     #[test]
-    fn generate_transfer_without_output_handle_is_invariant_violation() {
+    fn generate_transfer_without_output_handle_reports_internal_error() {
         let mut inner = make_sender_inner(4096);
-        inner.link.output_handle = None;
+        inner.link.handles = None;
 
         let result = inner.link.generate_non_resuming_transfer_performative(
             DeliveryTag::from(b"tag0".to_vec()),
@@ -1902,7 +1892,7 @@ mod tests {
 
         assert!(matches!(
             result,
-            Err(TransferError::LinkState(LinkError::InvariantViolation))
+            Err(TransferError::LinkState(LinkError::InternalError))
         ));
     }
 
@@ -1914,7 +1904,7 @@ mod tests {
     #[tokio::test]
     async fn split_returns_frame_size_too_small_when_performative_exceeds_max_frame_size() {
         let mut inner = make_sender_inner(8);
-        inner.link.input_handle = Some(endpoint::InputHandle(0));
+        inner.link.set_remote_handle(endpoint::InputHandle(0));
         let (outgoing_tx, mut outgoing_rx) = mpsc::channel::<LinkFrame>(16);
 
         let result = inner
@@ -2307,7 +2297,7 @@ mod tests {
     async fn next_delivery_tag_reports_acquisition_not_implemented() {
         let (mut inner, _session_rx, mut outgoing_rx, incoming_tx) =
             make_sender_inner_with_channels(4096);
-        inner.link.input_handle = Some(endpoint::InputHandle(0));
+        inner.link.set_remote_handle(endpoint::InputHandle(0));
 
         incoming_tx
             .send(LinkFrame::Acquisition(DeliveryTag::from(vec![0x01])))
@@ -2331,7 +2321,7 @@ mod tests {
     async fn acquisition_terminates_link_with_not_implemented() {
         let (mut inner, _session_rx, mut outgoing_rx, incoming_tx) =
             make_sender_inner_with_channels(4096);
-        inner.link.input_handle = Some(endpoint::InputHandle(0));
+        inner.link.set_remote_handle(endpoint::InputHandle(0));
 
         incoming_tx
             .send(LinkFrame::Acquisition(DeliveryTag::from(vec![0x01])))
@@ -2559,7 +2549,7 @@ mod tests {
     async fn abort_sends_aborted_resuming_transfer_and_settles() {
         let (mut inner, _session_rx, mut outgoing_rx, _incoming_tx) =
             make_sender_inner_with_channels(4096);
-        inner.link.input_handle = Some(InputHandle(0));
+        inner.link.set_remote_handle(InputHandle(0));
 
         let tag = DeliveryTag::from(vec![0x01]);
         let (sender, mut settled) = oneshot::channel();
@@ -2595,7 +2585,7 @@ mod tests {
     async fn abort_without_local_sender_does_not_register() {
         let (mut inner, _session_rx, mut outgoing_rx, _incoming_tx) =
             make_sender_inner_with_channels(4096);
-        inner.link.input_handle = Some(InputHandle(0));
+        inner.link.set_remote_handle(InputHandle(0));
 
         let tag = DeliveryTag::from(vec![0x02]);
         inner.abort(tag.clone(), 0, None).await.unwrap();
@@ -2727,7 +2717,12 @@ mod tests {
     #[tokio::test]
     async fn large_payload_is_split_into_one_first_and_continuation_frames() {
         let mut inner = make_sender_inner(256);
-        inner.link.input_handle = Some(InputHandle(0));
+        inner
+            .link
+            .handles
+            .as_mut()
+            .expect("the link is attached")
+            .remote = Some(InputHandle(0));
 
         let tag = DeliveryTag::from(vec![0x01]);
         let transfer = Transfer {
