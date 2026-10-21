@@ -183,7 +183,7 @@ where
                         self.control
                             .send(SessionControl::Disposition(disposition))
                             .await
-                            .map_err(|_| Self::Error::IllegalState)?
+                            .map_err(|_| Self::Error::InvariantViolation)?
                     }
                 }
                 TxnWorkFrame::Retire(mut disposition) => {
@@ -199,7 +199,7 @@ where
                             self.control
                                 .send(SessionControl::Disposition(disposition))
                                 .await
-                                .map_err(|_| Self::Error::IllegalState)?
+                                .map_err(|_| Self::Error::InvariantViolation)?
                         }
                     }
                 }

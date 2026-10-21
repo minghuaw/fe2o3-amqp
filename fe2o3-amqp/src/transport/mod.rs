@@ -320,7 +320,7 @@ where
             framed_write.send(proto_header).await?;
             *local_state = ConnectionState::HeaderExchange;
         }
-        _ => return Err(NegotiationError::IllegalState),
+        _ => return Err(NegotiationError::InvariantViolation),
     }
     Ok(())
 }
@@ -348,7 +348,7 @@ where
             *local_state = ConnectionState::HeaderExchange;
             incoming_header
         }
-        _ => return Err(NegotiationError::IllegalState),
+        _ => return Err(NegotiationError::InvariantViolation),
     };
     #[cfg(feature = "tracing")]
     tracing::trace!(?proto_header);

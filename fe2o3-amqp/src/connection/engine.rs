@@ -1,7 +1,6 @@
 //! The engine handles incoming and outgoing frames and messages to reduce
 //! transferring frames/messages over channels
 
-use std::io;
 use std::sync::{Arc, OnceLock};
 use std::time::Duration;
 
@@ -135,7 +134,11 @@ where
             ConnectionState::Start
             | ConnectionState::HeaderReceived
             | ConnectionState::HeaderSent
-            | ConnectionState::HeaderExchange => Err(ConnectionInnerError::IllegalState),
+            | ConnectionState::HeaderExchange => {
+                // The connection never reached the open exchange, so there is
+                // no close to exchange; just stop.
+                Ok(Running::Stop)
+            }
             ConnectionState::OpenPipe
             | ConnectionState::OpenClosePipe
             | ConnectionState::OpenReceived
@@ -173,12 +176,11 @@ where
         discard_other: bool,
     ) -> Result<(IncomingChannel, Close), ConnectionInnerError> {
         loop {
-            let frame = self.transport.next().await.ok_or_else(|| {
-                transport::Error::Io(io::Error::new(
-                    io::ErrorKind::UnexpectedEof,
-                    "Expecting remote close",
-                ))
-            })??;
+            let frame = self
+                .transport
+                .next()
+                .await
+                .ok_or(ConnectionInnerError::ConnectionLost)??;
 
             match frame.body {
                 FrameBody::Close(close) => return Ok((IncomingChannel(frame.channel), close)),
@@ -200,12 +202,7 @@ where
                 Ok(fr) => fr,
                 Err(error) => return Err(error.into()),
             },
-            None => {
-                return Err(OpenError::Io(io::Error::new(
-                    io::ErrorKind::UnexpectedEof,
-                    "Expecting an Open frame",
-                )))
-            }
+            None => return Err(OpenError::ConnectionLost),
         };
         let Frame { channel, body } = frame;
         let channel = endpoint::IncomingChannel(channel);
@@ -260,6 +257,10 @@ where
         match engine.open_inner().await {
             Ok(_) => Ok(engine),
             Err(error) => {
+                // The transport is already gone; there is no close to exchange.
+                if matches!(error, OpenError::ConnectionLost) {
+                    return Err(error);
+                }
                 match engine.close_connection(None).await {
                     Ok(_) => Err(error),
                     Err(error) => match error {
@@ -267,6 +268,10 @@ where
                             Err(OpenError::TransportError(e))
                         }
                         ConnectionInnerError::IllegalState => Err(OpenError::IllegalState),
+                        ConnectionInnerError::ConnectionLost => Err(OpenError::ConnectionLost),
+                        ConnectionInnerError::InvariantViolation => {
+                            Err(OpenError::InvariantViolation)
+                        }
                         ConnectionInnerError::NotImplemented(e) => {
                             Err(OpenError::NotImplemented(e))
                         }
@@ -295,7 +300,21 @@ where
     ) -> Result<(), ConnectionInnerError> {
         match &self.connection.local_state() {
             ConnectionState::Opened => {}
-            _ => return Err(ConnectionInnerError::IllegalState),
+            _state => {
+                // The connection is no longer opened, so the frame cannot be
+                // forwarded; discard it instead of failing the connection.
+                #[cfg(feature = "tracing")]
+                tracing::warn!(
+                    "dropping a session frame received while the connection is not opened: {:?}",
+                    _state
+                );
+                #[cfg(feature = "log")]
+                log::warn!(
+                    "dropping a session frame received while the connection is not opened: {:?}",
+                    _state
+                );
+                return Ok(());
+            }
         };
 
         match self.connection.session_tx_by_incoming_channel(channel) {
@@ -433,9 +452,9 @@ where
             }
             ConnectionControl::AllocateSession { tx, responder } => {
                 let result = self.connection.allocate_session(tx).map_err(Into::into);
-                responder
-                    .send(result)
-                    .map_err(|_| ConnectionInnerError::IllegalState)?;
+                // The requester may have dropped while the result was in
+                // flight; the allocation itself is not failed by that.
+                let _ = responder.send(result);
             }
             ConnectionControl::DeallocateSession(session_id) => {
                 self.connection.deallocate_session(session_id)
@@ -459,7 +478,21 @@ where
             // `CloseReceived`; the buffered frames are flushed as part of
             // closing the connection.
             ConnectionState::Opened | ConnectionState::CloseReceived => {}
-            _ => return Err(ConnectionInnerError::IllegalState),
+            _state => {
+                // The connection is closing or closed, so the session's frame
+                // can no longer be forwarded; discard it.
+                #[cfg(feature = "tracing")]
+                tracing::warn!(
+                    "dropping an outgoing session frame sent while the connection is closing: {:?}",
+                    _state
+                );
+                #[cfg(feature = "log")]
+                log::warn!(
+                    "dropping an outgoing session frame sent while the connection is closing: {:?}",
+                    _state
+                );
+                return Ok(Running::Continue);
+            }
         }
 
         let SessionFrame { channel, body } = frame;
@@ -513,6 +546,12 @@ where
     ) -> Result<Running, ConnectionInnerError> {
         match error {
             ConnectionInnerError::TransportError(_) => Ok(Running::Stop),
+            ConnectionInnerError::ConnectionLost => Ok(Running::Stop),
+            ConnectionInnerError::InvariantViolation => {
+                let error = definitions::Error::new(AmqpError::InternalError, None, None);
+                self.close_connection(Some(error)).await?;
+                Ok(Running::Stop)
+            }
             ConnectionInnerError::IllegalState => {
                 let error = definitions::Error::new(AmqpError::IllegalState, None, None);
                 self.close_connection(Some(error)).await?;
@@ -563,7 +602,11 @@ where
                                 | ConnectionState::OpenSent
                                 | ConnectionState::Opened
                                 | ConnectionState::CloseReceived
-                                | ConnectionState::CloseSent => Err(ConnectionInnerError::IllegalState),
+                                | ConnectionState::CloseSent => {
+                                    // The transport ended without the AMQP
+                                    // close exchange.
+                                    Err(ConnectionInnerError::ConnectionLost)
+                                }
                                 ConnectionState::ClosePipe
                                 | ConnectionState::Discarding
                                 | ConnectionState::End => Ok(Running::Stop),

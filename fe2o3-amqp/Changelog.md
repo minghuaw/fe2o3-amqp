@@ -54,6 +54,36 @@
     and `Result<(), TryCloseError>` whose `Ended`/`Closed` variant carries the terminal
     error; `TryEndError::AlreadyEnded` and `TryCloseError::AlreadyClosed` are removed.
 
+24. **Breaking**: peer violations in the link layer are now answered consistently. A frame
+    the session forwards that is not permitted in the current state (an `Attach` on an
+    attached link, or any other unexpected frame) terminates the link with an
+    `amqp:illegal-state` detach; the attach rejections previously reported `IllegalState`
+    without closing the link, `SendError::UnexpectedFrame` was reported without a detach,
+    and a `Flow`/`Disposition` frame reaching the receiver stream reported `IllegalState`
+    instead of an internal-invariant failure. `Flow`/`Disposition` leaks now close the link
+    with `amqp:internal-error` and report `LinkStateError::InvariantViolation`. Local
+    producers were reclassified: attach serialization, a missing output handle and a missing
+    delivery tag report `InvariantViolation`; flow and disposition operations on a link
+    without a local handle report the new `LinkStateError::NotAttached`.
+25. **Breaking**: local session/connection state-machine violations are now answered with
+    `amqp:internal-error` instead of `amqp:illegal-state` (which is reserved for frames
+    the peer is not permitted to send): `session::Error` and `session::BeginError` gain
+    `InvariantViolation`, as do `connection::Error` and `OpenError`, and a session or
+    connection whose engine stopped without reporting its outcome reports
+    `InvariantViolation` instead of `IllegalState`. Frames that race an ending session or
+    a closing connection are discarded: an outgoing link/session frame that can no longer
+    be forwarded is dropped instead of failing the session/connection, and a duplicate or
+    late `End` is ignored. A transport that ends without the AMQP close exchange now
+    reports the new `ConnectionLost` error (`OpenError::ConnectionLost` when the
+    connection was still opening) instead of an artificial unexpected-EOF IO error; a
+    close before the open exchange completes simply stops.
+
+26. **Bugfix**: `TxnAcquisition` now clears the link's `txn-id` when dropped even
+    after a direct discharge through `txn_mut()`, which bypasses `cleanup()` and
+    previously left the id on the link so a later `acquire` reported a local error.
+    The defensive `acquire` check reports `FlowError::InvariantViolation` instead of
+    the peer-only `IllegalState`, as do the internal transaction disposition sends.
+
 ## 0.18.2
 
 **Bugfix**: an unsettled delivery is now registered before its transfer reaches the session, preventing `send` from hanging when the peer settles immediately.
