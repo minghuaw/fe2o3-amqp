@@ -1804,13 +1804,22 @@ mod tests {
         remote_attach.unsettled = Some(remote_unsettled);
 
         let driver = async move {
+            let mut incoming_tx: Option<mpsc::Sender<LinkFrame>> = None;
             let mut attaches = 0usize;
             let mut saw_abort = false;
 
             loop {
                 tokio::select! {
                     ctrl = session_rx.recv() => match ctrl {
-                        Some(SessionControl::AllocateLink { responder, .. }) => {
+                        Some(SessionControl::AllocateLink {
+                            link_relay,
+                            responder,
+                            ..
+                        }) => {
+                            incoming_tx = Some(match link_relay {
+                                LinkRelay::Sender { tx, .. } => tx,
+                                LinkRelay::Receiver { tx, .. } => tx,
+                            });
                             let _ = responder.send(Ok(OutputHandle(1)));
                         }
                         Some(_) => {}
