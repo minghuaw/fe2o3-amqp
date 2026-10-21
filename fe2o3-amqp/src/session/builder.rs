@@ -9,7 +9,7 @@ use slab::Slab;
 use tokio::sync::mpsc;
 
 use crate::{
-    connection::{AllocSessionError, ConnectionHandle, ConnectionStopReason},
+    connection::{AllocSessionError, ConnectionHandle, ConnectionOutcome},
     control::SessionControl,
     endpoint::{OutgoingChannel, Session as _},
     session::{engine::SessionEngine, SessionState},
@@ -97,7 +97,7 @@ cfg_transaction! {
                 outgoing_channel: OutgoingChannel,
                 control_link_acceptor: ControlLinkAcceptor,
                 local_state: SessionState,
-                connection_stop_reason: Arc<OnceLock<ConnectionStopReason>>,
+                connection_stop_reason: Arc<OnceLock<ConnectionOutcome>>,
                 max_frame_size: usize,
             ) -> TxnSession<Session> {
                 let txn_manager = TransactionManager::new(outgoing, control_link_acceptor);
@@ -151,7 +151,7 @@ impl Builder {
         self,
         outgoing_channel: OutgoingChannel,
         local_state: SessionState,
-        connection_stop_reason: Arc<OnceLock<ConnectionStopReason>>,
+        connection_stop_reason: Arc<OnceLock<ConnectionOutcome>>,
     ) -> Session {
         Session {
             outgoing_channel,
@@ -377,6 +377,7 @@ impl Builder {
 
             let handle = SessionHandle {
                 is_ended: false,
+                end_sent: false,
                 control: session_control_tx,
                 engine_handle,
                 outcome,
@@ -447,6 +448,7 @@ impl Builder {
 
             let handle = SessionHandle {
                 is_ended: false,
+                end_sent: false,
                 control: session_control_tx,
                 engine_handle,
                 outcome,
@@ -516,6 +518,7 @@ impl Builder {
 
             let handle = SessionHandle {
                 is_ended: false,
+                end_sent: false,
                 control: session_control_tx,
                 engine_handle,
                 outcome,

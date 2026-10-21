@@ -66,7 +66,7 @@ type SessionRelay = Arc<Sender<SessionIncomingItem>>;
 /// The unprefixed variants describe the local side's action; the `Remote*`
 /// variants describe a remote-initiated close.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum ConnectionStopReason {
+pub enum ConnectionOutcome {
     /// The connection closed cleanly (locally)
     Closed,
     /// We closed the connection with this error
@@ -86,16 +86,23 @@ pub enum ConnectionStopReason {
 /// - `R`: The type of the session listener. This will be `()` on the client side.
 #[allow(dead_code)]
 pub struct ConnectionHandle<R> {
-    /// Only change this value in `on_close` method
+    /// Whether the terminal close outcome was already observed; set in
+    /// `on_close`/`try_close`. Later terminal calls report
+    /// [`Error::AlreadyClosed`].
     pub(crate) is_closed: bool,
+    /// Whether a `Close` control was already enqueued for the engine. Set by
+    /// `try_close`/`close`/`close_with_error` and checked by [`Drop`], so a
+    /// close is initiated at most once even when a non-blocking probe is
+    /// followed by a blocking close.
+    pub(crate) close_sent: bool,
     pub(crate) control: Sender<ConnectionControl>,
     pub(crate) handle: JoinHandle<()>,
-    pub(crate) outcome: oneshot::Receiver<Result<(), Error>>,
+    pub(crate) outcome: oneshot::Receiver<Result<ConnectionOutcome, Error>>,
 
     // outgoing channel for session
     pub(crate) outgoing: Sender<SessionFrame>,
     /// Why the connection stopped, shared with the sessions
-    pub(crate) connection_stop_reason: Arc<OnceLock<ConnectionStopReason>>,
+    pub(crate) connection_stop_reason: Arc<OnceLock<ConnectionOutcome>>,
     /// The negotiated max frame size (encoder max frame length), shared with
     /// the sessions and the links
     pub(crate) max_frame_size: usize,
@@ -110,6 +117,12 @@ impl<R> std::fmt::Debug for ConnectionHandle<R> {
 
 impl<R> Drop for ConnectionHandle<R> {
     fn drop(&mut self) {
+        // The close was already observed or initiated; do not send a second
+        // Close frame (a duplicate `try_close` followed by a drop would
+        // otherwise violate §2.4.3).
+        if self.is_closed || self.close_sent {
+            return;
+        }
         if let Err(_error) = self.control.try_send(ConnectionControl::Close(None)) {
             #[cfg(any(feature = "log", feature = "tracing"))]
             {
@@ -124,6 +137,8 @@ impl<R> Drop for ConnectionHandle<R> {
                 #[cfg(feature = "log")]
                 log::warn!("Failed to enqueue Close frame on connection drop: {reason}");
             }
+        } else {
+            self.close_sent = true;
         }
     }
 }
@@ -143,30 +158,57 @@ impl<R> ConnectionHandle<R> {
         self.max_frame_size
     }
 
-    /// Tries to close the connection
+    /// Tries to close the connection without blocking.
+    ///
+    /// The `Close` exchange is initiated at most once: a later `try_close`
+    /// or `close` does not send a second `Close` frame. This reports the
+    /// outcome if it has arrived and [`None`] while the exchange is still in
+    /// progress; use [`on_close`](#method.on_close) to await the outcome.
+    ///
+    /// The outcome is delivered once; a connection whose outcome was already
+    /// observed reports [`Error::AlreadyClosed`]. Use
+    /// [`is_closed`](#method.is_closed) to query the state instead.
     ///
     /// # Returns
     ///
-    /// - `Ok(Ok(()))` if the connection is closed successfully
-    /// - `Ok(Err(error))` if an error occurred on either side during exchange of close frames
-    /// - `Err(TryCloseError::AlreadyClosed)` if the connection is already closed
-    /// - `Err(TryCloseError::RemoteCloseNotReceived)` if the remote close is not received
-    pub fn try_close(&mut self) -> Result<Result<(), Error>, TryCloseError> {
+    /// - `Ok(Some(outcome))` if the connection reached a terminal outcome
+    /// - `Ok(None)` if the close exchange is still in progress
+    /// - `Err(error)` if the connection stopped with a local error
+    /// - `Err(Error::AlreadyClosed)` if the outcome was already observed
+    /// # Errors
+    ///
+    /// Returns [`Error`] if the connection stopped with a local failure or the
+    /// outcome was already observed (`Error::AlreadyClosed`); `Ok(None)` means
+    /// the close exchange is still in progress, use
+    /// [`on_close`](#method.on_close) to await it.
+    pub fn try_close(&mut self) -> Result<Option<ConnectionOutcome>, Error> {
         if self.is_closed {
-            return Err(TryCloseError::AlreadyClosed);
+            return Err(Error::AlreadyClosed);
         }
 
-        let _ = self.control.try_send(ConnectionControl::Close(None));
+        if !self.close_sent
+            && self
+                .control
+                .try_send(ConnectionControl::Close(None))
+                .is_ok()
+        {
+            self.close_sent = true;
+        }
+
         match self.outcome.try_recv() {
-            Ok(res) => {
+            Ok(Ok(outcome)) => {
                 self.is_closed = true;
-                Ok(res)
+                Ok(Some(outcome))
             }
-            Err(TryRecvError::Empty) => Err(TryCloseError::RemoteCloseNotReceived),
+            Ok(Err(error)) => {
+                self.is_closed = true;
+                Err(error)
+            }
+            Err(TryRecvError::Empty) => Ok(None),
             Err(TryRecvError::Closed) => {
                 self.is_closed = true;
-                // The engine somehow has already stopped running
-                Ok(Err(Error::IllegalState))
+                // The engine stopped without reporting its outcome.
+                Err(Error::InternalError)
             }
         }
     }
@@ -175,66 +217,107 @@ impl<R> ConnectionHandle<R> {
         /// Close the connection
         ///
         /// Closing the connection implicitly ends its sessions (the AMQP model); there is
-        /// no need to end the sessions first. If the peer closed the connection with an
-        /// error, the error is reported through this method.
+        /// no need to end the sessions first.
         ///
-        /// An `Error::IllegalState` will be returned if this is called after executing any of
-        /// [`close`](#method.close), [`close_with_error`](#method.close_with_error) or
-        /// [`on_close`](#method.on_close). This will cause the JoinHandle to be polled after
-        /// completion, which causes a panic.
+        /// The close outcome is delivered once: the returned [`ConnectionOutcome`]
+        /// reports how the connection closed (locally, by the remote, or with an error on
+        /// either side) and a remote error is carried inside it. Calling this after the
+        /// outcome was already observed reports [`Error::AlreadyClosed`]; use
+        /// [`is_closed`](#method.is_closed) to query the state instead.
         ///
         /// # wasm32 support
         ///
         /// This method is not supported in wasm32 targets, please use `drop()` instead.
-        pub async fn close(&mut self) -> Result<(), Error> {
-            // If sending is unsuccessful, the `ConnectionEngine` event loop is
-            // already dropped, this should be reflected by `JoinError` then.
-            let _ = self.control.send(ConnectionControl::Close(None)).await;
+        /// # Errors
+        ///
+        /// Returns [`Error`] if the connection stopped with a local failure or
+        /// the outcome was already observed (`Error::AlreadyClosed`). A remote
+        /// close is reported as the returned [`ConnectionOutcome`], not as an
+        /// error; a transport that ended without the close exchange reports
+        /// `Error::ConnectionLost`.
+        pub async fn close(&mut self) -> Result<ConnectionOutcome, Error> {
+            if self.is_closed {
+                return Err(Error::AlreadyClosed);
+            }
+            if !self.close_sent {
+                // If sending is unsuccessful, the `ConnectionEngine` event
+                // loop is already dropped; the outcome channel reports it.
+                let _ = self.control.send(ConnectionControl::Close(None)).await;
+                self.close_sent = true;
+            }
             self.on_close().await
         }
 
         /// Close the connection with an error
         ///
-        /// An `Error::IllegalState` will be returned if this is called after executing any of
-        /// [`close`](#method.close), [`close_with_error`](#method.close_with_error) or
-        /// [`on_close`](#method.on_close). This will cause the JoinHandle to be polled after
-        /// completion, which causes a panic.
+        /// On success the returned [`ConnectionOutcome`] is
+        /// [`ClosedWithError`](ConnectionOutcome::ClosedWithError). The outcome is
+        /// delivered once; calling this after the outcome was already observed reports
+        /// [`Error::AlreadyClosed`].
+        ///
+        /// If a close exchange was already initiated (by `try_close` or
+        /// `close`), no second `Close` frame is sent and this error is not
+        /// attached; the initiated exchange is awaited instead.
         ///
         /// # wasm32 support
         ///
         /// This method is not supported in wasm32 targets, please use `drop()` instead.
+        /// # Errors
+        ///
+        /// Returns [`Error`] if the connection stopped with a local failure or
+        /// the outcome was already observed (`Error::AlreadyClosed`). A remote
+        /// close is reported as the returned [`ConnectionOutcome`], not as an
+        /// error; a transport that ended without the close exchange reports
+        /// `Error::ConnectionLost`.
         pub async fn close_with_error(
             &mut self,
             error: impl Into<definitions::Error>,
-        ) -> Result<(), Error> {
-            // If sending is unsuccessful, the `ConnectionEngine` event loop is
-            // already dropped, this should be reflected by `JoinError` then.
-            let _ = self
-                .control
-                .send(ConnectionControl::Close(Some(error.into())))
-                .await;
+        ) -> Result<ConnectionOutcome, Error> {
+            if self.is_closed {
+                return Err(Error::AlreadyClosed);
+            }
+            if !self.close_sent {
+                // If sending is unsuccessful, the `ConnectionEngine` event
+                // loop is already dropped; the outcome channel reports it.
+                let _ = self
+                    .control
+                    .send(ConnectionControl::Close(Some(error.into())))
+                    .await;
+                self.close_sent = true;
+            }
             self.on_close().await
         }
     }
 
     /// Returns when the underlying event loop has stopped
     ///
-    /// An `Error::IllegalState` will be returned if this is called after executing any of
-    /// [`close`](#method.close), [`close_with_error`](#method.close_with_error) or
-    /// [`on_close`](#method.on_close). This will cause the JoinHandle to be polled after
-    /// completion, which causes a panic.
-    pub async fn on_close(&mut self) -> Result<(), Error> {
+    /// The close outcome is delivered once; a connection whose outcome was
+    /// already observed reports [`Error::AlreadyClosed`]. Use
+    /// [`is_closed`](#method.is_closed) to query the state instead.
+    /// # Errors
+    ///
+    /// Returns [`Error`] if the connection stopped with a local failure or
+    /// the outcome was already observed (`Error::AlreadyClosed`). A remote
+    /// close is reported as the returned [`ConnectionOutcome`], not as an
+    /// error; a transport that ended without the close exchange reports
+    /// `Error::ConnectionLost`.
+    pub async fn on_close(&mut self) -> Result<ConnectionOutcome, Error> {
         if self.is_closed {
-            return Err(Error::IllegalState);
+            return Err(Error::AlreadyClosed);
         }
         match (&mut self.outcome).await {
-            Ok(res) => {
+            Ok(Ok(outcome)) => {
                 self.is_closed = true;
-                res
+                Ok(outcome)
+            }
+            Ok(Err(error)) => {
+                self.is_closed = true;
+                Err(error)
             }
             Err(_) => {
                 self.is_closed = true;
-                Err(Error::IllegalState)
+                // The engine stopped without reporting its outcome.
+                Err(Error::InternalError)
             }
         }
     }
@@ -261,14 +344,23 @@ impl<R> ConnectionHandle<R> {
     }
 }
 
+/// Best-effort deallocate a session's outgoing channel from the connection.
+///
+/// The send fails only when the connection engine has already stopped (its
+/// `ConnectionControl` receiver was dropped). That is a normal teardown race:
+/// a connection close ends its sessions, and the session engine exits
+/// independently, so either side may finish first. The failure is ignored
+/// because the connection is already gone, there is nothing left to
+/// deallocate, and the session's end/stop outcome is delivered separately.
 pub(crate) async fn deallocate_session(
     control: &mut Sender<ConnectionControl>,
     channel: OutgoingChannel,
-) -> Result<(), DeallcoSessionError> {
-    control
+) {
+    // A failed send means the connection engine already stopped; ignoring it
+    // is safe because the connection cleaned up its sessions on the way down.
+    let _ = control
         .send(ConnectionControl::DeallocateSession(channel))
-        .await
-        .map_err(|_| DeallcoSessionError::IllegalState)
+        .await;
 }
 
 /// An AMQP 1.0 Connection.
@@ -466,7 +558,7 @@ pub struct Connection {
     pub(crate) agreed_channel_max: u16,
 
     /// Why this connection stopped, shared with the sessions and the handle
-    pub(crate) connection_stop_reason: Arc<OnceLock<ConnectionStopReason>>,
+    pub(crate) connection_stop_reason: Arc<OnceLock<ConnectionOutcome>>,
 }
 
 /* ------------------------------- Public API ------------------------------- */
@@ -592,11 +684,11 @@ impl endpoint::Connection for Connection {
         &self.local_open
     }
 
-    fn connection_stop_reason(&self) -> &Arc<OnceLock<ConnectionStopReason>> {
+    fn connection_stop_reason(&self) -> &Arc<OnceLock<ConnectionOutcome>> {
         &self.connection_stop_reason
     }
 
-    fn set_connection_stop_reason(&mut self, reason: ConnectionStopReason) {
+    fn set_connection_stop_reason(&mut self, reason: ConnectionOutcome) {
         let _ = self.connection_stop_reason.set(reason);
     }
 
@@ -764,7 +856,7 @@ impl endpoint::Connection for Connection {
             ConnectionState::HeaderExchange => self.local_state = ConnectionState::OpenSent,
             ConnectionState::OpenReceived => self.local_state = ConnectionState::Opened,
             ConnectionState::HeaderSent => self.local_state = ConnectionState::OpenPipe,
-            _ => return Err(Self::OpenError::IllegalState),
+            _ => return Err(Self::OpenError::InvariantViolation),
         }
 
         Ok(())
@@ -798,7 +890,7 @@ impl endpoint::Connection for Connection {
                 true => self.local_state = ConnectionState::Discarding,
                 false => self.local_state = ConnectionState::OpenClosePipe,
             },
-            _ => return Err(CloseError::IllegalState),
+            _ => return Err(CloseError::InvariantViolation),
         }
         Ok(())
     }
@@ -879,7 +971,7 @@ mod tests {
     use tokio::sync::mpsc;
 
     use super::{
-        AllocSessionError, Connection, ConnectionState, ConnectionStopReason, SessionIncomingItem,
+        AllocSessionError, Connection, ConnectionOutcome, ConnectionState, SessionIncomingItem,
     };
     use crate::endpoint::Connection as _;
 
@@ -917,8 +1009,224 @@ mod tests {
         assert!(matches!(
             connection.allocate_session(tx),
             Err(AllocSessionError::ConnectionStopped(
-                ConnectionStopReason::Closed
+                ConnectionOutcome::Closed
             ))
+        ));
+    }
+
+    /// A connection that stopped with a local (non-outcome) error reports that
+    /// error once; later calls report `AlreadyClosed` because the outcome was
+    /// already observed.
+    #[tokio::test]
+    async fn terminal_local_error_then_already_closed() {
+        use std::sync::{Arc, OnceLock};
+        use tokio::sync::oneshot;
+
+        let (control, _control_rx) = mpsc::channel(8);
+        let (outgoing, _outgoing_rx) = mpsc::channel(8);
+        let (outcome_tx, outcome) = oneshot::channel::<Result<ConnectionOutcome, super::Error>>();
+        outcome_tx
+            .send(Err(super::Error::IllegalState))
+            .expect("the receiver is held");
+        let mut handle = super::ConnectionHandle {
+            is_closed: false,
+            close_sent: false,
+            control,
+            handle: tokio::spawn(async {}),
+            outcome,
+            outgoing,
+            connection_stop_reason: Arc::new(OnceLock::new()),
+            max_frame_size: 0,
+            session_listener: (),
+        };
+
+        let error = handle.on_close().await.expect_err("a local error");
+        assert!(matches!(error, super::Error::IllegalState));
+
+        let error = handle
+            .on_close()
+            .await
+            .expect_err("the outcome was already observed");
+        assert!(matches!(error, super::Error::AlreadyClosed));
+
+        assert!(matches!(
+            handle.try_close(),
+            Err(super::Error::AlreadyClosed)
+        ));
+    }
+
+    /// An outcome channel dropped without a result (the engine stopped without
+    /// reporting) is an internal error.
+    #[tokio::test]
+    async fn dropped_outcome_reports_internal_error() {
+        use std::sync::{Arc, OnceLock};
+        use tokio::sync::oneshot;
+
+        let (control, _control_rx) = mpsc::channel(8);
+        let (outgoing, _outgoing_rx) = mpsc::channel(8);
+        let (outcome_tx, outcome) = oneshot::channel::<Result<ConnectionOutcome, super::Error>>();
+        drop(outcome_tx);
+        let mut handle = super::ConnectionHandle {
+            is_closed: false,
+            close_sent: false,
+            control,
+            handle: tokio::spawn(async {}),
+            outcome,
+            outgoing,
+            connection_stop_reason: Arc::new(OnceLock::new()),
+            max_frame_size: 0,
+            session_listener: (),
+        };
+
+        let error = handle.on_close().await.expect_err("an internal error");
+        assert!(matches!(error, super::Error::InternalError));
+    }
+
+    /// `try_close` on an engine that stopped without reporting an outcome
+    /// reports an internal error.
+    #[tokio::test]
+    async fn try_close_with_dropped_outcome_reports_internal_error() {
+        use std::sync::{Arc, OnceLock};
+        use tokio::sync::oneshot;
+
+        let (control, _control_rx) = mpsc::channel(8);
+        let (outgoing, _outgoing_rx) = mpsc::channel(8);
+        let (outcome_tx, outcome) = oneshot::channel::<Result<ConnectionOutcome, super::Error>>();
+        drop(outcome_tx);
+        let mut handle = super::ConnectionHandle {
+            is_closed: false,
+            close_sent: false,
+            control,
+            handle: tokio::spawn(async {}),
+            outcome,
+            outgoing,
+            connection_stop_reason: Arc::new(OnceLock::new()),
+            max_frame_size: 0,
+            session_listener: (),
+        };
+
+        let error = handle.try_close().expect_err("an internal error");
+        assert!(matches!(error, super::Error::InternalError));
+    }
+
+    /// `try_close` enqueues the `Close` control at most once, even when
+    /// followed by another `try_close` or a drop.
+    #[tokio::test]
+    async fn try_close_sends_the_close_once() {
+        use std::sync::{Arc, OnceLock};
+        use tokio::sync::oneshot;
+
+        let (control, mut control_rx) = mpsc::channel(8);
+        let (outgoing, _outgoing_rx) = mpsc::channel(8);
+        let (_outcome_tx, outcome) = oneshot::channel::<Result<ConnectionOutcome, super::Error>>();
+        let mut handle = super::ConnectionHandle {
+            is_closed: false,
+            close_sent: false,
+            control,
+            handle: tokio::spawn(async {}),
+            outcome,
+            outgoing,
+            connection_stop_reason: Arc::new(OnceLock::new()),
+            max_frame_size: 0,
+            session_listener: (),
+        };
+
+        assert!(matches!(handle.try_close(), Ok(None)));
+        assert!(matches!(
+            control_rx.try_recv(),
+            Ok(super::ConnectionControl::Close(None))
+        ));
+
+        // A second probe and the drop do not enqueue another Close.
+        assert!(matches!(handle.try_close(), Ok(None)));
+        drop(handle);
+        assert!(control_rx.try_recv().is_err());
+    }
+
+    /// `try_close` reports the outcome once and then `AlreadyClosed`.
+    #[tokio::test]
+    async fn try_close_reports_the_outcome_once() {
+        use std::sync::{Arc, OnceLock};
+        use tokio::sync::oneshot;
+
+        let (control, _control_rx) = mpsc::channel(8);
+        let (outgoing, _outgoing_rx) = mpsc::channel(8);
+        let (outcome_tx, outcome) = oneshot::channel::<Result<ConnectionOutcome, super::Error>>();
+        outcome_tx
+            .send(Ok(ConnectionOutcome::Closed))
+            .expect("the receiver is held");
+        let mut handle = super::ConnectionHandle {
+            is_closed: false,
+            close_sent: false,
+            control,
+            handle: tokio::spawn(async {}),
+            outcome,
+            outgoing,
+            connection_stop_reason: Arc::new(OnceLock::new()),
+            max_frame_size: 0,
+            session_listener: (),
+        };
+
+        assert!(matches!(
+            handle.try_close(),
+            Ok(Some(ConnectionOutcome::Closed))
+        ));
+        assert!(matches!(
+            handle.try_close(),
+            Err(super::Error::AlreadyClosed)
+        ));
+    }
+
+    /// A sink that accepts every frame, for testing frame-writing methods.
+    struct NullSink;
+
+    impl futures_util::Sink<crate::frames::amqp::Frame> for NullSink {
+        type Error = crate::transport::Error;
+
+        fn poll_ready(
+            self: std::pin::Pin<&mut Self>,
+            _: &mut std::task::Context<'_>,
+        ) -> std::task::Poll<Result<(), Self::Error>> {
+            std::task::Poll::Ready(Ok(()))
+        }
+
+        fn start_send(
+            self: std::pin::Pin<&mut Self>,
+            _: crate::frames::amqp::Frame,
+        ) -> Result<(), Self::Error> {
+            Ok(())
+        }
+
+        fn poll_flush(
+            self: std::pin::Pin<&mut Self>,
+            _: &mut std::task::Context<'_>,
+        ) -> std::task::Poll<Result<(), Self::Error>> {
+            std::task::Poll::Ready(Ok(()))
+        }
+
+        fn poll_close(
+            self: std::pin::Pin<&mut Self>,
+            _: &mut std::task::Context<'_>,
+        ) -> std::task::Poll<Result<(), Self::Error>> {
+            std::task::Poll::Ready(Ok(()))
+        }
+    }
+
+    /// A `send_close` from a state that cannot send a Close is an internal
+    /// invariant violation.
+    #[tokio::test]
+    async fn send_close_in_wrong_state_is_invariant_violation() {
+        let mut connection = Connection::new(ConnectionState::End, test_open());
+        let mut sink = NullSink;
+
+        let error = connection
+            .send_close(&mut sink, None)
+            .await
+            .expect_err("the close must be rejected");
+
+        assert!(matches!(
+            error,
+            super::ConnectionStateError::InvariantViolation
         ));
     }
 }

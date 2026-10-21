@@ -4,7 +4,7 @@ use std::collections::HashSet;
 use std::sync::{Arc, OnceLock};
 
 use fe2o3_amqp_types::{
-    definitions::{self, AmqpError, LinkError},
+    definitions::{self, AmqpError},
     messaging::{Accepted, DeliveryState, Rejected},
     performatives::Attach,
     transaction::{
@@ -20,8 +20,8 @@ use crate::{
         delivery::DeliveryInfo,
         receiver::ReceiverInner,
         shared_inner::{LinkEndpointInner, LinkEndpointInnerDetach},
-        IllegalLinkStateError, LinkFrame, ReceiverAttachError, ReceiverLink, RecvError,
-        SessionStopReason,
+        LinkError, LinkFrame, ReceiverAttachError, ReceiverLink, RecvError,
+        SessionStopped,
     },
     util::{Initialized, Running},
     Delivery,
@@ -42,8 +42,8 @@ pub struct ControlLinkAcceptor {
     >,
 }
 
-fn unreachable_dynamic_coordinator(_: Coordinator) -> Option<Coordinator> {
-    unreachable!()
+fn reject_dynamic_coordinator(_: Coordinator) -> Option<Coordinator> {
+    None
 }
 
 impl Default for ControlLinkAcceptor {
@@ -55,7 +55,7 @@ impl Default for ControlLinkAcceptor {
                 credit_mode: Default::default(),
                 target_capabilities: None,
                 auto_accept: false,
-                on_dynamic_target: unreachable_dynamic_coordinator,
+                on_dynamic_target: reject_dynamic_coordinator,
                 target_marker: std::marker::PhantomData,
 
                 // Should always be true for control links
@@ -73,7 +73,7 @@ impl ControlLinkAcceptor {
         remote_attach: Attach,
         control: mpsc::Sender<SessionControl>,
         outgoing: mpsc::Sender<LinkFrame>,
-        session_stop_reason: Arc<OnceLock<SessionStopReason>>,
+        session_stop_reason: Arc<OnceLock<SessionStopped>>,
         max_frame_size: usize,
     ) -> Result<TxnCoordinator, ReceiverAttachError> {
         self.inner
@@ -178,56 +178,51 @@ impl TxnCoordinator {
     #[cfg_attr(feature = "tracing", tracing::instrument(skip(self, error)))]
     async fn on_recv_error(&mut self, error: RecvError) -> Running {
         match error {
-            RecvError::LinkStateError(error) => match error {
-                crate::link::LinkStateError::IllegalState => {
+            RecvError::IllegalState => {
+                #[cfg(feature = "tracing")]
+                tracing::error!(?error);
+                #[cfg(feature = "log")]
+                log::error!("error = {:?}", error);
+                let error = definitions::Error::new(AmqpError::IllegalState, None, None);
+                // TODO: detach instead of closing
+                let _ = self.inner.close_with_error(Some(error)).await;
+                Running::Stop
+            }
+            RecvError::SessionStopped(_) => {
+                #[cfg(feature = "tracing")]
+                tracing::error!(?error);
+                #[cfg(feature = "log")]
+                log::error!("error = {:?}", error);
+                // Session must have already stopped
+                Running::Stop
+            }
+            RecvError::InvariantViolation | RecvError::InternalError => {
+                #[cfg(feature = "tracing")]
+                tracing::error!(?error);
+                #[cfg(feature = "log")]
+                log::error!("error = {:?}", error);
+                let error = definitions::Error::new(AmqpError::InternalError, None, None);
+                // TODO: detach instead of closing
+                let _ = self.inner.close_with_error(Some(error)).await;
+                Running::Stop
+            }
+            RecvError::LinkDetached(_) => {
+                // The peer detached the link; the relay already answered its
+                // detach, so this only finishes the local close.
+                if let Err(_err) = self.inner.close_with_error(None).await {
                     #[cfg(feature = "tracing")]
-                    tracing::error!(?error);
+                    tracing::error!(detach_error = ?_err);
                     #[cfg(feature = "log")]
-                    log::error!("error = {:?}", error);
-                    let error = definitions::Error::new(AmqpError::IllegalState, None, None);
-                    // TODO: detach instead of closing
-                    let _ = self.inner.close_with_error(Some(error)).await;
-                    Running::Stop
+                    log::error!("detach_error = {:?}", _err);
                 }
-                crate::link::LinkStateError::SessionStopped(_) => {
-                    #[cfg(feature = "tracing")]
-                    tracing::error!(?error);
-                    #[cfg(feature = "log")]
-                    log::error!("error = {:?}", error);
-                    // Session must have already stopped
-                    Running::Stop
-                }
-                crate::link::LinkStateError::ExpectImmediateDetach => {
-                    #[cfg(feature = "tracing")]
-                    tracing::error!(?error);
-                    #[cfg(feature = "log")]
-                    log::error!("error = {:?}", error);
-                    let _ = self.inner.close_with_error(None).await;
-                    // TODO: detach instead of closing
-                    Running::Stop
-                }
-                crate::link::LinkStateError::RemoteDetached
-                | crate::link::LinkStateError::RemoteClosed
-                | crate::link::LinkStateError::RemoteDetachedWithError(_)
-                | crate::link::LinkStateError::RemoteClosedWithError(_) => {
-                    self.inner
-                        .close_with_error(None)
-                        .await
-                        .unwrap_or_else(|_err| {
-                            #[cfg(feature = "tracing")]
-                            tracing::error!(detach_error = ?_err);
-                            #[cfg(feature = "log")]
-                            log::error!("detach_error = {:?}", _err);
-                        });
-                    Running::Stop
-                }
-            },
+                Running::Stop
+            }
             RecvError::TransferLimitExceeded => {
                 #[cfg(feature = "tracing")]
                 tracing::error!(?error);
                 #[cfg(feature = "log")]
                 log::error!("error = {:?}", error);
-                let error = definitions::Error::new(LinkError::TransferLimitExceeded, None, None);
+                let error = definitions::Error::new(definitions::LinkError::TransferLimitExceeded, None, None);
                 // TODO: detach instead of closing
                 let _ = self.inner.close_with_error(Some(error)).await;
                 Running::Stop
@@ -238,7 +233,7 @@ impl TxnCoordinator {
             | RecvError::IllegalRcvSettleModeInTransfer
             | RecvError::InconsistentFieldInMultiFrameDelivery
             | RecvError::MessageSizeExceeded(_)
-            | RecvError::TransactionalAcquisitionIsNotImeplemented => {
+            | RecvError::AcquisitionNotImplemented => {
                 #[cfg(feature = "tracing")]
                 tracing::error!(?error);
                 #[cfg(feature = "log")]
@@ -294,14 +289,28 @@ impl TxnCoordinator {
         match disposition_result {
             Ok(_) => Running::Continue,
             Err(disposition_error) => match disposition_error {
-                IllegalLinkStateError::IllegalState => {
+                LinkError::IllegalState => {
                     let error = definitions::Error::new(AmqpError::IllegalState, None, None);
                     // TODO: detach instead of closing
                     let _ = self.inner.close_with_error(Some(error)).await;
                     Running::Stop
                 }
-                IllegalLinkStateError::SessionStopped(_) => {
+                LinkError::SessionStopped(_) => {
                     // Session must have already dropped
+                    Running::Stop
+                }
+                LinkError::InvariantViolation | LinkError::InternalError => {
+                    #[cfg(feature = "tracing")]
+                    tracing::error!(?disposition_error);
+                    #[cfg(feature = "log")]
+                    log::error!("error = {:?}", disposition_error);
+                    let error = definitions::Error::new(AmqpError::InternalError, None, None);
+                    // TODO: detach instead of closing
+                    let _ = self.inner.close_with_error(Some(error)).await;
+                    Running::Stop
+                }
+                LinkError::LinkDetached(_) => {
+                    // The link already reached a terminal outcome.
                     Running::Stop
                 }
             },
@@ -313,7 +322,7 @@ impl TxnCoordinator {
         delivery_info: DeliveryInfo,
         error: TransactionError,
         description: impl Into<Option<String>>,
-    ) -> Result<(), IllegalLinkStateError> {
+    ) -> Result<(), LinkError> {
         let error = definitions::Error::new(error, description, None);
         let state = DeliveryState::Rejected(Rejected { error: Some(error) });
 

@@ -13,10 +13,10 @@ use tokio::sync::{mpsc, oneshot};
 use uuid::Uuid;
 
 use crate::{
-    connection::ConnectionStopReason,
+    connection::ConnectionOutcome,
     control::SessionControl,
     endpoint::{self, IncomingChannel, InputHandle, LinkFlow, OutgoingChannel, OutputHandle},
-    link::{target_archetype::VariantOfTargetArchetype, LinkRelay, SessionStopReason},
+    link::{target_archetype::VariantOfTargetArchetype, LinkRelay, SessionStopped},
     session::{
         self,
         frame::{SessionFrame, SessionOutgoingItem},
@@ -27,52 +27,52 @@ use crate::{
 use super::{
     frame::TxnWorkFrame,
     manager::{HandleControlLink, ResourceTransaction, TransactionManager},
-    AllocTxnIdError, DischargeError,
+    CoordinatorAllocTxnIdError, CoordinatorDischargeError,
 };
 
 pub(crate) async fn allocate_transaction_id(
     control: &mpsc::Sender<SessionControl>,
-) -> Result<TransactionId, AllocTxnIdError> {
+) -> Result<TransactionId, CoordinatorAllocTxnIdError> {
     let (resp, result) = oneshot::channel();
 
     control
         .send(SessionControl::AllocateTransactionId { resp })
         .await
-        .map_err(|_| AllocTxnIdError::InvalidSessionState)?;
+        .map_err(|_| CoordinatorAllocTxnIdError::InvalidSessionState)?;
     result
         .await
-        .map_err(|_| AllocTxnIdError::InvalidSessionState)?
+        .map_err(|_| CoordinatorAllocTxnIdError::InvalidSessionState)?
 }
 
 pub(crate) async fn rollback_transaction(
     control: &mpsc::Sender<SessionControl>,
     txn_id: TransactionId,
-) -> Result<Accepted, DischargeError> {
+) -> Result<Accepted, CoordinatorDischargeError> {
     let (resp, result) = oneshot::channel();
 
     control
         .send(SessionControl::RollbackTransaction { txn_id, resp })
         .await
-        .map_err(|_| DischargeError::InvalidSessionState)?;
+        .map_err(|_| CoordinatorDischargeError::InvalidSessionState)?;
     result
         .await
-        .map_err(|_| DischargeError::InvalidSessionState)?
+        .map_err(|_| CoordinatorDischargeError::InvalidSessionState)?
         .map_err(Into::into)
 }
 
 pub(crate) async fn commit_transaction(
     control: &mpsc::Sender<SessionControl>,
     txn_id: TransactionId,
-) -> Result<Accepted, DischargeError> {
+) -> Result<Accepted, CoordinatorDischargeError> {
     let (resp, result) = oneshot::channel();
 
     control
         .send(SessionControl::CommitTransaction { txn_id, resp })
         .await
-        .map_err(|_| DischargeError::InvalidSessionState)?;
+        .map_err(|_| CoordinatorDischargeError::InvalidSessionState)?;
     result
         .await
-        .map_err(|_| DischargeError::InvalidSessionState)?
+        .map_err(|_| CoordinatorDischargeError::InvalidSessionState)?
         .map_err(Into::into)
 }
 
@@ -135,7 +135,7 @@ impl<S> endpoint::HandleDeclare for TxnSession<S>
 where
     S: endpoint::Session<Error = session::error::SessionInnerError> + Send + Sync,
 {
-    fn allocate_transaction_id(&mut self) -> Result<TransactionId, AllocTxnIdError> {
+    fn allocate_transaction_id(&mut self) -> Result<TransactionId, CoordinatorAllocTxnIdError> {
         let mut txn_id = TransactionId::from(Uuid::new_v4().into_bytes());
         while self.txn_manager.txns.contains_key(&txn_id) {
             txn_id = TransactionId::from(Uuid::new_v4().into_bytes());
@@ -183,7 +183,7 @@ where
                         self.control
                             .send(SessionControl::Disposition(disposition))
                             .await
-                            .map_err(|_| Self::Error::IllegalState)?
+                            .map_err(|_| Self::Error::InvariantViolation)?
                     }
                 }
                 TxnWorkFrame::Retire(mut disposition) => {
@@ -199,7 +199,7 @@ where
                             self.control
                                 .send(SessionControl::Disposition(disposition))
                                 .await
-                                .map_err(|_| Self::Error::IllegalState)?
+                                .map_err(|_| Self::Error::InvariantViolation)?
                         }
                     }
                 }
@@ -238,15 +238,15 @@ where
         self.session.local_state()
     }
 
-    fn set_session_stop_reason(&mut self, reason: SessionStopReason) {
+    fn set_session_stop_reason(&mut self, reason: SessionStopped) {
         self.session.set_session_stop_reason(reason)
     }
 
-    fn session_stop_reason(&self) -> &Arc<OnceLock<SessionStopReason>> {
+    fn session_stop_reason(&self) -> &Arc<OnceLock<SessionStopped>> {
         self.session.session_stop_reason()
     }
 
-    fn connection_stop_reason(&self) -> &Arc<OnceLock<ConnectionStopReason>> {
+    fn connection_stop_reason(&self) -> &Arc<OnceLock<ConnectionOutcome>> {
         self.session.connection_stop_reason()
     }
 

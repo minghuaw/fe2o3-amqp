@@ -1,23 +1,26 @@
+use std::sync::OnceLock;
+
 use fe2o3_amqp_types::definitions::{self, AmqpError, ErrorCondition, SessionError};
 use serde_amqp::primitives::Symbol;
 
-use crate::{connection::ConnectionStopReason, session::error::AllocLinkError};
+use crate::{connection::ConnectionOutcome, session::error::AllocLinkError};
+
+use super::state::LinkState;
 
 #[cfg(docsrs)]
 use fe2o3_amqp_types::transaction::Coordinator;
 
 use super::{delivery::DeliveryInfo, receiver::DetachedReceiver, sender::DetachedSender};
 
-/// Why the link's session (or its connection) stopped before the link was
-/// detached or closed. From a link's perspective, a parent stopping earlier
-/// is always an error for the link's operations; the variants here describe
-/// the parent's state so the caller can decide how to recover.
+/// Why the session itself ended, independent of its connection. A connection
+/// stop is a failure of the session's end operation (`Err` from
+/// `Session::end`/`on_end`) and is not represented here; see [`SessionStopped`]
+/// for the link-facing propagation type that carries both.
 ///
 /// The unprefixed variants describe the local side's action; the `Remote*`
-/// variants describe a remote-initiated end. `ConnectionStopped(..)` embeds
-/// the connection's own stop reason (see [`ConnectionStopReason`]).
+/// variants describe a remote-initiated end.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum SessionStopReason {
+pub enum SessionOutcome {
     /// The session ended cleanly (locally)
     Ended,
     /// We ended the session with this error
@@ -26,25 +29,161 @@ pub enum SessionStopReason {
     RemoteEnded,
     /// The remote peer ended the session with this error
     RemoteEndedWithError(definitions::Error),
-    /// The connection stopped; the embedded reason tells whether the close
-    /// was local or remote and whether it carried an error
-    ConnectionStopped(ConnectionStopReason),
+}
+
+/// Why a session-dependent operation failed because the session stopped: the
+/// session reached its own outcome, or the session ended with its connection
+/// (carrying the connection's outcome).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum SessionStopped {
+    /// The session reached one of its own [`SessionOutcome`]s
+    Outcome(SessionOutcome),
+    /// The session ended with its connection; the embedded outcome tells
+    /// whether the close was local or remote and whether it carried an error
+    ConnectionStopped(ConnectionOutcome),
+}
+
+impl SessionStopped {
+    /// The session's own outcome, if the session ended by itself (i.e. not
+    /// with its connection).
+    pub fn outcome(&self) -> Option<&SessionOutcome> {
+        match self {
+            Self::Outcome(outcome) => Some(outcome),
+            Self::ConnectionStopped(_) => None,
+        }
+    }
+
+    /// The connection's outcome when the session ended with its connection.
+    pub fn connection_outcome(&self) -> Option<&ConnectionOutcome> {
+        match self {
+            Self::Outcome(_) => None,
+            Self::ConnectionStopped(outcome) => Some(outcome),
+        }
+    }
+}
+
+impl From<SessionOutcome> for SessionStopped {
+    fn from(outcome: SessionOutcome) -> Self {
+        Self::Outcome(outcome)
+    }
+}
+
+impl From<ConnectionOutcome> for SessionStopped {
+    fn from(outcome: ConnectionOutcome) -> Self {
+        Self::ConnectionStopped(outcome)
+    }
 }
 
 /// The recovery action for a session that stopped.
-fn session_stop_recovery(reason: &SessionStopReason) -> ErrorRecovery {
-    match reason {
-        SessionStopReason::ConnectionStopped(_) => ErrorRecovery::ReconnectConnection,
-        _ => ErrorRecovery::ReconnectSession,
+fn session_stop_recovery(stopped: &SessionStopped) -> ErrorRecovery {
+    match stopped {
+        SessionStopped::ConnectionStopped(_) => ErrorRecovery::ReconnectConnection,
+        SessionStopped::Outcome(_) => ErrorRecovery::ReconnectSession,
+    }
+}
+
+/// Warn that an operation failed after the session's relay was dropped without
+/// a recorded stop reason; the failure is link-local in that case.
+fn warn_unrecorded_stop_reason() {
+    #[cfg(feature = "tracing")]
+    tracing::warn!("session stop reason not recorded; reporting a link-local failure");
+    #[cfg(feature = "log")]
+    log::warn!("session stop reason not recorded; reporting a link-local failure");
+}
+
+/// The [`LinkError`] for an operation that failed because the session (or
+/// its connection) stopped; [`LinkError::InternalError`] when no stop
+/// reason was recorded.
+pub(crate) fn link_state_error_from_stop_reason(cell: &OnceLock<SessionStopped>) -> LinkError {
+    match cell.get() {
+        Some(reason) => LinkError::SessionStopped(reason.clone()),
+        None => {
+            warn_unrecorded_stop_reason();
+            LinkError::InternalError
+        }
+    }
+}
+
+/// The [`DetachError`] for an operation that failed because the session (or
+/// its connection) stopped; [`DetachError::InternalError`] when no stop reason
+/// was recorded.
+pub(crate) fn detach_error_from_stop_reason(cell: &OnceLock<SessionStopped>) -> DetachError {
+    match cell.get() {
+        Some(reason) => DetachError::SessionStopped(reason.clone()),
+        None => {
+            warn_unrecorded_stop_reason();
+            DetachError::InternalError
+        }
+    }
+}
+
+/// The [`SenderAttachError`] for an attach that failed because the session (or
+/// its connection) stopped; [`SenderAttachError::InternalError`] when no stop
+/// reason was recorded.
+pub(crate) fn sender_attach_error_from_stop_reason(
+    cell: &OnceLock<SessionStopped>,
+) -> SenderAttachError {
+    match cell.get() {
+        Some(reason) => SenderAttachError::SessionStopped(reason.clone()),
+        None => {
+            warn_unrecorded_stop_reason();
+            SenderAttachError::InternalError
+        }
+    }
+}
+
+/// The [`ReceiverAttachError`] for an attach that failed because the session
+/// (or its connection) stopped; [`ReceiverAttachError::InternalError`] when no
+/// stop reason was recorded.
+pub(crate) fn receiver_attach_error_from_stop_reason(
+    cell: &OnceLock<SessionStopped>,
+) -> ReceiverAttachError {
+    match cell.get() {
+        Some(reason) => ReceiverAttachError::SessionStopped(reason.clone()),
+        None => {
+            warn_unrecorded_stop_reason();
+            ReceiverAttachError::InternalError
+        }
+    }
+}
+
+/// The [`LinkError`] for an operation whose incoming channel closed with
+/// no buffered frame.
+///
+/// The session records its stop reason before dropping the relays; without
+/// one, the peer detached the link and the relay was removed while the
+/// session stayed alive. The link's local state then carries the outcome:
+/// `Detached`/`Closed` report a [`LinkError::LinkDetached`] with the
+/// peer's error from the detach that terminalized the link. Any other state
+/// means the relay disappeared without a recorded detach, which is an
+/// [`LinkError::InternalError`].
+pub(crate) fn link_error_from_closed_channel(
+    cell: &OnceLock<SessionStopped>,
+    local_state: &LinkState,
+) -> LinkError {
+    if let Some(reason) = cell.get() {
+        return LinkError::SessionStopped(reason.clone());
+    }
+
+    match local_state {
+        LinkState::Detached(remote_error) => LinkError::LinkDetached(LinkOutcome::Detached {
+            remote_error: remote_error.clone(),
+        }),
+        LinkState::Closed(remote_error) => LinkError::LinkDetached(LinkOutcome::Closed {
+            remote_error: remote_error.clone(),
+        }),
+        _ => {
+            warn_unrecorded_stop_reason();
+            LinkError::InternalError
+        }
     }
 }
 
 /// What a caller can do with a link after an operation failed.
 ///
-/// Returned by the `recovery()` method on [`LinkStateError`], [`DetachError`],
-/// [`SendError`] and [`RecvError`]. The action is derived from the error alone;
-/// defensive errors that can cover several link states are classified
-/// conservatively.
+/// Returned by the `recovery()` method on [`LinkError`], [`SendError`]
+/// and [`RecvError`]. The action is derived from the error alone; defensive
+/// errors that can cover several link states are classified conservatively.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[non_exhaustive]
 pub enum ErrorRecovery {
@@ -65,8 +204,8 @@ pub enum ErrorRecovery {
     ReconnectConnection,
 
     /// The link was closed or destroyed, or the error left its state
-    /// indeterminate (the defensive `IllegalState`/`ExpectImmediateDetach`
-    /// variants): create a new link.
+    /// indeterminate (the defensive `InvariantViolation`/`InternalError` and
+    /// `UnexpectedFrame` variants): create a new link.
     NewLink,
 }
 
@@ -91,56 +230,45 @@ impl ErrorRecovery {
     }
 }
 
-/// Error associated with detaching
-#[derive(Debug, thiserror::Error)]
-pub enum DetachError {
-    /// ILlegal link state
-    #[error("Illegal local state")]
-    IllegalState,
+/// Error associated with detaching a link.
+///
+/// This is a type alias of [`LinkError`]. A peer-initiated detach or close
+/// is reported as a [`LinkOutcome`] outcome instead of an error; this alias
+/// remains only for compatibility with existing signatures.
+pub type DetachError = LinkError;
 
-    /// The session (or its connection) stopped before the link was detached
-    #[error("The session stopped before the link was detached: {:?}", .0)]
-    SessionStopped(SessionStopReason),
+/// How the peer detached the link.
+///
+/// This is an outcome, not a local failure: the peer either suspended the
+/// link with a non-closing detach or destroyed it with a closing detach. The
+/// `error` field the peer attached to its detach, if any, is carried in
+/// `remote_error`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum LinkOutcome {
+    /// The peer suspended the link with a non-closing detach.
+    Detached {
+        /// The error the peer attached to its detach, if any.
+        remote_error: Option<definitions::Error>,
+    },
 
-    // /// Expecting a detach but found other frame
-    // #[error("Expecting a Detach")]
-    // NonDetachFrameReceived,
-    /// Remote peer detached with error
-    #[error("Remote detached with an error: {}", .0)]
-    RemoteDetachedWithError(definitions::Error),
-
-    /// The remote peer closed the link with a closing detach (`closed=true`).
-    ///
-    /// When the closing detach answers a non-closing detach from this side, the
-    /// link is reattached and then closed, completing the handshake (AMQP 1.0
-    /// §2.6.6). The link is left `Closed`.
-    #[error("Link closed by remote")]
-    ClosedByRemote,
-
-    /// Remote peer sent a non-closing detach when the local terminus is sending a closing detach
-    #[deprecated(
-        since = "0.18.1",
-        note = "the simultaneous close/suspend race now completes with `Ok(())`; this variant is still produced by `Sender::on_detach` and will be replaced by a detach status type"
-    )]
-    #[error("Link will be closed by local terminus")]
-    DetachedByRemote,
-
-    /// Remote peer closed the link with an error
-    #[error("Remote peer closed the link with an error: {}", .0)]
-    RemoteClosedWithError(definitions::Error),
+    /// The peer destroyed the link with a closing detach.
+    Closed {
+        /// The error the peer attached to its closing detach, if any.
+        remote_error: Option<definitions::Error>,
+    },
 }
 
-impl DetachError {
-    /// Classifies what the caller can do with the link after this error.
-    #[allow(deprecated)]
-    pub fn recovery(&self) -> ErrorRecovery {
+impl LinkOutcome {
+    /// Whether the peer destroyed the link (`true`) or suspended it (`false`).
+    pub fn is_closed(&self) -> bool {
+        matches!(self, LinkOutcome::Closed { .. })
+    }
+
+    /// The error the peer attached to its detach, if any.
+    pub fn remote_error(&self) -> Option<&definitions::Error> {
         match self {
-            Self::SessionStopped(reason) => session_stop_recovery(reason),
-            Self::RemoteDetachedWithError(_) | Self::DetachedByRemote => {
-                ErrorRecovery::ReattachLink
-            }
-            Self::ClosedByRemote | Self::RemoteClosedWithError(_) | Self::IllegalState => {
-                ErrorRecovery::NewLink
+            LinkOutcome::Detached { remote_error } | LinkOutcome::Closed { remote_error } => {
+                remote_error.as_ref()
             }
         }
     }
@@ -149,51 +277,104 @@ impl DetachError {
 /// Error from recording a peer-initiated detach with
 /// [`LinkDetach::apply_remote_detach_outcome`].
 ///
-/// The `Remote*WithError` variants mean the outcome *was* recorded (the link
-/// has already moved to `Closed`/`Detached` and released its output handle);
-/// `IllegalState` means nothing was changed.
+/// The outcome itself is reported as [`LinkOutcome`]; this error means the
+/// outcome was *not* recorded because the link was not in a state that can
+/// record it, and nothing changed.
 #[derive(Debug, thiserror::Error)]
 pub(crate) enum ApplyRemoteDetachError {
-    /// The outcome *was* recorded (the link is now `Detached`, handle
-    /// released); the peer's detach carried this error.
-    #[error("Remote detached with an error: {}", .0)]
-    RemoteDetachedWithError(definitions::Error),
+    /// The link was never attached (defensive)
+    ///
+    /// A remote detach cannot reach a link that was never attached: the
+    /// session routes an incoming detach by the peer's input handle, which
+    /// only exists after the peer's attach, and every call site either
+    /// pre-checks the link state or only observes relayed frames. Seeing this
+    /// indicates a broken library invariant.
+    #[error("An internal invariant was violated")]
+    InvariantViolation,
 
-    /// The outcome *was* recorded (the link is now `Closed`, handle
-    /// released); the peer's closing detach carried this error.
-    #[error("Remote peer closed the link with an error: {}", .0)]
-    RemoteClosedWithError(definitions::Error),
+    /// The link was already suspended by a previous detach
+    #[error("The link is already detached")]
+    AlreadyDetached(Option<definitions::Error>),
 
-    /// The outcome was *not* recorded: the link is `Unattached`, already
-    /// `Detached`, or already `Closed`, and nothing changed.
-    #[error("Illegal link state")]
-    IllegalState,
+    /// The link was already closed by a previous detach
+    #[error("The link is already closed")]
+    AlreadyClosed(Option<definitions::Error>),
 }
 
-impl From<ApplyRemoteDetachError> for DetachError {
+impl From<ApplyRemoteDetachError> for LinkError {
     fn from(value: ApplyRemoteDetachError) -> Self {
         match value {
-            ApplyRemoteDetachError::RemoteDetachedWithError(error) => {
-                DetachError::RemoteDetachedWithError(error)
+            ApplyRemoteDetachError::InvariantViolation => LinkError::InvariantViolation,
+            ApplyRemoteDetachError::AlreadyDetached(remote_error) => {
+                LinkError::LinkDetached(LinkOutcome::Detached { remote_error })
             }
-            ApplyRemoteDetachError::RemoteClosedWithError(error) => {
-                DetachError::RemoteClosedWithError(error)
+            ApplyRemoteDetachError::AlreadyClosed(remote_error) => {
+                LinkError::LinkDetached(LinkOutcome::Closed { remote_error })
             }
-            ApplyRemoteDetachError::IllegalState => DetachError::IllegalState,
         }
     }
 }
 
-impl From<ApplyRemoteDetachError> for LinkStateError {
-    fn from(value: ApplyRemoteDetachError) -> Self {
+/// Failure of a sender transfer.
+#[derive(Debug, thiserror::Error)]
+pub(crate) enum TransferError {
+    /// A local link-state failure
+    #[error(transparent)]
+    LinkState(#[from] LinkError),
+
+    /// The performative could not be serialized
+    #[error(transparent)]
+    MessageEncodeError(#[from] MessageEncodeError),
+
+    /// The negotiated max frame size cannot fit even the serialized transfer
+    /// performative, so the delivery cannot be split into frames
+    #[error("The negotiated max frame size is too small for the transfer performative")]
+    FrameSizeTooSmall,
+
+    /// The peer requested a transactional acquisition, which is not
+    /// implemented
+    #[cfg(feature = "transaction")]
+    #[error("Transactional acquisition is not implemented")]
+    AcquisitionNotImplemented,
+
+    /// The peer detached the link before the transfer completed
+    #[error("The peer detached the link")]
+    LinkDetached(LinkOutcome),
+
+    /// A frame other than the expected detach arrived while the transfer
+    /// waited for link credit
+    #[error("Unexpected frame while expecting the peer's detach")]
+    UnexpectedFrame,
+}
+
+impl From<TransferError> for SendError {
+    fn from(value: TransferError) -> Self {
         match value {
-            ApplyRemoteDetachError::RemoteDetachedWithError(error) => {
-                LinkStateError::RemoteDetachedWithError(error)
-            }
-            ApplyRemoteDetachError::RemoteClosedWithError(error) => {
-                LinkStateError::RemoteClosedWithError(error)
-            }
-            ApplyRemoteDetachError::IllegalState => LinkStateError::IllegalState,
+            TransferError::LinkState(error) => error.into(),
+            TransferError::MessageEncodeError(error) => SendError::MessageEncodeError(error),
+            TransferError::FrameSizeTooSmall => SendError::FrameSizeTooSmall,
+            #[cfg(feature = "transaction")]
+            TransferError::AcquisitionNotImplemented => SendError::AcquisitionNotImplemented,
+            TransferError::LinkDetached(status) => SendError::LinkDetached(status),
+            TransferError::UnexpectedFrame => SendError::UnexpectedFrame,
+        }
+    }
+}
+
+/// Failure delivered through a delivery's settlement channel.
+#[derive(Debug, Clone)]
+pub(crate) enum DeliveryFailure {
+    /// A local link-state failure
+    LinkState(LinkError),
+    /// The peer detached the link while the delivery was pending
+    LinkDetached(LinkOutcome),
+}
+
+impl From<DeliveryFailure> for SendError {
+    fn from(value: DeliveryFailure) -> Self {
+        match value {
+            DeliveryFailure::LinkState(error) => error.into(),
+            DeliveryFailure::LinkDetached(status) => SendError::LinkDetached(status),
         }
     }
 }
@@ -203,7 +384,7 @@ impl From<ApplyRemoteDetachError> for LinkStateError {
 pub enum SenderAttachError {
     /// The session (or its connection) stopped before the attach completed
     #[error("The session stopped before the link was attached: {:?}", .0)]
-    SessionStopped(SessionStopReason),
+    SessionStopped(SessionStopped),
 
     /// The session is not in the `Mapped` state (e.g. not begun, or ending)
     #[error("The session is not in a state that permits link attachment")]
@@ -217,14 +398,24 @@ pub enum SenderAttachError {
     #[error("Illegal link state")]
     IllegalState,
 
+    /// An internal invariant was violated (defensive)
+    ///
+    /// This is a safeguard for a path that is impossible by construction; it
+    /// cannot occur unless the library breaks its own invariants.
+    #[error("An internal invariant was violated")]
+    InvariantViolation,
+
+    /// An internal failure that can occur in principle
+    ///
+    /// Reported when the attach failed because an internal operation failed
+    /// without a more specific classification (e.g. the session stop reason
+    /// was not recorded).
+    #[error("An internal error occurred")]
+    InternalError,
+
     /// The local terminus is expecting an Attach from the remote peer
     #[error("Expecting an Attach frame but received a non-Attach frame")]
     NonAttachFrameReceived,
-
-    /// The link is expected to be detached immediately but didn't receive
-    /// an incoming Detach frame
-    #[error("Expecting the remote peer to immediately detach")]
-    ExpectImmediateDetach,
 
     /// Incoming Attach frame's Target field is None
     #[error("Target field is None")]
@@ -277,6 +468,11 @@ pub enum SenderAttachError {
     /// Remote peer closed the link with an error
     #[error("Remote peer closed with error {:?}", .0)]
     RemoteClosedWithError(definitions::Error),
+
+    /// The peer's attach reply carried an unsettled map during a
+    /// client-initiated attach
+    #[error("The peer's attach response carried an unsettled map")]
+    UnexpectedUnsettledMap,
 }
 
 /// The encoded message is larger than the maximum message size negotiated on
@@ -315,13 +511,41 @@ impl std::error::Error for MessageSizeExceeded {}
 /// Error associated with sending a message
 #[derive(Debug, thiserror::Error)]
 pub enum SendError {
-    /// Errors found in link state
-    #[error("Local error: {:?}", .0)]
-    LinkStateError(#[from] LinkStateError),
+    /// The peer sent a frame that is not permitted in the current state
+    /// (`amqp:illegal-state`)
+    #[error("The peer sent a frame that is not permitted in the current state")]
+    IllegalState,
 
-    /// The remote peer detached with error
-    #[error("Link is detached {:?}", .0)]
-    Detached(DetachError),
+    /// An internal invariant was violated (defensive)
+    ///
+    /// This is a safeguard for a path that is impossible by construction; it
+    /// cannot occur unless the library breaks its own invariants.
+    #[error("An internal invariant was violated")]
+    InvariantViolation,
+
+    /// An internal failure that can occur in principle
+    #[error("An internal error occurred")]
+    InternalError,
+
+    /// The session (or its connection) stopped before the delivery was settled
+    #[error("The session stopped before the delivery was settled: {:?}", .0)]
+    SessionStopped(SessionStopped),
+
+    /// The peer detached the link before the delivery was settled
+    #[error("The peer detached the link: {:?}", .0)]
+    LinkDetached(LinkOutcome),
+
+    /// The negotiated max frame size cannot fit even the serialized transfer
+    /// performative, so the message cannot be sent. `max-frame-size` is
+    /// negotiated per connection (AMQP 1.0 §2.4.1), so only a new connection
+    /// can change it.
+    #[error("The negotiated max frame size is too small for the transfer performative")]
+    FrameSizeTooSmall,
+
+    /// The peer requested a transactional acquisition, which is not
+    /// implemented
+    #[error("Transactional acquisition is not implemented")]
+    AcquisitionNotImplemented,
 
     /// A non-terminal delivery state is received while expecting
     /// an outcome
@@ -338,39 +562,24 @@ pub enum SendError {
     MessageSizeExceeded(MessageSizeExceeded),
 
     /// Error serializing message
-    #[error("Error encoding message")]
-    MessageEncodeError,
+    #[error(transparent)]
+    MessageEncodeError(#[from] MessageEncodeError),
+
+    /// A frame other than the expected detach arrived while the transfer
+    /// waited for link credit
+    #[error("Unexpected frame while expecting the peer's detach")]
+    UnexpectedFrame,
 }
 
 impl From<serde_amqp::Error> for SendError {
-    fn from(_: serde_amqp::Error) -> Self {
-        Self::MessageEncodeError
+    fn from(source: serde_amqp::Error) -> Self {
+        Self::MessageEncodeError(MessageEncodeError { source })
     }
 }
 
 impl From<MessageSizeExceeded> for SendError {
     fn from(error: MessageSizeExceeded) -> Self {
         Self::MessageSizeExceeded(error)
-    }
-}
-
-impl From<DetachError> for SendError {
-    fn from(error: DetachError) -> Self {
-        Self::Detached(error)
-    }
-}
-
-impl SendError {
-    /// Classifies what the caller can do with the link after this error.
-    pub fn recovery(&self) -> ErrorRecovery {
-        match self {
-            Self::LinkStateError(error) => error.recovery(),
-            Self::Detached(error) => error.recovery(),
-            Self::NonTerminalDeliveryState
-            | Self::IllegalDeliveryState
-            | Self::MessageSizeExceeded(_)
-            | Self::MessageEncodeError => ErrorRecovery::UseLink,
-        }
     }
 }
 
@@ -420,28 +629,38 @@ impl std::error::Error for DesiredFilterNotSupported {}
 pub enum ReceiverAttachError {
     /// The session (or its connection) stopped before the attach completed
     #[error("The session stopped before the link was attached: {:?}", .0)]
-    SessionStopped(SessionStopReason),
+    SessionStopped(SessionStopped),
 
     /// The session is not in the `Mapped` state (e.g. not begun, or ending)
     #[error("The session is not in a state that permits link attachment")]
     SessionNotMapped,
 
     /// Link name is already in use
-    #[error("Link name is not unique.")]
+    #[error("Link name is already in use")]
     DuplicatedLinkName,
 
     /// Illegal link state
     #[error("Illegal link state")]
     IllegalState,
 
+    /// An internal invariant was violated (defensive)
+    ///
+    /// This is a safeguard for a path that is impossible by construction; it
+    /// cannot occur unless the library breaks its own invariants.
+    #[error("An internal invariant was violated")]
+    InvariantViolation,
+
+    /// An internal failure that can occur in principle
+    ///
+    /// Reported when the attach failed because an internal operation failed
+    /// without a more specific classification (e.g. the session stop reason
+    /// was not recorded).
+    #[error("An internal error occurred")]
+    InternalError,
+
     /// The local terminus is expecting an Attach from the remote peer
     #[error("Expecting an Attach frame but received a non-Attach frame")]
     NonAttachFrameReceived,
-
-    /// The link is expected to be detached immediately but didn't receive
-    /// an incoming Detach frame
-    #[error("Expecting the remote peer to immediately detach")]
-    ExpectImmediateDetach,
 
     // Errors that should reject Attach
     /// Incoming Attach frame's Source field is None
@@ -484,6 +703,11 @@ pub enum ReceiverAttachError {
     /// The desired filter(s) on the receiver is not supported by the remote peer
     #[error("{:?}", .0)]
     DesiredFilterNotSupported(#[from] DesiredFilterNotSupported),
+
+    /// The peer's attach reply carried an unsettled map during a
+    /// client-initiated attach
+    #[error("The peer's attach response carried an unsettled map")]
+    UnexpectedUnsettledMap,
 }
 
 impl From<AllocLinkError> for ReceiverAttachError {
@@ -505,7 +729,6 @@ impl<'a> TryFrom<&'a ReceiverAttachError> for definitions::Error {
             ReceiverAttachError::DuplicatedLinkName => SessionError::HandleInUse.into(),
             ReceiverAttachError::IllegalState => AmqpError::IllegalState.into(),
             ReceiverAttachError::NonAttachFrameReceived => AmqpError::NotAllowed.into(),
-            ReceiverAttachError::ExpectImmediateDetach => AmqpError::NotAllowed.into(),
             ReceiverAttachError::CoordinatorIsNotImplemented => AmqpError::NotImplemented.into(),
             ReceiverAttachError::InitialDeliveryCountIsNone => AmqpError::InvalidField.into(),
             ReceiverAttachError::TargetAddressIsSomeWhenDynamicIsTrue => {
@@ -517,6 +740,7 @@ impl<'a> TryFrom<&'a ReceiverAttachError> for definitions::Error {
             ReceiverAttachError::DynamicNodePropertiesIsSomeWhenDynamicIsFalse => {
                 AmqpError::InvalidField.into()
             }
+            ReceiverAttachError::UnexpectedUnsettledMap => AmqpError::IllegalState.into(),
             _ => return Err(value),
         };
 
@@ -534,44 +758,6 @@ impl From<AllocLinkError> for SenderAttachError {
     }
 }
 
-impl TryFrom<DetachError> for SenderAttachError {
-    type Error = DetachError;
-
-    #[allow(deprecated)]
-    fn try_from(value: DetachError) -> Result<Self, Self::Error> {
-        match value {
-            DetachError::IllegalState => Ok(Self::IllegalState),
-            DetachError::SessionStopped(reason) => Ok(Self::SessionStopped(reason)),
-            DetachError::RemoteDetachedWithError(error)
-            | DetachError::RemoteClosedWithError(error) => {
-                // A closing detach is used for errors during attach anyway
-                Ok(Self::RemoteClosedWithError(error))
-            }
-            // DetachError::NonDetachFrameReceived
-            DetachError::ClosedByRemote | DetachError::DetachedByRemote => Err(value),
-        }
-    }
-}
-
-impl TryFrom<DetachError> for ReceiverAttachError {
-    type Error = DetachError;
-
-    #[allow(deprecated)]
-    fn try_from(value: DetachError) -> Result<Self, Self::Error> {
-        match value {
-            DetachError::IllegalState => Ok(Self::IllegalState),
-            DetachError::SessionStopped(reason) => Ok(Self::SessionStopped(reason)),
-            DetachError::RemoteDetachedWithError(error)
-            | DetachError::RemoteClosedWithError(error) => {
-                // A closing detach is used for errors during attach anyway
-                Ok(Self::RemoteClosedWithError(error))
-            }
-            // DetachError::NonDetachFrameReceived
-            DetachError::ClosedByRemote | DetachError::DetachedByRemote => Err(value),
-        }
-    }
-}
-
 impl<'a> TryFrom<&'a SenderAttachError> for definitions::Error {
     type Error = &'a SenderAttachError;
 
@@ -581,7 +767,6 @@ impl<'a> TryFrom<&'a SenderAttachError> for definitions::Error {
             SenderAttachError::DuplicatedLinkName => SessionError::HandleInUse.into(),
             SenderAttachError::IllegalState => AmqpError::IllegalState.into(),
             SenderAttachError::NonAttachFrameReceived => AmqpError::NotAllowed.into(),
-            SenderAttachError::ExpectImmediateDetach => AmqpError::NotAllowed.into(),
             SenderAttachError::CoordinatorIsNotImplemented => AmqpError::NotImplemented.into(),
             SenderAttachError::DynamicNodePropertiesIsSomeWhenDynamicIsFalse => {
                 AmqpError::InvalidField.into()
@@ -592,6 +777,7 @@ impl<'a> TryFrom<&'a SenderAttachError> for definitions::Error {
             SenderAttachError::SourceAddressIsSomeWhenDynamicIsTrue => {
                 AmqpError::InvalidField.into()
             }
+            SenderAttachError::UnexpectedUnsettledMap => AmqpError::IllegalState.into(),
 
             #[cfg(feature = "transaction")]
             SenderAttachError::DesireTxnCapabilitiesNotSupported => return Err(value),
@@ -605,71 +791,46 @@ impl<'a> TryFrom<&'a SenderAttachError> for definitions::Error {
 
 /// Errors associated with link state
 #[derive(Debug, Clone, thiserror::Error)]
-pub enum LinkStateError {
-    /// ILlegal link state
-    #[error("Illegal local state")]
+pub enum LinkError {
+    /// The peer sent a frame that is not permitted in the current state
+    /// (`amqp:illegal-state`)
+    #[error("The peer sent a frame that is not permitted in the current state")]
     IllegalState,
+
+    /// An internal invariant was violated (defensive)
+    ///
+    /// This is a safeguard for a path that is impossible by construction
+    /// (a missing local handle, a state-machine guard, an internal call-order
+    /// contract). It cannot occur unless the library breaks its own
+    /// invariants; a report of this error is a bug in the library.
+    #[error("An internal invariant was violated")]
+    InvariantViolation,
+
+    /// An internal failure that can occur in principle
+    ///
+    /// Reported when an internal operation failed without a more specific
+    /// classification: an engine task ended without reporting its outcome, a
+    /// stop reason was not recorded, a settlement channel died, or a frame
+    /// leaked into the wrong stream. Both this and
+    /// [`Self::InvariantViolation`] answer `amqp:internal-error`.
+    #[error("An internal error occurred")]
+    InternalError,
+
+    /// The link already reached a terminal outcome (`Detached`/`Closed`)
+    #[error("The link is already detached or closed: {:?}", .0)]
+    LinkDetached(LinkOutcome),
 
     /// The session (or its connection) stopped before the link was detached or closed
     #[error("The session stopped before the link was detached or closed: {:?}", .0)]
-    SessionStopped(SessionStopReason),
-
-    /// Remote peer detached
-    #[error("Remote detached")]
-    RemoteDetached,
-
-    /// Remote peer detached with error
-    #[error("Remote detached with an error: {}", .0)]
-    RemoteDetachedWithError(definitions::Error),
-
-    /// Remote peer closed
-    #[error("Remote closed")]
-    RemoteClosed,
-
-    /// Remote peer closed the link with an error
-    #[error("Remote peer closed the link with an error: {}", .0)]
-    RemoteClosedWithError(definitions::Error),
-
-    /// The link is expected to be detached immediately but didn't receive
-    /// an incoming Detach frame
-    #[error("Expecting an immediate detach")]
-    ExpectImmediateDetach,
-}
-
-impl From<DetachError> for LinkStateError {
-    #[allow(deprecated)]
-    fn from(value: DetachError) -> Self {
-        match value {
-            DetachError::IllegalState => Self::IllegalState,
-            DetachError::SessionStopped(reason) => Self::SessionStopped(reason),
-            DetachError::RemoteDetachedWithError(error) => Self::RemoteDetachedWithError(error),
-            DetachError::ClosedByRemote => Self::RemoteClosed,
-            DetachError::DetachedByRemote => Self::RemoteDetached,
-            DetachError::RemoteClosedWithError(error) => Self::RemoteClosedWithError(error),
-        }
-    }
-}
-
-impl LinkStateError {
-    /// Classifies what the caller can do with the link after this error.
-    pub fn recovery(&self) -> ErrorRecovery {
-        match self {
-            Self::RemoteDetached | Self::RemoteDetachedWithError(_) => ErrorRecovery::ReattachLink,
-            Self::SessionStopped(reason) => session_stop_recovery(reason),
-            Self::RemoteClosed
-            | Self::RemoteClosedWithError(_)
-            | Self::IllegalState
-            | Self::ExpectImmediateDetach => ErrorRecovery::NewLink,
-        }
-    }
+    SessionStopped(SessionStopped),
 }
 
 /// Errors associated with receiving a transfer
 #[derive(Debug, thiserror::Error)]
 pub(crate) enum ReceiverTransferError {
-    /// ILlegal link state
-    #[error("Illegal local state")]
-    IllegalState,
+    /// A local link-state failure
+    #[error(transparent)]
+    LinkState(#[from] LinkError),
 
     /// The peer sent more message transfers than currently allowed on the link.
     #[error("The peer sent more message transfers than currently allowed on the link")]
@@ -715,12 +876,48 @@ impl std::fmt::Display for MessageDecodeError {
 
 impl std::error::Error for MessageDecodeError {}
 
+/// Error encoding message
+#[derive(Debug)]
+pub struct MessageEncodeError {
+    /// Source error
+    pub source: serde_amqp::Error,
+}
+
+impl std::fmt::Display for MessageEncodeError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Error encoding message: {}", self.source)
+    }
+}
+
+impl std::error::Error for MessageEncodeError {}
+
 /// Errors associated with receiving
 #[derive(Debug, thiserror::Error)]
 pub enum RecvError {
-    /// Errors found in link state
-    #[error("Local error: {:?}", .0)]
-    LinkStateError(LinkStateError),
+    /// The peer sent a frame that is not permitted in the current state
+    /// (`amqp:illegal-state`)
+    #[error("The peer sent a frame that is not permitted in the current state")]
+    IllegalState,
+
+    /// An internal invariant was violated (defensive)
+    ///
+    /// This is a safeguard for a path that is impossible by construction; it
+    /// cannot occur unless the library breaks its own invariants.
+    #[error("An internal invariant was violated")]
+    InvariantViolation,
+
+    /// An internal failure that can occur in principle
+    #[error("An internal error occurred")]
+    InternalError,
+
+    /// The session (or its connection) stopped before a delivery could be
+    /// received
+    #[error("The session stopped before a delivery could be received: {:?}", .0)]
+    SessionStopped(SessionStopped),
+
+    /// The peer detached the link before a delivery could be received
+    #[error("The peer detached the link: {:?}", .0)]
+    LinkDetached(LinkOutcome),
 
     /// The peer sent more message transfers than currently allowed on the link.
     #[error("The peer sent more message transfers than currently allowed on the link")]
@@ -754,14 +951,15 @@ pub enum RecvError {
     #[error(transparent)]
     MessageSizeExceeded(MessageSizeExceeded),
 
-    /// Transactional acquision is not supported yet
+    /// Transactional acquisition is not supported yet
     #[error("Transactional acquisition is not implemented")]
-    TransactionalAcquisitionIsNotImeplemented,
+    AcquisitionNotImplemented,
 }
 
 impl From<ReceiverTransferError> for RecvError {
     fn from(value: ReceiverTransferError) -> Self {
         match value {
+            ReceiverTransferError::LinkState(error) => error.into(),
             ReceiverTransferError::TransferLimitExceeded => RecvError::TransferLimitExceeded,
             ReceiverTransferError::DeliveryIdIsNone => RecvError::DeliveryIdIsNone,
             ReceiverTransferError::DeliveryTagIsNone => RecvError::DeliveryTagIsNone,
@@ -772,9 +970,63 @@ impl From<ReceiverTransferError> for RecvError {
             ReceiverTransferError::InconsistentFieldInMultiFrameDelivery => {
                 RecvError::InconsistentFieldInMultiFrameDelivery
             }
-            ReceiverTransferError::IllegalState => {
-                RecvError::LinkStateError(LinkStateError::IllegalState)
+        }
+    }
+}
+
+/// The recovery action for a peer detach: a suspended link can be resumed, a
+/// destroyed one cannot.
+fn link_outcome_recovery(status: &LinkOutcome) -> ErrorRecovery {
+    if status.is_closed() {
+        ErrorRecovery::NewLink
+    } else {
+        ErrorRecovery::ReattachLink
+    }
+}
+
+impl LinkError {
+    /// Classifies what the caller can do with the link after this error.
+    pub fn recovery(&self) -> ErrorRecovery {
+        match self {
+            Self::IllegalState
+            | Self::InvariantViolation
+            | Self::InternalError
+            | Self::LinkDetached(_) => ErrorRecovery::NewLink,
+            Self::SessionStopped(reason) => session_stop_recovery(reason),
+        }
+    }
+}
+
+impl From<LinkError> for SendError {
+    fn from(value: LinkError) -> Self {
+        match value {
+            LinkError::IllegalState => SendError::IllegalState,
+            LinkError::InvariantViolation => SendError::InvariantViolation,
+            LinkError::InternalError => SendError::InternalError,
+            LinkError::LinkDetached(status) => SendError::LinkDetached(status),
+            LinkError::SessionStopped(reason) => SendError::SessionStopped(reason),
+        }
+    }
+}
+
+impl SendError {
+    /// Classifies what the caller can do with the link after this error.
+    pub fn recovery(&self) -> ErrorRecovery {
+        match self {
+            Self::IllegalState | Self::InvariantViolation | Self::InternalError => {
+                ErrorRecovery::NewLink
             }
+            Self::LinkDetached(status) => link_outcome_recovery(status),
+            Self::SessionStopped(reason) => session_stop_recovery(reason),
+            Self::NonTerminalDeliveryState
+            | Self::IllegalDeliveryState
+            | Self::MessageSizeExceeded(_)
+            | Self::MessageEncodeError(_) => ErrorRecovery::UseLink,
+            Self::AcquisitionNotImplemented | Self::UnexpectedFrame => ErrorRecovery::NewLink,
+            // `max-frame-size` is negotiated per connection (AMQP 1.0 §2.4.1),
+            // so a new link on the same connection inherits the same limit;
+            // only a new connection can change it.
+            Self::FrameSizeTooSmall => ErrorRecovery::ReconnectConnection,
         }
     }
 }
@@ -783,7 +1035,11 @@ impl RecvError {
     /// Classifies what the caller can do with the link after this error.
     pub fn recovery(&self) -> ErrorRecovery {
         match self {
-            Self::LinkStateError(error) => error.recovery(),
+            Self::IllegalState | Self::InvariantViolation | Self::InternalError => {
+                ErrorRecovery::NewLink
+            }
+            Self::LinkDetached(status) => link_outcome_recovery(status),
+            Self::SessionStopped(reason) => session_stop_recovery(reason),
             Self::TransferLimitExceeded
             | Self::MessageDecode(_)
             | Self::IllegalRcvSettleModeInTransfer => ErrorRecovery::UseLink,
@@ -791,88 +1047,62 @@ impl RecvError {
             | Self::DeliveryTagIsNone
             | Self::MessageSizeExceeded(_)
             | Self::InconsistentFieldInMultiFrameDelivery
-            | Self::TransactionalAcquisitionIsNotImeplemented => ErrorRecovery::NewLink,
+            | Self::AcquisitionNotImplemented => ErrorRecovery::NewLink,
         }
     }
 }
 
 /// Type alias for disposition error
-pub type DispositionError = IllegalLinkStateError;
+pub type DispositionError = LinkError;
 
 /// Type alias for flow error
-pub type FlowError = IllegalLinkStateError;
+pub type FlowError = LinkError;
 
-/// Errors associated with sending/handling Disposition
-#[derive(Debug, thiserror::Error)]
-pub enum IllegalLinkStateError {
-    /// ILlegal link state
-    #[error("Illegal local state")]
-    IllegalState,
+pub(crate) type SendAttachErrorKind = LinkError;
 
-    /// The session (or its connection) stopped before the link was detached or closed
-    #[error("The session stopped before the link was detached or closed: {:?}", .0)]
-    SessionStopped(SessionStopReason),
-}
-
-pub(crate) type SendAttachErrorKind = IllegalLinkStateError;
-
-impl From<IllegalLinkStateError> for LinkStateError {
-    fn from(value: IllegalLinkStateError) -> Self {
+impl From<LinkError> for ReceiverAttachError {
+    fn from(value: LinkError) -> Self {
         match value {
-            IllegalLinkStateError::IllegalState => LinkStateError::IllegalState,
-            IllegalLinkStateError::SessionStopped(reason) => LinkStateError::SessionStopped(reason),
+            LinkError::IllegalState => ReceiverAttachError::IllegalState,
+            LinkError::InvariantViolation => ReceiverAttachError::InvariantViolation,
+            LinkError::InternalError => ReceiverAttachError::InternalError,
+            // Attach paths never propagate a terminal link outcome; the
+            // primary attach error is preserved by the caller instead.
+            LinkError::LinkDetached(_) => ReceiverAttachError::IllegalState,
+            LinkError::SessionStopped(reason) => ReceiverAttachError::SessionStopped(reason),
         }
     }
 }
 
-impl From<IllegalLinkStateError> for ReceiverAttachError {
-    fn from(value: IllegalLinkStateError) -> Self {
+impl From<LinkError> for SenderAttachError {
+    fn from(value: LinkError) -> Self {
         match value {
-            IllegalLinkStateError::IllegalState => ReceiverAttachError::IllegalState,
-            IllegalLinkStateError::SessionStopped(reason) => {
-                ReceiverAttachError::SessionStopped(reason)
-            }
+            LinkError::IllegalState => SenderAttachError::IllegalState,
+            LinkError::InvariantViolation => SenderAttachError::InvariantViolation,
+            LinkError::InternalError => SenderAttachError::InternalError,
+            // Attach paths never propagate a terminal link outcome; the
+            // primary attach error is preserved by the caller instead.
+            LinkError::LinkDetached(_) => SenderAttachError::IllegalState,
+            LinkError::SessionStopped(reason) => SenderAttachError::SessionStopped(reason),
         }
     }
 }
 
-impl From<IllegalLinkStateError> for SenderAttachError {
-    fn from(value: IllegalLinkStateError) -> Self {
+impl From<LinkError> for RecvError {
+    fn from(value: LinkError) -> Self {
         match value {
-            IllegalLinkStateError::IllegalState => SenderAttachError::IllegalState,
-            IllegalLinkStateError::SessionStopped(reason) => {
-                SenderAttachError::SessionStopped(reason)
-            }
+            LinkError::IllegalState => RecvError::IllegalState,
+            LinkError::InvariantViolation => RecvError::InvariantViolation,
+            LinkError::InternalError => RecvError::InternalError,
+            LinkError::LinkDetached(status) => RecvError::LinkDetached(status),
+            LinkError::SessionStopped(reason) => RecvError::SessionStopped(reason),
         }
     }
 }
 
-impl From<IllegalLinkStateError> for SendError {
-    fn from(value: IllegalLinkStateError) -> Self {
-        match value {
-            IllegalLinkStateError::IllegalState => LinkStateError::IllegalState.into(),
-            IllegalLinkStateError::SessionStopped(reason) => {
-                LinkStateError::SessionStopped(reason).into()
-            }
-        }
-    }
-}
-
-impl From<IllegalLinkStateError> for DetachError {
-    fn from(value: IllegalLinkStateError) -> Self {
-        match value {
-            IllegalLinkStateError::IllegalState => Self::IllegalState,
-            IllegalLinkStateError::SessionStopped(reason) => Self::SessionStopped(reason),
-        }
-    }
-}
-
-impl<T> From<T> for RecvError
-where
-    T: Into<LinkStateError>,
-{
-    fn from(value: T) -> Self {
-        Self::LinkStateError(value.into())
+impl From<ApplyRemoteDetachError> for RecvError {
+    fn from(value: ApplyRemoteDetachError) -> Self {
+        Self::from(LinkError::from(value))
     }
 }
 
@@ -890,6 +1120,17 @@ pub enum SenderResumeErrorKind {
     /// Detach/suspend error
     #[error(transparent)]
     DetachError(#[from] DetachError),
+
+    /// The peer detached the link while it was being resumed
+    #[error("The peer detached the link while it was being resumed: {:?}", .0)]
+    LinkDetached(LinkOutcome),
+
+    /// The link's unsettled map remained incomplete after repeated
+    /// suspend/re-attempt rounds (AMQP 1.0 §2.6.13)
+    #[error(
+        "The link's unsettled map remained incomplete after repeated suspend/re-attempt rounds"
+    )]
+    IncompleteUnsettled,
 
     /// Resume timed out
     #[error("Resume timed out")]
@@ -921,13 +1162,13 @@ pub enum ReceiverResumeErrorKind {
     #[error(transparent)]
     AttachError(#[from] ReceiverAttachError),
 
-    /// Error with sending flow
+    /// Error with sending flow or with a link-state operation
     #[error(transparent)]
-    FlowError(#[from] IllegalLinkStateError),
+    FlowError(#[from] LinkError),
 
-    /// Detach/suspend error
-    #[error(transparent)]
-    DetachError(#[from] DetachError),
+    /// The peer detached the link while it was being resumed
+    #[error("The peer detached the link while it was being resumed: {:?}", .0)]
+    LinkDetached(LinkOutcome),
 
     /// Resume timed out
     #[error("Resume timed out")]
@@ -1027,86 +1268,74 @@ mod tests {
         MessageDecodeError { info, source }
     }
 
+    fn message_encode_error() -> MessageEncodeError {
+        let source = serde_amqp::from_slice::<String>(&[]).unwrap_err();
+        MessageEncodeError { source }
+    }
+
     #[test]
     fn link_state_error_recovery() {
+        assert_eq!(LinkError::IllegalState.recovery(), ErrorRecovery::NewLink);
         assert_eq!(
-            LinkStateError::RemoteDetached.recovery(),
-            ErrorRecovery::ReattachLink
-        );
-        assert_eq!(
-            LinkStateError::RemoteDetachedWithError(test_error()).recovery(),
-            ErrorRecovery::ReattachLink
-        );
-        assert_eq!(
-            LinkStateError::RemoteClosed.recovery(),
+            LinkError::InvariantViolation.recovery(),
             ErrorRecovery::NewLink
         );
         assert_eq!(
-            LinkStateError::RemoteClosedWithError(test_error()).recovery(),
+            LinkError::LinkDetached(LinkOutcome::Detached { remote_error: None }).recovery(),
             ErrorRecovery::NewLink
         );
         assert_eq!(
-            LinkStateError::IllegalState.recovery(),
+            LinkError::LinkDetached(LinkOutcome::Closed { remote_error: None }).recovery(),
             ErrorRecovery::NewLink
         );
         assert_eq!(
-            LinkStateError::ExpectImmediateDetach.recovery(),
-            ErrorRecovery::NewLink
-        );
-        assert_eq!(
-            LinkStateError::SessionStopped(SessionStopReason::Ended).recovery(),
+            LinkError::SessionStopped(SessionStopped::Outcome(SessionOutcome::Ended)).recovery(),
             ErrorRecovery::ReconnectSession
         );
         assert_eq!(
-            LinkStateError::SessionStopped(SessionStopReason::ConnectionStopped(
-                ConnectionStopReason::Closed
-            ))
-            .recovery(),
+            LinkError::SessionStopped(SessionStopped::ConnectionStopped(ConnectionOutcome::Closed))
+                .recovery(),
             ErrorRecovery::ReconnectConnection
         );
     }
 
     #[test]
-    #[allow(deprecated)]
     fn detach_error_recovery() {
         assert_eq!(
-            DetachError::SessionStopped(SessionStopReason::RemoteEnded).recovery(),
+            DetachError::SessionStopped(SessionStopped::Outcome(SessionOutcome::RemoteEnded))
+                .recovery(),
             ErrorRecovery::ReconnectSession
         );
         assert_eq!(
-            DetachError::SessionStopped(SessionStopReason::ConnectionStopped(
-                ConnectionStopReason::RemoteClosed
+            DetachError::SessionStopped(SessionStopped::ConnectionStopped(
+                ConnectionOutcome::RemoteClosed
             ))
             .recovery(),
             ErrorRecovery::ReconnectConnection
         );
-        assert_eq!(
-            DetachError::RemoteDetachedWithError(test_error()).recovery(),
-            ErrorRecovery::ReattachLink
-        );
-        assert_eq!(
-            DetachError::ClosedByRemote.recovery(),
-            ErrorRecovery::NewLink
-        );
-        assert_eq!(
-            DetachError::RemoteClosedWithError(test_error()).recovery(),
-            ErrorRecovery::NewLink
-        );
         assert_eq!(DetachError::IllegalState.recovery(), ErrorRecovery::NewLink);
-        assert_eq!(
-            DetachError::DetachedByRemote.recovery(),
-            ErrorRecovery::ReattachLink
-        );
     }
 
     #[test]
     fn send_error_recovery() {
         assert_eq!(
-            SendError::LinkStateError(LinkStateError::RemoteDetached).recovery(),
+            SendError::SessionStopped(SessionStopped::Outcome(SessionOutcome::RemoteEnded))
+                .recovery(),
+            ErrorRecovery::ReconnectSession
+        );
+        assert_eq!(
+            SendError::LinkDetached(LinkOutcome::Detached {
+                remote_error: Some(test_error())
+            })
+            .recovery(),
             ErrorRecovery::ReattachLink
         );
         assert_eq!(
-            SendError::Detached(DetachError::ClosedByRemote).recovery(),
+            SendError::LinkDetached(LinkOutcome::Closed { remote_error: None }).recovery(),
+            ErrorRecovery::NewLink
+        );
+        assert_eq!(
+            SendError::UnexpectedFrame.recovery(),
             ErrorRecovery::NewLink
         );
         assert_eq!(
@@ -1126,19 +1355,51 @@ mod tests {
             ErrorRecovery::UseLink
         );
         assert_eq!(
-            SendError::MessageEncodeError.recovery(),
+            SendError::MessageEncodeError(message_encode_error()).recovery(),
             ErrorRecovery::UseLink
+        );
+        assert_eq!(
+            SendError::InvariantViolation.recovery(),
+            ErrorRecovery::NewLink
+        );
+        assert_eq!(
+            SendError::FrameSizeTooSmall.recovery(),
+            ErrorRecovery::ReconnectConnection
+        );
+        assert_eq!(
+            SendError::AcquisitionNotImplemented.recovery(),
+            ErrorRecovery::NewLink
         );
     }
 
     #[test]
     fn recv_error_recovery() {
         assert_eq!(
-            RecvError::LinkStateError(LinkStateError::SessionStopped(
-                SessionStopReason::ConnectionStopped(ConnectionStopReason::Closed)
-            ))
-            .recovery(),
+            RecvError::SessionStopped(SessionStopped::ConnectionStopped(ConnectionOutcome::Closed))
+                .recovery(),
             ErrorRecovery::ReconnectConnection
+        );
+        assert_eq!(
+            RecvError::LinkDetached(LinkOutcome::Detached { remote_error: None }).recovery(),
+            ErrorRecovery::ReattachLink
+        );
+        assert_eq!(
+            RecvError::LinkDetached(LinkOutcome::Detached {
+                remote_error: Some(test_error())
+            })
+            .recovery(),
+            ErrorRecovery::ReattachLink
+        );
+        assert_eq!(
+            RecvError::LinkDetached(LinkOutcome::Closed { remote_error: None }).recovery(),
+            ErrorRecovery::NewLink
+        );
+        assert_eq!(
+            RecvError::LinkDetached(LinkOutcome::Closed {
+                remote_error: Some(test_error())
+            })
+            .recovery(),
+            ErrorRecovery::NewLink
         );
         assert_eq!(
             RecvError::TransferLimitExceeded.recovery(),
@@ -1173,9 +1434,60 @@ mod tests {
             ErrorRecovery::NewLink
         );
         assert_eq!(
-            RecvError::TransactionalAcquisitionIsNotImeplemented.recovery(),
+            RecvError::InvariantViolation.recovery(),
             ErrorRecovery::NewLink
         );
+        assert_eq!(
+            RecvError::AcquisitionNotImplemented.recovery(),
+            ErrorRecovery::NewLink
+        );
+    }
+
+    #[test]
+    fn receiver_transfer_error_mapping() {
+        assert!(matches!(
+            RecvError::from(ReceiverTransferError::LinkState(
+                LinkError::InvariantViolation
+            )),
+            RecvError::InvariantViolation
+        ));
+
+        let status = LinkOutcome::Detached { remote_error: None };
+        assert!(matches!(
+            RecvError::from(ReceiverTransferError::LinkState(LinkError::LinkDetached(
+                status
+            ))),
+            RecvError::LinkDetached(_)
+        ));
+    }
+
+    #[test]
+    fn encode_error_preserves_source() {
+        let source = serde_amqp::from_slice::<String>(&[]).unwrap_err();
+        let expected = source.to_string();
+        let error = SendError::from(source);
+        assert!(matches!(error, SendError::MessageEncodeError(_)));
+        assert_eq!(
+            error.to_string(),
+            format!("Error encoding message: {expected}")
+        );
+    }
+
+    #[test]
+    fn link_detached_converts_to_the_direct_variants() {
+        let status = LinkOutcome::Detached { remote_error: None };
+        assert!(matches!(
+            SendError::from(LinkError::LinkDetached(status.clone())),
+            SendError::LinkDetached(_)
+        ));
+        assert!(matches!(
+            RecvError::from(LinkError::LinkDetached(status)),
+            RecvError::LinkDetached(_)
+        ));
+        assert!(matches!(
+            SendError::from(LinkError::InvariantViolation),
+            SendError::InvariantViolation
+        ));
     }
 
     #[test]

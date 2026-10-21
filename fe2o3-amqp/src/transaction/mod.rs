@@ -387,6 +387,12 @@ pub trait TransactionAcquisition:
     /// This will set the `txn-id` property in the link's flow and send a flow frame with the
     /// given credit. The returned [`TxnAcquisition`] can be used to receive and retire the
     /// acquired deliveries.
+    ///
+    /// The transaction id is retired by [`TxnAcquisition::commit`],
+    /// [`TxnAcquisition::rollback`], [`TxnAcquisition::cleanup`] or its `Drop`
+    /// implementation. Acquiring a link that still carries a transaction id is
+    /// impossible by contract and reports [`FlowError::InvariantViolation`]
+    /// (defensive).
     fn acquire<'r>(
         self,
         recver: &'r mut Receiver,
@@ -398,7 +404,7 @@ pub trait TransactionAcquisition:
                 let mut writer = recver.inner.link.flow_state.lock.write();
                 let fields = writer.properties.get_or_insert_with(Fields::new);
                 if fields.contains_key(TXN_ID_KEY) {
-                    return Err(FlowError::IllegalState);
+                    return Err(FlowError::InvariantViolation);
                 }
 
                 fields.insert(Symbol::from(TXN_ID_KEY), value);
@@ -523,7 +529,7 @@ pub struct Transaction<'t> {
 
 
 impl<'t> TransactionDischarge for Transaction<'t> {
-    type Error = ControllerSendError;
+    type Error = DischargeError;
 
     fn is_discharged(&self) -> bool {
         self.is_discharged
@@ -557,7 +563,7 @@ impl<'t> Transaction<'t> {
     pub async fn declare(
         controller: &'t Controller,
         global_id: impl Into<Option<TransactionId>>,
-    ) -> Result<Transaction<'t>, ControllerSendError> {
+    ) -> Result<Transaction<'t>, DeclareError> {
         let mut inner = controller.inner.lock().await;
         let declared = declare_on_link(&mut inner, global_id.into()).await?;
         Ok(Self {
@@ -804,10 +810,11 @@ mod tests {
     /// was sent with `include_properties = false` and the `txn-id` was dropped.
     #[tokio::test]
     async fn acquire_flow_carries_the_txn_id() {
-        // `acquire`'s default body only needs `txn_id`. `is_discharged()`
-        // returns `true` so `TxnAcquisition`'s `Drop` (which uses a blocking
-        // send) does not run inside the async runtime; the recorded properties
-        // are therefore left intact for inspection.
+        // `acquire`'s default body only needs `txn_id`. `TxnAcquisition`'s
+        // `Drop` clears the txn-id and uses a blocking send, so the test
+        // `mem::forget`s the acquisition instead of dropping it (avoiding the
+        // blocking send inside the async runtime and leaving the recorded
+        // properties intact for inspection).
         struct FakeTxn {
             id: Binary,
         }
@@ -854,7 +861,7 @@ mod tests {
             other => panic!("unexpected frame: {other:?}"),
         }
 
-        drop(acq); // no-op Drop (is_discharged() == true), releases the borrow
+        std::mem::forget(acq); // skip Drop's blocking send; releases the borrow
 
         // ...and the txn-id was recorded on the link's flow state.
         assert!(
