@@ -12,9 +12,8 @@ use fe2o3_amqp::{
     acceptor::{ConnectionAcceptor, ListenerSessionHandle, SessionAcceptor},
     connection::{
         Connection, ConnectionHandle, ConnectionOutcome, Error as ConnectionError, OpenError,
-        TryCloseError,
     },
-    session::{Error as SessionError, Session, SessionHandle, SessionOutcome, TryEndError},
+    session::{Error as SessionError, Session, SessionHandle, SessionOutcome},
     types::definitions::{self, AmqpError},
 };
 
@@ -246,7 +245,7 @@ async fn repeated_session_end_reports_already_ended() {
     assert!(matches!(error, SessionError::AlreadyEnded));
     assert!(matches!(
         client_session.try_end(),
-        Err(TryEndError::AlreadyEnded)
+        Err(SessionError::AlreadyEnded)
     ));
 }
 
@@ -315,7 +314,7 @@ async fn repeated_connection_close_reports_already_closed() {
     assert!(matches!(error, ConnectionError::AlreadyClosed));
     assert!(matches!(
         client_connection.try_close(),
-        Err(TryCloseError::AlreadyClosed)
+        Err(ConnectionError::AlreadyClosed)
     ));
 }
 
@@ -435,5 +434,43 @@ async fn connection_lost_after_open_is_reported() {
     assert!(
         matches!(result, Err(ConnectionError::ConnectionLost)),
         "expected ConnectionLost, got {result:?}"
+    );
+}
+
+/// A non-blocking `try_close` followed by a blocking `close` completes the
+/// single close exchange; the initiated close is not sent twice.
+#[tokio::test]
+async fn try_close_then_close_completes() {
+    let (_server_connection, mut client_connection) = establish_connection_pair().await;
+
+    let result = match client_connection.try_close() {
+        Ok(Some(outcome)) => Ok(outcome),
+        Ok(None) => client_connection.close().await,
+        Err(error) => Err(error),
+    };
+
+    assert!(
+        matches!(result, Ok(ConnectionOutcome::Closed)),
+        "expected Closed, got {result:?}"
+    );
+}
+
+/// A non-blocking `try_end` followed by a blocking `end` completes the single
+/// end exchange; the initiated end is not sent twice.
+#[tokio::test]
+async fn try_end_then_end_completes() {
+    let (mut server_connection, mut client_connection) = establish_connection_pair().await;
+    let (mut client_session, _server_session) =
+        establish_session_pair(&mut server_connection, &mut client_connection).await;
+
+    let result = match client_session.try_end() {
+        Ok(Some(outcome)) => Ok(outcome),
+        Ok(None) => client_session.end().await,
+        Err(error) => Err(error),
+    };
+
+    assert!(
+        matches!(result, Ok(SessionOutcome::Ended)),
+        "expected Ended, got {result:?}"
     );
 }

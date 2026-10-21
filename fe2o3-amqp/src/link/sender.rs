@@ -1638,6 +1638,7 @@ mod tests {
         drop(outcome_tx);
         SessionHandle {
             is_ended: false,
+            end_sent: false,
             control,
             engine_handle: tokio::spawn(async {}),
             outcome,
@@ -1879,10 +1880,10 @@ mod tests {
     }
 
     /// A closed incoming channel with no recorded session stop reason and an
-    /// attached link is a link-local defensive failure: the relay disappeared
-    /// without a recorded detach.
+    /// attached link is an internal failure: the relay disappeared without a
+    /// recorded detach.
     #[tokio::test]
-    async fn closed_incoming_channel_without_stop_reason_is_invariant_violation() {
+    async fn closed_incoming_channel_without_stop_reason_reports_internal_error() {
         let (mut inner, _session_rx, _outgoing_rx, incoming_tx) =
             make_sender_inner_with_channels(4096);
         drop(incoming_tx);
@@ -1891,7 +1892,7 @@ mod tests {
 
         assert!(matches!(
             result,
-            Err(TransferError::LinkState(LinkStateError::InvariantViolation))
+            Err(TransferError::LinkState(LinkStateError::InternalError))
         ));
     }
 
