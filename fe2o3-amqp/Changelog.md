@@ -1,6 +1,6 @@
 # Change Log
 
-## Unreleased
+## 0.18.4
 
 1. **Bugfix**: transactional acquisition now includes the link flow `properties` in the acquiring flow (and in the `cleanup`/drop drain flows), so the `txn-id` actually reaches the resource; the `txn-id` is also recorded when the link had no flow properties yet. Previously the `txn-id` was silently dropped (regression since 0.12.0).
 2. **Bugfix**: outgoing delivery-ids are allocated once per delivery instead of from the per-frame transfer-id, so a delivery split over multiple transfer frames no longer makes the next delivery-id skip values; Proton-based peers (ActiveMQ Artemis, Qpid Broker-J) require consecutive delivery-ids and reject gaps with a delivery-id sequencing error.
