@@ -280,7 +280,7 @@ pub use serde;
 pub use de::{from_reader, from_slice};
 pub use error::Error;
 pub use ser::to_vec;
-pub use size_ser::serialized_size;
+pub use size_ser::{serialized_size, SizeError};
 pub use value::{de::from_value, ser::to_value, Value};
 
 #[cfg(feature = "derive")]

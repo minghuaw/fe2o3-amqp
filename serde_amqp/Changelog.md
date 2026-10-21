@@ -1,5 +1,12 @@
 # Change Log
 
+## 0.19.0
+
+1. **Breaking**: `serialized_size` now returns `Result<usize, SizeError>` and `SizeSerializer`
+   uses the new `SizeError` (previously the crate-wide `serde_amqp::Error`). `SizeError` only
+   reports `TooLong` (a value too long for AMQP's 32-bit length fields), so callers can handle
+   size overflow precisely.
+
 ## 0.18.0
 
 1. Bumped the version to "0.18.0" to match the updated `fe2o3-amqp`. This crate has no
