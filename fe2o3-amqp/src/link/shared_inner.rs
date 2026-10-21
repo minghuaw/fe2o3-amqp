@@ -86,6 +86,7 @@ where
     fn handle_reattach_outcome(
         &mut self,
         outcome: <Self::Link as LinkAttach>::AttachExchange,
+        detach_outcome: LinkOutcome,
     ) -> Result<&mut Self, <Self::Link as LinkAttach>::AttachError>;
 
     /// # Cancel safety
@@ -93,11 +94,12 @@ where
     /// This should be cancel safe if oneshot channel is cancel safe
     async fn reattach_inner(
         &mut self,
+        detach_outcome: LinkOutcome,
     ) -> Result<&mut Self, <Self::Link as LinkAttach>::AttachError> {
         self.reallocate_output_handle().await?; // FIXME: cancel safe? if oneshot channel is cancel safe
         match self.exchange_attach(AttachMode::Reattach).await // cancel safe: the attach exchange only awaits on mpsc operations
         {
-            Ok(attach_exchange) => self.handle_reattach_outcome(attach_exchange),
+            Ok(attach_exchange) => self.handle_reattach_outcome(attach_exchange, detach_outcome),
             Err(attach_error) => Err(self.handle_attach_error(attach_error).await),
         }
     }
@@ -182,7 +184,7 @@ where
                     let status = LinkOutcome::Closed {
                         remote_error: remote_detach.error.clone(),
                     };
-                    reattach_then_close(self).await?;
+                    reattach_then_close(self, status.clone()).await?;
                     Ok(status)
                 } else {
                     self.link_mut().on_detach_reply(remote_detach)
@@ -194,7 +196,7 @@ where
                     let status = LinkOutcome::Closed {
                         remote_error: remote_detach.error.clone(),
                     };
-                    reattach_then_close(self).await?;
+                    reattach_then_close(self, status.clone()).await?;
                     Ok(status)
                 } else {
                     self.link_mut().on_detach_reply(remote_detach)
@@ -235,7 +237,7 @@ where
                         remote_error: remote_detach.error.clone(),
                     };
                     let _ = self.link_mut().apply_remote_detach_outcome(remote_detach);
-                    reattach_then_close(self).await?;
+                    reattach_then_close(self, status.clone()).await?;
                     Ok(status)
                 }
             }
@@ -277,7 +279,7 @@ where
                         remote_error: remote_detach.error.clone(),
                     };
                     let _ = self.link_mut().apply_remote_detach_outcome(remote_detach);
-                    reattach_then_close(self).await?;
+                    reattach_then_close(self, status.clone()).await?;
                     Ok(status)
                 }
             }
@@ -290,14 +292,14 @@ where
                     let status = LinkOutcome::Closed {
                         remote_error: remote_detach.error.clone(),
                     };
-                    reattach_then_close(self).await?;
+                    reattach_then_close(self, status.clone()).await?;
                     Ok(status)
                 } else {
                     let status = LinkOutcome::Closed {
                         remote_error: remote_detach.error.clone(),
                     };
                     let _ = self.link_mut().apply_remote_detach_outcome(remote_detach);
-                    reattach_then_close(self).await?;
+                    reattach_then_close(self, status.clone()).await?;
                     Ok(status)
                 }
             }
@@ -317,7 +319,7 @@ where
                         remote_error: remote_detach.error.clone(),
                     };
                     let _ = self.link_mut().apply_remote_detach_outcome(remote_detach);
-                    reattach_then_close(self).await?;
+                    reattach_then_close(self, status.clone()).await?;
                     Ok(status)
                 }
             }
@@ -333,20 +335,23 @@ where
 /// closed the link by reattaching and then sending a closing detach.
 ///
 /// Used on both sides of the race. The closing side reattaches too so the
-/// link is re-registered for the peer's crossed attach (it is released when
-/// the closing detach is sent); the crossed attach exchanges then converge
+/// link is re-registered for the peer's simultaneous attach (it is released when
+/// the closing detach is sent); the simultaneous attach exchanges then converge
 /// symmetrically.
 ///
 /// # Cancel safety
 ///
 /// This is cancel safe if oneshot channel is cancel safe
-async fn reattach_then_close<T>(link_inner: &mut T) -> Result<(), DetachError>
+async fn reattach_then_close<T>(
+    link_inner: &mut T,
+    detach_outcome: LinkOutcome,
+) -> Result<(), DetachError>
 where
     T: LinkEndpointInner + LinkEndpointInnerReattach + Send + Sync,
     T::Link: LinkDetach<DetachError = DetachError>,
     <T::Link as LinkAttach>::AttachError: From<AllocLinkError> + Sync,
 {
-    if let Err(_attach_error) = link_inner.reattach_inner().await {
+    if let Err(_attach_error) = link_inner.reattach_inner(detach_outcome).await {
         // The reattach that completes the AMQP 1.0 §2.6.6 handshake failed.
         // This helper is generic over the link type, so the concrete
         // `AttachError` cannot be inspected here. The failure is derived from
