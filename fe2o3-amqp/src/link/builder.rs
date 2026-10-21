@@ -24,9 +24,9 @@ use super::{
     sender::SenderInner,
     state::{LinkFlowState, LinkFlowStateInner, LinkState},
     target_archetype::VerifyTargetArchetype,
-    ArcUnsettledMap, Receiver, ReceiverAttachError, ReceiverFlowState, ReceiverLink,
-    ReceiverRelayFlowState, Sender, SenderAttachError, SenderFlowState, SenderLink,
-    SenderRelayFlowState, SessionStopReason,
+    ArcUnsettledMap, DeliveryFailure, LinkStateError, Receiver, ReceiverAttachError,
+    ReceiverFlowState, ReceiverLink, ReceiverRelayFlowState, Sender, SenderAttachError,
+    SenderFlowState, SenderLink, SenderRelayFlowState, SessionStopReason,
 };
 
 cfg_transaction! {
@@ -564,7 +564,10 @@ where
                 tracing::debug!(?exchange);
                 #[cfg(feature = "log")]
                 log::debug!("exchange = {:?}", exchange);
-                exchange.complete_or(SenderAttachError::IllegalState)?
+                exchange.complete_or_fail_deliveries(
+                    DeliveryFailure::LinkState(LinkStateError::IllegalState),
+                    SenderAttachError::UnexpectedUnsettledMap,
+                )?
             }
             Err(attach_error) => {
                 #[cfg(feature = "tracing")]
@@ -683,7 +686,7 @@ where
             .exchange_attach(&session.outgoing, &mut incoming_rx, AttachMode::Resume)
             .await
         {
-            Ok(outcome) => outcome.complete_or(ReceiverAttachError::IllegalState)?,
+            Ok(outcome) => outcome.complete_or(ReceiverAttachError::UnexpectedUnsettledMap)?,
             Err(attach_error) => {
                 let err = link
                     .handle_attach_error(

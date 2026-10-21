@@ -9,10 +9,10 @@ use crate::{
 };
 
 use super::{
-    declare_on_link, discharge_on_link, rollback_on_drop, ControlLink, Controller,
-    ControllerSendError, DEFAULT_ROLLBACK_ON_DROP_TRIALS, OwnedDeclareError,
-    OwnedDischargeError, TransactionAcquisition, TransactionBase, TransactionDischarge,
-    TransactionExt, TransactionPosting, TransactionRetirement,
+    declare_on_link, discharge_on_link, rollback_on_drop, ControlLink, Controller, DeclareError,
+    DEFAULT_ROLLBACK_ON_DROP_TRIALS, OwnedDeclareError, OwnedDischargeError, TransactionAcquisition,
+    TransactionBase, TransactionDischarge, TransactionExt, TransactionPosting,
+    TransactionRetirement,
 };
 
 /// An owned transaction that has exclusive access to its own control link.
@@ -158,7 +158,7 @@ impl OwnedTransaction {
     pub async fn declare_with_controller(
         controller: Controller,
         global_id: impl Into<Option<TransactionId>>,
-    ) -> Result<OwnedTransaction, ControllerSendError> {
+    ) -> Result<OwnedTransaction, DeclareError> {
         let mut inner = controller.into_inner();
         let declared = declare_on_link(&mut inner, global_id.into()).await?;
         Ok(Self {

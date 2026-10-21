@@ -19,6 +19,39 @@
    link operation requires a reattach, a new session or connection, or a new link.
 5. **Bugfix**: disambiguate transport sink calls to compile with `tokio-util 0.7.20`.
 
+17. **Breaking**: `SenderAttachError` and `ReceiverAttachError` gain `UnexpectedUnsettledMap`:
+    a client-initiated attach whose peer reply carries an unsettled map now reports it instead
+    of `IllegalState`, and the sender fails the deliveries pending resumption with
+    `DeliveryFailure::LinkState(IllegalState)` instead of dropping their settlement channels.
+
+18. **Bugfix**: link failures are now derived from the link's local state when its incoming
+    channel closes without a recorded session stop. A concurrent send that consumed the peer's
+    detach no longer leaves a later `on_detach`, `recv` or send reporting `IllegalState` (or
+    waiting for a frame that will not come): the link reports the `LinkDetached(Detached)` or
+    `LinkDetached(Closed)` outcome it already reached. `Sender::on_detach` on an already
+    terminal link returns the stored `DetachStatus` immediately, `send_detach` on a terminal
+    link reports the outcome as `LinkDetached(status)`, and the session relay now fails the
+    deliveries still pending on a sender link with the peer's actual `Detached`/`Closed`
+    outcome (including its error) when the link endpoint is gone or the peer closed the link,
+    instead of letting their settlement channels drop.
+
+19. **Bugfix**: when this side rejects an incoming attach, a rejection detach that could not
+    be sent is now classified against the attach failure. If the link already reached a
+    terminal outcome, the remote error stored in that outcome is reported as
+    `RemoteClosedWithError`; otherwise the attach error stays the primary error, and a session
+    stop always wins. The immediate-detach rejection paths also no longer wait for a detach
+    reply after sending the detach failed.
+
+20. **Breaking**: session and connection handles now report the terminal outcome on repeated
+    `on_end`/`on_close`/`try_end`/`try_close` calls instead of `IllegalState`/
+    `AlreadyEnded`/`AlreadyClosed`: a clean end or close returns `Ok(())`, a remote error is
+    replayed, and other terminal errors are reported as `IllegalState`. A clean remote-ended
+    session or remote-closed connection now returns `Ok(())` from the handle instead of
+    `Error::RemoteEnded`/`Error::RemoteClosed` (the stop reasons still record the remote
+    end/close for links). `try_end`/`try_close` now return a flat `Result<(), TryEndError>`
+    and `Result<(), TryCloseError>` whose `Ended`/`Closed` variant carries the terminal
+    error; `TryEndError::AlreadyEnded` and `TryCloseError::AlreadyClosed` are removed.
+
 ## 0.18.2
 
 **Bugfix**: an unsettled delivery is now registered before its transfer reaches the session, preventing `send` from hanging when the peer settles immediately.

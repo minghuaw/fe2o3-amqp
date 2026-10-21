@@ -111,7 +111,7 @@ impl From<NegotiationError> for OpenError {
 
 impl From<Infallible> for OpenError {
     fn from(_: Infallible) -> Self {
-        unreachable!()
+        unreachable!("Infallible cannot be constructed")
     }
 }
 
@@ -271,19 +271,19 @@ pub(crate) enum AllocSessionError {
     ChannelMaxReached,
 }
 
-pub(crate) enum DeallcoSessionError {
+pub(crate) enum DeallocateSessionError {
     IllegalState,
 }
 
 /// Error associated with trying to close the connection
 #[derive(Debug, thiserror::Error)]
 pub enum TryCloseError {
-    /// Illegal local connection state
-    #[error("Illegal local state")]
-    AlreadyClosed,
-
-    /// An close frame has been sent to the remote peer,
+    /// A close frame has been sent to the remote peer,
     /// but the connection has not received a close frame from the remote peer
     #[error("The connection has not received a close frame from the remote peer")]
     RemoteCloseNotReceived,
+
+    /// The connection closed with an error
+    #[error("The connection closed with an error: {0}")]
+    Closed(Box<Error>),
 }

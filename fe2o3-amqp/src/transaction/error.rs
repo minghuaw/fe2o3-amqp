@@ -9,7 +9,7 @@ use crate::link::{
 
 /// Errors with allocation of new transacation ID
 #[derive(Debug)]
-pub(crate) enum AllocTxnIdError {
+pub(crate) enum CoordinatorAllocTxnIdError {
     /// Allocation of transaction ID is not implemented
     ///
     /// This happens when transaction session is not enabled
@@ -26,7 +26,7 @@ cfg_acceptor! {
 
     /// Errors with discharging a transaction at the transaction manager
     #[derive(Debug)]
-    pub(crate) enum DischargeError {
+    pub(crate) enum CoordinatorDischargeError {
         /// Session must have dropped
         #[cfg(not(target_arch = "wasm32"))]
         #[cfg(feature = "acceptor")]
@@ -38,7 +38,7 @@ cfg_acceptor! {
         TransactionError(TransactionError),
     }
 
-    impl From<TransactionError> for DischargeError {
+    impl From<TransactionError> for CoordinatorDischargeError {
         fn from(value: TransactionError) -> Self {
             Self::TransactionError(value)
         }
@@ -66,24 +66,24 @@ cfg_acceptor! {
         TransactionError(TransactionError),
     }
     
-    impl From<AllocTxnIdError> for CoordinatorError {
-        fn from(value: AllocTxnIdError) -> Self {
+    impl From<CoordinatorAllocTxnIdError> for CoordinatorError {
+        fn from(value: CoordinatorAllocTxnIdError) -> Self {
             match value {
-                AllocTxnIdError::NotImplemented => Self::AllocTxnIdNotImplemented,
+                CoordinatorAllocTxnIdError::NotImplemented => Self::AllocTxnIdNotImplemented,
                 #[cfg(not(target_arch = "wasm32"))]
                 #[cfg(feature = "acceptor")]
-                AllocTxnIdError::InvalidSessionState => Self::InvalidSessionState,
+                CoordinatorAllocTxnIdError::InvalidSessionState => Self::InvalidSessionState,
             }
         }
     }
     
-    impl From<DischargeError> for CoordinatorError {
-        fn from(value: DischargeError) -> Self {
+    impl From<CoordinatorDischargeError> for CoordinatorError {
+        fn from(value: CoordinatorDischargeError) -> Self {
             match value {
                 #[cfg(not(target_arch = "wasm32"))]
                 #[cfg(feature = "acceptor")]
-                DischargeError::InvalidSessionState => Self::InvalidSessionState,
-                DischargeError::TransactionError(error) => Self::TransactionError(error),
+                CoordinatorDischargeError::InvalidSessionState => Self::InvalidSessionState,
+                CoordinatorDischargeError::TransactionError(error) => Self::TransactionError(error),
             }
         }
     }
@@ -94,7 +94,7 @@ cfg_acceptor! {
 pub enum ControllerSendError {
     /// Errors found in link state
     #[error("Local error: {:?}", .0)]
-    LinkStateError(#[from] LinkStateError),
+    LinkStateError(LinkStateError),
 
     /// The peer detached the link before the delivery was settled
     #[error("The peer detached the link: {:?}", .0)]
@@ -136,9 +136,10 @@ pub enum ControllerSendError {
     #[error(transparent)]
     MessageEncodeError(#[from] MessageEncodeError),
 
-    /// The peer was expected to detach immediately but another frame arrived
-    #[error("Expecting the peer to immediately detach")]
-    ExpectImmediateDetach,
+    /// A frame other than the expected detach arrived while the transfer
+    /// waited for link credit
+    #[error("Unexpected frame while expecting the peer's detach")]
+    UnexpectedFrame,
 }
 
 impl From<SendError> for ControllerSendError {
@@ -153,7 +154,7 @@ impl From<SendError> for ControllerSendError {
             SendError::IllegalDeliveryState => Self::IllegalDeliveryState,
             SendError::MessageSizeExceeded(error) => Self::MessageSizeExceeded(error),
             SendError::MessageEncodeError(error) => Self::MessageEncodeError(error),
-            SendError::ExpectImmediateDetach => Self::ExpectImmediateDetach,
+            SendError::UnexpectedFrame => Self::UnexpectedFrame,
         }
     }
 }
@@ -161,11 +162,26 @@ impl From<SendError> for ControllerSendError {
 impl From<DeliveryFailure> for ControllerSendError {
     fn from(value: DeliveryFailure) -> Self {
         match value {
-            DeliveryFailure::LinkState(error) => Self::LinkStateError(error),
+            DeliveryFailure::LinkState(error) => error.into(),
             DeliveryFailure::LinkDetached(status) => Self::LinkDetached(status),
         }
     }
 }
+
+impl From<LinkStateError> for ControllerSendError {
+    fn from(value: LinkStateError) -> Self {
+        match value {
+            LinkStateError::LinkDetached(status) => Self::LinkDetached(status),
+            other => Self::LinkStateError(other),
+        }
+    }
+}
+
+/// Error declaring a transaction on the control link
+pub type DeclareError = ControllerSendError;
+
+/// Error discharging a transaction on the control link
+pub type DischargeError = ControllerSendError;
 
 /// Errors with declaring an OwnedTransaction
 #[derive(Debug, thiserror::Error)]
@@ -223,7 +239,7 @@ impl From<LinkStateError> for OwnedDischargeError {
 pub enum PostError {
     /// Errors found in link state
     #[error("Local error: {:?}", .0)]
-    LinkStateError(#[from] LinkStateError),
+    LinkStateError(LinkStateError),
 
     /// The peer detached the link before the delivery was settled
     #[error("The peer detached the link: {:?}", .0)]
@@ -261,14 +277,24 @@ pub enum PostError {
     #[error(transparent)]
     MessageEncodeError(#[from] MessageEncodeError),
 
-    /// The peer was expected to detach immediately but another frame arrived
-    #[error("Expecting the peer to immediately detach")]
-    ExpectImmediateDetach,
+    /// A frame other than the expected detach arrived while the transfer
+    /// waited for link credit
+    #[error("Unexpected frame while expecting the peer's detach")]
+    UnexpectedFrame,
 }
 
 impl From<serde_amqp::Error> for PostError {
     fn from(source: serde_amqp::Error) -> Self {
         Self::MessageEncodeError(MessageEncodeError { source })
+    }
+}
+
+impl From<LinkStateError> for PostError {
+    fn from(value: LinkStateError) -> Self {
+        match value {
+            LinkStateError::LinkDetached(status) => Self::LinkDetached(status),
+            other => Self::LinkStateError(other),
+        }
     }
 }
 
@@ -281,13 +307,13 @@ impl From<MessageSizeExceeded> for PostError {
 impl From<TransferError> for PostError {
     fn from(value: TransferError) -> Self {
         match value {
-            TransferError::LinkState(error) => Self::LinkStateError(error),
+            TransferError::LinkState(error) => error.into(),
             TransferError::NotAttached => Self::NotAttached,
             TransferError::MessageEncodeError(error) => Self::MessageEncodeError(error),
             TransferError::FrameSizeTooSmall => Self::FrameSizeTooSmall,
             TransferError::AcquisitionNotImplemented => Self::AcquisitionNotImplemented,
             TransferError::LinkDetached(status) => Self::LinkDetached(status),
-            TransferError::ExpectImmediateDetach => Self::ExpectImmediateDetach,
+            TransferError::UnexpectedFrame => Self::UnexpectedFrame,
         }
     }
 }
@@ -326,7 +352,9 @@ impl FromPreSettled for PostResult {
 
 impl FromDeliveryFailure for PostResult {
     fn from_oneshot_recv_error(_: tokio::sync::oneshot::error::RecvError) -> Self {
-        Err(PostError::LinkStateError(LinkStateError::IllegalState))
+        // The session relay and the link endpoint fail the pending deliveries
+        // before they drop their maps, so this is defensive only.
+        Err(PostError::LinkStateError(LinkStateError::InvariantViolation))
     }
 
     fn from_session_stop_reason(reason: SessionStopReason) -> Self {
@@ -334,7 +362,7 @@ impl FromDeliveryFailure for PostResult {
     }
 
     fn from_link_state_error(error: LinkStateError) -> Self {
-        Err(PostError::LinkStateError(error))
+        Err(error.into())
     }
 
     fn from_detach_status(status: DetachStatus) -> Self {
