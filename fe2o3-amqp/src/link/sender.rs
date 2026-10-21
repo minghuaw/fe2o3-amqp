@@ -2717,7 +2717,12 @@ mod tests {
     #[tokio::test]
     async fn large_payload_is_split_into_one_first_and_continuation_frames() {
         let mut inner = make_sender_inner(256);
-        inner.link.input_handle = Some(InputHandle(0));
+        inner
+            .link
+            .handles
+            .as_mut()
+            .expect("the link is attached")
+            .remote = Some(InputHandle(0));
 
         let tag = DeliveryTag::from(vec![0x01]);
         let transfer = Transfer {
