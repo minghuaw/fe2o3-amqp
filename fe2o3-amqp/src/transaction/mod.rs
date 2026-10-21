@@ -810,10 +810,11 @@ mod tests {
     /// was sent with `include_properties = false` and the `txn-id` was dropped.
     #[tokio::test]
     async fn acquire_flow_carries_the_txn_id() {
-        // `acquire`'s default body only needs `txn_id`. `is_discharged()`
-        // returns `true` so `TxnAcquisition`'s `Drop` (which uses a blocking
-        // send) does not run inside the async runtime; the recorded properties
-        // are therefore left intact for inspection.
+        // `acquire`'s default body only needs `txn_id`. `TxnAcquisition`'s
+        // `Drop` clears the txn-id and uses a blocking send, so the test
+        // `mem::forget`s the acquisition instead of dropping it (avoiding the
+        // blocking send inside the async runtime and leaving the recorded
+        // properties intact for inspection).
         struct FakeTxn {
             id: Binary,
         }
@@ -860,7 +861,7 @@ mod tests {
             other => panic!("unexpected frame: {other:?}"),
         }
 
-        drop(acq); // no-op Drop (is_discharged() == true), releases the borrow
+        std::mem::forget(acq); // skip Drop's blocking send; releases the borrow
 
         // ...and the txn-id was recorded on the link's flow state.
         assert!(
