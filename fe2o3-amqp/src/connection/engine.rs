@@ -21,7 +21,7 @@ use crate::transport::Transport;
 use crate::util::Running;
 use crate::{endpoint, transport, SendBound};
 
-use super::ConnectionStopReason;
+use super::ConnectionOutcome;
 use super::{heartbeat::HeartBeat, ConnectionState};
 use super::{AllocSessionError, ConnectionInnerError, ConnectionStateError, Error, OpenError};
 
@@ -41,7 +41,7 @@ where
 {
     /// The shared cell holding why the connection stopped, on the connection
     /// object and shared with the sessions and the handle
-    pub(crate) fn connection_stop_reason(&self) -> &Arc<OnceLock<ConnectionStopReason>> {
+    pub(crate) fn connection_stop_reason(&self) -> &Arc<OnceLock<ConnectionOutcome>> {
         self.connection.connection_stop_reason()
     }
 
@@ -77,7 +77,7 @@ cfg_not_wasm32! {
         ConnectionStateError: From<C::OpenError> + From<C::CloseError>,
         OpenError: From<C::OpenError>,
     {
-        pub fn spawn(self) -> (JoinHandle<()>, oneshot::Receiver<Result<(), Error>>) {
+        pub fn spawn(self) -> (JoinHandle<()>, oneshot::Receiver<Result<ConnectionOutcome, Error>>) {
             let (tx, rx) = oneshot::channel();
             let handle = tokio::spawn(self.event_loop(tx));
             (handle, rx)
@@ -99,7 +99,7 @@ cfg_wasm32! {
     {
         pub fn spawn_local(
             self
-        ) -> (JoinHandle<()>, oneshot::Receiver<Result<(), Error>>) {
+        ) -> (JoinHandle<()>, oneshot::Receiver<Result<ConnectionOutcome, Error>>) {
             let (tx, rx) = oneshot::channel();
             let handle = tokio::task::spawn_local(self.event_loop(tx));
             (handle, rx)
@@ -108,7 +108,7 @@ cfg_wasm32! {
         pub fn spawn_on_local_set(
             self,
             local_set: &tokio::task::LocalSet,
-        ) -> (JoinHandle<()>, oneshot::Receiver<Result<(), Error>>) {
+        ) -> (JoinHandle<()>, oneshot::Receiver<Result<ConnectionOutcome, Error>>) {
             let (tx, rx) = oneshot::channel();
             let handle = local_set.spawn_local(self.event_loop(tx));
             (handle, rx)
@@ -417,9 +417,10 @@ where
                 // channels close, so sessions and links observe the local
                 // error regardless of how the peer responds.
                 if let Some(error) = &error {
-                    self.connection.set_connection_stop_reason(
-                        ConnectionStopReason::ClosedWithError(error.clone()),
-                    );
+                    self.connection
+                        .set_connection_stop_reason(ConnectionOutcome::ClosedWithError(
+                            error.clone(),
+                        ));
                 }
                 self.outgoing_session_frames.close();
                 while let Some(frame) = self.outgoing_session_frames.recv().await {
@@ -535,7 +536,7 @@ where
     }
 
     #[cfg_attr(feature = "tracing", tracing::instrument(name = "Connection::event_loop", skip(self), fields(container_id = %self.connection.local_open().container_id)))]
-    async fn event_loop(mut self, tx: oneshot::Sender<Result<(), Error>>) {
+    async fn event_loop(mut self, tx: oneshot::Sender<Result<ConnectionOutcome, Error>>) {
         let mut outcome = Ok(());
         loop {
             let result = tokio::select! {
@@ -675,10 +676,10 @@ where
         // session that wakes on the channel closure sees it.
         let connection_stop_reason = match &result {
             Err(Error::RemoteClosedWithError(error)) => {
-                ConnectionStopReason::RemoteClosedWithError(error.clone())
+                ConnectionOutcome::RemoteClosedWithError(error.clone())
             }
-            Err(Error::RemoteClosed) => ConnectionStopReason::RemoteClosed,
-            _ => ConnectionStopReason::Closed,
+            Err(Error::RemoteClosed) => ConnectionOutcome::RemoteClosed,
+            _ => ConnectionOutcome::Closed,
         };
         self.connection
             .set_connection_stop_reason(connection_stop_reason);
@@ -690,11 +691,18 @@ where
         tracing::debug!("Stopped");
         #[cfg(feature = "log")]
         log::debug!("Stopped");
-        // A clean remote close is an outcome, not an error, for the handle;
-        // the stop reason above still records that the remote closed.
+        // A remote close (with or without error) is an outcome, not a failure,
+        // for the handle; the first-recorded stop reason is the status.
+        // Transport and local errors stay errors.
+        let status = self
+            .connection
+            .connection_stop_reason()
+            .get()
+            .cloned()
+            .unwrap_or(ConnectionOutcome::Closed);
         let result = match result {
-            Err(Error::RemoteClosed) => Ok(()),
-            other => other,
+            Ok(()) | Err(Error::RemoteClosed) | Err(Error::RemoteClosedWithError(_)) => Ok(status),
+            Err(other) => Err(other),
         };
         let _ = tx.send(result);
     }

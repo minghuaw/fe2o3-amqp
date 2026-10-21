@@ -21,7 +21,7 @@ use crate::{
         state::{LinkFlowState, LinkFlowStateInner, LinkState},
         target_archetype::TargetArchetypeExt,
         AttachMode, LinkFrame, LinkIncomingItem, LinkRelay, ReceiverAttachError, ReceiverLink,
-        SessionStopReason,
+        SessionStopped,
     },
     session::SessionHandle,
     Receiver,
@@ -113,7 +113,7 @@ where
         remote_attach: Attach,
         control: mpsc::Sender<SessionControl>,
         outgoing: mpsc::Sender<LinkFrame>,
-        session_stop_reason: Arc<OnceLock<SessionStopReason>>,
+        session_stop_reason: Arc<OnceLock<SessionStopped>>,
         max_frame_size: usize,
     ) -> Result<ReceiverInner<ReceiverLink<T>>, ReceiverAttachError>
     where

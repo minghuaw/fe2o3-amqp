@@ -21,7 +21,7 @@ use crate::{
         receiver::ReceiverInner,
         shared_inner::{LinkEndpointInner, LinkEndpointInnerDetach},
         LinkStateError, LinkFrame, ReceiverAttachError, ReceiverLink, RecvError,
-        SessionStopReason,
+        SessionStopped,
     },
     util::{Initialized, Running},
     Delivery,
@@ -73,7 +73,7 @@ impl ControlLinkAcceptor {
         remote_attach: Attach,
         control: mpsc::Sender<SessionControl>,
         outgoing: mpsc::Sender<LinkFrame>,
-        session_stop_reason: Arc<OnceLock<SessionStopReason>>,
+        session_stop_reason: Arc<OnceLock<SessionStopped>>,
         max_frame_size: usize,
     ) -> Result<TxnCoordinator, ReceiverAttachError> {
         self.inner

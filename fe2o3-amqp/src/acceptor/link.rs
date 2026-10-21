@@ -243,7 +243,7 @@ mod tests {
     use super::{AcceptorAttachError, LinkAcceptor, ListenerSessionHandle, SessionHandle};
     use crate::{
         control::SessionControl,
-        link::{LinkFrame, SessionStopReason},
+        link::{LinkFrame, SessionOutcome, SessionStopped},
         session::error::Error,
     };
 
@@ -251,12 +251,12 @@ mod tests {
     /// listener sender is dropped (as if the session engine exited) and the
     /// stop reason cell is either pre-set or left unset.
     fn ended_listener_session_handle(
-        session_stop_reason: Option<SessionStopReason>,
+        session_stop_reason: Option<SessionStopped>,
     ) -> ListenerSessionHandle {
         let (_, link_listener) = mpsc::channel::<Attach>(16);
         let (control, _) = mpsc::channel::<SessionControl>(16);
         let (outgoing, _) = mpsc::channel::<LinkFrame>(16);
-        let (outcome_tx, outcome) = oneshot::channel::<Result<(), Error>>();
+        let (outcome_tx, outcome) = oneshot::channel::<Result<SessionOutcome, Error>>();
         drop(outcome_tx);
         let stop_reason_cell = Arc::new(OnceLock::new());
         if let Some(reason) = session_stop_reason {
@@ -265,6 +265,7 @@ mod tests {
         SessionHandle {
             is_ended: false,
             terminal_outcome: None,
+            terminated_with_error: false,
             control,
             engine_handle: tokio::spawn(async {}),
             outcome,
@@ -280,15 +281,15 @@ mod tests {
     #[tokio::test]
     async fn accept_reports_recorded_stop_reason() {
         let mut handle = ended_listener_session_handle(Some(
-            SessionStopReason::ConnectionStopped(crate::connection::ConnectionStopReason::Closed),
+            SessionStopped::ConnectionStopped(crate::connection::ConnectionOutcome::Closed),
         ));
 
         let result = LinkAcceptor::new().accept(&mut handle).await;
 
         match result {
             Err(AcceptorAttachError::SessionStopped(
-                SessionStopReason::ConnectionStopped(
-                    crate::connection::ConnectionStopReason::Closed,
+                SessionStopped::ConnectionStopped(
+                    crate::connection::ConnectionOutcome::Closed,
                 ),
             )) => {}
             other => panic!("expected SessionStopped(ConnectionClosed), got {:?}", other),
@@ -304,7 +305,9 @@ mod tests {
         let result = LinkAcceptor::new().accept(&mut handle).await;
 
         match result {
-            Err(AcceptorAttachError::SessionStopped(SessionStopReason::Ended)) => {}
+            Err(AcceptorAttachError::SessionStopped(SessionStopped::Outcome(
+                SessionOutcome::Ended,
+            ))) => {}
             other => panic!("expected SessionStopped(Ended), got {:?}", other),
         }
     }

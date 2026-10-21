@@ -15,7 +15,7 @@ use crate::{
     link::{
         delivery::{Delivery, DeliveryInfo},
         state::LinkState,
-        ApplyRemoteDetachError, AttachMode, DetachStatus, LinkFrame, SessionStopReason,
+        ApplyRemoteDetachError, AttachMode, LinkFrame, LinkOutcome, SessionStopped,
     },
     util::{AsByteIterator, IntoReader},
     Payload,
@@ -38,13 +38,13 @@ pub(crate) trait LinkDetach {
     ///
     /// A crossing detach is `IllegalState`. In both accepted transitions the
     /// output handle is released and the peer's `error` field, if any, is
-    /// reported in the returned [`DetachStatus`], so the close/detach
+    /// reported in the returned [`LinkOutcome`], so the close/detach
     /// procedure can propagate it to its caller.
     ///
     /// A detach the peer sends on its own is answered by the relay already,
     /// so the engine records it with [`Self::apply_remote_detach_outcome`]
     /// instead; that method accepts crossing detaches and any attached state.
-    fn on_detach_reply(&mut self, detach: Detach) -> Result<DetachStatus, Self::DetachError>;
+    fn on_detach_reply(&mut self, detach: Detach) -> Result<LinkOutcome, Self::DetachError>;
 
     async fn send_detach(
         &mut self,
@@ -70,7 +70,7 @@ pub(crate) trait LinkDetach {
     fn apply_remote_detach_outcome(
         &mut self,
         detach: Detach,
-    ) -> Result<DetachStatus, ApplyRemoteDetachError>;
+    ) -> Result<LinkOutcome, ApplyRemoteDetachError>;
 }
 
 pub(crate) trait LinkAttach {
@@ -103,7 +103,7 @@ pub(crate) trait LinkExt: Link {
     fn output_handle_mut(&mut self) -> &mut Option<OutputHandle>;
 
     /// The shared cell holding why the session (or its connection) stopped
-    fn session_stop_reason(&self) -> &Arc<OnceLock<SessionStopReason>>;
+    fn session_stop_reason(&self) -> &Arc<OnceLock<SessionStopped>>;
 
     fn flow_state(&self) -> &Self::FlowState;
 

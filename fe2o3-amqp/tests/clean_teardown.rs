@@ -10,8 +10,8 @@ use std::time::Duration;
 
 use fe2o3_amqp::{
     acceptor::{ConnectionAcceptor, ListenerSessionHandle, SessionAcceptor},
-    connection::{self, Connection, ConnectionHandle},
-    session::{self, Session, SessionHandle},
+    connection::{Connection, ConnectionHandle, ConnectionOutcome},
+    session::{Session, SessionHandle, SessionOutcome},
     types::definitions::{self, AmqpError},
 };
 
@@ -74,7 +74,10 @@ async fn local_session_end_returns_ok() {
         .await
         .expect("end timed out");
 
-    assert!(result.is_ok(), "local end must not error, got {:?}", result);
+    assert!(
+        matches!(result, Ok(SessionOutcome::Ended)),
+        "local end must report Ended, got {result:?}"
+    );
 }
 
 /// A locally initiated session end with an error must not surface as an error
@@ -93,9 +96,8 @@ async fn local_session_end_with_error_returns_ok() {
     .expect("end timed out");
 
     assert!(
-        result.is_ok(),
-        "local end with error must not error, got {:?}",
-        result
+        matches!(result, Ok(SessionOutcome::EndedWithError(_))),
+        "local end with error must report EndedWithError, got {result:?}"
     );
 }
 
@@ -110,9 +112,8 @@ async fn local_connection_close_returns_ok() {
         .expect("close timed out");
 
     assert!(
-        result.is_ok(),
-        "local close must not error, got {:?}",
-        result
+        matches!(result, Ok(ConnectionOutcome::Closed)),
+        "local close must report Closed, got {result:?}"
     );
 }
 
@@ -130,9 +131,8 @@ async fn local_connection_close_with_error_returns_ok() {
     .expect("close timed out");
 
     assert!(
-        result.is_ok(),
-        "local close with error must not error, got {:?}",
-        result
+        matches!(result, Ok(ConnectionOutcome::ClosedWithError(_))),
+        "local close with error must report ClosedWithError, got {result:?}"
     );
 }
 
@@ -152,9 +152,8 @@ async fn remote_session_end_returns_ok() {
 
     server_result.expect("server end failed");
     assert!(
-        client_result.is_ok(),
-        "remote clean end must not error, got {:?}",
-        client_result
+        matches!(client_result, Ok(SessionOutcome::RemoteEnded)),
+        "remote clean end must report RemoteEnded, got {client_result:?}"
     );
 }
 
@@ -176,14 +175,20 @@ async fn remote_session_end_with_error_is_reported_and_cached() {
     .expect("remote end timed out");
 
     server_result.expect("server end failed");
-    let error = client_result.expect_err("remote end with error must be reported");
-    assert!(matches!(error, session::Error::RemoteEndedWithError(_)));
+    let expected = test_error();
+    assert!(
+        matches!(&client_result, Ok(SessionOutcome::RemoteEndedWithError(error)) if error == &expected),
+        "remote end with error must be reported as an outcome, got {client_result:?}"
+    );
 
     let again = client_session
         .on_end()
         .await
-        .expect_err("the terminal error must be cached");
-    assert!(matches!(again, session::Error::RemoteEndedWithError(_)));
+        .expect("the outcome is cached");
+    assert!(
+        matches!(&again, SessionOutcome::RemoteEndedWithError(error) if error == &expected),
+        "the cached outcome must keep the remote error, got {again:?}"
+    );
 }
 
 /// Repeated local session ends report the same clean outcome.
@@ -194,8 +199,14 @@ async fn repeated_session_end_reports_the_same_clean_outcome() {
         establish_session_pair(&mut server_connection, &mut client_connection).await;
 
     client_session.end().await.expect("local end failed");
-    assert!(client_session.on_end().await.is_ok());
-    assert!(client_session.try_end().is_ok());
+    assert!(matches!(
+        client_session.on_end().await,
+        Ok(SessionOutcome::Ended)
+    ));
+    assert!(matches!(
+        client_session.try_end(),
+        Ok(SessionOutcome::Ended)
+    ));
 }
 
 /// A remote clean connection close must not surface as an error on the
@@ -212,9 +223,8 @@ async fn remote_connection_close_returns_ok() {
 
     server_result.expect("server close failed");
     assert!(
-        client_result.is_ok(),
-        "remote clean close must not error, got {:?}",
-        client_result
+        matches!(client_result, Ok(ConnectionOutcome::RemoteClosed)),
+        "remote clean close must report RemoteClosed, got {client_result:?}"
     );
 }
 
@@ -234,14 +244,20 @@ async fn remote_connection_close_with_error_is_reported_and_cached() {
     .expect("remote close timed out");
 
     server_result.expect("server close failed");
-    let error = client_result.expect_err("remote close with error must be reported");
-    assert!(matches!(error, connection::Error::RemoteClosedWithError(_)));
+    let expected = test_error();
+    assert!(
+        matches!(&client_result, Ok(ConnectionOutcome::RemoteClosedWithError(error)) if error == &expected),
+        "remote close with error must be reported as an outcome, got {client_result:?}"
+    );
 
     let again = client_connection
         .on_close()
         .await
-        .expect_err("the terminal error must be cached");
-    assert!(matches!(again, connection::Error::RemoteClosedWithError(_)));
+        .expect("the outcome is cached");
+    assert!(
+        matches!(&again, ConnectionOutcome::RemoteClosedWithError(error) if error == &expected),
+        "the cached outcome must keep the remote error, got {again:?}"
+    );
 }
 
 /// Repeated local connection closes report the same clean outcome.
@@ -250,6 +266,35 @@ async fn repeated_connection_close_reports_the_same_clean_outcome() {
     let (_server_connection, mut client_connection) = establish_connection_pair().await;
 
     client_connection.close().await.expect("local close failed");
-    assert!(client_connection.on_close().await.is_ok());
-    assert!(client_connection.try_close().is_ok());
+    assert!(matches!(
+        client_connection.on_close().await,
+        Ok(ConnectionOutcome::Closed)
+    ));
+    assert!(matches!(
+        client_connection.try_close(),
+        Ok(ConnectionOutcome::Closed)
+    ));
+}
+
+/// A session whose connection stopped reports the connection stop as an error
+/// on `on_end`, consistent with link operations failing when their session
+/// stopped.
+#[tokio::test]
+async fn session_end_reports_connection_stop_as_error() {
+    let (mut server_connection, mut client_connection) = establish_connection_pair().await;
+    let (mut client_session, _server_session) =
+        establish_session_pair(&mut server_connection, &mut client_connection).await;
+
+    let (server_result, client_result) = tokio::time::timeout(Duration::from_secs(10), async {
+        tokio::join!(server_connection.close(), client_session.on_end())
+    })
+    .await
+    .expect("session end timed out");
+
+    server_result.expect("server close failed");
+    let error = client_result.expect_err("the connection stopped first");
+    assert!(
+        matches!(error, fe2o3_amqp::session::Error::ConnectionStopped(_)),
+        "expected ConnectionStopped, got {error:?}"
+    );
 }
