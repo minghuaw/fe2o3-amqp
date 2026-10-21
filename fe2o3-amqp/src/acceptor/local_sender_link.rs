@@ -16,7 +16,7 @@ use crate::{
     link::{
         sender::SenderInner,
         state::{LinkFlowState, LinkFlowStateInner, LinkState},
-        LinkRelay, SenderAttachError, SenderLink,
+        AttachMode, LinkRelay, SenderAttachError, SenderLink,
     },
     session::SessionHandle,
     util::{Consumer, Producer},
@@ -171,10 +171,10 @@ where
         let outgoing = session.outgoing.clone();
 
         match link.on_incoming_attach(remote_attach) {
-            Ok(_) => link.send_attach(&outgoing, false).await?,
+            Ok(_) => link.send_attach(&outgoing, AttachMode::Resume).await?,
             Err(attach_error) => {
                 // Complete attach then detach should any error happen
-                link.send_attach(&outgoing, false).await?;
+                link.send_attach(&outgoing, AttachMode::Resume).await?;
                 match attach_error {
                     SenderAttachError::SndSettleModeNotSupported => {
                         // FIXME: The initiating side is responsible for checking whether the desired modes are supported?
@@ -199,6 +199,7 @@ where
             session: session.control.clone(),
             outgoing,
             incoming: incoming_rx,
+            pending_redeliveries: Vec::new(),
         };
         Ok(Sender { inner })
     }
