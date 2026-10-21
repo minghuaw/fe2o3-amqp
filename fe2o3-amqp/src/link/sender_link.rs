@@ -120,6 +120,7 @@ where
                 input_handle,
                 transfer,
                 payload.clone(),
+                true,
                 &self.session_stop_reason,
             )
             .await?;
@@ -133,6 +134,7 @@ where
                 input_handle.clone(),
                 transfer.clone(),
                 partial,
+                true,
                 &self.session_stop_reason,
             )
             .await?; // cancel safe
@@ -142,10 +144,7 @@ where
             // Clear them *before* the loop so the last transfer is also cleared
             // even when there is no middle frame (i.e. the delivery spans exactly
             // two frames).
-            transfer.delivery_tag = None;
-            transfer.message_format = None;
-            transfer.settled = None;
-            transfer.rcv_settle_mode = None;
+            clear_continuation_fields(&mut transfer);
 
             // Send the transfers in the middle
             while payload.len() > max_payload {
@@ -155,6 +154,7 @@ where
                     input_handle.clone(),
                     transfer.clone(),
                     partial,
+                    false,
                     &self.session_stop_reason,
                 )
                 .await?;
@@ -171,6 +171,7 @@ where
                 input_handle,
                 transfer,
                 payload,
+                false,
                 &self.session_stop_reason,
             )
             .await?;
@@ -498,12 +499,18 @@ async fn send_transfer(
     input_handle: InputHandle,
     transfer: Transfer,
     payload: Payload,
+    is_first: bool,
     session_stop_reason: &OnceLock<SessionStopReason>,
 ) -> Result<(), LinkStateError> {
-    let frame = LinkFrame::Transfer {
+    let frame = LinkTransfer {
         input_handle,
         performative: transfer,
         payload,
+    };
+    let frame = if is_first {
+        LinkFrame::FirstTransfer(frame)
+    } else {
+        LinkFrame::TransferContinuation(frame)
     };
     writer
         .send(frame)

@@ -1283,7 +1283,10 @@ mod tests {
     use super::*;
     use crate::endpoint::{InputHandle, OutputHandle, SenderLink as _};
     use crate::{
-        link::state::{LinkFlowState, LinkFlowStateInner, LinkState},
+        link::{
+            state::{LinkFlowState, LinkFlowStateInner, LinkState},
+            LinkTransfer,
+        },
         util::Consumer,
     };
 
@@ -1536,7 +1539,7 @@ mod tests {
         assert!(matches!(settlement, Settlement::Unsettled { .. }));
         assert!(matches!(
             session.recv().await,
-            Some(LinkFrame::Transfer { .. })
+            Some(LinkFrame::FirstTransfer(_))
         ));
         assert!(is_registered(link, &tag));
     }
@@ -1598,11 +1601,11 @@ mod tests {
         inner.abort(tag.clone(), 0, Some(sender)).await.unwrap();
 
         match outgoing_rx.try_recv().expect("expected a transfer") {
-            LinkFrame::Transfer {
+            LinkFrame::FirstTransfer(LinkTransfer {
                 performative,
                 payload,
                 ..
-            } => {
+            }) => {
                 assert!(performative.resume);
                 assert!(performative.aborted);
                 assert!(!performative.more);
@@ -1634,7 +1637,7 @@ mod tests {
 
         assert!(matches!(
             outgoing_rx.try_recv(),
-            Ok(LinkFrame::Transfer { .. })
+            Ok(LinkFrame::FirstTransfer(_))
         ));
         assert!(inner.link.unsettled.read().is_none());
     }
@@ -1720,7 +1723,10 @@ mod tests {
                                     .await;
                             }
                         }
-                        Some(LinkFrame::Transfer { performative, .. }) => {
+                        Some(LinkFrame::FirstTransfer(LinkTransfer {
+                            performative,
+                            ..
+                        })) => {
                             assert!(performative.aborted);
                             assert!(performative.resume);
                             saw_abort = true;
@@ -1759,5 +1765,78 @@ mod tests {
         result.unwrap();
 
         assert!(matches!(settled.try_recv(), Ok(Ok(None))));
+    }
+
+    /// A split delivery emits exactly one `FirstTransfer`, followed by
+    /// `TransferContinuation` frames with the delivery identity cleared.
+    #[tokio::test]
+    async fn large_payload_is_split_into_one_first_and_continuation_frames() {
+        let mut inner = make_sender_inner(256);
+        inner.link.input_handle = Some(InputHandle(0));
+
+        let tag = DeliveryTag::from(vec![0x01]);
+        let transfer = Transfer {
+            handle: fe2o3_amqp_types::definitions::Handle(0),
+            delivery_id: None,
+            delivery_tag: Some(tag.clone()),
+            message_format: Some(0),
+            settled: Some(false),
+            more: false,
+            rcv_settle_mode: None,
+            state: None,
+            resume: false,
+            aborted: false,
+            batchable: false,
+        };
+        let payload = Payload::from(vec![0u8; 2000]);
+        let (writer, mut outgoing_rx) = mpsc::channel::<LinkFrame>(64);
+
+        let settled = inner
+            .link
+            .send_transfer_without_modifying_unsettled_map(&writer, transfer, payload)
+            .await
+            .expect("the splitter should enqueue all frames");
+        assert!(!settled, "settled flag is Some(false)");
+
+        let mut frames = Vec::new();
+        while let Ok(frame) = outgoing_rx.try_recv() {
+            frames.push(frame);
+        }
+        assert!(frames.len() > 1, "payload must span multiple frames");
+        assert_eq!(
+            frames
+                .iter()
+                .filter(|frame| matches!(frame, LinkFrame::FirstTransfer(_)))
+                .count(),
+            1,
+            "exactly one first frame"
+        );
+
+        for (index, frame) in frames.iter().enumerate() {
+            match frame {
+                LinkFrame::FirstTransfer(frame) => {
+                    assert_eq!(index, 0);
+                    assert_eq!(frame.performative.delivery_tag.as_ref(), Some(&tag));
+                    assert_eq!(frame.performative.delivery_id, None);
+                    assert_eq!(frame.performative.message_format, Some(0));
+                    assert_eq!(frame.performative.settled, Some(false));
+                    assert!(frame.performative.more);
+                }
+                LinkFrame::TransferContinuation(frame) => {
+                    assert!(index > 0);
+                    assert_eq!(frame.performative.delivery_id, None);
+                    assert_eq!(frame.performative.delivery_tag, None);
+                    assert_eq!(frame.performative.message_format, None);
+                    assert_eq!(frame.performative.settled, None);
+                    assert_eq!(frame.performative.rcv_settle_mode, None);
+                    if index + 1 == frames.len() {
+                        assert!(!frame.performative.more);
+                    } else {
+                        assert!(frame.performative.more);
+                    }
+                }
+                other => panic!("expected a transfer frame, got {other:?}"),
+            }
+        }
     }
 }

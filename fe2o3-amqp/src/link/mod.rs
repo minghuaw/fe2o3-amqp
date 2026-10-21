@@ -766,13 +766,18 @@ impl LinkRelay<OutputHandle> {
                 let delivery_tag = transfer.delivery_tag.clone();
                 let transfer_more = transfer.more;
 
-                tx.send(LinkFrame::Transfer {
+                // The receiver derives first/continuation from its own
+                // incomplete-transfer state. A remote peer may repeat the
+                // delivery-id/tag on continuation frames, so presence must not
+                // be used here.
+                let frame = LinkTransfer {
                     input_handle: InputHandle::from(transfer.handle.clone()),
                     performative: transfer,
                     payload,
-                })
-                .await
-                .map_err(|_| LinkRelayError::UnattachedHandle)?;
+                };
+                tx.send(LinkFrame::RemoteTransfer(frame))
+                    .await
+                    .map_err(|_| LinkRelayError::UnattachedHandle)?;
 
                 if !settled {
                     if let ReceiverSettleMode::Second = receiver_settle_mode {
