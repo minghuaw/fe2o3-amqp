@@ -16,7 +16,7 @@ fe2o3-amqp = { features = ["rustls"], path = "../../fe2o3-amqp" }
 tokio-rustls = { version = "0.26.0", default-features = false }
 rustls = { version = "0.23.36", default-features = false, optional = true }
 url = "2"
-webpki-roots = "0.26"
+webpki-roots = "1"
 
 [[bin]]
 name = "sasl_scram_sha_1"

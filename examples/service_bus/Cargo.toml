@@ -21,7 +21,7 @@ dotenv = "0.15.0"
 tokio = { version = "1", features = ["net", "rt", "rt-multi-thread", "macros"] }
 tokio-rustls = { version = "0.26.0", default-features = false }
 rustls = { version = "0.23.12", default-features = false }
-webpki-roots = "0.26.3"
+webpki-roots = "1"
 fe2o3-amqp = { path = "../../fe2o3-amqp", features = ["rustls"] }
 uuid = { version = "1", features = ["v4"] }
 serde_amqp = { path = "../../serde_amqp" }
