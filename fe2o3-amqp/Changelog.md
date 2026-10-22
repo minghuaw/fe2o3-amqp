@@ -1,5 +1,13 @@
 # Change Log
 
+## 0.14.2
+
+**Security**: the `rustls` feature now requires `webpki-roots` "1.0.10", whose root bundle
+drops "emSign ECC Root CA - G3" (removed upstream because its trust is no longer warranted).
+The previous `"1"` caret requirement let an existing lock keep 1.0.9 and still trust that root.
+The `rustls-tls-webpki-roots` feature of `fe2o3-amqp-ws` also depends on `webpki-roots` "1.0.10"
+directly so the resolved 1.x is fixed even with an otherwise stale lock.
+
 ## 0.14.1
 
 **Bugfix**: disambiguate transport sink calls to compile with `tokio-util 0.7.20`
