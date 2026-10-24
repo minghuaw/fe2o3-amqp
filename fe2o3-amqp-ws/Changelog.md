@@ -2,7 +2,7 @@
 
 ## 0.14.1
 
-1. **Security**: the `rustls-tls-webpki-roots` feature now depends on `webpki-roots` "1.0.10" directly, so the resolved 1.x is the bundle that removed "emSign ECC Root CA - G3" even when a downstream lock would otherwise keep an older 1.x. (`tokio-tungstenite` only requires `webpki-roots ^0.26`; 0.26.11 re-exports 1.x via the semver trick.)
+1. **Security**: the `rustls-tls-webpki-roots` feature now depends on `webpki-roots` "1.0.11" directly, so the resolved 1.x is a bundle that removed the emSign roots "emSign ECC Root CA - G3", "emSign Root CA - C1" and "emSign ECC Root CA - C3" even when a downstream lock would otherwise keep an older 1.x. (`tokio-tungstenite` only requires `webpki-roots ^0.26`; 0.26.11 re-exports 1.x via the semver trick.)
 
 ## 0.14.0
 
