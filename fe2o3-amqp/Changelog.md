@@ -1,5 +1,10 @@
 # Change Log
 
+## 0.18.5
+
+1. **Security**: the `rustls` feature now requires `webpki-roots` "1.0.11", whose root bundle drops the emSign roots removed upstream: "emSign ECC Root CA - G3", "emSign Root CA - C1" and "emSign ECC Root CA - C3". The previous `"1"` caret requirement let an existing lock keep an older bundle and still trust those roots.
+2. **Security**: the `rustls-tls-webpki-roots` feature of `fe2o3-amqp-ws` also depends on `webpki-roots` "1.0.11" directly so the resolved 1.x is fixed even with an otherwise stale lock.
+
 ## 0.18.4
 
 1. **Bugfix**: transactional acquisition now includes the link flow `properties` in the acquiring flow (and in the `cleanup`/drop drain flows), so the `txn-id` actually reaches the resource; the `txn-id` is also recorded when the link had no flow properties yet. Previously the `txn-id` was silently dropped (regression since 0.12.0).
