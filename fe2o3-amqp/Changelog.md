@@ -1,5 +1,9 @@
 # Change Log
 
+## Unreleased
+
+1. **Bugfix**: SASL `EXTERNAL` now sends an empty initial response and answers an empty challenge with an empty response (RFC 4422), so it authenticates against servers that challenge a missing initial response, such as ActiveMQ Artemis. A challenge with data is still an error.
+
 ## 0.18.4
 
 1. **Bugfix**: transactional acquisition now includes the link flow `properties` in the acquiring flow (and in the `cleanup`/drop drain flows), so the `txn-id` actually reaches the resource; the `txn-id` is also recorded when the link had no flow properties yet. Previously the `txn-id` was silently dropped (regression since 0.12.0).

@@ -127,7 +127,10 @@ impl SaslProfile {
     pub(crate) fn initial_response(&mut self) -> Option<Binary> {
         match self {
             SaslProfile::Anonymous => None,
-            SaslProfile::External => None,
+            // The identity comes from the transport (e.g. a TLS client certificate). An empty
+            // initial response asks the server to use it, so no challenge round trip is needed
+            // (RFC 4422, section 3 and appendix A).
+            SaslProfile::External => Some(Binary::from(Vec::new())),
             SaslProfile::Plain { username, password } => {
                 let username = username.as_bytes();
                 let password = password.as_bytes();
@@ -154,7 +157,6 @@ impl SaslProfile {
     }
 
     /// How a SASL profile should respond to a SASL frame
-    #[cfg_attr(not(feature = "scram"), allow(unused_variables))]
     pub(crate) fn on_frame(
         &mut self,
         frame: sasl::Frame,
@@ -180,6 +182,14 @@ impl SaslProfile {
                 }
             }
             Frame::Challenge(challenge) => match self {
+                // A server may still send an empty challenge (e.g. one that treats the initial
+                // response as absent); EXTERNAL answers it with an empty response, as RFC 4422
+                // allows. A challenge with data asks for something EXTERNAL cannot provide.
+                SaslProfile::External if challenge.challenge.is_empty() => {
+                    Ok(Negotiation::Response(SaslResponse {
+                        response: Binary::from(Vec::new()),
+                    }))
+                }
                 SaslProfile::Anonymous | SaslProfile::Plain { .. } | SaslProfile::External => {
                     Err(Error::NotImplemented(Some(
                         "SASL Challenge is not implemented for ANONYMOUS, PLAIN, or EXTERNAL."
@@ -228,9 +238,11 @@ impl SaslProfile {
 
 #[cfg(test)]
 mod tests {
+    use fe2o3_amqp_types::{primitives::Binary, sasl::SaslChallenge};
     use url::Url;
 
-    use super::SaslProfile;
+    use super::{Negotiation, SaslProfile};
+    use crate::frames::sasl::Frame;
 
     #[test]
     fn test_try_from_address() {
@@ -262,5 +274,33 @@ mod tests {
             password: String::from("example"),
         };
         let _response = profile.initial_response();
+    }
+
+    #[test]
+    fn external_sends_an_empty_initial_response() {
+        let mut profile = SaslProfile::External;
+        let response = profile.initial_response();
+        assert_eq!(response, Some(Binary::from(Vec::new())));
+    }
+
+    #[test]
+    fn external_answers_an_empty_challenge_with_an_empty_response() {
+        let mut profile = SaslProfile::External;
+        let challenge = Frame::Challenge(SaslChallenge {
+            challenge: Binary::from(Vec::new()),
+        });
+        let Ok(Negotiation::Response(response)) = profile.on_frame(challenge, None) else {
+            panic!("expected a sasl-response to the empty challenge");
+        };
+        assert_eq!(response.response, Binary::from(Vec::new()));
+    }
+
+    #[test]
+    fn external_refuses_a_challenge_with_data() {
+        let mut profile = SaslProfile::External;
+        let challenge = Frame::Challenge(SaslChallenge {
+            challenge: Binary::from(vec![1, 2, 3]),
+        });
+        assert!(profile.on_frame(challenge, None).is_err());
     }
 }
