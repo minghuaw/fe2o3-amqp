@@ -22,7 +22,7 @@ default = []
 native-tls = ["tokio-tungstenite/native-tls"]
 native-tls-vendored = ["tokio-tungstenite/native-tls-vendored"]
 rustls-tls-native-roots = ["tokio-tungstenite/rustls-tls-native-roots"]
-rustls-tls-webpki-roots = ["tokio-tungstenite/rustls-tls-webpki-roots"]
+rustls-tls-webpki-roots = ["tokio-tungstenite/rustls-tls-webpki-roots", "webpki-roots"]
 
 [dependencies]
 futures-util = { workspace = true, features = ["sink"] }
@@ -35,6 +35,11 @@ bytes.workspace = true
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 tokio = { workspace = true, features = ["net"] }
 tokio-tungstenite.workspace = true
+# Security floor. `tokio-tungstenite` only requires `webpki-roots ^0.26`, and 0.26.11 re-exports
+# `webpki-roots` 1.x via the semver trick. Depending on it directly (behind the
+# `rustls-tls-webpki-roots` feature) forces the resolved 1.x to a bundle that removed the
+# emSign roots (G3, C1 and C3), even when a downstream lock would otherwise keep an older 1.x.
+webpki-roots = { workspace = true, optional = true }
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 tokio = { workspace = true, features = ["sync", "macros"] }
