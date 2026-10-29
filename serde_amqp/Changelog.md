@@ -5,6 +5,9 @@
 1. Fixed panics and length wrapping when deserializing malformed `list`/`map`/
    `array` encodings. Wire-declared sizes and counts are now checked and return
    `Error::InvalidLength` instead of overflowing (issue #427).
+2. Added a default nesting-depth limit of 64 for compound values. The limit is
+   configurable with `Deserializer::set_max_depth` and prevents deeply nested
+   input from exhausting the stack (issue #443).
 
 ## 0.18.0
 
