@@ -34,6 +34,14 @@ use crate::{
 /// real-world OPEN/BEGIN/ATTACH frames carry single-digit element counts.
 pub const MAX_ARRAY_COUNT: usize = 65_536;
 
+/// Default maximum nesting depth for compound AMQP values (lists, maps,
+/// arrays, and described values).
+///
+/// This matches the limits used by other AMQP implementations (for example,
+/// AmqpNetLite and go-amqp use 64). It can be raised or lowered on a
+/// [`Deserializer`] with [`Deserializer::set_max_depth`].
+pub const DEFAULT_MAX_NESTING_DEPTH: usize = 64;
+
 /// Removes the fixed header (the count field and, for arrays, the element
 /// constructor) from a compound length read off the wire.
 ///
@@ -69,6 +77,8 @@ pub struct Deserializer<R> {
     enum_type: EnumType,
     struct_encoding: StructEncoding,
     elem_format_code: Option<EncodingCodes>,
+    depth: usize,
+    max_depth: usize,
 }
 
 impl<'de, R: Read<'de>> Deserializer<R> {
@@ -81,7 +91,36 @@ impl<'de, R: Read<'de>> Deserializer<R> {
             enum_type: Default::default(),
             struct_encoding: StructEncoding::None,
             elem_format_code: None,
+            depth: 0,
+            max_depth: DEFAULT_MAX_NESTING_DEPTH,
         }
+    }
+
+    /// Sets the maximum nesting depth allowed while decoding compound values.
+    ///
+    /// A value nested deeper than this limit is rejected with
+    /// [`Error::InvalidValue`] instead of risking a stack overflow.
+    pub fn set_max_depth(&mut self, max_depth: usize) {
+        self.max_depth = max_depth;
+    }
+
+    /// Returns the maximum nesting depth configured for this deserializer.
+    pub fn max_depth(&self) -> usize {
+        self.max_depth
+    }
+
+    fn enter_nested<T>(
+        &mut self,
+        f: impl FnOnce(&mut Self) -> Result<T, Error>,
+    ) -> Result<T, Error> {
+        if self.depth >= self.max_depth {
+            return Err(Error::InvalidValue);
+        }
+
+        self.depth += 1;
+        let result = f(self);
+        self.depth -= 1;
+        result
     }
 
     fn read_format_code(&mut self) -> Option<Result<EncodingCodes, Error>> {
@@ -866,7 +905,7 @@ where
             self.deserialize_i64(visitor)
         } else if name == TRANSPARENT_VEC {
             self.seq_type = Some(SequenceType::TransparentVec);
-            visitor.visit_seq(TransparentVecAccess::new(self))
+            self.enter_nested(|de| visitor.visit_seq(TransparentVecAccess::new(de)))
         } else if name == LAZY_VALUE {
             self.non_native_type = Some(NonNativeType::LazyValue);
             self.deserialize_byte_buf(visitor)
@@ -908,7 +947,9 @@ where
 
                 // If count is zero, jump to visitor
                 match count {
-                    0 => visitor.visit_seq(ArrayAccess::new(self, len, count)),
+                    0 => {
+                        self.enter_nested(|de| visitor.visit_seq(ArrayAccess::new(de, len, count)))
+                    }
                     _ => {
                         let format_code = self
                             .read_format_code()
@@ -919,7 +960,7 @@ where
                         let len = checked_body_len(len, OFFSET_ARRAY8)?;
                         // let buf = self.reader.read_bytes(len)?;
 
-                        visitor.visit_seq(ArrayAccess::new(self, len, count))
+                        self.enter_nested(|de| visitor.visit_seq(ArrayAccess::new(de, len, count)))
                     }
                 }
             }
@@ -939,7 +980,9 @@ where
 
                 // If count is zero, jump to visitor
                 match count {
-                    0 => visitor.visit_seq(ArrayAccess::new(self, len, count)),
+                    0 => {
+                        self.enter_nested(|de| visitor.visit_seq(ArrayAccess::new(de, len, count)))
+                    }
                     _ => {
                         let format_code = self
                             .read_format_code()
@@ -950,14 +993,14 @@ where
                         let len = checked_body_len(len, OFFSET_ARRAY32)?;
                         // let buf = self.reader.read_bytes(len)?;
 
-                        visitor.visit_seq(ArrayAccess::new(self, len, count))
+                        self.enter_nested(|de| visitor.visit_seq(ArrayAccess::new(de, len, count)))
                     }
                 }
             }
             EncodingCodes::List0 => {
                 let len = 0;
                 let count = 0;
-                visitor.visit_seq(ListAccess::new(self, len, count))
+                self.enter_nested(|de| visitor.visit_seq(ListAccess::new(de, len, count)))
             }
             EncodingCodes::List8 => {
                 let len = self
@@ -976,7 +1019,7 @@ where
 
                 // Make sure there is no other element format code
                 self.elem_format_code = None;
-                visitor.visit_seq(ListAccess::new(self, len, count))
+                self.enter_nested(|de| visitor.visit_seq(ListAccess::new(de, len, count)))
             }
             EncodingCodes::List32 => {
                 let len_bytes = self.reader.read_const_bytes()?;
@@ -997,7 +1040,7 @@ where
 
                 // Make sure there is no other element format code
                 self.elem_format_code = None;
-                visitor.visit_seq(ListAccess::new(self, len, count))
+                self.enter_nested(|de| visitor.visit_seq(ListAccess::new(de, len, count)))
             }
             _ => Err(Error::InvalidFormatCode),
         }
@@ -1057,7 +1100,7 @@ where
             return Err(Error::SequenceLengthMismatch);
         }
 
-        visitor.visit_seq(ListAccess::new(self, size, count))
+        self.enter_nested(|de| visitor.visit_seq(ListAccess::new(de, size, count)))
     }
 
     fn deserialize_map<V>(self, visitor: V) -> Result<V::Value, Self::Error>
@@ -1115,7 +1158,7 @@ where
 
         // // AMQP map count includes both key and value, should be halfed
         // let count = count / 2;
-        visitor.visit_map(MapAccess::new(self, size, count))
+        self.enter_nested(|de| visitor.visit_map(MapAccess::new(de, size, count)))
     }
 
     fn deserialize_tuple_struct<V>(
@@ -1129,17 +1172,19 @@ where
     {
         if name == DESCRIBED_BASIC {
             self.struct_encoding = StructEncoding::DescribedBasic;
-            visitor.visit_seq(DescribedAccess::basic(self, len as u32))
+            self.enter_nested(|de| visitor.visit_seq(DescribedAccess::basic(de, len as u32)))
         } else if name == DESCRIBED_LIST {
             self.struct_encoding = StructEncoding::DescribedList;
-            visitor.visit_seq(DescribedAccess::list(self))
+            self.enter_nested(|de| visitor.visit_seq(DescribedAccess::list(de)))
         } else {
             match self
                 .get_elem_code_or_peek_byte()
                 .ok_or_else(|| Error::unexpected_eof("Expecting format code"))??
                 .try_into()?
             {
-                EncodingCodes::DescribedType => visitor.visit_seq(DescribedAccess::list(self)),
+                EncodingCodes::DescribedType => {
+                    self.enter_nested(|de| visitor.visit_seq(DescribedAccess::list(de)))
+                }
                 _ => self.deserialize_tuple(len, visitor),
             }
         }
@@ -1158,13 +1203,15 @@ where
         let cur_encoding = self.struct_encoding.clone();
         let result = if name == DESCRIBED_BASIC {
             self.struct_encoding = StructEncoding::DescribedBasic;
-            visitor.visit_seq(DescribedAccess::basic(self, fields.len() as u32))
+            self.enter_nested(|de| {
+                visitor.visit_seq(DescribedAccess::basic(de, fields.len() as u32))
+            })
         } else if name == DESCRIBED_LIST {
             self.struct_encoding = StructEncoding::DescribedList;
-            visitor.visit_seq(DescribedAccess::list(self))
+            self.enter_nested(|de| visitor.visit_seq(DescribedAccess::list(de)))
         } else if name == DESCRIBED_MAP {
             self.struct_encoding = StructEncoding::DescribedMap;
-            visitor.visit_map(DescribedAccess::map(self))
+            self.enter_nested(|de| visitor.visit_map(DescribedAccess::map(de)))
         } else {
             self.struct_encoding = StructEncoding::None;
             match self
@@ -1176,7 +1223,9 @@ where
                     self.deserialize_tuple(fields.len(), visitor)
                 }
                 EncodingCodes::Map32 | EncodingCodes::Map8 => self.deserialize_map(visitor),
-                EncodingCodes::DescribedType => visitor.visit_seq(DescribedAccess::list(self)),
+                EncodingCodes::DescribedType => {
+                    self.enter_nested(|de| visitor.visit_seq(DescribedAccess::list(de)))
+                }
                 _ => Err(Error::InvalidFormatCode),
             }
         };
@@ -2926,5 +2975,93 @@ mod tests {
 
         let result: Result<Foo, _> = from_slice(buf);
         assert!(matches!(result, Err(Error::InvalidLength)));
+    }
+
+    fn nested_list32(depth: usize) -> Vec<u8> {
+        let mut buf = Vec::with_capacity(depth * 9 + 1);
+        for _ in 0..depth {
+            buf.push(0xd0); // list32
+            buf.extend_from_slice(&0u32.to_be_bytes()); // size, fixed below
+            buf.extend_from_slice(&1u32.to_be_bytes()); // count
+        }
+        buf.push(0x40); // null
+
+        for i in 0..depth {
+            let child_len = 9 * (depth - i - 1) + 1;
+            let size = 4 + child_len;
+            let offset = i * 9 + 1;
+            buf[offset..offset + 4].copy_from_slice(&(size as u32).to_be_bytes());
+        }
+
+        buf
+    }
+
+    fn nested_described(depth: usize) -> Vec<u8> {
+        let mut buf = Vec::with_capacity(depth * 3 + 1);
+        for _ in 0..depth {
+            buf.extend_from_slice(&[0x00, 0x53, 0x00]); // described, smallulong 0
+        }
+        buf.push(0x40); // null
+        buf
+    }
+
+    #[test]
+    fn nesting_depth_at_limit_is_accepted() {
+        use super::DEFAULT_MAX_NESTING_DEPTH;
+
+        let buf = nested_list32(DEFAULT_MAX_NESTING_DEPTH);
+        let result: Result<crate::Value, _> = from_slice(&buf);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn nesting_depth_beyond_limit_is_rejected() {
+        use super::DEFAULT_MAX_NESTING_DEPTH;
+
+        use crate::error::Error;
+
+        let buf = nested_list32(DEFAULT_MAX_NESTING_DEPTH + 1);
+        let result: Result<crate::Value, _> = from_slice(&buf);
+        assert!(matches!(result, Err(Error::InvalidValue)));
+
+        let result: Result<crate::Value, _> = from_reader(std::io::Cursor::new(buf));
+        assert!(matches!(result, Err(Error::InvalidValue)));
+    }
+
+    #[test]
+    fn deeply_nested_input_is_rejected_without_stack_overflow() {
+        use crate::error::Error;
+
+        // Reproduces the reported stack-exhaustion shape. The depth guard
+        // rejects this long before the visitor reaches the deep end.
+        let buf = nested_list32(20_000);
+        let result: Result<crate::Value, _> = from_slice(&buf);
+        assert!(matches!(result, Err(Error::InvalidValue)));
+    }
+
+    #[test]
+    fn described_nesting_depth_beyond_limit_is_rejected() {
+        use super::DEFAULT_MAX_NESTING_DEPTH;
+
+        use crate::error::Error;
+
+        let buf = nested_described(DEFAULT_MAX_NESTING_DEPTH + 1);
+        let result: Result<crate::Value, _> = from_slice(&buf);
+        assert!(matches!(result, Err(Error::InvalidValue)));
+    }
+
+    #[test]
+    fn max_depth_is_configurable() {
+        use super::Deserializer;
+        use crate::error::Error;
+        use crate::read::SliceReader;
+
+        let buf = nested_list32(3);
+        let mut de = Deserializer::new(SliceReader::new(&buf));
+        de.set_max_depth(2);
+        assert_eq!(de.max_depth(), 2);
+
+        let result = crate::Value::deserialize(&mut de);
+        assert!(matches!(result, Err(Error::InvalidValue)));
     }
 }
