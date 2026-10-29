@@ -43,15 +43,22 @@ pub trait Read<'de>: private::Sealed {
         Ok(buf)
     }
 
+    /// Number of bytes still available in the underlying input, if known.
+    ///
+    /// Slice-backed readers can answer this exactly. Stream readers return
+    /// `None` because the remaining length of the stream is not known.
+    fn remaining(&self) -> Option<usize> {
+        None
+    }
+
     /// Peek `n` number of bytes without consuming
     fn peek_bytes(&mut self, n: usize) -> Result<Option<&[u8]>, io::Error>;
 
-    /// Consuming `n` number of bytes
-    fn read_bytes(&mut self, n: usize) -> Result<Vec<u8>, io::Error> {
-        let mut buf = vec![0u8; n];
-        self.read_exact(&mut buf)?;
-        Ok(buf)
-    }
+    /// Consuming `n` number of bytes.
+    ///
+    /// Implementations must not allocate `n` bytes before verifying that the
+    /// bytes are actually available.
+    fn read_bytes(&mut self, n: usize) -> Result<Vec<u8>, io::Error>;
 
     /// Read to buffer
     fn read_exact(&mut self, buf: &mut [u8]) -> Result<(), io::Error>;
@@ -122,7 +129,18 @@ where
     R: Read<'de>,
 {
     let len = peek_encoded_len(reader, width)?;
-    let bytes = reader.read_bytes(checked_encoded_len(width, len)?)?;
+    let total = checked_encoded_len(width, len)?;
+
+    // Reject lengths that cannot fit in a slice-backed input before the
+    // reader allocates the destination buffer. Stream readers return `None`
+    // and rely on their incremental read path instead.
+    if let Some(remaining) = reader.remaining() {
+        if total > remaining {
+            return Err(Error::InvalidLength);
+        }
+    }
+
+    let bytes = reader.read_bytes(total)?;
     Ok(bytes)
 }
 
@@ -173,8 +191,9 @@ where
 
 #[cfg(test)]
 mod tests {
-    use super::checked_encoded_len;
+    use super::{checked_encoded_len, read_encoded_len_bytes};
     use crate::error::Error;
+    use crate::read::SliceReader;
 
     #[test]
     fn encoded_len_overflow_is_rejected() {
@@ -182,5 +201,15 @@ mod tests {
             checked_encoded_len(4, usize::MAX),
             Err(Error::InvalidLength)
         ));
+    }
+
+    #[test]
+    fn encoded_len_larger_than_slice_is_rejected() {
+        // str32 with a declared length of u32::MAX and no payload.
+        let buf = [0xB1, 0xFF, 0xFF, 0xFF, 0xFF];
+        let mut reader = SliceReader::new(&buf);
+
+        let result = read_encoded_len_bytes(&mut reader, 4);
+        assert!(matches!(result, Err(Error::InvalidLength)));
     }
 }

@@ -5,6 +5,9 @@
 1. Fixed panics and length wrapping when deserializing malformed `list`/`map`/
    `array` encodings. Wire-declared sizes and counts are now checked and return
    `Error::InvalidLength` instead of overflowing (issue #427).
+2. Hardened readers so declared string/binary/symbol/`LazyValue` lengths are not
+   allocated before the bytes are available, and added
+   `Deserializer::set_max_value_size` for stream-backed inputs (issue #442).
 
 ## 0.18.0
 

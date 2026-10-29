@@ -43,8 +43,18 @@ impl<'s> Read<'s> for SliceReader<'s> {
         self.initial_len - self.slice.len()
     }
 
+    fn remaining(&self) -> Option<usize> {
+        Some(self.slice.len())
+    }
+
     fn peek_bytes(&mut self, n: usize) -> Result<Option<&[u8]>, io::Error> {
         Ok(self.slice.get(..n))
+    }
+
+    fn read_bytes(&mut self, n: usize) -> Result<Vec<u8>, io::Error> {
+        // Check the length before allocating. `get_byte_slice` returns an
+        // error if the slice is too short.
+        Ok(self.get_byte_slice(n)?.to_vec())
     }
 
     fn next(&mut self) -> Result<Option<u8>, io::Error> {
@@ -127,6 +137,34 @@ mod tests {
 
         assert!(peek_none.is_none());
         assert!(matches!(next_none, Ok(None)) || next_none.is_err());
+    }
+
+    #[test]
+    fn test_read_bytes_rejects_length_larger_than_slice() {
+        let slice = SHORT_BUFFER;
+        let mut reader = SliceReader::new(slice);
+
+        assert_eq!(reader.remaining(), Some(slice.len()));
+        assert!(reader.read_bytes(u32::MAX as usize).is_err());
+        // The failed read must not consume any bytes.
+        assert_eq!(reader.remaining(), Some(slice.len()));
+    }
+
+    #[test]
+    fn test_read_bytes_returns_and_consumes_slice() {
+        let mut reader = SliceReader::new(&[0, 1, 2, 3]);
+
+        assert_eq!(reader.read_bytes(2).unwrap(), vec![0, 1]);
+        assert_eq!(reader.remaining(), Some(2));
+
+        assert!(reader.read_bytes(0).unwrap().is_empty());
+        assert_eq!(reader.remaining(), Some(2));
+
+        assert_eq!(reader.read_bytes(2).unwrap(), vec![2, 3]);
+        assert_eq!(reader.remaining(), Some(0));
+
+        assert!(reader.read_bytes(1).is_err());
+        assert_eq!(reader.remaining(), Some(0));
     }
 
     #[test]
