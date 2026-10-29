@@ -107,12 +107,22 @@ where
     }
 }
 
+/// Total encoded length of a variable-width value: one format code byte, the
+/// width of the length field, and the declared payload length.
+#[inline]
+fn checked_encoded_len(width: usize, len: usize) -> Result<usize, Error> {
+    width
+        .checked_add(1)
+        .and_then(|total| total.checked_add(len))
+        .ok_or(Error::InvalidLength)
+}
+
 fn read_encoded_len_bytes<'de, R>(reader: &mut R, width: usize) -> Result<Vec<u8>, Error>
 where
     R: Read<'de>,
 {
     let len = peek_encoded_len(reader, width)?;
-    let bytes = reader.read_bytes(1 + width + len)?;
+    let bytes = reader.read_bytes(checked_encoded_len(width, len)?)?;
     Ok(bytes)
 }
 
@@ -159,4 +169,18 @@ where
     bytes.append(&mut value_bytes);
 
     Ok(bytes)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::checked_encoded_len;
+    use crate::error::Error;
+
+    #[test]
+    fn encoded_len_overflow_is_rejected() {
+        assert!(matches!(
+            checked_encoded_len(4, usize::MAX),
+            Err(Error::InvalidLength)
+        ));
+    }
 }

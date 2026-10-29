@@ -34,6 +34,18 @@ use crate::{
 /// real-world OPEN/BEGIN/ATTACH frames carry single-digit element counts.
 pub const MAX_ARRAY_COUNT: usize = 65_536;
 
+/// Removes the fixed header (the count field and, for arrays, the element
+/// constructor) from a compound length read off the wire.
+///
+/// A malformed encoding can declare a size that is smaller than its own
+/// header. Returning [`Error::InvalidLength`] keeps that input from panicking
+/// on subtraction (debug builds) or wrapping to a huge length (release
+/// builds).
+#[inline]
+fn checked_body_len(len: usize, header_len: usize) -> Result<usize, Error> {
+    len.checked_sub(header_len).ok_or(Error::InvalidLength)
+}
+
 /// Deserialize an instance of type T from an IO stream
 pub fn from_reader<T: de::DeserializeOwned>(reader: impl std::io::Read) -> Result<T, Error> {
     let reader = IoReader::new(reader);
@@ -468,9 +480,10 @@ impl<'de, R: Read<'de>> Deserializer<R> {
                     .peek_bytes(3)?
                     .ok_or_else(|| Error::unexpected_eof(""))?;
                 let size = _buf[2] as usize;
+                let total = 3usize.checked_add(size).ok_or(Error::InvalidLength)?;
                 let _buf = self
                     .reader
-                    .peek_bytes(3 + size)?
+                    .peek_bytes(total)?
                     .ok_or_else(|| Error::unexpected_eof(""))?;
                 let slice = std::str::from_utf8(&_buf[3..])?;
                 visitor.visit_str(slice)
@@ -486,9 +499,10 @@ impl<'de, R: Read<'de>> Deserializer<R> {
                 let mut size_bytes = [0u8; 4];
                 size_bytes.copy_from_slice(&_buf[2..]);
                 let size = u32::from_be_bytes(size_bytes) as usize;
+                let total = 6usize.checked_add(size).ok_or(Error::InvalidLength)?;
                 let _buf = self
                     .reader
-                    .peek_bytes(6 + size)?
+                    .peek_bytes(total)?
                     .ok_or_else(|| Error::unexpected_eof(""))?;
                 let slice = std::str::from_utf8(&_buf[6..])?;
                 visitor.visit_str(slice)
@@ -902,7 +916,7 @@ where
                         self.elem_format_code = Some(format_code);
 
                         // Account for offset
-                        let len = len - OFFSET_ARRAY8;
+                        let len = checked_body_len(len, OFFSET_ARRAY8)?;
                         // let buf = self.reader.read_bytes(len)?;
 
                         visitor.visit_seq(ArrayAccess::new(self, len, count))
@@ -933,7 +947,7 @@ where
                         self.elem_format_code = Some(format_code);
 
                         // Account for offset
-                        let len = len - OFFSET_ARRAY32;
+                        let len = checked_body_len(len, OFFSET_ARRAY32)?;
                         // let buf = self.reader.read_bytes(len)?;
 
                         visitor.visit_seq(ArrayAccess::new(self, len, count))
@@ -958,7 +972,7 @@ where
                     as usize;
 
                 // Account for offset
-                let len = len - OFFSET_LIST8;
+                let len = checked_body_len(len, OFFSET_LIST8)?;
 
                 // Make sure there is no other element format code
                 self.elem_format_code = None;
@@ -979,7 +993,7 @@ where
                 }
 
                 // Account for offset
-                let len = len - OFFSET_LIST32;
+                let len = checked_body_len(len, OFFSET_LIST32)?;
 
                 // Make sure there is no other element format code
                 self.elem_format_code = None;
@@ -1017,7 +1031,7 @@ where
                     as usize;
 
                 // Account for offset
-                let size = size - OFFSET_LIST8;
+                let size = checked_body_len(size, OFFSET_LIST8)?;
 
                 // Make sure there is no other element format code
                 self.elem_format_code = None;
@@ -1030,7 +1044,7 @@ where
                 let count = u32::from_be_bytes(count_bytes) as usize;
 
                 // Account for offset
-                let size = size - OFFSET_LIST32;
+                let size = checked_body_len(size, OFFSET_LIST32)?;
 
                 // Make sure there is no other element format code
                 self.elem_format_code = None;
@@ -1067,7 +1081,7 @@ where
                     as usize;
 
                 // Account for offset
-                let size = size - OFFSET_MAP8;
+                let size = checked_body_len(size, OFFSET_MAP8)?;
 
                 (size, count)
             }
@@ -1086,12 +1100,18 @@ where
                 }
 
                 // Account for offset
-                let size = size - OFFSET_MAP32;
+                let size = checked_body_len(size, OFFSET_MAP32)?;
 
                 (size, count)
             }
             _ => return Err(Error::InvalidFormatCode),
         };
+
+        // AMQP map count includes both key and value, so an odd count can
+        // never describe complete entries.
+        if count % 2 != 0 {
+            return Err(Error::InvalidLength);
+        }
 
         // // AMQP map count includes both key and value, should be halfed
         // let count = count / 2;
@@ -1558,7 +1578,7 @@ impl<'de, R: Read<'de>> de::MapAccess<'de> for MapAccess<'_, R> {
     where
         V: de::DeserializeSeed<'de>,
     {
-        self.count -= 1;
+        self.count = self.count.checked_sub(1).ok_or(Error::InvalidLength)?;
         seed.deserialize(self.as_mut())
     }
 
@@ -1573,6 +1593,7 @@ impl<'de, R: Read<'de>> de::MapAccess<'de> for MapAccess<'_, R> {
     {
         match self.count {
             0 => Ok(None),
+            1 => Err(Error::InvalidLength),
             _ => {
                 // AMQP map count includes both key and value
                 self.count -= 2;
@@ -1776,7 +1797,11 @@ impl<'de, R: Read<'de>> de::SeqAccess<'de> for DescribedAccess<'_, R> {
                 // list headers
                 if self.counter == 0 {
                     if let StructEncoding::DescribedList = self.de.struct_encoding {
-                        self.field_count += self.consume_list_header()?;
+                        let count = self.consume_list_header()?;
+                        self.field_count = self
+                            .field_count
+                            .checked_add(count)
+                            .ok_or(Error::InvalidLength)?;
                     }
                 }
                 result
@@ -1816,7 +1841,11 @@ impl<'de, R: Read<'de>> de::MapAccess<'de> for DescribedAccess<'_, R> {
                 let result = seed.deserialize(self.as_mut()).map(Some);
                 if self.counter == 0 {
                     if let StructEncoding::DescribedMap = self.de.struct_encoding {
-                        self.field_count += self.consume_map_header()?;
+                        let count = self.consume_map_header()?;
+                        self.field_count = self
+                            .field_count
+                            .checked_add(count)
+                            .ok_or(Error::InvalidLength)?;
                     }
                 }
                 result
@@ -2779,5 +2808,123 @@ mod tests {
 
         let result: Result<Vec<()>, _> = from_slice(buf);
         assert!(matches!(result, Err(Error::InvalidValue)));
+    }
+
+    // Regression tests for malformed compound-size fields. The wire-declared
+    // size includes the count field (and, for arrays, the element constructor),
+    // so a size smaller than that header must be rejected instead of
+    // underflowing the subtraction that computes the body length.
+
+    #[test]
+    fn list_size_smaller_than_header_is_rejected() {
+        use crate::error::Error;
+
+        let result: Result<Vec<()>, _> = from_slice(&[0xc0, 0x00, 0x00]);
+        assert!(matches!(result, Err(Error::InvalidLength)));
+
+        let result: Result<Vec<()>, _> =
+            from_slice(&[0xd0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]);
+        assert!(matches!(result, Err(Error::InvalidLength)));
+    }
+
+    #[test]
+    fn map_size_smaller_than_header_is_rejected() {
+        use std::collections::BTreeMap;
+
+        use crate::error::Error;
+
+        let result: Result<BTreeMap<u8, u8>, _> = from_slice(&[0xc1, 0x00, 0x00]);
+        assert!(matches!(result, Err(Error::InvalidLength)));
+
+        let result: Result<BTreeMap<u8, u8>, _> =
+            from_slice(&[0xd1, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]);
+        assert!(matches!(result, Err(Error::InvalidLength)));
+    }
+
+    #[test]
+    fn array_size_smaller_than_header_is_rejected() {
+        use crate::error::Error;
+
+        // count = 1, so the element constructor is present and the offset is 2.
+        let result: Result<Vec<()>, _> = from_slice(&[0xe0, 0x01, 0x01, 0x40]);
+        assert!(matches!(result, Err(Error::InvalidLength)));
+
+        // array32 with count = 1 and a body size smaller than the 5-byte
+        // count + element-constructor header.
+        let result: Result<Vec<()>, _> =
+            from_slice(&[0xf0, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01, 0x40]);
+        assert!(matches!(result, Err(Error::InvalidLength)));
+    }
+
+    #[test]
+    fn tuple_list_size_smaller_than_header_is_rejected() {
+        use crate::error::Error;
+
+        let result: Result<(u8,), _> = from_slice(&[0xc0, 0x00, 0x01]);
+        assert!(matches!(result, Err(Error::InvalidLength)));
+
+        let result: Result<(u8,), _> =
+            from_slice(&[0xd0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01]);
+        assert!(matches!(result, Err(Error::InvalidLength)));
+    }
+
+    #[test]
+    fn map_with_odd_count_is_rejected() {
+        use std::collections::BTreeMap;
+
+        use crate::error::Error;
+
+        let result: Result<BTreeMap<u8, u8>, _> = from_slice(&[0xc1, 0x01, 0x01]);
+        assert!(matches!(result, Err(Error::InvalidLength)));
+
+        let result: Result<BTreeMap<u8, u8>, _> =
+            from_slice(&[0xd1, 0x00, 0x00, 0x00, 0x04, 0x00, 0x00, 0x00, 0x01]);
+        assert!(matches!(result, Err(Error::InvalidLength)));
+    }
+
+    #[test]
+    fn map_access_rejects_missing_key_and_value() {
+        use std::marker::PhantomData;
+
+        use serde::de::MapAccess as _;
+
+        use crate::error::Error;
+        use crate::read::SliceReader;
+
+        use super::{Deserializer, MapAccess};
+
+        let mut de = Deserializer::new(SliceReader::new(&[]));
+
+        // A value requested without a preceding key must not underflow.
+        let mut access = MapAccess::new(&mut de, 0, 0);
+        let result = access.next_value_seed(PhantomData::<u8>);
+        assert!(matches!(result, Err(Error::InvalidLength)));
+
+        // A single remaining element cannot form a complete entry.
+        let mut access = MapAccess::new(&mut de, 0, 1);
+        let result = access.next_entry_seed(PhantomData::<u8>, PhantomData::<u8>);
+        assert!(matches!(result, Err(Error::InvalidLength)));
+    }
+
+    #[cfg(feature = "serde_amqp_derive")]
+    #[test]
+    fn described_list_count_overflow_is_rejected() {
+        use crate as serde_amqp;
+        use crate::error::Error;
+        use crate::macros::DeserializeComposite;
+
+        #[allow(dead_code)]
+        #[derive(Debug, DeserializeComposite)]
+        #[amqp_contract(code = "00:13", encoding = "list")]
+        struct Foo(bool);
+
+        let buf: &[u8] = &[
+            0x00, 0x53, 0x13, // described type, smallulong descriptor 0x13
+            0xd0, 0x00, 0x00, 0x00, 0x04, // list32 size = count field only
+            0xff, 0xff, 0xff, 0xff, // count = u32::MAX
+        ];
+
+        let result: Result<Foo, _> = from_slice(buf);
+        assert!(matches!(result, Err(Error::InvalidLength)));
     }
 }
