@@ -1,0 +1,32 @@
+name: MSRV
+
+on:
+  push:
+    branches:
+      - main
+      - "dev/*"
+  pull_request: {}
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  msrv:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Read the declared MSRV
+        id: msrv
+        run: |
+          v=$(grep -m1 '^rust-version' fe2o3-amqp/Cargo.toml | sed -E 's/.*"([^"]+)".*/\1/')
+          if [ -z "$v" ]; then
+            echo "fe2o3-amqp/Cargo.toml does not declare a rust-version" >&2
+            exit 1
+          fi
+          echo "version=$v" >> "$GITHUB_OUTPUT"
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ steps.msrv.outputs.version }}
+      - name: Check on the MSRV
+        run: cargo check -p fe2o3-amqp --all-features
