@@ -280,6 +280,7 @@ mod tests {
             control,
             engine_handle: tokio::spawn(async {}),
             outcome,
+            force: Arc::new(tokio::sync::watch::channel(false).0),
             outgoing,
             session_stop_reason: stop_reason_cell,
             max_frame_size: 4096,

@@ -8,7 +8,7 @@ use tokio::sync::{mpsc::Sender, oneshot};
 
 use crate::{
     connection::AllocSessionError,
-    endpoint::{InputHandle, OutgoingChannel, OutputHandle},
+    endpoint::{IncomingChannel, InputHandle, OutgoingChannel, OutputHandle},
     link::LinkRelay,
     session::{error::AllocLinkError, frame::SessionIncomingItem},
 };
@@ -30,6 +30,10 @@ pub(crate) enum ConnectionControl {
         responder: oneshot::Sender<Result<OutgoingChannel, AllocSessionError>>,
     },
     DeallocateSession(OutgoingChannel),
+    RetireSession {
+        outgoing: OutgoingChannel,
+        incoming: Option<IncomingChannel>,
+    },
 }
 
 impl std::fmt::Display for ConnectionControl {
@@ -41,6 +45,9 @@ impl std::fmt::Display for ConnectionControl {
                 responder: _,
             } => write!(f, "AllocateSession"),
             Self::DeallocateSession(id) => write!(f, "DeallocateSession({})", id.0),
+            Self::RetireSession { outgoing, incoming } => {
+                write!(f, "RetireSession({}, {:?})", outgoing.0, incoming)
+            }
         }
     }
 }

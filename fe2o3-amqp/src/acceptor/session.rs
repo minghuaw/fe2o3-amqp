@@ -9,7 +9,7 @@ use fe2o3_amqp_types::{
     performatives::{Attach, Begin, Detach, Disposition, End, Flow, Transfer},
     states::SessionState,
 };
-use tokio::sync::{mpsc, oneshot};
+use tokio::sync::{mpsc, oneshot, watch};
 use tokio::task::JoinHandle;
 
 use crate::{
@@ -174,6 +174,7 @@ impl SessionAcceptor {
             session_control_rx: mpsc::Receiver<SessionControl>,
             incoming: mpsc::Receiver<SessionFrame>,
             outgoing_link_frames: mpsc::Receiver<LinkFrame>,
+            force: Arc<watch::Sender<bool>>,
         ) -> Result<(JoinHandle<()>, oneshot::Receiver<Result<(), Error>>), BeginError> {
             let engine = SessionEngine::begin_listener_session(
                 connection.control.clone(),
@@ -182,6 +183,7 @@ impl SessionAcceptor {
                 incoming,
                 connection.outgoing.clone(),
                 outgoing_link_frames,
+                force,
             )
             .await?;
             Ok(engine.spawn())
@@ -199,6 +201,7 @@ impl SessionAcceptor {
             session_control_rx: mpsc::Receiver<SessionControl>,
             incoming: mpsc::Receiver<SessionFrame>,
             outgoing_link_frames: mpsc::Receiver<LinkFrame>,
+            force: Arc<watch::Sender<bool>>,
         ) -> Result<(JoinHandle<()>, oneshot::Receiver<Result<(), Error>>), BeginError> {
             match self.0.control_link_acceptor.clone() {
                 Some(control_link_acceptor) => {
@@ -218,6 +221,7 @@ impl SessionAcceptor {
                         incoming,
                         connection.outgoing.clone(),
                         outgoing_link_frames,
+                        force.clone(),
                     )
                     .await?;
                     Ok(engine.spawn())
@@ -230,6 +234,7 @@ impl SessionAcceptor {
                         incoming,
                         connection.outgoing.clone(),
                         outgoing_link_frames,
+                        force,
                     )
                     .await?;
                     Ok(engine.spawn())
@@ -249,6 +254,7 @@ impl SessionAcceptor {
             mpsc::channel::<SessionControl>(DEFAULT_SESSION_CONTROL_BUFFER_SIZE);
         let (outgoing_tx, outgoing_rx) = mpsc::channel(self.0.buffer_size);
         let (link_listener_tx, link_listener_rx) = mpsc::channel(self.0.buffer_size);
+        let force = Arc::new(watch::channel(false).0);
 
         // If the connection engine pre-allocated the session relay (to handle
         // pipelined frames), use the pre-created incoming channel and outgoing
@@ -318,6 +324,7 @@ impl SessionAcceptor {
                 session_control_rx,
                 incoming_rx,
                 outgoing_rx,
+                force.clone(),
             )
             .await?;
 
@@ -326,6 +333,7 @@ impl SessionAcceptor {
             control: session_control_tx,
             engine_handle,
             outcome,
+            force,
             outgoing: outgoing_tx,
             session_stop_reason,
             max_frame_size,
@@ -364,6 +372,7 @@ where
         incoming: mpsc::Receiver<SessionIncomingItem>,
         outgoing: mpsc::Sender<SessionFrame>,
         outgoing_link_frames: mpsc::Receiver<LinkFrame>,
+        force: Arc<tokio::sync::watch::Sender<bool>>,
     ) -> Result<Self, BeginError> {
         #[cfg(feature = "tracing")]
         tracing::trace!("Instantiating session engine");
@@ -376,6 +385,7 @@ where
             incoming,
             outgoing,
             outgoing_link_frames,
+            force,
         };
 
         // send a begin
@@ -422,6 +432,10 @@ impl endpoint::Session for ListenerSession {
 
     fn outgoing_channel(&self) -> OutgoingChannel {
         self.session.outgoing_channel()
+    }
+
+    fn incoming_channel(&self) -> Option<IncomingChannel> {
+        self.session.incoming_channel()
     }
 
     fn allocate_link(

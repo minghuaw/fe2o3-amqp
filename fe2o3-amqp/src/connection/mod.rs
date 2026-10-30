@@ -271,6 +271,26 @@ pub(crate) async fn deallocate_session(
         .map_err(|_| DeallcoSessionError::IllegalState)
 }
 
+/// Retire a session that was locally abandoned before the peer completed the
+/// End exchange.
+///
+/// Unlike [`deallocate_session`], this keeps the outgoing channel reserved
+/// until the peer's late End or the connection close, so a new session cannot
+/// receive frames addressed to the abandoned one. The send is awaited (rather
+/// than best-effort) so that a subsequent session allocation, which goes
+/// through the same control queue, is ordered after the retirement.
+pub(crate) async fn retire_session(
+    control: &mut Sender<ConnectionControl>,
+    outgoing: OutgoingChannel,
+    incoming: Option<IncomingChannel>,
+) {
+    // A failed send means the connection engine already stopped; the
+    // connection releases all channel bookkeeping on its way down.
+    let _ = control
+        .send(ConnectionControl::RetireSession { outgoing, incoming })
+        .await;
+}
+
 /// An AMQP 1.0 Connection.
 ///
 /// # Open a new [`Connection`] with default configuration
@@ -458,6 +478,13 @@ pub struct Connection {
     pub(crate) local_open: Open,
     pub(crate) session_by_incoming_channel: HashMap<IncomingChannel, SessionRelay>,
     pub(crate) session_by_outgoing_channel: Slab<SessionRelay>,
+    /// Sessions abandoned locally before the peer's End.
+    ///
+    /// The outgoing slab slot stays occupied so its channel number cannot be
+    /// reused, and the incoming channel is ignored until a late `End` arrives
+    /// or the connection stops. This prevents late frames for the abandoned
+    /// session from being delivered to a new session.
+    pub(crate) retired_sessions: HashMap<IncomingChannel, OutgoingChannel>,
 
     // remote
     pub(crate) remote_open: Option<Open>,
@@ -568,6 +595,7 @@ impl Connection {
             local_open,
             session_by_incoming_channel: HashMap::new(),
             session_by_outgoing_channel: Slab::new(),
+            retired_sessions: HashMap::new(),
 
             remote_open: None,
             agreed_channel_max,
@@ -640,6 +668,14 @@ impl endpoint::Connection for Connection {
             .remove(outgoing_channel.0 as usize);
     }
 
+    fn retire_session(&mut self, outgoing: OutgoingChannel, incoming: Option<IncomingChannel>) {
+        Connection::retire_session(self, outgoing, incoming)
+    }
+
+    fn is_retired_incoming(&self, channel: IncomingChannel) -> bool {
+        Connection::is_retired_incoming(self, channel)
+    }
+
     /// Reacting to remote Open frame
     #[cfg_attr(feature = "tracing", tracing::instrument(skip_all))]
     fn on_incoming_open(
@@ -702,6 +738,13 @@ impl endpoint::Connection for Connection {
             _ => return Err(ConnectionInnerError::IllegalState),
         }
 
+        // A late End for a session that was locally abandoned frees the
+        // retired outgoing channel. The frame is consumed rather than being
+        // delivered to any other session.
+        if self.finish_retired_session(channel) {
+            return Ok(());
+        }
+
         // Forward to session
         let sframe = SessionFrame::new(channel, SessionFrameBody::End(end));
         // Drop incoming channel
@@ -709,7 +752,11 @@ impl endpoint::Connection for Connection {
             .session_by_incoming_channel
             .remove(&channel)
             .ok_or(ConnectionInnerError::NotFound(None))?;
-        relay.send(sframe).await?;
+        // The session engine may already have stopped (for example, a local
+        // forced teardown raced with the peer's End). The channel mapping has
+        // been removed, so there is nothing left to deliver to and no reason
+        // to fail the connection.
+        let _ = relay.send(sframe).await;
 
         Ok(())
     }
@@ -834,6 +881,49 @@ impl endpoint::Connection for Connection {
 }
 
 impl Connection {
+    /// Retire a session whose engine was locally abandoned before the peer's
+    /// `End`.
+    ///
+    /// If the incoming channel is still mapped, the mapping is removed and the
+    /// outgoing slab slot is kept occupied so the channel number cannot be
+    /// reused. A late `End` on the incoming channel later releases the slot.
+    /// If the incoming channel is already gone (the remote `End` was processed
+    /// first, or `Begin` never completed), the outgoing slot is released
+    /// immediately.
+    pub(crate) fn retire_session(
+        &mut self,
+        outgoing: OutgoingChannel,
+        incoming: Option<IncomingChannel>,
+    ) {
+        if let Some(incoming) = incoming {
+            if self.session_by_incoming_channel.remove(&incoming).is_some() {
+                self.retired_sessions.insert(incoming, outgoing);
+                return;
+            }
+        }
+
+        self.session_by_outgoing_channel.remove(outgoing.0 as usize);
+    }
+
+    /// Whether `channel` belongs to a session retired before the peer's `End`.
+    pub(crate) fn is_retired_incoming(&self, channel: IncomingChannel) -> bool {
+        self.retired_sessions.contains_key(&channel)
+    }
+
+    /// Release a retired session when the peer's late `End` arrives.
+    ///
+    /// Returns true when the channel belonged to a retired session and the
+    /// frame was consumed.
+    pub(crate) fn finish_retired_session(&mut self, channel: IncomingChannel) -> bool {
+        match self.retired_sessions.remove(&channel) {
+            Some(outgoing) => {
+                self.session_by_outgoing_channel.remove(outgoing.0 as usize);
+                true
+            }
+            None => false,
+        }
+    }
+
     /// Allocate a new session relay for a locally initiated session upon receiving the response
     /// from the remote peer.
     ///
@@ -848,6 +938,13 @@ impl Connection {
             ConnectionState::Opened => {}
             // TODO: what about pipelined
             _ => return Err(ConnectionInnerError::IllegalState),
+        }
+
+        if self.is_retired_incoming(channel) {
+            // A Begin on a retired channel would resurrect a session whose
+            // engine no longer exists; AMQP channel numbers are not reusable
+            // until the previous session's End completes.
+            return Err(ConnectionInnerError::IllegalState);
         }
 
         match begin.remote_channel {
@@ -920,5 +1017,62 @@ mod tests {
                 ConnectionStopReason::Closed
             ))
         ));
+    }
+
+    /// A locally retired session keeps its outgoing slot reserved until the
+    /// peer's late End, so a new session cannot reuse the channel.
+    #[tokio::test]
+    async fn retire_session_reserves_channel_until_late_end() {
+        use crate::endpoint::IncomingChannel;
+        use fe2o3_amqp_types::performatives::End;
+
+        let mut connection = Connection::new(ConnectionState::Opened, test_open());
+        let (tx, _rx) = mpsc::channel::<SessionIncomingItem>(8);
+        let outgoing = connection.allocate_session(tx).expect("allocate session");
+
+        // Simulate a completed Begin: the session is mapped by the peer's
+        // incoming channel.
+        let incoming = IncomingChannel(7);
+        let relay = connection
+            .session_by_outgoing_channel
+            .get(outgoing.0 as usize)
+            .expect("allocated relay")
+            .clone();
+        connection
+            .session_by_incoming_channel
+            .insert(incoming, relay);
+
+        connection.retire_session(outgoing, Some(incoming));
+
+        assert!(
+            connection.is_retired_incoming(incoming),
+            "the incoming channel must be retired"
+        );
+        assert!(
+            connection
+                .session_by_outgoing_channel
+                .contains(outgoing.0 as usize),
+            "the outgoing slot must stay reserved"
+        );
+
+        let (tx, _rx) = mpsc::channel::<SessionIncomingItem>(8);
+        let next = connection.allocate_session(tx).expect("allocate next");
+        assert_ne!(
+            outgoing, next,
+            "the retired outgoing channel must not be reused"
+        );
+
+        // A late End consumes the retired entry and frees the outgoing slot.
+        connection
+            .on_incoming_end(incoming, End { error: None })
+            .await
+            .expect("late End for a retired session is consumed");
+        assert!(!connection.is_retired_incoming(incoming));
+        assert!(
+            !connection
+                .session_by_outgoing_channel
+                .contains(outgoing.0 as usize),
+            "the outgoing slot must be free after the late End"
+        );
     }
 }

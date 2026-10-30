@@ -523,6 +523,20 @@ impl endpoint::Connection for ListenerConnection {
     }
 
     #[inline]
+    fn retire_session(
+        &mut self,
+        outgoing: OutgoingChannel,
+        incoming: Option<IncomingChannel>,
+    ) {
+        self.connection.retire_session(outgoing, incoming)
+    }
+
+    #[inline]
+    fn is_retired_incoming(&self, channel: IncomingChannel) -> bool {
+        self.connection.is_retired_incoming(channel)
+    }
+
+    #[inline]
     fn on_incoming_open(
         &mut self,
         channel: IncomingChannel,

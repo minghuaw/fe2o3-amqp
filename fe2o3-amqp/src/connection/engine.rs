@@ -298,8 +298,22 @@ where
             _ => return Err(ConnectionInnerError::IllegalState),
         };
 
+        // A retired session no longer has an engine; discard late frames
+        // instead of delivering them to a reused channel or failing the
+        // connection.
+        if self.connection.is_retired_incoming(channel) {
+            return Ok(());
+        }
+
         match self.connection.session_tx_by_incoming_channel(channel) {
-            Some(tx) => tx.send(frame).await?,
+            Some(tx) => {
+                if tx.send(frame).await.is_err() {
+                    // The session engine stopped before the connection learned
+                    // about it (for example during a local forced teardown).
+                    // The channel is retired or about to be; dropping the frame
+                    // must not take the whole connection down with it.
+                }
+            }
             None => return Err(ConnectionInnerError::NotFound(None)),
         };
         Ok(())
@@ -438,6 +452,9 @@ where
             }
             ConnectionControl::DeallocateSession(session_id) => {
                 self.connection.deallocate_session(session_id)
+            }
+            ConnectionControl::RetireSession { outgoing, incoming } => {
+                self.connection.retire_session(outgoing, incoming)
             }
         }
 
