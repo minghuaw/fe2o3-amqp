@@ -69,6 +69,7 @@ pub struct Deserializer<R> {
     enum_type: EnumType,
     struct_encoding: StructEncoding,
     elem_format_code: Option<EncodingCodes>,
+    max_value_size: Option<usize>,
 }
 
 impl<'de, R: Read<'de>> Deserializer<R> {
@@ -81,7 +82,42 @@ impl<'de, R: Read<'de>> Deserializer<R> {
             enum_type: Default::default(),
             struct_encoding: StructEncoding::None,
             elem_format_code: None,
+            max_value_size: None,
         }
+    }
+
+    /// Sets an optional maximum size for values whose length is read from the
+    /// wire (strings, binaries, symbols, and `LazyValue`).
+    ///
+    /// Slice-backed inputs are additionally bounded by the number of bytes
+    /// remaining in the slice. Stream-backed inputs need this limit if the
+    /// caller has not otherwise bounded the input, since the length of the
+    /// stream is not known to the deserializer.
+    pub fn set_max_value_size(&mut self, max_value_size: Option<usize>) {
+        self.max_value_size = max_value_size;
+    }
+
+    /// Returns the maximum value size configured for this deserializer.
+    pub fn max_value_size(&self) -> Option<usize> {
+        self.max_value_size
+    }
+
+    /// Validates a length read from the wire before it is used to allocate or
+    /// consume input.
+    fn check_value_len(&self, len: usize) -> Result<usize, Error> {
+        if let Some(remaining) = self.reader.remaining() {
+            if len > remaining {
+                return Err(Error::InvalidLength);
+            }
+        }
+
+        if let Some(max_value_size) = self.max_value_size {
+            if len > max_value_size {
+                return Err(Error::InvalidLength);
+            }
+        }
+
+        Ok(len)
     }
 
     fn read_format_code(&mut self) -> Option<Result<EncodingCodes, Error>> {
@@ -318,11 +354,15 @@ impl<'de, R: Read<'de>> Deserializer<R> {
     #[inline]
     fn read_small_string(&mut self) -> Option<Result<String, Error>> {
         let len = match self.reader.next().transpose() {
-            Some(Ok(byte)) => byte,
+            Some(Ok(byte)) => byte as usize,
             Some(Err(e)) => return Some(Err(e.into())),
             None => return None,
         };
-        match self.reader.read_bytes(len as usize) {
+        let len = match self.check_value_len(len) {
+            Ok(len) => len,
+            Err(e) => return Some(Err(e)),
+        };
+        match self.reader.read_bytes(len) {
             Ok(buf) => Some(String::from_utf8(buf).map_err(Into::into)),
             Err(e) => Some(Err(e.into())),
         }
@@ -334,8 +374,11 @@ impl<'de, R: Read<'de>> Deserializer<R> {
             Ok(bytes) => bytes,
             Err(e) => return Some(Err(e.into())),
         };
-        let len = u32::from_be_bytes(len_bytes);
-        match self.reader.read_bytes(len as usize) {
+        let len = match self.check_value_len(u32::from_be_bytes(len_bytes) as usize) {
+            Ok(len) => len,
+            Err(e) => return Some(Err(e)),
+        };
+        match self.reader.read_bytes(len) {
             Ok(buf) => Some(String::from_utf8(buf).map_err(Into::into)),
             Err(e) => Some(Err(e.into())),
         }
@@ -383,13 +426,15 @@ impl<'de, R: Read<'de>> Deserializer<R> {
                 let len = self
                     .reader
                     .next()?
-                    .ok_or_else(|| Error::unexpected_eof("Expecting len"))?;
-                self.reader.read_bytes(len as usize).map_err(Into::into)
+                    .ok_or_else(|| Error::unexpected_eof("Expecting len"))?
+                    as usize;
+                let len = self.check_value_len(len)?;
+                self.reader.read_bytes(len).map_err(Into::into)
             }
             EncodingCodes::Vbin32 => {
                 let len_bytes = self.reader.read_const_bytes()?;
-                let len = u32::from_be_bytes(len_bytes);
-                self.reader.read_bytes(len as usize).map_err(Into::into)
+                let len = self.check_value_len(u32::from_be_bytes(len_bytes) as usize)?;
+                self.reader.read_bytes(len).map_err(Into::into)
             }
             _ => Err(Error::InvalidFormatCode),
         }
@@ -480,6 +525,7 @@ impl<'de, R: Read<'de>> Deserializer<R> {
                     .peek_bytes(3)?
                     .ok_or_else(|| Error::unexpected_eof(""))?;
                 let size = _buf[2] as usize;
+                let size = self.check_value_len(size)?;
                 let total = 3usize.checked_add(size).ok_or(Error::InvalidLength)?;
                 let _buf = self
                     .reader
@@ -498,7 +544,7 @@ impl<'de, R: Read<'de>> Deserializer<R> {
                     .ok_or_else(|| Error::unexpected_eof(""))?;
                 let mut size_bytes = [0u8; 4];
                 size_bytes.copy_from_slice(&_buf[2..]);
-                let size = u32::from_be_bytes(size_bytes) as usize;
+                let size = self.check_value_len(u32::from_be_bytes(size_bytes) as usize)?;
                 let total = 6usize.checked_add(size).ok_or(Error::InvalidLength)?;
                 let _buf = self
                     .reader
@@ -740,6 +786,7 @@ where
             }
             _ => return Err(Error::InvalidFormatCode),
         };
+        let len = self.check_value_len(len)?;
         self.reader.forward_read_str(len, visitor)
     }
 
@@ -790,6 +837,7 @@ where
                     }
                     _ => return Err(Error::InvalidFormatCode),
                 };
+                let len = self.check_value_len(len)?;
                 self.reader.forward_read_bytes_with_hint(len, visitor)
             }
         }
@@ -2925,6 +2973,85 @@ mod tests {
         ];
 
         let result: Result<Foo, _> = from_slice(buf);
+        assert!(matches!(result, Err(Error::InvalidLength)));
+    }
+
+    // Regression tests for declared lengths that are much larger than the
+    // remaining input. These must fail without allocating the declared size.
+
+    #[test]
+    fn oversized_str32_length_is_rejected() {
+        use crate::error::Error;
+
+        let buf = [0xB1, 0xFF, 0xFF, 0xFF, 0xFF];
+        let result: Result<String, _> = from_slice(&buf);
+        assert!(matches!(result, Err(Error::InvalidLength)));
+    }
+
+    #[test]
+    fn oversized_vbin32_length_is_rejected() {
+        use crate::error::Error;
+
+        let buf = [0xB0, 0xFF, 0xFF, 0xFF, 0xFF];
+        let result: Result<serde_bytes::ByteBuf, _> = from_slice(&buf);
+        assert!(matches!(result, Err(Error::InvalidLength)));
+    }
+
+    #[test]
+    fn oversized_lazy_value_length_is_rejected() {
+        use crate::error::Error;
+        use crate::lazy::LazyValue;
+
+        let buf = [0xB0, 0xFF, 0xFF, 0xFF, 0xFF];
+        let result: Result<LazyValue, _> = from_slice(&buf);
+        assert!(matches!(result, Err(Error::InvalidLength)));
+    }
+
+    #[test]
+    fn oversized_sym32_descriptor_length_is_rejected() {
+        use serde::de::IgnoredAny;
+
+        use crate::error::Error;
+
+        // 0x00 = described type, 0xB3 = sym32, length = u32::MAX.
+        let buf = [0x00, 0xB3, 0xFF, 0xFF, 0xFF, 0xFF];
+        let result: Result<IgnoredAny, _> = from_slice(&buf);
+        assert!(matches!(result, Err(Error::InvalidLength)));
+    }
+
+    #[test]
+    fn oversized_str32_length_from_reader_is_rejected() {
+        let buf = [0xB1, 0xFF, 0xFF, 0xFF, 0xFF];
+        let result: Result<String, _> = from_reader(std::io::Cursor::new(buf));
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn max_value_size_is_enforced() {
+        use super::Deserializer;
+        use crate::error::Error;
+        use crate::read::SliceReader;
+
+        // str8 with five payload bytes.
+        let buf = [0xA1, 0x05, b'a', b'b', b'c', b'd', b'e'];
+        let mut de = Deserializer::new(SliceReader::new(&buf));
+        de.set_max_value_size(Some(4));
+
+        let result = String::deserialize(&mut de);
+        assert!(matches!(result, Err(Error::InvalidLength)));
+    }
+
+    #[test]
+    fn max_value_size_from_reader_is_enforced() {
+        use super::Deserializer;
+        use crate::error::Error;
+        use crate::read::IoReader;
+
+        let buf = [0xA1, 0x05, b'a', b'b', b'c', b'd', b'e'];
+        let mut de = Deserializer::new(IoReader::new(std::io::Cursor::new(buf)));
+        de.set_max_value_size(Some(4));
+
+        let result = String::deserialize(&mut de);
         assert!(matches!(result, Err(Error::InvalidLength)));
     }
 }
