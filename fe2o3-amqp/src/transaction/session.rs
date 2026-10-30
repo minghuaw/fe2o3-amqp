@@ -254,6 +254,10 @@ where
         self.session.outgoing_channel()
     }
 
+    fn incoming_channel(&self) -> Option<IncomingChannel> {
+        self.session.incoming_channel()
+    }
+
     // Allocate new local handle for new Link
     fn allocate_link(
         &mut self,

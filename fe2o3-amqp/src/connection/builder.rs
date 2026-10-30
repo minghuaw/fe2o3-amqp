@@ -1348,6 +1348,7 @@ cfg_not_wasm32! {
     {
         let connection_stop_reason = engine.connection_stop_reason().clone();
         let max_frame_size = engine.max_frame_size();
+        let force = engine.force();
         let (handle, outcome) = engine.spawn();
 
         let connection_handle = ConnectionHandle {
@@ -1355,6 +1356,7 @@ cfg_not_wasm32! {
             control: control_tx,
             handle,
             outcome,
+            force,
             outgoing: outgoing_tx, // session_control: session_control_tx
             connection_stop_reason,
             max_frame_size,
@@ -1377,6 +1379,7 @@ cfg_wasm32! {
     {
         let connection_stop_reason = engine.connection_stop_reason().clone();
         let max_frame_size = engine.max_frame_size();
+        let force = engine.force();
         let (handle, outcome) = engine.spawn_on_local_set(local_set);
 
         let connection_handle = ConnectionHandle {
@@ -1384,6 +1387,7 @@ cfg_wasm32! {
             control: control_tx,
             handle,
             outcome,
+            force,
             outgoing: outgoing_tx, // session_control: session_control_tx
             connection_stop_reason,
             max_frame_size,
@@ -1403,6 +1407,7 @@ cfg_wasm32! {
     {
         let connection_stop_reason = engine.connection_stop_reason().clone();
         let max_frame_size = engine.max_frame_size();
+        let force = engine.force();
         let (handle, outcome) = engine.spawn_local();
 
         let connection_handle = ConnectionHandle {
@@ -1410,6 +1415,7 @@ cfg_wasm32! {
             control: control_tx,
             handle,
             outcome,
+            force,
             outgoing: outgoing_tx, // session_control: session_control_tx
             connection_stop_reason,
             max_frame_size,

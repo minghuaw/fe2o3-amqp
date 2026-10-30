@@ -43,6 +43,9 @@ pub(crate) trait Session {
 
     fn outgoing_channel(&self) -> OutgoingChannel;
 
+    /// The channel the peer chose for this session, once its `Begin` arrived.
+    fn incoming_channel(&self) -> Option<IncomingChannel>;
+
     // Allocate new local handle for new Link
     fn allocate_link(
         &mut self,

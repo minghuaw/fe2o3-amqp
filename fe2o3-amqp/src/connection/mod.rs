@@ -17,6 +17,7 @@ use tokio::{
     sync::{
         mpsc::Sender,
         oneshot::{self, error::TryRecvError},
+        watch,
     },
     task::JoinHandle,
 };
@@ -79,7 +80,9 @@ pub enum ConnectionStopReason {
 
 /// A handle to the [`Connection`] event loop.
 ///
-/// Dropping the handle will also stop the [`Connection`] event loop.
+/// Dropping the handle initiates the `Close` exchange; it does not wait for
+/// the peer's `Close`. If the peer does not complete the exchange, use
+/// [`force_close`](ConnectionHandle::force_close) for bounded local teardown.
 ///
 /// # Generic Parameters
 ///
@@ -91,6 +94,8 @@ pub struct ConnectionHandle<R> {
     pub(crate) control: Sender<ConnectionControl>,
     pub(crate) handle: JoinHandle<()>,
     pub(crate) outcome: oneshot::Receiver<Result<(), Error>>,
+    /// Local-close signal shared with the engine.
+    pub(crate) force: Arc<watch::Sender<bool>>,
 
     // outgoing channel for session
     pub(crate) outgoing: Sender<SessionFrame>,
@@ -110,6 +115,10 @@ impl<R> std::fmt::Debug for ConnectionHandle<R> {
 
 impl<R> Drop for ConnectionHandle<R> {
     fn drop(&mut self) {
+        // A forced local close already owns the connection's shutdown.
+        if *self.force.borrow() {
+            return;
+        }
         if let Err(_error) = self.control.try_send(ConnectionControl::Close(None)) {
             #[cfg(any(feature = "log", feature = "tracing"))]
             {
@@ -217,6 +226,26 @@ impl<R> ConnectionHandle<R> {
         }
     }
 
+    /// Force the connection down without waiting for the peer's `Close`.
+    ///
+    /// This stops the connection engine and closes the transport locally,
+    /// which ends all sessions and wakes their waiters. It does not send a
+    /// `Close` frame and does not wait for a peer response. Use it after a
+    /// graceful [`close`](#method.close) failed or timed out.
+    ///
+    /// The forced close is signalled through a dedicated watch channel, so it
+    /// works even when the control queue is full. An `Error::IllegalState` is
+    /// returned if the connection already closed (or its outcome was already
+    /// observed).
+    pub async fn force_close(&mut self) -> Result<(), Error> {
+        if self.is_closed {
+            return Err(Error::IllegalState);
+        }
+
+        self.force.send_replace(true);
+        self.on_close().await
+    }
+
     /// Returns when the underlying event loop has stopped
     ///
     /// An `Error::IllegalState` will be returned if this is called after executing any of
@@ -269,6 +298,26 @@ pub(crate) async fn deallocate_session(
         .send(ConnectionControl::DeallocateSession(channel))
         .await
         .map_err(|_| DeallcoSessionError::IllegalState)
+}
+
+/// Retire a session that was locally abandoned before the peer completed the
+/// End exchange.
+///
+/// Unlike [`deallocate_session`], this keeps the outgoing channel reserved
+/// until the peer's late End or the connection close, so a new session cannot
+/// receive frames addressed to the abandoned one. The send is awaited (rather
+/// than best-effort) so that a subsequent session allocation, which goes
+/// through the same control queue, is ordered after the retirement.
+pub(crate) async fn retire_session(
+    control: &mut Sender<ConnectionControl>,
+    outgoing: OutgoingChannel,
+    incoming: Option<IncomingChannel>,
+) {
+    // A failed send means the connection engine already stopped; the
+    // connection releases all channel bookkeeping on its way down.
+    let _ = control
+        .send(ConnectionControl::RetireSession { outgoing, incoming })
+        .await;
 }
 
 /// An AMQP 1.0 Connection.
@@ -458,6 +507,13 @@ pub struct Connection {
     pub(crate) local_open: Open,
     pub(crate) session_by_incoming_channel: HashMap<IncomingChannel, SessionRelay>,
     pub(crate) session_by_outgoing_channel: Slab<SessionRelay>,
+    /// Sessions abandoned locally before the peer's End.
+    ///
+    /// The outgoing slab slot stays occupied so its channel number cannot be
+    /// reused, and the incoming channel is ignored until a late `End` arrives
+    /// or the connection stops. This prevents late frames for the abandoned
+    /// session from being delivered to a new session.
+    pub(crate) retired_sessions: HashMap<IncomingChannel, OutgoingChannel>,
 
     // remote
     pub(crate) remote_open: Option<Open>,
@@ -568,6 +624,7 @@ impl Connection {
             local_open,
             session_by_incoming_channel: HashMap::new(),
             session_by_outgoing_channel: Slab::new(),
+            retired_sessions: HashMap::new(),
 
             remote_open: None,
             agreed_channel_max,
@@ -640,6 +697,14 @@ impl endpoint::Connection for Connection {
             .remove(outgoing_channel.0 as usize);
     }
 
+    fn retire_session(&mut self, outgoing: OutgoingChannel, incoming: Option<IncomingChannel>) {
+        Connection::retire_session(self, outgoing, incoming)
+    }
+
+    fn is_retired_incoming(&self, channel: IncomingChannel) -> bool {
+        Connection::is_retired_incoming(self, channel)
+    }
+
     /// Reacting to remote Open frame
     #[cfg_attr(feature = "tracing", tracing::instrument(skip_all))]
     fn on_incoming_open(
@@ -702,6 +767,13 @@ impl endpoint::Connection for Connection {
             _ => return Err(ConnectionInnerError::IllegalState),
         }
 
+        // A late End for a session that was locally abandoned frees the
+        // retired outgoing channel. The frame is consumed rather than being
+        // delivered to any other session.
+        if self.finish_retired_session(channel) {
+            return Ok(());
+        }
+
         // Forward to session
         let sframe = SessionFrame::new(channel, SessionFrameBody::End(end));
         // Drop incoming channel
@@ -709,7 +781,11 @@ impl endpoint::Connection for Connection {
             .session_by_incoming_channel
             .remove(&channel)
             .ok_or(ConnectionInnerError::NotFound(None))?;
-        relay.send(sframe).await?;
+        // The session engine may already have stopped (for example, a local
+        // forced teardown raced with the peer's End). The channel mapping has
+        // been removed, so there is nothing left to deliver to and no reason
+        // to fail the connection.
+        let _ = relay.send(sframe).await;
 
         Ok(())
     }
@@ -834,6 +910,49 @@ impl endpoint::Connection for Connection {
 }
 
 impl Connection {
+    /// Retire a session whose engine was locally abandoned before the peer's
+    /// `End`.
+    ///
+    /// If the incoming channel is still mapped, the mapping is removed and the
+    /// outgoing slab slot is kept occupied so the channel number cannot be
+    /// reused. A late `End` on the incoming channel later releases the slot.
+    /// If the incoming channel is already gone (the remote `End` was processed
+    /// first, or `Begin` never completed), the outgoing slot is released
+    /// immediately.
+    pub(crate) fn retire_session(
+        &mut self,
+        outgoing: OutgoingChannel,
+        incoming: Option<IncomingChannel>,
+    ) {
+        if let Some(incoming) = incoming {
+            if self.session_by_incoming_channel.remove(&incoming).is_some() {
+                self.retired_sessions.insert(incoming, outgoing);
+                return;
+            }
+        }
+
+        self.session_by_outgoing_channel.remove(outgoing.0 as usize);
+    }
+
+    /// Whether `channel` belongs to a session retired before the peer's `End`.
+    pub(crate) fn is_retired_incoming(&self, channel: IncomingChannel) -> bool {
+        self.retired_sessions.contains_key(&channel)
+    }
+
+    /// Release a retired session when the peer's late `End` arrives.
+    ///
+    /// Returns true when the channel belonged to a retired session and the
+    /// frame was consumed.
+    pub(crate) fn finish_retired_session(&mut self, channel: IncomingChannel) -> bool {
+        match self.retired_sessions.remove(&channel) {
+            Some(outgoing) => {
+                self.session_by_outgoing_channel.remove(outgoing.0 as usize);
+                true
+            }
+            None => false,
+        }
+    }
+
     /// Allocate a new session relay for a locally initiated session upon receiving the response
     /// from the remote peer.
     ///
@@ -848,6 +967,13 @@ impl Connection {
             ConnectionState::Opened => {}
             // TODO: what about pipelined
             _ => return Err(ConnectionInnerError::IllegalState),
+        }
+
+        if self.is_retired_incoming(channel) {
+            // A Begin on a retired channel would resurrect a session whose
+            // engine no longer exists; AMQP channel numbers are not reusable
+            // until the previous session's End completes.
+            return Err(ConnectionInnerError::IllegalState);
         }
 
         match begin.remote_channel {
@@ -920,5 +1046,111 @@ mod tests {
                 ConnectionStopReason::Closed
             ))
         ));
+    }
+
+    /// A locally retired session keeps its outgoing slot reserved until the
+    /// peer's late End, so a new session cannot reuse the channel.
+    #[tokio::test]
+    async fn retire_session_reserves_channel_until_late_end() {
+        use crate::endpoint::IncomingChannel;
+        use fe2o3_amqp_types::performatives::End;
+
+        let mut connection = Connection::new(ConnectionState::Opened, test_open());
+        let (tx, _rx) = mpsc::channel::<SessionIncomingItem>(8);
+        let outgoing = connection.allocate_session(tx).expect("allocate session");
+
+        // Simulate a completed Begin: the session is mapped by the peer's
+        // incoming channel.
+        let incoming = IncomingChannel(7);
+        let relay = connection
+            .session_by_outgoing_channel
+            .get(outgoing.0 as usize)
+            .expect("allocated relay")
+            .clone();
+        connection
+            .session_by_incoming_channel
+            .insert(incoming, relay);
+
+        connection.retire_session(outgoing, Some(incoming));
+
+        assert!(
+            connection.is_retired_incoming(incoming),
+            "the incoming channel must be retired"
+        );
+        assert!(
+            connection
+                .session_by_outgoing_channel
+                .contains(outgoing.0 as usize),
+            "the outgoing slot must stay reserved"
+        );
+
+        let (tx, _rx) = mpsc::channel::<SessionIncomingItem>(8);
+        let next = connection.allocate_session(tx).expect("allocate next");
+        assert_ne!(
+            outgoing, next,
+            "the retired outgoing channel must not be reused"
+        );
+
+        // A late End consumes the retired entry and frees the outgoing slot.
+        connection
+            .on_incoming_end(incoming, End { error: None })
+            .await
+            .expect("late End for a retired session is consumed");
+        assert!(!connection.is_retired_incoming(incoming));
+        assert!(
+            !connection
+                .session_by_outgoing_channel
+                .contains(outgoing.0 as usize),
+            "the outgoing slot must be free after the late End"
+        );
+    }
+
+    /// `force_close` uses a dedicated watch signal, so it must work even when
+    /// the connection control queue is full.
+    #[tokio::test]
+    async fn force_close_bypasses_full_control_queue() {
+        use std::sync::{Arc, OnceLock};
+        use std::time::Duration;
+        use tokio::sync::{mpsc, oneshot};
+
+        use crate::control::ConnectionControl;
+        use crate::endpoint::OutgoingChannel;
+
+        let (control, control_rx) = mpsc::channel(1);
+        control
+            .try_send(ConnectionControl::DeallocateSession(OutgoingChannel(0)))
+            .expect("the queue starts empty");
+
+        let (outgoing, _outgoing_rx) = mpsc::channel(1);
+        let (outcome_tx, outcome) = oneshot::channel();
+        let force = Arc::new(tokio::sync::watch::channel(false).0);
+        let engine_force = force.clone();
+        tokio::spawn(async move {
+            let mut force = engine_force.subscribe();
+            let _ = force.wait_for(|forced| *forced).await;
+            let _ = outcome_tx.send(Ok(()));
+        });
+
+        let mut handle = super::ConnectionHandle {
+            is_closed: false,
+            control,
+            handle: tokio::spawn(async {}),
+            outcome,
+            force,
+            outgoing,
+            connection_stop_reason: Arc::new(OnceLock::new()),
+            max_frame_size: 0,
+            session_listener: (),
+        };
+
+        let result = tokio::time::timeout(Duration::from_secs(1), handle.force_close())
+            .await
+            .expect("force_close must not wait on the control queue");
+        assert!(result.is_ok());
+        assert!(handle.is_closed());
+
+        // Keep the receiver alive until after force_close so the queue remains
+        // full rather than closing the control channel.
+        drop(control_rx);
     }
 }

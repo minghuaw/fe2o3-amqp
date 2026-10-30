@@ -2385,6 +2385,7 @@ mod tests {
             control,
             engine_handle: tokio::spawn(async {}),
             outcome,
+            force: Arc::new(tokio::sync::watch::channel(false).0),
             outgoing: outgoing_tx,
             session_stop_reason: Arc::new(OnceLock::new()),
             max_frame_size,

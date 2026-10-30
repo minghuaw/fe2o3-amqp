@@ -6,7 +6,7 @@ use std::sync::{Arc, OnceLock};
 use fe2o3_amqp_types::definitions::{Fields, Handle, TransferNumber};
 use serde_amqp::primitives::Symbol;
 use slab::Slab;
-use tokio::sync::mpsc;
+use tokio::sync::{mpsc, watch};
 
 use crate::{
     connection::{AllocSessionError, ConnectionHandle, ConnectionStopReason},
@@ -289,6 +289,7 @@ impl Builder {
                 mpsc::channel::<SessionControl>(DEFAULT_SESSION_CONTROL_BUFFER_SIZE);
             let (incoming_tx, incoming_rx) = mpsc::channel(self.buffer_size);
             let (outgoing_tx, outgoing_rx) = mpsc::channel(self.buffer_size);
+            let force = Arc::new(watch::channel(false).0);
 
             // create session in connection::Engine
             let outgoing_channel = match connection.allocate_session(incoming_tx).await {
@@ -318,6 +319,7 @@ impl Builder {
                     incoming_rx,
                     connection.outgoing.clone(),
                     outgoing_rx,
+                    force.clone(),
                 )
                 .await?
                 .spawn();
@@ -347,6 +349,7 @@ impl Builder {
                             incoming_rx,
                             connection.outgoing.clone(),
                             outgoing_rx,
+                            force.clone(),
                         )
                         .await?
                         .spawn();
@@ -367,6 +370,7 @@ impl Builder {
                             incoming_rx,
                             connection.outgoing.clone(),
                             outgoing_rx,
+                            force.clone(),
                         )
                         .await?
                         .spawn();
@@ -380,6 +384,7 @@ impl Builder {
                 control: session_control_tx,
                 engine_handle,
                 outcome,
+                force,
                 outgoing: outgoing_tx,
                 session_stop_reason,
                 max_frame_size,
@@ -411,6 +416,7 @@ impl Builder {
                 mpsc::channel::<SessionControl>(DEFAULT_SESSION_CONTROL_BUFFER_SIZE);
             let (incoming_tx, incoming_rx) = mpsc::channel(self.buffer_size);
             let (outgoing_tx, outgoing_rx) = mpsc::channel(self.buffer_size);
+            let force = Arc::new(watch::channel(false).0);
 
             // create session in connection::Engine
             let outgoing_channel = match connection.allocate_session(incoming_tx).await {
@@ -439,6 +445,7 @@ impl Builder {
                     incoming_rx,
                     connection.outgoing.clone(),
                     outgoing_rx,
+                    force.clone(),
                 )
                 .await?
                 .spawn_on_local_set(local_set);
@@ -450,6 +457,7 @@ impl Builder {
                 control: session_control_tx,
                 engine_handle,
                 outcome,
+                force,
                 outgoing: outgoing_tx,
                 session_stop_reason,
                 max_frame_size,
@@ -480,6 +488,7 @@ impl Builder {
                 mpsc::channel::<SessionControl>(DEFAULT_SESSION_CONTROL_BUFFER_SIZE);
             let (incoming_tx, incoming_rx) = mpsc::channel(self.buffer_size);
             let (outgoing_tx, outgoing_rx) = mpsc::channel(self.buffer_size);
+            let force = Arc::new(watch::channel(false).0);
 
             // create session in connection::Engine
             let outgoing_channel = match connection.allocate_session(incoming_tx).await {
@@ -508,6 +517,7 @@ impl Builder {
                     incoming_rx,
                     connection.outgoing.clone(),
                     outgoing_rx,
+                    force.clone(),
                 )
                 .await?
                 .spawn_local();
@@ -519,6 +529,7 @@ impl Builder {
                 control: session_control_tx,
                 engine_handle,
                 outcome,
+                force,
                 outgoing: outgoing_tx,
                 session_stop_reason,
                 max_frame_size,

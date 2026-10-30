@@ -47,6 +47,17 @@ pub(crate) trait Connection {
     // Remove outgoing id and session id association
     fn deallocate_session(&mut self, outgoing_channel: OutgoingChannel);
 
+    /// Retire a session whose engine was abandoned locally before the peer's
+    /// `End`.
+    ///
+    /// Implementations must keep the outgoing channel reserved until the
+    /// peer's late `End` or the connection close, and discard late frames for
+    /// the retired incoming channel.
+    fn retire_session(&mut self, outgoing: OutgoingChannel, incoming: Option<IncomingChannel>);
+
+    /// Whether the incoming channel belongs to a locally retired session.
+    fn is_retired_incoming(&self, channel: IncomingChannel) -> bool;
+
     // async fn forward_to_session(&mut self, incoming_channel: u16, frame: SessionFrame) -> Result<(), Self::Error>;
 
     /// Reacting to remote Open frame

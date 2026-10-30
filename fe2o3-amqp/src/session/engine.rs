@@ -5,7 +5,7 @@ use fe2o3_amqp_types::{
     performatives::End,
 };
 use tokio::{
-    sync::{mpsc, oneshot},
+    sync::{mpsc, oneshot, watch},
     task::JoinHandle,
 };
 
@@ -70,6 +70,11 @@ pub(crate) struct SessionEngine<S: Session> {
     pub outgoing: mpsc::Sender<SessionFrame>,
 
     pub outgoing_link_frames: mpsc::Receiver<LinkFrame>,
+
+    /// Shared local-teardown signal. Keeping the `Arc` alive in the engine
+    /// means dropping the `SessionHandle` does not accidentally look like a
+    /// forced teardown.
+    pub force: Arc<watch::Sender<bool>>,
 }
 
 impl<S> SessionEngine<S>
@@ -84,6 +89,7 @@ where
         incoming: mpsc::Receiver<SessionIncomingItem>,
         outgoing: mpsc::Sender<SessionFrame>,
         outgoing_link_frames: mpsc::Receiver<LinkFrame>,
+        force: Arc<watch::Sender<bool>>,
     ) -> Result<Self, BeginError> {
         let mut engine = Self {
             conn_control,
@@ -92,6 +98,7 @@ where
             incoming,
             outgoing,
             outgoing_link_frames,
+            force,
         };
 
         // send a begin
@@ -610,85 +617,106 @@ where
         }
     }
 
-    #[cfg_attr(feature = "tracing", tracing::instrument(name = "Session::event_loop", skip(self), fields(outgoing_channel = %self.session.outgoing_channel().0)))]
-    async fn event_loop(mut self, tx: oneshot::Sender<Result<(), Error>>) {
-        let mut outcome = Ok(());
-        loop {
-            let result = tokio::select! {
-                incoming = self.incoming.recv() => {
-                    match incoming {
-                        Some(incoming) => self.on_incoming(incoming).await,
-                        None => {
-                            // Check local state
-                            match self.continue_or_stop_by_state() {
-                                Running::Continue => {
-                                    // The connection stopped before the session ended;
-                                    // yield the stop as an error so it flows through the
-                                    // generic error path. Connection-level errors are
-                                    // reported through the `ConnectionHandle`.
-                                    Err(SessionInnerError::ConnectionStopped(
-                                        connection_stop_reason_or_closed(
-                                            self.session.connection_stop_reason(),
-                                        ),
-                                    ))
-                                },
-                                Running::Stop => Ok(Running::Stop),
-                            }
-                        }
-                    }
-                },
-                control = self.control.recv() => {
-                    match control {
-                        Some(control) => {
-                            self.on_control(control).await
-                        },
-                        None => {
-                            // all Links and SessionHandle are dropped
-                            // Complete ending session
-                            'inner: loop {
-                                match self.session.local_state() {
-                                    SessionState::Mapped
-                                    | SessionState::EndReceived => {
-                                        if let Err(_err) = self.on_control(SessionControl::End(None)).await {
-                                            #[cfg(feature = "tracing")]
-                                            tracing::error!("err {:?}", _err);
-                                            #[cfg(feature = "log")]
-                                            log::error!("err {:?}", _err);
-                                        }
-                                    },
-                                    // Wait for remote end
-                                    SessionState::Discarding | SessionState::EndSent => {
-                                        match self.incoming.recv().await {
-                                            Some(incoming) => {
-                                                let _ = self.on_incoming(incoming).await;
-                                            },
-                                            None => {
-                                                // The connection must have already stopped before session negotiated ending
-                                                break 'inner
-                                            }
-                                        }
-                                    },
-                                    SessionState::Unmapped => break 'inner,
-                                    _ => break 'inner,
-                                }
-                            }
-
-                            Ok(Running::Stop)
-                        }
-                    }
-                },
-                frame = self.outgoing_link_frames.recv() => {
-                    match frame {
-                        Some(frame) => self.on_outgoing_link_frames(frame).await,
-                        None => {
-                            // All Links and SessionHandle are dropped
-                            //
-                            // Upon ending, all link-to-session channels will be closed
-                            // first while the session is still waitint for remote end frame.
-                            Ok(Running::Continue)
+    #[cfg_attr(feature = "tracing", tracing::instrument(skip_all))]
+    async fn next_step(&mut self) -> Result<Running, SessionInnerError> {
+        tokio::select! {
+            incoming = self.incoming.recv() => {
+                match incoming {
+                    Some(incoming) => self.on_incoming(incoming).await,
+                    None => {
+                        // Check local state
+                        match self.continue_or_stop_by_state() {
+                            Running::Continue => {
+                                // The connection stopped before the session ended;
+                                // yield the stop as an error so it flows through the
+                                // generic error path. Connection-level errors are
+                                // reported through the `ConnectionHandle`.
+                                Err(SessionInnerError::ConnectionStopped(
+                                    connection_stop_reason_or_closed(
+                                        self.session.connection_stop_reason(),
+                                    ),
+                                ))
+                            },
+                            Running::Stop => Ok(Running::Stop),
                         }
                     }
                 }
+            },
+            control = self.control.recv() => {
+                match control {
+                    Some(control) => {
+                        self.on_control(control).await
+                    },
+                    None => {
+                        // all Links and SessionHandle are dropped
+                        // Complete ending session
+                        'inner: loop {
+                            match self.session.local_state() {
+                                SessionState::Mapped
+                                | SessionState::EndReceived => {
+                                    if let Err(_err) = self.on_control(SessionControl::End(None)).await {
+                                        #[cfg(feature = "tracing")]
+                                        tracing::error!("err {:?}", _err);
+                                        #[cfg(feature = "log")]
+                                        log::error!("err {:?}", _err);
+                                    }
+                                },
+                                // Wait for remote end
+                                SessionState::Discarding | SessionState::EndSent => {
+                                    match self.incoming.recv().await {
+                                        Some(incoming) => {
+                                            let _ = self.on_incoming(incoming).await;
+                                        },
+                                        None => {
+                                            // The connection must have already stopped before session negotiated ending
+                                            break 'inner
+                                        }
+                                    }
+                                },
+                                SessionState::Unmapped => break 'inner,
+                                _ => break 'inner,
+                            }
+                        }
+
+                        Ok(Running::Stop)
+                    }
+                }
+            },
+            frame = self.outgoing_link_frames.recv() => {
+                match frame {
+                    Some(frame) => self.on_outgoing_link_frames(frame).await,
+                    None => {
+                        // All Links and SessionHandle are dropped
+                        //
+                        // Upon ending, all link-to-session channels will be closed
+                        // first while the session is still waitint for remote end frame.
+                        Ok(Running::Continue)
+                    }
+                }
+            }
+        }
+    }
+
+    #[cfg_attr(feature = "tracing", tracing::instrument(name = "Session::event_loop", skip(self), fields(outgoing_channel = %self.session.outgoing_channel().0)))]
+    async fn event_loop(mut self, tx: oneshot::Sender<Result<(), Error>>) {
+        let mut outcome = Ok(());
+        let mut aborted = false;
+        loop {
+            let mut force = self.force.subscribe();
+            let result = tokio::select! {
+                biased;
+                changed = force.wait_for(|forced| *forced) => {
+                    match changed {
+                        Ok(_) => {
+                            aborted = true;
+                            break;
+                        }
+                        // The keepalive sender is held by the engine; this
+                        // branch cannot close before the engine stops.
+                        Err(_) => continue,
+                    }
+                }
+                result = self.next_step() => result,
             };
 
             let running = match result {
@@ -728,20 +756,40 @@ where
         log::debug!("Stopped");
         // Publish the stop reason before the link relays and unsettled maps are dropped,
         // so every link that wakes on the channel closures sees it.
-        let session_stop_reason = match &outcome {
-            Err(SessionInnerError::ConnectionStopped(reason)) => {
-                SessionStopReason::from(reason.clone())
+        let session_stop_reason = if aborted {
+            match self.session.connection_stop_reason().get() {
+                Some(reason) => SessionStopReason::from(reason.clone()),
+                None => SessionStopReason::Aborted,
             }
-            Err(SessionInnerError::RemoteEndedWithError(error)) => {
-                SessionStopReason::RemoteEndedWithError(error.clone())
+        } else {
+            match &outcome {
+                Err(SessionInnerError::ConnectionStopped(reason)) => {
+                    SessionStopReason::from(reason.clone())
+                }
+                Err(SessionInnerError::RemoteEndedWithError(error)) => {
+                    SessionStopReason::RemoteEndedWithError(error.clone())
+                }
+                Err(SessionInnerError::RemoteEnded) => SessionStopReason::RemoteEnded,
+                _ => SessionStopReason::Ended,
             }
-            Err(SessionInnerError::RemoteEnded) => SessionStopReason::RemoteEnded,
-            _ => SessionStopReason::Ended,
         };
         self.session.set_session_stop_reason(session_stop_reason);
-        let _ =
-            connection::deallocate_session(&mut self.conn_control, self.session.outgoing_channel())
-                .await;
+        if aborted {
+            // Keep the outgoing channel reserved until the peer's late End or
+            // the connection close, so late frames cannot reach a new session.
+            connection::retire_session(
+                &mut self.conn_control,
+                self.session.outgoing_channel(),
+                self.session.incoming_channel(),
+            )
+            .await;
+        } else {
+            let _ = connection::deallocate_session(
+                &mut self.conn_control,
+                self.session.outgoing_channel(),
+            )
+            .await;
+        }
         // The session ends with the connection; sanitize the connection stop
         // so the handle observes a clean end. Connection-level errors are
         // reported through the `ConnectionHandle`.

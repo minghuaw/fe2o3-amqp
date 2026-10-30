@@ -26,6 +26,13 @@ pub enum SessionStopReason {
     RemoteEnded,
     /// The remote peer ended the session with this error
     RemoteEndedWithError(definitions::Error),
+    /// The session was locally abandoned without completing the End exchange.
+    ///
+    /// This is recorded by [`SessionHandle::force_end`](crate::session::SessionHandle::force_end)
+    /// when the peer does not complete the exchange. The peer may still
+    /// consider the session open until it sends an `End` or the connection
+    /// closes; late frames for the retired channel are discarded.
+    Aborted,
     /// The connection stopped; the embedded reason tells whether the close
     /// was local or remote and whether it carried an error
     ConnectionStopped(ConnectionStopReason),

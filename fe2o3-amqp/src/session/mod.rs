@@ -18,6 +18,7 @@ use tokio::{
     sync::{
         mpsc::{self},
         oneshot::{self, error::TryRecvError},
+        watch,
     },
     task::JoinHandle,
 };
@@ -59,7 +60,9 @@ pub const DEFAULT_WINDOW: Uint = 5000;
 
 /// A handle to the [`Session`] event loop
 ///
-/// Dropping the handle will also stop the [`Session`] event loop
+/// Dropping the handle initiates the `End` exchange; it does not wait for the
+/// peer's `End`. If the peer does not complete the exchange, use
+/// [`force_end`](SessionHandle::force_end) for bounded local teardown.
 ///
 /// # Generic Parameters
 ///
@@ -71,6 +74,8 @@ pub struct SessionHandle<R> {
     pub(crate) control: mpsc::Sender<SessionControl>,
     pub(crate) engine_handle: JoinHandle<()>,
     pub(crate) outcome: oneshot::Receiver<Result<(), Error>>,
+    /// Local-teardown signal shared with the engine.
+    pub(crate) force: Arc<watch::Sender<bool>>,
 
     // outgoing for Link
     pub(crate) outgoing: mpsc::Sender<LinkFrame>,
@@ -90,6 +95,11 @@ impl<R> std::fmt::Debug for SessionHandle<R> {
 
 impl<R> Drop for SessionHandle<R> {
     fn drop(&mut self) {
+        // A forced local teardown already owns the session's shutdown; do not
+        // enqueue a duplicate End after it was requested.
+        if *self.force.borrow() {
+            return;
+        }
         if let Err(_error) = self.control.try_send(SessionControl::End(None)) {
             #[cfg(any(feature = "log", feature = "tracing"))]
             {
@@ -207,6 +217,32 @@ impl<R> SessionHandle<R> {
                 .await;
             self.on_end().await
         }
+    }
+
+    /// Locally abandon the session without waiting for the peer's `End`.
+    ///
+    /// This stops the session engine, wakes link/operation waiters, drops the
+    /// session's buffers, and retires its channel. The peer may still consider
+    /// the session open until it sends `End` or the connection closes; late
+    /// frames for the retired channel are discarded, and the channel number is
+    /// not reused until that `End` arrives or the connection stops.
+    ///
+    /// Use this after a graceful [`end`](#method.end) failed or timed out. The
+    /// forced teardown does not send an `End` frame and does not wait for a
+    /// peer response. It is safe to call again after the future was cancelled;
+    /// the outcome is delivered once.
+    ///
+    /// An `Error::IllegalState` is returned if the session already ended (or
+    /// its outcome was already observed).
+    pub async fn force_end(&mut self) -> Result<(), Error> {
+        if self.is_ended {
+            return Err(Error::IllegalState);
+        }
+
+        // `send_replace` (unlike `send`) persists the value even when the
+        // engine has not subscribed yet, so an immediate force cannot be lost.
+        self.force.send_replace(true);
+        self.on_end().await
     }
 
     /// Returns when the underlying event loop has stopped
@@ -644,6 +680,10 @@ impl endpoint::Session for Session {
 
     fn outgoing_channel(&self) -> OutgoingChannel {
         self.outgoing_channel
+    }
+
+    fn incoming_channel(&self) -> Option<IncomingChannel> {
+        self.incoming_channel
     }
 
     fn allocate_link(
@@ -1268,14 +1308,18 @@ fn consecutive_chunk_indices(delivery_ids: &[DeliveryNumber]) -> Vec<usize> {
 
 #[cfg(test)]
 mod tests {
-    use std::sync::{Arc, OnceLock};
+    use std::{
+        sync::{Arc, OnceLock},
+        time::Duration,
+    };
 
     use super::{
         num_messages_settled_by_disposition, Builder, DeliveryTag, Handle, InputHandle, Payload,
-        Role, Session, SessionFrame, SessionFrameBody, SessionInnerError, SessionOutgoingItem,
-        SessionState, Transfer, DEFAULT_WINDOW,
+        Role, Session, SessionControl, SessionFrame, SessionFrameBody, SessionHandle,
+        SessionInnerError, SessionOutgoingItem, SessionState, Transfer, DEFAULT_WINDOW,
     };
-    use crate::endpoint::{OutgoingChannel, Session as _};
+    use crate::endpoint::{OutgoingChannel, OutputHandle, Session as _};
+    use tokio::sync::{mpsc, oneshot, watch};
 
     fn mapped_session() -> Session {
         Builder::new()
@@ -1638,5 +1682,47 @@ mod tests {
         assert!(matches!(error, SessionInnerError::IllegalState));
         assert_eq!(session.next_outgoing_delivery_id, delivery_start);
         assert_eq!(session.next_outgoing_id, transfer_start);
+    }
+
+    /// `force_end` signals the engine through a dedicated watch channel, so it
+    /// must work even when the control queue is full.
+    #[tokio::test]
+    async fn force_end_bypasses_full_control_queue() {
+        let (control, control_rx) = mpsc::channel(1);
+        control
+            .try_send(SessionControl::DeallocateLink(OutputHandle(0)))
+            .expect("the queue starts empty");
+
+        let (outgoing, _outgoing_rx) = mpsc::channel(1);
+        let (outcome_tx, outcome) = oneshot::channel();
+        let force = Arc::new(watch::channel(false).0);
+        let engine_force = force.clone();
+        tokio::spawn(async move {
+            let mut force = engine_force.subscribe();
+            let _ = force.wait_for(|forced| *forced).await;
+            let _ = outcome_tx.send(Ok(()));
+        });
+
+        let mut handle = SessionHandle {
+            is_ended: false,
+            control,
+            engine_handle: tokio::spawn(async {}),
+            outcome,
+            force,
+            outgoing,
+            session_stop_reason: Arc::new(OnceLock::new()),
+            max_frame_size: 4096,
+            link_listener: (),
+        };
+
+        let result = tokio::time::timeout(Duration::from_secs(1), handle.force_end())
+            .await
+            .expect("force_end must not wait on the control queue");
+        assert!(result.is_ok());
+        assert!(handle.is_ended());
+
+        // Keep the receiver alive until after force_end so the queue remains
+        // full rather than closing the control channel.
+        drop(control_rx);
     }
 }
