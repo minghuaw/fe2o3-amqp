@@ -1,5 +1,9 @@
 # Change Log
 
+## Unreleased
+
+1. **Breaking**: the minimum supported Rust version is now 1.95 because `parking_lot` was updated from 0.12 to 0.13 (edition 2024, MSRV 1.95). Note that 0.13 also removes parking_lot's automatic eventual fairness.
+
 ## 0.18.4
 
 1. **Bugfix**: transactional acquisition now includes the link flow `properties` in the acquiring flow (and in the `cleanup`/drop drain flows), so the `txn-id` actually reaches the resource; the `txn-id` is also recorded when the link had no flow properties yet. Previously the `txn-id` was silently dropped (regression since 0.12.0).
