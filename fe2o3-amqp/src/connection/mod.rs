@@ -17,6 +17,7 @@ use tokio::{
     sync::{
         mpsc::Sender,
         oneshot::{self, error::TryRecvError},
+        watch,
     },
     task::JoinHandle,
 };
@@ -79,7 +80,9 @@ pub enum ConnectionStopReason {
 
 /// A handle to the [`Connection`] event loop.
 ///
-/// Dropping the handle will also stop the [`Connection`] event loop.
+/// Dropping the handle initiates the `Close` exchange; it does not wait for
+/// the peer's `Close`. If the peer does not complete the exchange, use
+/// [`force_close`](ConnectionHandle::force_close) for bounded local teardown.
 ///
 /// # Generic Parameters
 ///
@@ -91,6 +94,8 @@ pub struct ConnectionHandle<R> {
     pub(crate) control: Sender<ConnectionControl>,
     pub(crate) handle: JoinHandle<()>,
     pub(crate) outcome: oneshot::Receiver<Result<(), Error>>,
+    /// Local-close signal shared with the engine.
+    pub(crate) force: Arc<watch::Sender<bool>>,
 
     // outgoing channel for session
     pub(crate) outgoing: Sender<SessionFrame>,
@@ -110,6 +115,10 @@ impl<R> std::fmt::Debug for ConnectionHandle<R> {
 
 impl<R> Drop for ConnectionHandle<R> {
     fn drop(&mut self) {
+        // A forced local close already owns the connection's shutdown.
+        if *self.force.borrow() {
+            return;
+        }
         if let Err(_error) = self.control.try_send(ConnectionControl::Close(None)) {
             #[cfg(any(feature = "log", feature = "tracing"))]
             {
@@ -215,6 +224,26 @@ impl<R> ConnectionHandle<R> {
                 .await;
             self.on_close().await
         }
+    }
+
+    /// Force the connection down without waiting for the peer's `Close`.
+    ///
+    /// This stops the connection engine and closes the transport locally,
+    /// which ends all sessions and wakes their waiters. It does not send a
+    /// `Close` frame and does not wait for a peer response. Use it after a
+    /// graceful [`close`](#method.close) failed or timed out.
+    ///
+    /// The forced close is signalled through a dedicated watch channel, so it
+    /// works even when the control queue is full. An `Error::IllegalState` is
+    /// returned if the connection already closed (or its outcome was already
+    /// observed).
+    pub async fn force_close(&mut self) -> Result<(), Error> {
+        if self.is_closed {
+            return Err(Error::IllegalState);
+        }
+
+        self.force.send_replace(true);
+        self.on_close().await
     }
 
     /// Returns when the underlying event loop has stopped
@@ -1074,5 +1103,54 @@ mod tests {
                 .contains(outgoing.0 as usize),
             "the outgoing slot must be free after the late End"
         );
+    }
+
+    /// `force_close` uses a dedicated watch signal, so it must work even when
+    /// the connection control queue is full.
+    #[tokio::test]
+    async fn force_close_bypasses_full_control_queue() {
+        use std::sync::{Arc, OnceLock};
+        use std::time::Duration;
+        use tokio::sync::{mpsc, oneshot};
+
+        use crate::control::ConnectionControl;
+        use crate::endpoint::OutgoingChannel;
+
+        let (control, control_rx) = mpsc::channel(1);
+        control
+            .try_send(ConnectionControl::DeallocateSession(OutgoingChannel(0)))
+            .expect("the queue starts empty");
+
+        let (outgoing, _outgoing_rx) = mpsc::channel(1);
+        let (outcome_tx, outcome) = oneshot::channel();
+        let force = Arc::new(tokio::sync::watch::channel(false).0);
+        let engine_force = force.clone();
+        tokio::spawn(async move {
+            let mut force = engine_force.subscribe();
+            let _ = force.wait_for(|forced| *forced).await;
+            let _ = outcome_tx.send(Ok(()));
+        });
+
+        let mut handle = super::ConnectionHandle {
+            is_closed: false,
+            control,
+            handle: tokio::spawn(async {}),
+            outcome,
+            force,
+            outgoing,
+            connection_stop_reason: Arc::new(OnceLock::new()),
+            max_frame_size: 0,
+            session_listener: (),
+        };
+
+        let result = tokio::time::timeout(Duration::from_secs(1), handle.force_close())
+            .await
+            .expect("force_close must not wait on the control queue");
+        assert!(result.is_ok());
+        assert!(handle.is_closed());
+
+        // Keep the receiver alive until after force_close so the queue remains
+        // full rather than closing the control channel.
+        drop(control_rx);
     }
 }

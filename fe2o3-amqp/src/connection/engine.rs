@@ -10,7 +10,7 @@ use fe2o3_amqp_types::performatives::Close;
 use futures_util::{SinkExt, StreamExt};
 use tokio::io::{AsyncRead, AsyncWrite};
 use tokio::sync::mpsc::Receiver;
-use tokio::sync::oneshot;
+use tokio::sync::{oneshot, watch};
 use tokio::task::JoinHandle;
 
 use crate::control::ConnectionControl;
@@ -32,6 +32,9 @@ pub(crate) struct ConnectionEngine<Io, C> {
     control: Receiver<ConnectionControl>,
     outgoing_session_frames: Receiver<SessionFrame>,
     heartbeat: HeartBeat,
+    /// Shared local-close signal. The engine keeps the `Arc` alive so dropping
+    /// the handle does not look like a forced close.
+    force: Arc<watch::Sender<bool>>,
 }
 
 impl<Io, C> ConnectionEngine<Io, C>
@@ -62,6 +65,11 @@ where
     /// i.e. before any `ConnectionHandle` is created.
     pub(crate) fn max_frame_size(&self) -> usize {
         self.transport.encoder_max_frame_size()
+    }
+
+    /// The shared local-close signal, cloned into the [`ConnectionHandle`].
+    pub(crate) fn force(&self) -> Arc<watch::Sender<bool>> {
+        self.force.clone()
     }
 }
 
@@ -249,12 +257,14 @@ where
         control: Receiver<ConnectionControl>,
         outgoing_session_frames: Receiver<SessionFrame>,
     ) -> Result<Self, OpenError> {
+        let force = Arc::new(watch::channel(false).0);
         let mut engine = Self {
             transport,
             connection,
             control,
             outgoing_session_frames,
             heartbeat: HeartBeat::never(),
+            force,
         };
 
         match engine.open_inner().await {
@@ -551,127 +561,155 @@ where
         }
     }
 
-    #[cfg_attr(feature = "tracing", tracing::instrument(name = "Connection::event_loop", skip(self), fields(container_id = %self.connection.local_open().container_id)))]
-    async fn event_loop(mut self, tx: oneshot::Sender<Result<(), Error>>) {
-        let mut outcome = Ok(());
-        loop {
-            let result = tokio::select! {
-                _ = self.heartbeat.next() => self.on_heartbeat().await,
-                incoming = self.transport.next() => {
-                    let result = match incoming {
-                        Some(incoming) => {
-                            match incoming {
-                                Ok(frame) => self.on_incoming(frame).await,
-                                Err(err) => Err(err.into()),
-                            }
-                        },
-                        None => {
-                            // Incoming stream is closed
+    #[cfg_attr(feature = "tracing", tracing::instrument(skip_all))]
+    async fn next_event(&mut self) -> Result<Running, ConnectionInnerError> {
+        tokio::select! {
+            _ = self.heartbeat.next() => self.on_heartbeat().await,
+            incoming = self.transport.next() => {
+                let result = match incoming {
+                    Some(incoming) => {
+                        match incoming {
+                            Ok(frame) => self.on_incoming(frame).await,
+                            Err(err) => Err(err.into()),
+                        }
+                    },
+                    None => {
+                        // Incoming stream is closed
 
+                        match self.connection.local_state() {
+                            ConnectionState::Start
+                            | ConnectionState::HeaderReceived
+                            | ConnectionState::HeaderSent
+                            | ConnectionState::HeaderExchange
+                            | ConnectionState::OpenPipe
+                            | ConnectionState::OpenClosePipe
+                            | ConnectionState::OpenReceived
+                            | ConnectionState::OpenSent
+                            | ConnectionState::Opened
+                            | ConnectionState::CloseReceived
+                            | ConnectionState::CloseSent => Err(ConnectionInnerError::IllegalState),
+                            ConnectionState::ClosePipe
+                            | ConnectionState::Discarding
+                            | ConnectionState::End => Ok(Running::Stop),
+                        }
+                    },
+                };
+
+                result
+            },
+            control = self.control.recv() => {
+                match control {
+                    Some(control) => self.on_control(control).await,
+                    None => {
+                        // All control channel are dropped (which is impossible)
+                        // Finish closing the connection
+                        loop {
                             match self.connection.local_state() {
-                                ConnectionState::Start
-                                | ConnectionState::HeaderReceived
-                                | ConnectionState::HeaderSent
-                                | ConnectionState::HeaderExchange
-                                | ConnectionState::OpenPipe
-                                | ConnectionState::OpenClosePipe
-                                | ConnectionState::OpenReceived
-                                | ConnectionState::OpenSent
-                                | ConnectionState::Opened
+                                ConnectionState::Opened
                                 | ConnectionState::CloseReceived
-                                | ConnectionState::CloseSent => Err(ConnectionInnerError::IllegalState),
-                                ConnectionState::ClosePipe
-                                | ConnectionState::Discarding
-                                | ConnectionState::End => Ok(Running::Stop),
-                            }
-                        },
-                    };
-
-                    result
-                },
-                control = self.control.recv() => {
-                    match control {
-                        Some(control) => self.on_control(control).await,
-                        None => {
-                            // All control channel are dropped (which is impossible)
-                            // Finish closing the connection
-                            loop {
-                                match self.connection.local_state() {
-                                    ConnectionState::Opened
-                                    | ConnectionState::CloseReceived
-                                    | ConnectionState::OpenSent
-                                    | ConnectionState::OpenPipe => {
-                                        if let Err(_err) = self.on_control(ConnectionControl::Close(None)).await {
+                                | ConnectionState::OpenSent
+                                | ConnectionState::OpenPipe => {
+                                    if let Err(_err) = self.on_control(ConnectionControl::Close(None)).await {
+                                        #[cfg(feature = "tracing")]
+                                        tracing::error!("err {:?}", _err);
+                                        #[cfg(feature = "log")]
+                                        log::error!("err {:?}", _err);
+                                    }
+                                }
+                                ConnectionState::Discarding
+                                | ConnectionState::CloseSent
+                                | ConnectionState::OpenClosePipe
+                                | ConnectionState::ClosePipe => {
+                                    match self.transport.next().await {
+                                        Some(Ok(frame)) => {
+                                            let _ = self.on_incoming(frame).await;
+                                        },
+                                        Some(Err(_err)) => {
                                             #[cfg(feature = "tracing")]
                                             tracing::error!("err {:?}", _err);
                                             #[cfg(feature = "log")]
                                             log::error!("err {:?}", _err);
-                                        }
+                                        },
+                                        None => break
                                     }
-                                    ConnectionState::Discarding
-                                    | ConnectionState::CloseSent
-                                    | ConnectionState::OpenClosePipe
-                                    | ConnectionState::ClosePipe => {
-                                        match self.transport.next().await {
-                                            Some(Ok(frame)) => {
-                                                let _ = self.on_incoming(frame).await;
-                                            },
-                                            Some(Err(_err)) => {
-                                                #[cfg(feature = "tracing")]
-                                                tracing::error!("err {:?}", _err);
-                                                #[cfg(feature = "log")]
-                                                log::error!("err {:?}", _err);
-                                            },
-                                            None => break
-                                        }
-                                    },
-                                    ConnectionState::End => break,
-                                    _ => break, // This should not happen
-                                }
+                                },
+                                ConnectionState::End => break,
+                                _ => break, // This should not happen
                             }
+                        }
 
-                            Ok(Running::Stop)
-                        }
-                    }
-                },
-                frame = self.outgoing_session_frames.recv() => {
-                    match frame {
-                        Some(frame) => self.on_outgoing_session_frames(frame).await,
-                        None => {
-                            // Upon closing, the outgoing_session_frames channel will be closed
-                            // first while the connection may still be waiting for remote
-                            // close frame.
-                            Ok(Running::Continue)
-                        }
+                        Ok(Running::Stop)
                     }
                 }
-            };
-
-            let running = match result {
-                Ok(running) => running,
-                Err(error) => {
-                    #[cfg(feature = "tracing")]
-                    tracing::error!("{:?}", error);
-                    #[cfg(feature = "log")]
-                    log::error!("{:?}", error);
-                    // let running = self.on_error(&error).await;
-                    match self.on_error(&error).await {
-                        Ok(running) => {
-                            outcome = Err(error);
-                            running
-                        }
-                        Err(error) => {
-                            // Stop the session if error cannot be handled
-                            #[cfg(feature = "tracing")]
-                            tracing::error!("Unable to handle error {:?}", error);
-                            #[cfg(feature = "log")]
-                            log::error!("Unable to handle error {:?}", error);
-                            outcome = Err(error);
-                            Running::Stop
-                        }
+            },
+            frame = self.outgoing_session_frames.recv() => {
+                match frame {
+                    Some(frame) => self.on_outgoing_session_frames(frame).await,
+                    None => {
+                        // Upon closing, the outgoing_session_frames channel will be closed
+                        // first while the connection may still be waiting for remote
+                        // close frame.
+                        Ok(Running::Continue)
                     }
                 }
+            }
+        }
+    }
+
+    /// Run one event-loop step, including the error handling that may wait for
+    /// the remote `Close`.
+    ///
+    /// Keeping this in one future lets a forced close cancel both the normal
+    /// event select and the `close_connection`/`wait_for_remote_close` path.
+    async fn step(&mut self) -> (Running, Option<ConnectionInnerError>) {
+        let result = self.next_event().await;
+        match result {
+            Ok(running) => (running, None),
+            Err(error) => {
+                #[cfg(feature = "tracing")]
+                tracing::error!("{:?}", error);
+                #[cfg(feature = "log")]
+                log::error!("{:?}", error);
+                match self.on_error(&error).await {
+                    Ok(running) => (running, Some(error)),
+                    Err(error) => {
+                        // Stop the connection if the error cannot be handled.
+                        #[cfg(feature = "tracing")]
+                        tracing::error!("Unable to handle error {:?}", error);
+                        #[cfg(feature = "log")]
+                        log::error!("Unable to handle error {:?}", error);
+                        (Running::Stop, Some(error))
+                    }
+                }
+            }
+        }
+    }
+
+    #[cfg_attr(feature = "tracing", tracing::instrument(name = "Connection::event_loop", skip(self), fields(container_id = %self.connection.local_open().container_id)))]
+    async fn event_loop(mut self, tx: oneshot::Sender<Result<(), Error>>) {
+        let mut outcome = Ok(());
+        let mut aborted = false;
+        loop {
+            let mut force = self.force.subscribe();
+            let (running, error) = tokio::select! {
+                biased;
+                changed = force.wait_for(|forced| *forced) => {
+                    match changed {
+                        Ok(_) => {
+                            aborted = true;
+                            break;
+                        }
+                        // The keepalive sender is held by the engine; this
+                        // branch cannot close before the engine stops.
+                        Err(_) => continue,
+                    }
+                }
+                step = self.step() => step,
             };
+
+            if let Some(error) = error {
+                outcome = Err(error);
+            }
 
             match running {
                 Running::Continue => {}
@@ -685,7 +723,18 @@ where
         // in the channel. Instead, it is usually desirable to perform a “clean” shutdown.
         // To do this, the receiver first closes the channels, which will prevent any
         // further messages to be sent into them.
-        let close = self.transport.close().await.map_err(Into::into);
+        //
+        // A forced close must not wait for the transport's graceful close: dropping
+        // the engine's transport at the end of this task closes the underlying stream
+        // locally and wakes the peer.
+        if aborted {
+            outcome = Ok(());
+        }
+        let close = if aborted {
+            Ok(())
+        } else {
+            self.transport.close().await.map_err(Into::into)
+        };
         let result = outcome.and(close).map_err(Into::into);
 
         // Publish the stop reason before the channels are closed, so every

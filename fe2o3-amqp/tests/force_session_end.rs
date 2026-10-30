@@ -16,7 +16,7 @@ use fe2o3_amqp::{
         ConnectionAcceptor, LinkAcceptor, LinkEndpoint, ListenerConnectionHandle,
         ListenerSessionHandle, SessionAcceptor,
     },
-    connection::{Connection, ConnectionHandle},
+    connection::{Connection, ConnectionHandle, ConnectionStopReason},
     frames::amqp::{FrameBody, FrameDecoder},
     link::{LinkStateError, RecvError, SessionStopReason},
     session::{Session, SessionHandle},
@@ -37,10 +37,12 @@ async fn establish_filtered_connection_pair() -> (
     ListenerConnectionHandle,
     ConnectionHandle<()>,
     watch::Sender<bool>,
+    watch::Sender<bool>,
 ) {
     let (client_io, proxy_client_io) = tokio::io::duplex(64 * 1024);
     let (proxy_server_io, server_io) = tokio::io::duplex(64 * 1024);
     let (drop_end_tx, mut drop_end_rx) = watch::channel(false);
+    let (drop_close_tx, mut drop_close_rx) = watch::channel(false);
 
     tokio::spawn(async move {
         let (mut client_read, mut client_write) = tokio::io::split(proxy_client_io);
@@ -74,12 +76,15 @@ async fn establish_filtered_connection_pair() -> (
                 break;
             }
 
-            let drop_end = *drop_end_rx.borrow_and_update()
-                && matches!(
-                    FrameDecoder {}.decode(&mut BytesMut::from(body.as_slice())),
-                    Ok(Some(frame)) if matches!(frame.body, FrameBody::End(_))
-                );
-            if drop_end {
+            let drop_end = *drop_end_rx.borrow_and_update();
+            let drop_close = *drop_close_rx.borrow_and_update();
+            let drop_frame = matches!(
+                FrameDecoder {}.decode(&mut BytesMut::from(body.as_slice())),
+                Ok(Some(frame))
+                    if (drop_end && matches!(frame.body, FrameBody::End(_)))
+                        || (drop_close && matches!(frame.body, FrameBody::Close(_)))
+            );
+            if drop_frame {
                 continue;
             }
 
@@ -106,7 +111,12 @@ async fn establish_filtered_connection_pair() -> (
         .expect("connection accept task panicked")
         .expect("connection accept failed");
 
-    (server_connection, client_connection, drop_end_tx)
+    (
+        server_connection,
+        client_connection,
+        drop_end_tx,
+        drop_close_tx,
+    )
 }
 
 async fn establish_session_pair(
@@ -173,7 +183,7 @@ async fn send_and_receive(sender: &mut Sender, receiver: &mut Receiver, body: &s
 
 #[tokio::test]
 async fn force_end_is_bounded_and_preserves_sibling_sessions() {
-    let (mut server_connection, mut client_connection, drop_end) =
+    let (mut server_connection, mut client_connection, drop_end, _drop_close) =
         establish_filtered_connection_pair().await;
 
     let (mut client_session_1, mut server_session_1) =
@@ -239,7 +249,7 @@ async fn force_end_is_bounded_and_preserves_sibling_sessions() {
 /// `SessionStopReason::Aborted` to links and leaves sibling sessions usable.
 #[tokio::test]
 async fn force_end_without_graceful_end_reports_aborted() {
-    let (mut server_connection, mut client_connection, _drop_end) =
+    let (mut server_connection, mut client_connection, _drop_end, _drop_close) =
         establish_filtered_connection_pair().await;
 
     let (mut client_session_1, mut server_session_1) =
@@ -263,4 +273,37 @@ async fn force_end_without_graceful_end_reports_aborted() {
 
     send_and_receive(&mut sibling_sender, &mut sibling_receiver, "after-abort").await;
     assert!(!client_connection.is_closed());
+}
+
+/// A connection whose peer withholds `Close` must also be terminable locally.
+#[tokio::test]
+async fn force_close_is_bounded_and_wakes_sessions() {
+    let (mut server_connection, mut client_connection, _drop_end, drop_close) =
+        establish_filtered_connection_pair().await;
+    let (mut client_session, mut server_session) =
+        establish_session_pair(&mut server_connection, &mut client_connection).await;
+    let (mut receiver, _listener_sender) =
+        attach_receiver(&mut client_session, &mut server_session, "force-close-recv").await;
+
+    // Withhold the client's Close so graceful close cannot complete.
+    drop_close.send(true).unwrap();
+    let graceful =
+        tokio::time::timeout(Duration::from_millis(200), client_connection.close()).await;
+    assert!(
+        graceful.is_err(),
+        "graceful close must not complete while the peer withholds Close, got {graceful:?}"
+    );
+
+    common::expect_ok!(client_connection.force_close()).await;
+    assert!(
+        client_connection.is_closed(),
+        "the connection engine must have stopped"
+    );
+
+    match tokio::time::timeout(Duration::from_secs(2), receiver.recv::<String>()).await {
+        Ok(Err(RecvError::LinkStateError(LinkStateError::SessionStopped(
+            SessionStopReason::ConnectionStopped(ConnectionStopReason::Closed),
+        )))) => {}
+        other => panic!("expected the link to wake with ConnectionStopped(Closed), got {other:?}"),
+    }
 }

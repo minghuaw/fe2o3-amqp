@@ -209,6 +209,7 @@ impl<Tls, Sasl> ConnectionAcceptor<Tls, Sasl> {
             .await?;
         let connection_stop_reason = engine.connection_stop_reason().clone();
         let max_frame_size = engine.max_frame_size();
+        let force = engine.force();
         let (handle, outcome) = engine.spawn();
 
         let connection_handle = ConnectionHandle {
@@ -216,6 +217,7 @@ impl<Tls, Sasl> ConnectionAcceptor<Tls, Sasl> {
             control: control_tx,
             handle,
             outcome,
+            force,
             outgoing: outgoing_tx,
             connection_stop_reason,
             max_frame_size,

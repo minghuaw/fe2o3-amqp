@@ -3,9 +3,9 @@
 ## Unreleased
 
 1. **Bugfix**: SASL `EXTERNAL` now sends an empty initial response and answers an empty challenge with an empty response (RFC 4422), so it authenticates against servers that challenge a missing initial response, such as ActiveMQ Artemis. A challenge with data is still an error.
-2. Added `SessionHandle::force_end()` for bounded local session teardown when the peer does not complete the `End` exchange. It stops the session engine and wakes link waiters without waiting for the peer, reports `SessionStopReason::Aborted` to links when no local `End` was already in progress, and retires the channel so late frames are discarded and the channel number is not reused until the peer's `End` or the connection close.
 2. **Security**: the `rustls` feature now requires `webpki-roots` "1.0.11", whose root bundle drops the emSign roots removed upstream: "emSign ECC Root CA - G3", "emSign Root CA - C1" and "emSign ECC Root CA - C3". The previous `"1"` caret requirement let an existing lock keep an older bundle and still trust those roots.
 3. **Security**: the `rustls-tls-webpki-roots` feature of `fe2o3-amqp-ws` also depends on `webpki-roots` "1.0.11" directly so the resolved 1.x is fixed even with an otherwise stale lock.
+4. Added `SessionHandle::force_end()` and `ConnectionHandle::force_close()` for bounded local teardown when the peer does not complete the `End`/`Close` exchange. They stop the affected engine and wake link waiters without waiting for the peer, bypass a full control queue through a dedicated cancellation signal, and publish `SessionStopReason::Aborted`/`ConnectionStopReason::Closed`. A forced session retires its channel so late frames are discarded and the channel number is not reused until the peer's `End` or the connection close.
 
 ## 0.18.4
 
