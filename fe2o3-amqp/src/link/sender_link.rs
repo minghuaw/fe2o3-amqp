@@ -77,16 +77,12 @@ where
     {
         use crate::util::Consume;
 
+        // The detach branch is polled first so that a remote detach that has
+        // already arrived is observed before a concurrently granted link-credit
+        // is consumed. Otherwise a send could race the remote closing the link,
+        // consuming credit and writing a transfer with a stale handle.
         tokio::select! {
-            tag = self.flow_state.consume(1) => {
-                // link-credit is defined as
-                // "The current maximum number of messages that can be handled
-                // at the receiver endpoint of the link"
-
-                // Draining should already set the link credit to 0, causing
-                // sender to wait for new link credit
-                Ok(tag)
-            },
+            biased;
             frame = detached => { // cancel safe
                 match frame {
                     // If remote has detached the link
@@ -117,6 +113,15 @@ where
                         Err(LinkStateError::ExpectImmediateDetach)
                     }
                 }
+            },
+            tag = self.flow_state.consume(1) => {
+                // link-credit is defined as
+                // "The current maximum number of messages that can be handled
+                // at the receiver endpoint of the link"
+
+                // Draining should already set the link credit to 0, causing
+                // sender to wait for new link credit
+                Ok(tag)
             }
         }
     }
@@ -779,7 +784,7 @@ mod tests {
     use std::sync::Arc;
 
     use fe2o3_amqp_types::{
-        definitions::{ReceiverSettleMode, SenderSettleMode},
+        definitions::{Handle, ReceiverSettleMode, SenderSettleMode},
         messaging::Target,
     };
     use tokio::sync::Notify;
@@ -815,6 +820,42 @@ mod tests {
             verify_incoming_source: true,
             verify_incoming_target: true,
         }
+    }
+
+    /// A remote detach that is already queued must be observed before an idle
+    /// link's available credit is consumed: the biased select polls the detach
+    /// branch first, so no transfer is written with a stale handle and the
+    /// caller gets `RemoteDetached` instead of `UnattachedHandle`.
+    #[tokio::test]
+    async fn queued_remote_detach_wins_over_idle_link_credit() {
+        let mut link = make_sender_link(100);
+        let (incoming_tx, mut incoming_rx) = mpsc::channel::<LinkFrame>(16);
+        let (outgoing_tx, mut outgoing_rx) = mpsc::channel::<LinkFrame>(16);
+
+        incoming_tx
+            .send(LinkFrame::Detach(Detach {
+                handle: Handle(0),
+                closed: false,
+                error: None,
+            }))
+            .await
+            .unwrap();
+
+        let result = link
+            .get_delivery_tag_or_detached(&outgoing_tx, incoming_rx.recv())
+            .await;
+
+        assert!(matches!(result, Err(LinkStateError::RemoteDetached)));
+        // Only the reply detach may be written; no transfer may carry a
+        // delivery with the stale handle.
+        assert!(matches!(
+            outgoing_rx.try_recv(),
+            Ok(LinkFrame::Detach(detach)) if !detach.closed
+        ));
+        assert!(
+            outgoing_rx.try_recv().is_err(),
+            "no transfer may be written after the peer detached"
+        );
     }
 
     /// A sender-side tag absent from the local unsettled map must be ignored
