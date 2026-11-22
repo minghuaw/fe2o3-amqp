@@ -437,10 +437,34 @@ impl ReceiverLink<Target> {
 }
 
 impl<T> ReceiverLink<T> {
-    fn handle_unsettled_in_attach(
+    pub(crate) fn handle_unsettled_in_attach(
         &mut self,
         remote_unsettled: Option<OrderedMap<DeliveryTag, Option<DeliveryState>>>,
+        remote_incomplete_unsettled: bool,
     ) -> ReceiverAttachExchange {
+        // AMQP 1.0 §2.6.13: with a complete remote map, deliveries that only
+        // this side considers unsettled (target-only) MUST be considered
+        // settled. Absence from an incomplete map is not evidence of
+        // settlement, so nothing is removed in that case.
+        if !remote_incomplete_unsettled {
+            let mut guard = self.unsettled.write();
+            if let Some(local) = guard.as_mut() {
+                match &remote_unsettled {
+                    Some(remote) => {
+                        let stale: Vec<DeliveryTag> = local
+                            .keys()
+                            .filter(|tag| !remote.contains_key(*tag))
+                            .cloned()
+                            .collect();
+                        for tag in stale {
+                            let _ = local.swap_remove(&tag);
+                        }
+                    }
+                    None => local.clear(),
+                }
+            }
+        }
+
         let remote_is_empty = match remote_unsettled {
             Some(map) => map.is_empty(),
             None => true,
@@ -742,7 +766,8 @@ where
         }
 
         // Ok(Self::AttachExchange::Complete)
-        Ok(self.handle_unsettled_in_attach(remote_attach.unsettled))
+        let incomplete_unsettled = remote_attach.incomplete_unsettled;
+        Ok(self.handle_unsettled_in_attach(remote_attach.unsettled, incomplete_unsettled))
     }
 
     /// # Cancel safety

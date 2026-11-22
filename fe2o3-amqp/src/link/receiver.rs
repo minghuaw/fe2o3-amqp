@@ -1937,7 +1937,9 @@ mod tests {
     use crate::endpoint::OutputHandle;
     use crate::link::{state::LinkState, LinkTransfer};
     use crate::util::Sealed;
-    use fe2o3_amqp_types::{definitions::SenderSettleMode, messaging::Received};
+    use fe2o3_amqp_types::{
+        definitions::SenderSettleMode, messaging::Received, primitives::OrderedMap,
+    };
     use tokio::sync::oneshot;
 
     use crate::link::test_util::{make_flow_state, make_receiver_inner_with_channels};
@@ -3098,5 +3100,56 @@ mod tests {
         );
         assert!(matches!(result, Err(DetachError::ClosedByRemote)));
         assert!(matches!(&inner.link.local_state, LinkState::Closed));
+    }
+    /// AMQP 1.0 §2.6.13: target-only deliveries (local unsettled entries
+    /// absent from a complete remote map) MUST be considered settled.
+    #[test]
+    fn receiver_reconciles_target_only_deliveries() {
+        let (mut inner, _session_rx, _outgoing_rx, _incoming_tx) =
+            make_receiver_inner_with_channels(4096);
+        seed_unsettled(&inner.link.unsettled, &[vec![1], vec![2]]);
+
+        // Remote map has only tag 1 (complete): tag 2 is target-only.
+        let mut remote = OrderedMap::new();
+        remote.insert(DeliveryTag::from(vec![1u8]), None);
+        let _ = inner.link.handle_unsettled_in_attach(Some(remote), false);
+
+        let lock = inner.link.unsettled.read();
+        let map = lock.as_ref().unwrap();
+        assert!(map.contains_key(&DeliveryTag::from(vec![1u8])));
+        assert!(!map.contains_key(&DeliveryTag::from(vec![2u8])));
+    }
+
+    /// An incomplete remote map is not evidence of settlement, so local
+    /// entries are left untouched.
+    #[test]
+    fn receiver_keeps_deliveries_on_incomplete_remote_map() {
+        let (mut inner, _session_rx, _outgoing_rx, _incoming_tx) =
+            make_receiver_inner_with_channels(4096);
+        seed_unsettled(&inner.link.unsettled, &[vec![1]]);
+
+        let _ = inner
+            .link
+            .handle_unsettled_in_attach(Some(OrderedMap::new()), true);
+
+        let lock = inner.link.unsettled.read();
+        assert!(lock
+            .as_ref()
+            .unwrap()
+            .contains_key(&DeliveryTag::from(vec![1u8])));
+    }
+
+    /// A `None` remote map (peer reattached without unsettled state) settles
+    /// every target-only delivery.
+    #[test]
+    fn receiver_clears_deliveries_on_missing_remote_map() {
+        let (mut inner, _session_rx, _outgoing_rx, _incoming_tx) =
+            make_receiver_inner_with_channels(4096);
+        seed_unsettled(&inner.link.unsettled, &[vec![1], vec![2]]);
+
+        let _ = inner.link.handle_unsettled_in_attach(None, false);
+
+        let lock = inner.link.unsettled.read();
+        assert!(lock.as_ref().unwrap().is_empty());
     }
 }
