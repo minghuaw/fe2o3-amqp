@@ -146,6 +146,10 @@ pub(crate) enum AttachMode {
     /// peer's attach carried a non-null unsettled map, i.e. whether it is
     /// resuming rather than creating a fresh link. The reply must mirror that
     /// so the peer can reconcile outstanding deliveries.
+    ///
+    /// Only the acceptor endpoints construct this variant, so it is unused in
+    /// builds without the `acceptor` feature.
+    #[cfg_attr(not(feature = "acceptor"), allow(dead_code))]
     Reply { peer_is_resuming: bool },
     /// Re-create the link; send a null unsettled map.
     Reattach,
