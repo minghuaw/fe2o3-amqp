@@ -9,6 +9,25 @@ an older bundle and still trust those roots. The `rustls-tls-webpki-roots` featu
 `fe2o3-amqp-ws` also depends on `webpki-roots` "1.0.11" directly so the resolved 1.x is fixed
 even with an otherwise stale lock.
 
+**Bugfix**: unsettled deliveries now survive link resumption across a new session or connection
+(#396). A resuming attach advertises the local unsettled map (including a non-null empty map),
+source-only deliveries are buffered and re-sent as new deliveries, and a complete-map exchange no
+longer detaches in a resend loop. Deliveries no longer fail when the original session or connection
+is torn down.
+
+**Bugfix**: the AMQP 1.0 §2.6.13 incomplete-unsettled cycle now reduces state, suspends and
+re-attempts the resume with a bounded number of rounds; a sender-only tag in the peer's attach map
+is ignored instead of being answered with a spurious aborted transfer, and the receiver reconciles
+local-only tags from a complete remote map (#396).
+
+**Bugfix**: the §2.6.6 crossed-close reattach now sends a null unsettled map and fails the peer's
+still-unsettled deliveries instead of returning `IllegalState` (#396).
+
+**Bugfix**: harden the sender against the idle-detach race: a queued remote `Detach` is observed
+before link credit is consumed, a detach for an already-released link no longer ends the session
+with `UnattachedHandle`, and `detach_then_resume_on_session` does not attempt to resume a link the
+peer closed.
+
 ## 0.14.1
 
 **Bugfix**: disambiguate transport sink calls to compile with `tokio-util 0.7.20`
