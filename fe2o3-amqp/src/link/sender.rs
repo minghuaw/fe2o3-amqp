@@ -1555,10 +1555,11 @@ mod tests {
         }
     }
 
-    fn seed_unsettled_entries(
+    fn seed_unsettled_entries_with_payload(
         link: &SenderLink<Target>,
         n: u32,
         state: Option<DeliveryState>,
+        payload: Payload,
     ) -> Vec<oneshot::Receiver<Result<Option<DeliveryState>, LinkStateError>>> {
         let mut map = OrderedMap::new();
         let mut receivers = Vec::with_capacity(n as usize);
@@ -1567,11 +1568,30 @@ mod tests {
             receivers.push(rx);
             map.insert(
                 DeliveryTag::from(i.to_be_bytes().to_vec()),
-                UnsettledMessage::new(Bytes::new(), state.clone(), 0, tx),
+                UnsettledMessage::new(payload.clone(), state.clone(), 0, tx),
             );
         }
         *link.unsettled.write() = Some(map);
         receivers
+    }
+
+    fn seed_unsettled_entries(
+        link: &SenderLink<Target>,
+        n: u32,
+        state: Option<DeliveryState>,
+    ) -> Vec<oneshot::Receiver<Result<Option<DeliveryState>, LinkStateError>>> {
+        seed_unsettled_entries_with_payload(link, n, state, Payload::new())
+    }
+
+    async fn resume_with_timeout(
+        inner: &mut SenderInner<SenderLink<Target>>,
+    ) -> Result<(), SenderResumeErrorKind> {
+        tokio::time::timeout(
+            std::time::Duration::from_secs(10),
+            inner.resume_incoming_attach(None),
+        )
+        .await
+        .expect("incomplete-unsettled resume timed out")
     }
 
     fn peer_attach_with_unsettled(
@@ -1618,6 +1638,55 @@ mod tests {
                                 error: None,
                             }))
                             .await;
+                    }
+                    Some(_) => {}
+                    None => break,
+                },
+            }
+        }
+    }
+
+    /// Like [`drive_resume_peer`], but also records every transfer the link
+    /// writes, classified as first (`true`) or continuation (`false`).
+    async fn drive_resume_peer_recording(
+        mut session_rx: mpsc::Receiver<SessionControl>,
+        mut outgoing_rx: mpsc::Receiver<LinkFrame>,
+        initial_incoming_tx: mpsc::Sender<LinkFrame>,
+        peer_attach: Attach,
+        transfers: Arc<std::sync::Mutex<Vec<(bool, Transfer)>>>,
+    ) {
+        let mut incoming_tx = initial_incoming_tx;
+        loop {
+            tokio::select! {
+                ctrl = session_rx.recv() => match ctrl {
+                    Some(SessionControl::AllocateLink { link_relay, responder, .. }) => {
+                        incoming_tx = match link_relay {
+                            LinkRelay::Sender { tx, .. } => tx,
+                            LinkRelay::Receiver { tx, .. } => tx,
+                        };
+                        let _ = responder.send(Ok(endpoint::OutputHandle(1)));
+                    }
+                    Some(_) => {}
+                    None => break,
+                },
+                frame = outgoing_rx.recv() => match frame {
+                    Some(LinkFrame::Attach(_)) => {
+                        let _ = incoming_tx.send(LinkFrame::Attach(peer_attach.clone())).await;
+                    }
+                    Some(LinkFrame::Detach(_)) => {
+                        let _ = incoming_tx
+                            .send(LinkFrame::Detach(Detach {
+                                handle: fe2o3_amqp_types::definitions::Handle(0),
+                                closed: false,
+                                error: None,
+                            }))
+                            .await;
+                    }
+                    Some(LinkFrame::FirstTransfer(frame)) => {
+                        transfers.lock().unwrap().push((true, frame.performative));
+                    }
+                    Some(LinkFrame::TransferContinuation(frame)) => {
+                        transfers.lock().unwrap().push((false, frame.performative));
                     }
                     Some(_) => {}
                     None => break,
@@ -2269,7 +2338,7 @@ mod tests {
             peer_attach,
         ));
 
-        let result = inner.resume_incoming_attach(None).await;
+        let result = resume_with_timeout(&mut inner).await;
         peer.abort();
 
         result.expect("resume must complete");
@@ -2315,7 +2384,7 @@ mod tests {
             peer_attach,
         ));
 
-        let result = inner.resume_incoming_attach(None).await;
+        let result = resume_with_timeout(&mut inner).await;
         peer.abort();
 
         assert!(matches!(
@@ -2360,7 +2429,7 @@ mod tests {
             peer_attach,
         ));
 
-        let result = inner.resume_incoming_attach(None).await;
+        let result = resume_with_timeout(&mut inner).await;
         peer.abort();
 
         assert!(matches!(
@@ -2396,7 +2465,7 @@ mod tests {
         // `resend()` consumes one link credit per new delivery.
         inner.link.flow_state().state().lock.write().link_credit = 1000;
 
-        let result = inner.resume_incoming_attach(None).await;
+        let result = resume_with_timeout(&mut inner).await;
         peer.abort();
 
         result.expect("resume must complete");
@@ -2405,6 +2474,101 @@ mod tests {
             inner.link.unsettled.read().as_ref().map(|m| m.len()),
             Some(n as usize)
         );
+    }
+
+    /// A successful incomplete reduce must still drain the buffered
+    /// source-only deliveries after the loop, registering them as new
+    /// non-resumed deliveries.
+    #[tokio::test]
+    async fn incomplete_reduce_drains_pending_redeliveries_as_new_transfers() {
+        let (mut inner, session_rx, outgoing_rx, incoming_tx) =
+            make_sender_inner_with_channels(512);
+        inner.link.local_state = LinkState::Detached;
+        inner.link.flow_state().state().lock.write().link_credit = 100_000;
+
+        let received = Some(DeliveryState::Received(Received {
+            section_number: 0,
+            section_offset: 0,
+        }));
+        let payload = Payload::from(vec![0u8; 2000]);
+        let _rx = seed_unsettled_entries_with_payload(&inner.link, 200, received, payload);
+
+        // The peer only knows the first 120 tags and has already processed
+        // them; the remaining 80 are source-only and must be buffered.
+        let mut remote = OrderedMap::new();
+        for i in 0..120u32 {
+            remote.insert(
+                DeliveryTag::from(i.to_be_bytes().to_vec()),
+                Some(DeliveryState::Accepted(Accepted {})),
+            );
+        }
+        let peer_attach = peer_attach_with_unsettled(remote);
+        let recorded = Arc::new(std::sync::Mutex::new(Vec::new()));
+        let peer = tokio::spawn(drive_resume_peer_recording(
+            session_rx,
+            outgoing_rx,
+            incoming_tx,
+            peer_attach,
+            recorded.clone(),
+        ));
+
+        let result = resume_with_timeout(&mut inner).await;
+        result.expect("resume must complete");
+        assert!(matches!(inner.link.local_state, LinkState::Attached));
+        assert!(
+            inner.pending_redeliveries.is_empty(),
+            "the post-loop drain must empty pending_redeliveries"
+        );
+
+        // The drain only enqueues frames on the link channel; let the
+        // scripted peer observe all of them before inspecting.
+        tokio::time::timeout(std::time::Duration::from_secs(5), async {
+            while recorded
+                .lock()
+                .unwrap()
+                .iter()
+                .filter(|(first, _)| *first)
+                .count()
+                < 80
+            {
+                tokio::task::yield_now().await;
+            }
+        })
+        .await
+        .expect("the peer did not observe all redeliveries");
+        peer.abort();
+
+        let guard = inner.link.unsettled.read();
+        let map = guard
+            .as_ref()
+            .expect("the re-sent deliveries must be registered");
+        assert_eq!(map.len(), 80);
+
+        let recorded = recorded.lock().unwrap();
+        let first_transfers: Vec<_> = recorded.iter().filter(|(first, _)| *first).collect();
+        assert_eq!(first_transfers.len(), 80);
+        assert!(
+            recorded.iter().any(|(first, _)| !*first),
+            "the large payload must be split into continuation transfers"
+        );
+        for (first, transfer) in recorded.iter() {
+            assert!(!transfer.resume);
+            assert!(!transfer.aborted);
+            if *first {
+                assert!(transfer.delivery_tag.is_some());
+                assert!(transfer.message_format.is_some());
+                assert!(
+                    transfer.more,
+                    "first frame of a split delivery has more=true"
+                );
+                assert!(map.contains_key(transfer.delivery_tag.as_ref().unwrap()));
+            } else {
+                assert!(transfer.delivery_tag.is_none());
+                assert!(transfer.message_format.is_none());
+                assert!(transfer.settled.is_none());
+                assert!(transfer.rcv_settle_mode.is_none());
+            }
+        }
     }
 
     /// A failed redelivery is put back on the queue instead of losing its

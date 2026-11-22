@@ -149,7 +149,7 @@ async fn pending_delivery_resolves_after_resume_on_same_session() {
     // Drive the acceptor receiver so it answers the sender's non-closing
     // detach.
     let recv_a = tokio::spawn(async move {
-        let _ = receiver_a.recv::<String>().await;
+        let _ = tokio::time::timeout(Duration::from_secs(10), receiver_a.recv::<String>()).await;
     });
     let detached = common::expect_ok!(sender.detach()).await;
     recv_a.await.unwrap();
