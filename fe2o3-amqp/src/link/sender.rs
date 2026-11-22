@@ -1539,6 +1539,99 @@ mod tests {
         assert_eq!(inner.pending_redeliveries.len(), 200);
     }
 
+    /// An acceptor reply must mirror whether the peer's attach was resuming:
+    /// a reply to a non-null peer map carries the local map (empty or not),
+    /// while a reply to a null peer map carries `unsettled = None`.
+    #[tokio::test]
+    async fn acceptor_reply_mirrors_peer_unsettled_map() {
+        let (mut inner, mut session_rx, _outgoing_rx, _incoming_tx) =
+            make_sender_inner_with_channels(4096);
+        let session = inner.session.clone();
+        let responder = tokio::spawn(async move {
+            while let Some(control) = session_rx.recv().await {
+                if let SessionControl::GetMaxFrameSize(tx) = control {
+                    let _ = tx.send(4096);
+                }
+            }
+        });
+        let (tx, mut rx) = mpsc::channel::<LinkFrame>(16);
+
+        // Empty local map, peer resuming: a non-null empty map is sent.
+        inner.link.local_state = LinkState::AttachReceived;
+        inner
+            .link
+            .send_attach_inner(
+                &tx,
+                &session,
+                AttachMode::Reply {
+                    peer_is_resuming: true,
+                },
+            )
+            .await
+            .map_err(|_| "send_attach_inner failed")
+            .unwrap();
+        let attach = match rx.recv().await.unwrap() {
+            LinkFrame::Attach(attach) => attach,
+            other => panic!("expected Attach, got {other:?}"),
+        };
+        assert!(attach.unsettled.as_ref().is_some_and(|map| map.is_empty()));
+        assert!(!attach.incomplete_unsettled);
+
+        // Non-empty local map + peer resuming: the map is carried.
+        let (delivery_tx, _delivery_rx) = oneshot::channel();
+        inner
+            .link
+            .unsettled
+            .write()
+            .get_or_insert(OrderedMap::new())
+            .insert(
+                DeliveryTag::from(vec![0x01]),
+                UnsettledMessage::new(Bytes::new(), None, 0, delivery_tx),
+            );
+        inner.link.local_state = LinkState::AttachReceived;
+        inner
+            .link
+            .send_attach_inner(
+                &tx,
+                &session,
+                AttachMode::Reply {
+                    peer_is_resuming: true,
+                },
+            )
+            .await
+            .map_err(|_| "send_attach_inner failed")
+            .unwrap();
+        let attach = match rx.recv().await.unwrap() {
+            LinkFrame::Attach(attach) => attach,
+            other => panic!("expected Attach, got {other:?}"),
+        };
+        assert_eq!(attach.unsettled.as_ref().map(|map| map.len()), Some(1));
+
+        // Peer not resuming: the reply carries no unsettled map even when the
+        // local map is non-empty.
+        inner.link.local_state = LinkState::IncompleteAttachReceived;
+        inner
+            .link
+            .send_attach_inner(
+                &tx,
+                &session,
+                AttachMode::Reply {
+                    peer_is_resuming: false,
+                },
+            )
+            .await
+            .map_err(|_| "send_attach_inner failed")
+            .unwrap();
+        let attach = match rx.recv().await.unwrap() {
+            LinkFrame::Attach(attach) => attach,
+            other => panic!("expected Attach, got {other:?}"),
+        };
+        assert!(attach.unsettled.is_none());
+        assert!(!attach.incomplete_unsettled);
+
+        responder.abort();
+    }
+
     /// A failed redelivery is put back on the queue instead of losing its
     /// settlement channel.
     #[tokio::test]

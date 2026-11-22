@@ -142,6 +142,11 @@ pub(crate) enum SenderAttachExchange {
 pub(crate) enum AttachMode {
     /// Continue an existing (suspended) link; advertise the unsettled map.
     Resume,
+    /// Answer a peer-initiated attach. `peer_is_resuming` records whether the
+    /// peer's attach carried a non-null unsettled map, i.e. whether it is
+    /// resuming rather than creating a fresh link. The reply must mirror that
+    /// so the peer can reconcile outstanding deliveries.
+    Reply { peer_is_resuming: bool },
     /// Re-create the link; send a null unsettled map.
     Reattach,
 }
@@ -372,11 +377,14 @@ where
         // empty-but-present map when nothing is unsettled. A reattach, such as
         // the one completing the AMQP 1.0 §2.6.6 crossed close, MUST carry a
         // null `unsettled` field (§2.7.3).
-        let is_resuming = matches!(mode, AttachMode::Resume)
-            && matches!(
+        let is_resuming = match mode {
+            AttachMode::Resume => matches!(
                 self.local_state,
                 LinkState::Detached | LinkState::DetachSent
-            );
+            ),
+            AttachMode::Reply { peer_is_resuming } => peer_is_resuming,
+            AttachMode::Reattach => false,
+        };
 
         // Advertise the unsettled map on (re)attach so the peer can reconcile
         // outstanding deliveries; resumption re-sends them.
@@ -392,7 +400,16 @@ where
                 self.as_maybe_incomplete_attach(max_frame_size, handle, is_resuming)?
             }
         };
-        if matches!(mode, AttachMode::Reattach) {
+        // A genuine reattach and a reply to a non-resuming peer MUST NOT carry
+        // an unsettled map: neither side is reconciling a suspended link.
+        if matches!(mode, AttachMode::Reattach)
+            || matches!(
+                mode,
+                AttachMode::Reply {
+                    peer_is_resuming: false
+                }
+            )
+        {
             attach.unsettled = None;
             attach.incomplete_unsettled = false;
         }
@@ -411,7 +428,7 @@ where
                     self.local_state = LinkState::AttachSent
                 }
             }
-            LinkState::AttachReceived => {
+            LinkState::AttachReceived | LinkState::IncompleteAttachReceived => {
                 writer.send(frame).await // cancel safe
                     .map_err(|_| SendAttachErrorKind::IllegalSessionState)?;
                 if incomplete_unsettled {
