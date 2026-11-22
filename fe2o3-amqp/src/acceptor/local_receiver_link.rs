@@ -228,11 +228,16 @@ where
             verify_incoming_target: self.verify_incoming_target,
         };
 
+        // The reply must mirror whether the peer is resuming; capture this
+        // before `on_incoming_attach` consumes the attach.
+        let peer_is_resuming = remote_attach.unsettled.is_some();
+        let reply_mode = AttachMode::Reply { peer_is_resuming };
+
         // `on_incoming_attach` should always be evaluated
         match (err, link.on_incoming_attach(remote_attach)) {
             (Some(attach_error), _) | (_, Err(attach_error)) => {
                 // Complete attach anyway
-                link.send_attach(&outgoing, AttachMode::Resume).await?;
+                link.send_attach(&outgoing, reply_mode).await?;
                 return Err(link
                     .handle_attach_error(
                         attach_error,
@@ -242,7 +247,7 @@ where
                     )
                     .await)
             }
-            _ => link.send_attach(&outgoing, AttachMode::Resume).await?,
+            _ => link.send_attach(&outgoing, reply_mode).await?,
         }
 
         let mut inner = ReceiverInner {
@@ -266,5 +271,119 @@ where
         }
 
         Ok(inner)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::sync::{Arc, OnceLock};
+
+    use fe2o3_amqp_types::{
+        definitions::{DeliveryTag, Handle, ReceiverSettleMode, Role, SenderSettleMode},
+        messaging::{DeliveryState, Source, Target, TargetArchetype},
+        performatives::Attach,
+        primitives::{OrderedMap, Symbol},
+    };
+    use tokio::sync::{mpsc, oneshot};
+
+    use super::*;
+    use crate::{
+        endpoint::OutputHandle,
+        session::{error::Error, SessionHandle},
+    };
+
+    fn remote_sender_attach(
+        unsettled: Option<OrderedMap<DeliveryTag, Option<DeliveryState>>>,
+        incomplete_unsettled: bool,
+    ) -> Attach {
+        Attach {
+            name: String::from("test-receiver"),
+            handle: Handle(0),
+            role: Role::Sender,
+            snd_settle_mode: SenderSettleMode::Mixed,
+            rcv_settle_mode: ReceiverSettleMode::First,
+            source: Some(Box::new(Source::default())),
+            target: Some(Box::new(TargetArchetype::Target(Target::default()))),
+            unsettled,
+            incomplete_unsettled,
+            initial_delivery_count: Some(0),
+            max_message_size: None,
+            offered_capabilities: None,
+            desired_capabilities: None,
+            properties: None,
+        }
+    }
+
+    /// Drive the acceptor through its real `accept_incoming_attach` path with a
+    /// fake session and return the reply `Attach` it wrote.
+    async fn accept_and_capture_reply(remote_attach: Attach) -> Attach {
+        let (control_tx, mut control_rx) = mpsc::channel::<SessionControl>(16);
+        let (outgoing_tx, mut outgoing_rx) = mpsc::channel::<LinkFrame>(16);
+        let (outcome_tx, outcome) = oneshot::channel::<Result<(), Error>>();
+        drop(outcome_tx);
+
+        let mut session = SessionHandle {
+            is_ended: false,
+            control: control_tx,
+            engine_handle: tokio::spawn(async {}),
+            outcome,
+            outgoing: outgoing_tx,
+            session_stop_reason: Arc::new(OnceLock::new()),
+            max_frame_size: 4096,
+            link_listener: (),
+        };
+
+        let (reply_tx, reply_rx) = oneshot::channel();
+        let driver = tokio::spawn(async move {
+            loop {
+                tokio::select! {
+                    control = control_rx.recv() => match control {
+                        Some(SessionControl::AllocateIncomingLink { responder, .. }) => {
+                            let _ = responder.send(Ok(OutputHandle(1)));
+                        }
+                        Some(_) => {}
+                        None => break,
+                    },
+                    frame = outgoing_rx.recv() => {
+                        if let Some(frame) = frame {
+                            let _ = reply_tx.send(frame);
+                        }
+                        break;
+                    }
+                }
+            }
+        });
+
+        let acceptor = LocalReceiverLinkAcceptor::<Symbol, Target, _>::default();
+        let shared = SharedLinkAcceptorFields::default();
+        let receiver = acceptor
+            .accept_incoming_attach(&shared, remote_attach, &mut session)
+            .await
+            .expect("accepting the incoming receiver link failed");
+        let frame = reply_rx.await.expect("the acceptor did not send a reply");
+        drop(receiver);
+        driver.abort();
+
+        match frame {
+            LinkFrame::Attach(attach) => attach,
+            other => panic!("expected an Attach reply, got {other:?}"),
+        }
+    }
+
+    /// The receiver acceptor must mirror the peer's resumption state exactly
+    /// like the sender acceptor does.
+    #[tokio::test]
+    async fn reply_mirrors_peer_resume_map() {
+        let reply = accept_and_capture_reply(remote_sender_attach(Some(OrderedMap::new()), false))
+            .await;
+        assert!(reply.unsettled.as_ref().is_some_and(|map| map.is_empty()));
+        assert!(!reply.incomplete_unsettled);
+
+        let reply = accept_and_capture_reply(remote_sender_attach(Some(OrderedMap::new()), true))
+            .await;
+        assert!(reply.unsettled.as_ref().is_some_and(|map| map.is_empty()));
+
+        let reply = accept_and_capture_reply(remote_sender_attach(None, false)).await;
+        assert!(reply.unsettled.is_none());
     }
 }
