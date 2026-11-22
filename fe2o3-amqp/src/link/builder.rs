@@ -16,7 +16,7 @@ use tokio::sync::{mpsc, Notify};
 use crate::{
     connection::DEFAULT_OUTGOING_BUFFER_SIZE,
     endpoint::{LinkExt, OutputHandle},
-    link::{Link, LinkIncomingItem, LinkRelay},
+    link::{AttachMode, Link, LinkIncomingItem, LinkRelay},
     session::{self, SessionHandle},
     util::{Consumer, Producer},
 };
@@ -544,7 +544,12 @@ where
         let mut link = self.create_link(unsettled, output_handle, consumer);
 
         match link
-            .exchange_attach(&session.outgoing, &mut incoming_rx, &session.control, false)
+            .exchange_attach(
+                &session.outgoing,
+                &mut incoming_rx,
+                &session.control,
+                AttachMode::Resume,
+            )
             .await
         {
             Ok(exchange) => {
@@ -578,6 +583,7 @@ where
             session: session.control.clone(),
             outgoing,
             incoming: incoming_rx,
+            pending_redeliveries: Vec::new(),
             // marker: PhantomData,
         };
         Ok(inner)
@@ -657,7 +663,12 @@ where
         let mut link = self.create_link(unsettled, output_handle, flow_state);
 
         match link
-            .exchange_attach(&session.outgoing, &mut incoming_rx, &session.control, false)
+            .exchange_attach(
+                &session.outgoing,
+                &mut incoming_rx,
+                &session.control,
+                AttachMode::Resume,
+            )
             .await
         {
             Ok(outcome) => outcome.complete_or(ReceiverAttachError::IllegalState)?,

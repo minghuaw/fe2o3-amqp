@@ -1,4 +1,4 @@
-use fe2o3_amqp_types::{definitions::Fields, messaging::MESSAGE_FORMAT};
+use fe2o3_amqp_types::definitions::Fields;
 use futures_util::Future;
 
 use crate::endpoint::LinkExt;
@@ -77,16 +77,12 @@ where
     {
         use crate::util::Consume;
 
+        // The detach branch is polled first so that a remote detach that has
+        // already arrived is observed before a concurrently granted link-credit
+        // is consumed. Otherwise a send could race the remote closing the link,
+        // consuming credit and writing a transfer with a stale handle.
         tokio::select! {
-            tag = self.flow_state.consume(1) => {
-                // link-credit is defined as
-                // "The current maximum number of messages that can be handled
-                // at the receiver endpoint of the link"
-
-                // Draining should already set the link credit to 0, causing
-                // sender to wait for new link credit
-                Ok(tag)
-            },
+            biased;
             frame = detached => { // cancel safe
                 match frame {
                     // If remote has detached the link
@@ -117,6 +113,15 @@ where
                         Err(LinkStateError::ExpectImmediateDetach)
                     }
                 }
+            },
+            tag = self.flow_state.consume(1) => {
+                // link-credit is defined as
+                // "The current maximum number of messages that can be handled
+                // at the receiver endpoint of the link"
+
+                // Draining should already set the link credit to 0, causing
+                // sender to wait for new link credit
+                Ok(tag)
             }
         }
     }
@@ -402,7 +407,7 @@ async fn send_disposition(
 
 impl<T> SenderLink<T> {
     #[allow(clippy::needless_collect)]
-    fn handle_unsettled_in_attach(
+    pub(crate) fn handle_unsettled_in_attach(
         &mut self,
         remote_unsettled: Option<OrderedMap<DeliveryTag, Option<DeliveryState>>>,
     ) -> Result<SenderAttachExchange, SenderAttachError> {
@@ -414,19 +419,12 @@ impl<T> SenderLink<T> {
                     return Ok(SenderAttachExchange::Complete);
                 }
 
-                remote_map
-                    .into_keys()
-                    // Local is None, assume the message format is 0
-                    .map(|delivery_tag| {
-                        (
-                            delivery_tag,
-                            ResumingDelivery::Abort {
-                                message_format: MESSAGE_FORMAT,
-                                sender: None,
-                            },
-                        )
-                    })
-                    .collect()
+                // The peer considers these deliveries unsettled while this side
+                // has no record of them (target-only). AMQP 1.0 §2.6.13: the
+                // sender MUST ignore them, and §2.7.5 forbids sending resumed
+                // transfers for deliveries not in the local unsettled map. The
+                // receiver settles them by comparing the attach maps.
+                Vec::new()
             }
             (Some(local_map), None) => {
                 if local_map.is_empty() {
@@ -445,26 +443,17 @@ impl<T> SenderLink<T> {
                     return Ok(SenderAttachExchange::Complete);
                 }
 
-                let local: Vec<(DeliveryTag, ResumingDelivery)> = local_map
+                // `remote_map` retains only target-only deliveries after the
+                // local tags are removed. The sender MUST ignore them
+                // (AMQP 1.0 §2.6.13) and MUST NOT send resumed transfers for
+                // deliveries not in its local unsettled map (§2.7.5).
+                local_map
                     .into_iter()
                     .filter_map(|(tag, local)| {
                         let remote = remote_map.swap_remove(&tag);
                         resume_delivery(local, remote).map(|resume| (tag, resume))
                     })
-                    .collect();
-                let remote = remote_map
-                    .into_keys()
-                    // These are unsettled messages not found in the local map, assume the message format is 0
-                    .map(|tag| {
-                        (
-                            tag,
-                            ResumingDelivery::Abort {
-                                message_format: MESSAGE_FORMAT,
-                                sender: None,
-                            },
-                        )
-                    });
-                local.into_iter().chain(remote).collect()
+                    .collect()
             }
         };
 
@@ -586,10 +575,9 @@ where
         &mut self,
         writer: &mpsc::Sender<LinkFrame>,
         session: &mpsc::Sender<SessionControl>,
-        is_reattaching: bool,
+        mode: AttachMode,
     ) -> Result<(), Self::AttachError> {
-        self.send_attach_inner(writer, session, is_reattaching)
-            .await?;
+        self.send_attach_inner(writer, session, mode).await?;
         Ok(())
     }
 }
@@ -669,10 +657,10 @@ where
         writer: &mpsc::Sender<LinkFrame>,
         reader: &mut mpsc::Receiver<LinkFrame>,
         session: &mpsc::Sender<SessionControl>,
-        is_reattaching: bool,
+        mode: AttachMode,
     ) -> Result<Self::AttachExchange, SenderAttachError> {
         // Send out local attach
-        self.send_attach(writer, session, is_reattaching).await?;
+        self.send_attach(writer, session, mode).await?;
 
         // Wait for remote attach
         let remote_attach = match reader
@@ -788,5 +776,152 @@ where
         },
         Some(_) => SenderAttachError::NonAttachFrameReceived,
         None => SenderAttachError::IllegalSessionState,
+    }
+}
+#[cfg(test)]
+mod tests {
+    use std::marker::PhantomData;
+    use std::sync::Arc;
+
+    use fe2o3_amqp_types::{
+        definitions::{Handle, ReceiverSettleMode, SenderSettleMode},
+        messaging::Target,
+    };
+    use tokio::sync::Notify;
+
+    use super::*;
+    use crate::link::state::{LinkFlowState, LinkFlowStateInner};
+    use crate::util::Consumer;
+
+    fn make_sender_link(link_credit: u32) -> SenderLink<Target> {
+        let flow_state = Arc::new(LinkFlowState::sender(LinkFlowStateInner {
+            initial_delivery_count: 0,
+            delivery_count: 0,
+            link_credit,
+            available: 0,
+            drain: false,
+            properties: None,
+        }));
+        SenderLink::<Target> {
+            role: PhantomData,
+            local_state: LinkState::Attached,
+            name: String::from("test-sender"),
+            output_handle: Some(OutputHandle(0)),
+            input_handle: Some(InputHandle(0)),
+            snd_settle_mode: SenderSettleMode::Mixed,
+            rcv_settle_mode: ReceiverSettleMode::First,
+            source: None,
+            target: None,
+            max_message_size: 0,
+            offered_capabilities: None,
+            desired_capabilities: None,
+            flow_state: Consumer::new(Arc::new(Notify::new()), flow_state),
+            unsettled: Arc::new(RwLock::new(None)),
+            verify_incoming_source: true,
+            verify_incoming_target: true,
+        }
+    }
+
+    /// A remote detach that is already queued must be observed before an idle
+    /// link's available credit is consumed: the biased select polls the detach
+    /// branch first, so no transfer is written with a stale handle and the
+    /// caller gets `RemoteDetached` instead of `UnattachedHandle`.
+    #[tokio::test]
+    async fn queued_remote_detach_wins_over_idle_link_credit() {
+        let mut link = make_sender_link(100);
+        let (incoming_tx, mut incoming_rx) = mpsc::channel::<LinkFrame>(16);
+        let (outgoing_tx, mut outgoing_rx) = mpsc::channel::<LinkFrame>(16);
+
+        incoming_tx
+            .send(LinkFrame::Detach(Detach {
+                handle: Handle(0),
+                closed: false,
+                error: None,
+            }))
+            .await
+            .unwrap();
+
+        let result = link
+            .get_delivery_tag_or_detached(&outgoing_tx, incoming_rx.recv())
+            .await;
+
+        assert!(matches!(result, Err(LinkStateError::RemoteDetached)));
+        // Only the reply detach may be written; no transfer may carry a
+        // delivery with the stale handle.
+        assert!(matches!(
+            outgoing_rx.try_recv(),
+            Ok(LinkFrame::Detach(detach)) if !detach.closed
+        ));
+        assert!(
+            outgoing_rx.try_recv().is_err(),
+            "no transfer may be written after the peer detached"
+        );
+    }
+
+    /// A queued remote *closing* detach is likewise observed before credit is
+    /// consumed; the caller sees `RemoteClosed` and no transfer is written.
+    #[tokio::test]
+    async fn queued_remote_close_wins_over_idle_link_credit() {
+        let mut link = make_sender_link(100);
+        let (incoming_tx, mut incoming_rx) = mpsc::channel::<LinkFrame>(16);
+        let (outgoing_tx, mut outgoing_rx) = mpsc::channel::<LinkFrame>(16);
+
+        incoming_tx
+            .send(LinkFrame::Detach(Detach {
+                handle: Handle(0),
+                closed: true,
+                error: None,
+            }))
+            .await
+            .unwrap();
+
+        let result = link
+            .get_delivery_tag_or_detached(&outgoing_tx, incoming_rx.recv())
+            .await;
+
+        assert!(matches!(result, Err(LinkStateError::RemoteClosed)));
+        assert!(matches!(
+            outgoing_rx.try_recv(),
+            Ok(LinkFrame::Detach(detach)) if detach.closed
+        ));
+        assert!(
+            outgoing_rx.try_recv().is_err(),
+            "no transfer may be written after the peer closed the link"
+        );
+    }
+
+    /// A sender-side tag absent from the local unsettled map must be ignored
+    /// rather than answered with a spurious aborted transfer (AMQP 1.0
+    /// §2.6.13/§2.7.5).
+    #[test]
+    fn target_only_deliveries_are_not_resumed() {
+        let mut link = make_sender_link(0);
+        let mut remote = OrderedMap::new();
+        remote.insert(DeliveryTag::from(vec![0u8]), None);
+
+        let exchange = link
+            .handle_unsettled_in_attach(Some(remote))
+            .expect("attach handling failed");
+        assert!(matches!(exchange, SenderAttachExchange::Resume(v) if v.is_empty()));
+    }
+
+    /// A resuming attach carries a non-null (possibly empty) unsettled map so
+    /// it cannot be mistaken for a pipelined re-attach, while a fresh attach
+    /// leaves the field unset.
+    #[test]
+    fn resuming_attach_advertises_empty_unsettled_map() {
+        let link = make_sender_link(0);
+        let handle = OutputHandle(0);
+
+        let fresh = link.as_complete_attach(handle.clone(), false);
+        assert!(fresh.unsettled.is_none());
+        assert!(!fresh.incomplete_unsettled);
+
+        let resuming = link.as_complete_attach(handle, true);
+        assert!(resuming
+            .unsettled
+            .as_ref()
+            .is_some_and(|map| map.is_empty()));
+        assert!(!resuming.incomplete_unsettled);
     }
 }

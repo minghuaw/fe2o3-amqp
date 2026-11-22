@@ -745,11 +745,16 @@ impl endpoint::Session for Session {
             .link_by_input_handle
             .remove(&InputHandle::from(detach.handle.clone()))
         {
-            Some(mut link) => link
-                .on_incoming_detach(detach)
-                .await
-                .map_err(|_| SessionInnerError::UnattachedHandle),
-            None => Err(SessionInnerError::UnattachedHandle),
+            // The link endpoint may already be gone (e.g. a queued detach
+            // racing a reattach or a dropped link). There is nothing left to
+            // notify, so the detach is stale from this session's point of
+            // view: ignore it instead of failing the session with
+            // `UnattachedHandle`.
+            Some(mut link) => {
+                let _ = link.on_incoming_detach(detach).await;
+                Ok(())
+            }
+            None => Ok(()),
         }
     }
 
