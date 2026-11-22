@@ -426,10 +426,34 @@ impl ReceiverLink<Target> {
 }
 
 impl<T> ReceiverLink<T> {
-    fn handle_unsettled_in_attach(
+    pub(crate) fn handle_unsettled_in_attach(
         &mut self,
         remote_unsettled: Option<OrderedMap<DeliveryTag, Option<DeliveryState>>>,
+        remote_incomplete_unsettled: bool,
     ) -> ReceiverAttachExchange {
+        // AMQP 1.0 §2.6.13: with a complete remote map, deliveries that only
+        // this side considers unsettled (target-only) MUST be considered
+        // settled. Absence from an incomplete map is not evidence of
+        // settlement, so nothing is removed in that case.
+        if !remote_incomplete_unsettled {
+            let mut guard = self.unsettled.write();
+            if let Some(local) = guard.as_mut() {
+                match &remote_unsettled {
+                    Some(remote) => {
+                        let stale: Vec<DeliveryTag> = local
+                            .keys()
+                            .filter(|tag| !remote.contains_key(*tag))
+                            .cloned()
+                            .collect();
+                        for tag in stale {
+                            let _ = local.swap_remove(&tag);
+                        }
+                    }
+                    None => local.clear(),
+                }
+            }
+        }
+
         let remote_is_empty = match remote_unsettled {
             Some(map) => map.is_empty(),
             None => true,
@@ -726,7 +750,8 @@ where
         }
 
         // Ok(Self::AttachExchange::Complete)
-        Ok(self.handle_unsettled_in_attach(remote_attach.unsettled))
+        let incomplete_unsettled = remote_attach.incomplete_unsettled;
+        Ok(self.handle_unsettled_in_attach(remote_attach.unsettled, incomplete_unsettled))
     }
 
     /// # Cancel safety
@@ -736,10 +761,9 @@ where
         &mut self,
         writer: &mpsc::Sender<LinkFrame>,
         session: &mpsc::Sender<SessionControl>,
-        is_reattaching: bool,
+        mode: AttachMode,
     ) -> Result<(), Self::AttachError> {
-        self.send_attach_inner(writer, session, is_reattaching)
-            .await?; // FIXME: cancel safe? if oneshot channel is cancel safe
+        self.send_attach_inner(writer, session, mode).await?; // FIXME: cancel safe? if oneshot channel is cancel safe
         Ok(())
     }
 }
@@ -822,10 +846,10 @@ where
         writer: &mpsc::Sender<LinkFrame>,
         reader: &mut mpsc::Receiver<LinkFrame>,
         session: &mpsc::Sender<SessionControl>,
-        is_reattaching: bool,
+        mode: AttachMode,
     ) -> Result<Self::AttachExchange, ReceiverAttachError> {
         // Send out local attach
-        self.send_attach(writer, session, is_reattaching).await?; // FIXME: cancel safe? if oneshot channel is cancel safe
+        self.send_attach(writer, session, mode).await?; // FIXME: cancel safe? if oneshot channel is cancel safe
 
         // Wait for remote attach
         let remote_attach = match reader
@@ -987,5 +1011,101 @@ mod tests {
         }
         let final_slice = &vals[prev_ind..];
         assert_eq!(final_slice, expected.last().unwrap())
+    }
+
+    mod reconciliation {
+        use std::marker::PhantomData;
+        use std::sync::Arc;
+
+        use fe2o3_amqp_types::{
+            definitions::{DeliveryTag, ReceiverSettleMode, SenderSettleMode},
+            messaging::Target,
+        };
+
+        use super::super::*;
+        use crate::link::state::{LinkFlowState, LinkFlowStateInner};
+
+        fn make_receiver_link() -> ReceiverLink<Target> {
+            let flow_state = Arc::new(LinkFlowState::receiver(LinkFlowStateInner {
+                initial_delivery_count: 0,
+                delivery_count: 0,
+                link_credit: 200,
+                available: 0,
+                drain: false,
+                properties: None,
+            }));
+            ReceiverLink::<Target> {
+                role: PhantomData,
+                local_state: LinkState::Attached,
+                name: String::from("test-receiver"),
+                output_handle: Some(OutputHandle(0)),
+                input_handle: Some(InputHandle(0)),
+                snd_settle_mode: SenderSettleMode::Mixed,
+                rcv_settle_mode: ReceiverSettleMode::First,
+                source: None,
+                target: None,
+                max_message_size: 0,
+                offered_capabilities: None,
+                desired_capabilities: None,
+                flow_state,
+                unsettled: Arc::new(RwLock::new(None)),
+                verify_incoming_source: true,
+                verify_incoming_target: true,
+            }
+        }
+
+        fn seed(link: &ReceiverLink<Target>, tags: &[Vec<u8>]) {
+            let mut guard = link.unsettled.write();
+            let map = guard.get_or_insert_with(OrderedMap::new);
+            for tag in tags {
+                map.insert(DeliveryTag::from(tag.clone()), None);
+            }
+        }
+
+        /// AMQP 1.0 §2.6.13: target-only deliveries (local unsettled entries
+        /// absent from a complete remote map) MUST be considered settled.
+        #[test]
+        fn reconciles_target_only_deliveries() {
+            let mut link = make_receiver_link();
+            seed(&link, &[vec![1], vec![2]]);
+
+            let mut remote = OrderedMap::new();
+            remote.insert(DeliveryTag::from(vec![1u8]), None);
+            let _ = link.handle_unsettled_in_attach(Some(remote), false);
+
+            let guard = link.unsettled.read();
+            let map = guard.as_ref().unwrap();
+            assert!(map.contains_key(&DeliveryTag::from(vec![1u8])));
+            assert!(!map.contains_key(&DeliveryTag::from(vec![2u8])));
+        }
+
+        /// An incomplete remote map is not evidence of settlement, so local
+        /// entries are left untouched.
+        #[test]
+        fn keeps_deliveries_on_incomplete_remote_map() {
+            let mut link = make_receiver_link();
+            seed(&link, &[vec![1]]);
+
+            let _ = link.handle_unsettled_in_attach(Some(OrderedMap::new()), true);
+
+            let guard = link.unsettled.read();
+            assert!(guard
+                .as_ref()
+                .unwrap()
+                .contains_key(&DeliveryTag::from(vec![1u8])));
+        }
+
+        /// A `None` remote map (peer reattached without unsettled state)
+        /// settles every target-only delivery.
+        #[test]
+        fn clears_deliveries_on_missing_remote_map() {
+            let mut link = make_receiver_link();
+            seed(&link, &[vec![1], vec![2]]);
+
+            let _ = link.handle_unsettled_in_attach(None, false);
+
+            let guard = link.unsettled.read();
+            assert!(guard.as_ref().unwrap().is_empty());
+        }
     }
 }

@@ -7,7 +7,7 @@ use crate::{
     session::{self, error::AllocLinkError},
 };
 
-use super::{state::LinkState, DetachError, LinkFrame, LinkRelay};
+use super::{state::LinkState, AttachMode, DetachError, LinkFrame, LinkRelay};
 
 pub(crate) trait LinkEndpointInner
 where
@@ -30,7 +30,7 @@ where
 
     async fn exchange_attach(
         &mut self,
-        is_reattaching: bool,
+        mode: AttachMode,
     ) -> Result<<Self::Link as LinkAttach>::AttachExchange, <Self::Link as LinkAttach>::AttachError>;
 
     async fn handle_attach_error(
@@ -78,7 +78,7 @@ where
         &mut self,
     ) -> Result<&mut Self, <Self::Link as LinkAttach>::AttachError> {
         self.reallocate_output_handle().await?; // FIXME: cancel safe? if oneshot channel is cancel safe
-        match self.exchange_attach(true).await // FIXME: cancel safe? if oneshot channel is cancel safe
+        match self.exchange_attach(AttachMode::Reattach).await // FIXME: cancel safe? if oneshot channel is cancel safe
         {
             Ok(attach_exchange) => self.handle_reattach_outcome(attach_exchange),
             Err(attach_error) => Err(self.handle_attach_error(attach_error).await),
