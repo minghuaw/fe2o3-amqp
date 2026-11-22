@@ -15,7 +15,7 @@ use crate::{
     link::{
         delivery::{Delivery, DeliveryInfo},
         state::LinkState,
-        ApplyRemoteDetachError, LinkFrame, SessionStopReason,
+        ApplyRemoteDetachError, AttachMode, LinkFrame, SessionStopReason,
     },
     util::{AsByteIterator, IntoReader},
     Payload,
@@ -85,7 +85,7 @@ pub(crate) trait LinkAttach {
     async fn send_attach(
         &mut self,
         writer: &mpsc::Sender<LinkFrame>,
-        is_reattaching: bool,
+        mode: AttachMode,
     ) -> Result<(), Self::AttachError>;
 }
 
@@ -125,7 +125,7 @@ pub(crate) trait LinkExt: Link {
         &mut self,
         writer: &mpsc::Sender<LinkFrame>,
         reader: &mut mpsc::Receiver<LinkFrame>,
-        is_reattaching: bool,
+        mode: AttachMode,
     ) -> Result<Self::AttachExchange, Self::AttachError>;
 
     async fn handle_attach_error(

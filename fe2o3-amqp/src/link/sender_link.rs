@@ -1,6 +1,6 @@
 use std::sync::{Arc, OnceLock};
 
-use fe2o3_amqp_types::{definitions::Fields, messaging::MESSAGE_FORMAT};
+use fe2o3_amqp_types::definitions::Fields;
 use futures_util::Future;
 use serde_amqp::serialized_size;
 
@@ -48,20 +48,43 @@ where
         transfer: Transfer,
         payload: Payload,
         delivery_tag: DeliveryTag,
-        unsettled: UnsettledMessage,
+        unsettled: &mut Option<UnsettledMessage>,
     ) -> Result<(), LinkStateError> {
         self.unsettled
             .write()
             .get_or_insert(OrderedMap::new())
-            .insert(delivery_tag.clone(), unsettled);
+            .insert(
+                delivery_tag.clone(),
+                unsettled
+                    .take()
+                    .expect("the caller supplies the unsettled message"),
+            );
         let registration = UnsettledRegistration {
             unsettled: &self.unsettled,
             delivery_tag: Some(&delivery_tag),
         };
-        self.send_transfer_without_modifying_unsettled_map(writer, transfer, payload)
-            .await?;
-        registration.keep();
-        Ok(())
+        match self
+            .send_transfer_without_modifying_unsettled_map(writer, transfer, payload)
+            .await
+        {
+            Ok(_) => {
+                registration.keep();
+                Ok(())
+            }
+            Err(error) => {
+                // Recover the message so the caller can retry it instead of
+                // losing its settlement channel. The relay may have removed
+                // and failed the entry in the meantime, in which case there is
+                // nothing left to recover.
+                *unsettled = self
+                    .unsettled
+                    .write()
+                    .as_mut()
+                    .and_then(|map| map.swap_remove(&delivery_tag));
+                registration.keep();
+                Err(error)
+            }
+        }
     }
 
     /// # Cancel safety
@@ -356,9 +379,20 @@ where
         }
 
         let (tx, rx) = oneshot::channel();
-        let unsettled = UnsettledMessage::new(payload_copy, None, message_format, tx);
-        self.send_unsettled_transfer(writer, transfer, payload, delivery_tag.clone(), unsettled)
-            .await?;
+        let mut unsettled = Some(UnsettledMessage::new(
+            payload_copy,
+            None,
+            message_format,
+            tx,
+        ));
+        self.send_unsettled_transfer(
+            writer,
+            transfer,
+            payload,
+            delivery_tag.clone(),
+            &mut unsettled,
+        )
+        .await?;
 
         Ok(Settlement::Unsettled {
             delivery_tag,
@@ -551,7 +585,7 @@ async fn send_disposition(
 
 impl<T> SenderLink<T> {
     #[allow(clippy::needless_collect)]
-    fn handle_unsettled_in_attach(
+    pub(crate) fn handle_unsettled_in_attach(
         &mut self,
         remote_unsettled: Option<OrderedMap<DeliveryTag, Option<DeliveryState>>>,
     ) -> Result<SenderAttachExchange, SenderAttachError> {
@@ -563,19 +597,12 @@ impl<T> SenderLink<T> {
                     return Ok(SenderAttachExchange::Complete);
                 }
 
-                remote_map
-                    .into_keys()
-                    // Local is None, assume the message format is 0
-                    .map(|delivery_tag| {
-                        (
-                            delivery_tag,
-                            ResumingDelivery::Abort {
-                                message_format: MESSAGE_FORMAT,
-                                sender: None,
-                            },
-                        )
-                    })
-                    .collect()
+                // The peer considers these deliveries unsettled while this side
+                // has no record of them (target-only). AMQP 1.0 §2.6.13: the
+                // sender MUST ignore them, and §2.7.5 forbids sending resumed
+                // transfers for deliveries not in the local unsettled map. The
+                // receiver settles them by comparing the attach maps.
+                Vec::new()
             }
             (Some(local_map), None) => {
                 if local_map.is_empty() {
@@ -594,26 +621,17 @@ impl<T> SenderLink<T> {
                     return Ok(SenderAttachExchange::Complete);
                 }
 
-                let local: Vec<(DeliveryTag, ResumingDelivery)> = local_map
+                // `remote_map` retains only target-only deliveries after the
+                // local tags are removed. The sender MUST ignore them
+                // (AMQP 1.0 §2.6.13) and MUST NOT send resumed transfers for
+                // deliveries not in its local unsettled map (§2.7.5).
+                local_map
                     .into_iter()
                     .filter_map(|(tag, local)| {
                         let remote = remote_map.swap_remove(&tag);
                         resume_delivery(local, remote).map(|resume| (tag, resume))
                     })
-                    .collect();
-                let remote = remote_map
-                    .into_keys()
-                    // These are unsettled messages not found in the local map, assume the message format is 0
-                    .map(|tag| {
-                        (
-                            tag,
-                            ResumingDelivery::Abort {
-                                message_format: MESSAGE_FORMAT,
-                                sender: None,
-                            },
-                        )
-                    });
-                local.into_iter().chain(remote).collect()
+                    .collect()
             }
         };
 
@@ -752,9 +770,9 @@ where
     async fn send_attach(
         &mut self,
         writer: &mpsc::Sender<LinkFrame>,
-        is_reattaching: bool,
+        mode: AttachMode,
     ) -> Result<(), Self::AttachError> {
-        self.send_attach_inner(writer, is_reattaching).await?;
+        self.send_attach_inner(writer, mode).await?;
         Ok(())
     }
 }
@@ -837,10 +855,10 @@ where
         &mut self,
         writer: &mpsc::Sender<LinkFrame>,
         reader: &mut mpsc::Receiver<LinkFrame>,
-        is_reattaching: bool,
+        mode: AttachMode,
     ) -> Result<Self::AttachExchange, SenderAttachError> {
         // Send out local attach
-        self.send_attach(writer, is_reattaching).await?;
+        self.send_attach(writer, mode).await?;
 
         // Wait for remote attach
         let remote_attach =

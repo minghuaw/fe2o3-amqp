@@ -121,6 +121,30 @@ pub(crate) enum SenderAttachExchange {
     Resume(Vec<(DeliveryTag, ResumingDelivery)>),
 }
 
+/// Whether an outgoing `Attach` continues an existing link (resume) or
+/// re-creates it (reattach).
+///
+/// The two are distinguished on the wire by the `unsettled` field:
+///
+/// - [`AttachMode::Resume`] advertises the unsettled map (a non-null, possibly
+///   empty map), so the peer can reconcile outstanding deliveries (AMQP 1.0
+///   §2.6.3/§2.6.13).
+/// - [`AttachMode::Reattach`] forces `unsettled` to be null; per §2.7.3 a
+///   genuine reattach, such as the one completing the §2.6.6 crossed close,
+///   MUST NOT carry an unsettled map.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum AttachMode {
+    /// Continue an existing (suspended) link; advertise the unsettled map.
+    Resume,
+    /// Answer a peer-initiated attach. `peer_is_resuming` records whether the
+    /// peer's attach carried a non-null unsettled map, i.e. whether it is
+    /// resuming rather than creating a fresh link. The reply must mirror that
+    /// so the peer can reconcile outstanding deliveries.
+    Reply { peer_is_resuming: bool },
+    /// Re-create the link; send a null unsettled map.
+    Reattach,
+}
+
 impl std::fmt::Debug for SenderAttachExchange {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
@@ -228,18 +252,24 @@ where
 {
     fn get_unsettled_map(
         &self,
-        is_reattaching: bool,
         partial_unsettled: usize,
+        is_resuming: bool,
     ) -> Option<OrderedMap<DeliveryTag, Option<DeliveryState>>> {
-        // When reattaching (as opposed to resuming), the unsettled map MUST be null.
-        if is_reattaching {
-            return None;
-        }
-
         let guard = self.unsettled.read();
-        let map = guard.as_ref()?;
+        let map = match guard.as_ref() {
+            Some(map) if !map.is_empty() => map,
+            // A resuming attach MUST carry a non-null unsettled field so it
+            // cannot be mistaken for a pipelined re-attach (AMQP 1.0 §2.6.5);
+            // an empty-but-present map is used when nothing is unsettled.
+            _ => {
+                return if is_resuming {
+                    Some(OrderedMap::new())
+                } else {
+                    None
+                };
+            }
+        };
         match (map.len(), partial_unsettled) {
-            (0, _) => None,
             (_, 0..=1) => {
                 let v = map
                     .iter()
@@ -258,17 +288,17 @@ where
         }
     }
 
-    fn as_complete_attach(&self, handle: OutputHandle, is_reattaching: bool) -> Attach {
-        self.as_attach_inner(handle, is_reattaching, 1)
+    fn as_complete_attach(&self, handle: OutputHandle, is_resuming: bool) -> Attach {
+        self.as_attach_inner(handle, 1, is_resuming)
     }
 
     fn as_attach_inner(
         &self,
         handle: OutputHandle,
-        is_reattaching: bool,
         partial_unsettled: usize,
+        is_resuming: bool,
     ) -> Attach {
-        let unsettled = self.get_unsettled_map(is_reattaching, partial_unsettled);
+        let unsettled = self.get_unsettled_map(partial_unsettled, is_resuming);
 
         let max_message_size = match self.max_message_size {
             0 => None,
@@ -305,11 +335,11 @@ where
         &self,
         max_frame_size: usize,
         handle: OutputHandle,
-        is_reattaching: bool,
+        is_resuming: bool,
     ) -> Result<Attach, SendAttachErrorKind> {
         let mut denominator = 1usize; // This is going to be the denominator
 
-        let mut attach = self.as_attach_inner(handle.clone(), is_reattaching, denominator);
+        let mut attach = self.as_attach_inner(handle.clone(), denominator, is_resuming);
         // `SizeSerializer` computes the serialized size without allocating a
         // buffer; only the size is needed here.
         while serialized_size(&attach).map_err(|_| SendAttachErrorKind::IllegalState)? // This should not happen
@@ -317,7 +347,7 @@ where
         {
             denominator *= 2;
 
-            attach = self.as_attach_inner(handle.clone(), is_reattaching, denominator);
+            attach = self.as_attach_inner(handle.clone(), denominator, is_resuming);
         }
 
         Ok(attach)
@@ -330,7 +360,7 @@ where
     pub(crate) async fn send_attach_inner(
         &mut self,
         writer: &mpsc::Sender<LinkFrame>,
-        is_reattaching: bool,
+        mode: AttachMode,
     ) -> Result<(), SendAttachErrorKind> {
         // Create Attach frame
         let handle = match &self.output_handle {
@@ -338,29 +368,49 @@ where
             None => return Err(SendAttachErrorKind::IllegalState),
         };
 
-        let unsettled_map_len = if is_reattaching {
-            // If reattaching, the unsettled map MUST be null
-            //
-            // It is ok to clear the map here because link will always try to send attach
-            // before it handles the remote attach.
-            let mut guard = self.unsettled.write();
-            *guard = None;
-            None
-        } else {
+        // A resuming attach carries a non-null unsettled map, including an
+        // empty-but-present map when nothing is unsettled. A reattach, such as
+        // the one completing the AMQP 1.0 §2.6.6 crossed close, MUST carry a
+        // null `unsettled` field (§2.7.3).
+        let is_resuming = match mode {
+            AttachMode::Resume => matches!(
+                self.local_state,
+                LinkState::Detached | LinkState::DetachSent
+            ),
+            AttachMode::Reply { peer_is_resuming } => peer_is_resuming,
+            AttachMode::Reattach => false,
+        };
+
+        // Advertise the unsettled map on (re)attach so the peer can reconcile
+        // outstanding deliveries; resumption re-sends them.
+        let unsettled_map_len = {
             let guard = self.unsettled.read();
             guard.as_ref().map(|m| m.len())
         };
 
-        let attach = match unsettled_map_len {
-            Some(0) | None => self.as_complete_attach(handle, is_reattaching),
+        let mut attach = match unsettled_map_len {
+            Some(0) | None => self.as_complete_attach(handle, is_resuming),
             Some(_) => {
                 // The connection engine publishes the negotiated encoder max
                 // frame size before the connection handle is created; links
                 // are only attached after the connection is opened, so the
                 // value is always populated.
-                self.as_maybe_incomplete_attach(self.max_frame_size, handle, is_reattaching)?
+                self.as_maybe_incomplete_attach(self.max_frame_size, handle, is_resuming)?
             }
         };
+        // A genuine reattach and a reply to a non-resuming peer MUST NOT carry
+        // an unsettled map: neither side is reconciling a suspended link.
+        if matches!(mode, AttachMode::Reattach)
+            || matches!(
+                mode,
+                AttachMode::Reply {
+                    peer_is_resuming: false
+                }
+            )
+        {
+            attach.unsettled = None;
+            attach.incomplete_unsettled = false;
+        }
         let incomplete_unsettled = attach.incomplete_unsettled;
         let frame = LinkFrame::Attach(attach);
 
@@ -379,7 +429,7 @@ where
                     self.local_state = LinkState::AttachSent
                 }
             }
-            LinkState::AttachReceived => {
+            LinkState::AttachReceived | LinkState::IncompleteAttachReceived => {
                 writer.send(frame).await // cancel safe
                     .map_err(|_| match self.session_stop_reason.get() {
                         Some(reason) => SendAttachErrorKind::SessionStopped(reason.clone()),
@@ -442,10 +492,30 @@ where
         closed: bool,
         error: Option<definitions::Error>,
     ) -> Result<(), Self::DetachError> {
-        // Change the state whether sending the detach frame succeeds or not
+        // Change the state whether sending the detach frame succeeds or not.
+        //
+        // A detach may also be sent before the exchange completes (e.g. the
+        // reduce/suspend/re-attempt cycle of AMQP 1.0 §2.6.13), so every
+        // attached-or-exchanging state is accepted, not only `Attached`.
         match (&self.local_state, closed) {
-            (LinkState::Attached, false) => self.local_state = LinkState::DetachSent,
-            (LinkState::Attached, true) => self.local_state = LinkState::CloseSent,
+            (
+                LinkState::Attached
+                | LinkState::AttachSent
+                | LinkState::AttachReceived
+                | LinkState::IncompleteAttachSent
+                | LinkState::IncompleteAttachReceived
+                | LinkState::IncompleteAttachExchanged,
+                false,
+            ) => self.local_state = LinkState::DetachSent,
+            (
+                LinkState::Attached
+                | LinkState::AttachSent
+                | LinkState::AttachReceived
+                | LinkState::IncompleteAttachSent
+                | LinkState::IncompleteAttachReceived
+                | LinkState::IncompleteAttachExchanged,
+                true,
+            ) => self.local_state = LinkState::CloseSent,
             _ => return Err(DetachError::IllegalState),
         };
 
