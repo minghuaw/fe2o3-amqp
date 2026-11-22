@@ -366,6 +366,93 @@ mod tests {
         }
     }
 
+    /// Even when `on_incoming_attach` fails, the receiver acceptor still sends
+    /// the reply attach with the peer's resumption flag before driving the
+    /// detach handshake.
+    #[tokio::test]
+    async fn error_path_reply_still_mirrors_peer_resume_map() {
+        let (control_tx, mut control_rx) = mpsc::channel::<SessionControl>(16);
+        let (outgoing_tx, mut outgoing_rx) = mpsc::channel::<LinkFrame>(16);
+        let (outcome_tx, outcome) = oneshot::channel::<Result<(), Error>>();
+        drop(outcome_tx);
+        let mut session = SessionHandle {
+            is_ended: false,
+            control: control_tx,
+            engine_handle: tokio::spawn(async {}),
+            outcome,
+            outgoing: outgoing_tx,
+            link_listener: (),
+        };
+
+        let (reply_tx, reply_rx) = oneshot::channel();
+        let driver = tokio::spawn(async move {
+            let mut link_tx = None;
+            let mut reply_tx = Some(reply_tx);
+            loop {
+                tokio::select! {
+                    control = control_rx.recv() => match control {
+                        Some(SessionControl::AllocateIncomingLink { link_relay, responder, .. }) => {
+                            if let LinkRelay::Receiver { tx, .. } = link_relay {
+                                link_tx = Some(tx);
+                            }
+                            let _ = responder.send(Ok(OutputHandle(1)));
+                        }
+                        Some(_) => {}
+                        None => break,
+                    },
+                    frame = outgoing_rx.recv() => match frame {
+                        Some(frame @ LinkFrame::Attach(_)) => {
+                            if let Some(reply_tx) = reply_tx.take() {
+                                let _ = reply_tx.send(frame);
+                            }
+                        }
+                        Some(LinkFrame::Detach(_)) => {
+                            if let Some(tx) = &link_tx {
+                                let _ = tx
+                                    .send(LinkFrame::Detach(
+                                        fe2o3_amqp_types::performatives::Detach {
+                                            handle: Handle(0),
+                                            closed: true,
+                                            error: None,
+                                        },
+                                    ))
+                                    .await;
+                            }
+                            break;
+                        }
+                        Some(_) => {}
+                        None => break,
+                    },
+                }
+            }
+        });
+
+        // A missing source makes `on_incoming_attach` fail after the peer's
+        // resumption flag has been captured.
+        let mut remote_attach = remote_sender_attach(Some(OrderedMap::new()), false);
+        remote_attach.source = None;
+        let acceptor = LocalReceiverLinkAcceptor::<Symbol, Target, _>::default();
+        let shared = SharedLinkAcceptorFields::default();
+        let result = acceptor
+            .accept_incoming_attach(&shared, remote_attach, &mut session)
+            .await;
+        let reply = reply_rx.await.expect("the error path did not send a reply");
+        driver.abort();
+
+        assert!(matches!(
+            result,
+            Err(ReceiverAttachError::IncomingSourceIsNone)
+        ));
+        let reply = match reply {
+            LinkFrame::Attach(attach) => attach,
+            other => panic!("expected an Attach reply, got {other:?}"),
+        };
+        assert!(
+            reply.unsettled.as_ref().is_some_and(|map| map.is_empty()),
+            "the error-path reply must still mirror the peer's resumption"
+        );
+    }
+
     /// The receiver acceptor must mirror the peer's resumption state exactly
     /// like the sender acceptor does.
     #[tokio::test]

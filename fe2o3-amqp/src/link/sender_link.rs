@@ -858,6 +858,38 @@ mod tests {
         );
     }
 
+    /// A queued remote *closing* detach is likewise observed before credit is
+    /// consumed; the caller sees `RemoteClosed` and no transfer is written.
+    #[tokio::test]
+    async fn queued_remote_close_wins_over_idle_link_credit() {
+        let mut link = make_sender_link(100);
+        let (incoming_tx, mut incoming_rx) = mpsc::channel::<LinkFrame>(16);
+        let (outgoing_tx, mut outgoing_rx) = mpsc::channel::<LinkFrame>(16);
+
+        incoming_tx
+            .send(LinkFrame::Detach(Detach {
+                handle: Handle(0),
+                closed: true,
+                error: None,
+            }))
+            .await
+            .unwrap();
+
+        let result = link
+            .get_delivery_tag_or_detached(&outgoing_tx, incoming_rx.recv())
+            .await;
+
+        assert!(matches!(result, Err(LinkStateError::RemoteClosed)));
+        assert!(matches!(
+            outgoing_rx.try_recv(),
+            Ok(LinkFrame::Detach(detach)) if detach.closed
+        ));
+        assert!(
+            outgoing_rx.try_recv().is_err(),
+            "no transfer may be written after the peer closed the link"
+        );
+    }
+
     /// A sender-side tag absent from the local unsettled map must be ignored
     /// rather than answered with a spurious aborted transfer (AMQP 1.0
     /// §2.6.13/§2.7.5).
